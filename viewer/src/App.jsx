@@ -1,63 +1,66 @@
 import { useState, useEffect } from 'react'
 import StorageViewer from './components/StorageViewer'
+import MexPanel from './components/MexPanel'
 import './App.css'
 
+const API_URL = 'http://127.0.0.1:5000/api/mex'
+
 function App() {
-  const [metadata, setMetadata] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('storage');
+  const [metadata, setMetadata] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMetadata()
-  }, [])
+    fetchMetadata();
+  }, []);
 
-  async function loadMetadata() {
+  const fetchMetadata = async () => {
     try {
-      // Fetch metadata from the storage directory
-      const response = await fetch('/storage/metadata.json')
-      if (!response.ok) {
-        throw new Error('Failed to load metadata')
+      const response = await fetch(`${API_URL}/storage/metadata`);
+      const data = await response.json();
+      if (data.success) {
+        setMetadata(data.metadata);
       }
-      const data = await response.json()
-      setMetadata(data)
-      setError(null)
     } catch (err) {
-      console.error('Error loading metadata:', err)
-      setError('Failed to load storage metadata. Make sure the storage folder exists.')
+      console.error('Failed to fetch metadata:', err);
+      setMetadata({ characters: {} });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <div className="spinner"></div>
-        <p>Loading storage...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="app-error">
-        <h2>⚠️ Error</h2>
-        <p>{error}</p>
-        <button onClick={loadMetadata} className="retry-button">
-          Retry
-        </button>
-      </div>
-    )
-  }
+  };
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🎮 Melee Costume Storage</h1>
-        <p className="subtitle">Browse and manage your character skin collection</p>
+        <h1>Melee Nexus</h1>
+        <nav className="app-tabs">
+          <button
+            className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
+            onClick={() => setActiveTab('storage')}
+          >
+            Costume Vault
+          </button>
+          <button
+            className={`tab ${activeTab === 'mex' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mex')}
+          >
+            MEX Manager
+          </button>
+        </nav>
       </header>
 
-      <StorageViewer metadata={metadata} />
+      <main className="app-content">
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '48px', color: '#888' }}>
+            Loading...
+          </div>
+        ) : (
+          <>
+            {activeTab === 'storage' && <StorageViewer metadata={metadata} />}
+            {activeTab === 'mex' && <MexPanel />}
+          </>
+        )}
+      </main>
     </div>
   )
 }

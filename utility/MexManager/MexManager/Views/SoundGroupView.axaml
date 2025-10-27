@@ -1,0 +1,328 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:MexManager.ViewModels"
+			 xmlns:views="clr-namespace:MexManager.Views"
+			 xmlns:converters="clr-namespace:MexManager.Converters"
+			 xmlns:controls="clr-namespace:MexManager.Controls"
+			 xmlns:pgc="clr-namespace:Avalonia.PropertyGrid.Controls;assembly=Avalonia.PropertyGrid"
+			 xmlns:pm="clr-namespace:Avalonia.PropertyModels;assembly=Avalonia.PropertyModels"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="MexManager.Views.SoundGroupView"
+			 x:DataType="vm:SoundGroupModel">
+
+	<UserControl.Resources>
+		<converters:DataGridIndexConverter x:Key="DataGridIndexConverter"/>
+	</UserControl.Resources>
+
+	<DockPanel>
+		<DockPanel>
+			<Menu
+				DockPanel.Dock="Top"
+				Height="48">
+				<controls:IconMenuItem
+					Text="File"
+					ToolTip.Tip="File"
+					IconSource="avares://MexManager/Assets/Common/icon_file.png">
+					<MenuItem
+						Header="Import Group"
+						ToolTip.Tip="Import"
+						Click="ImportGroup_Click">
+						<MenuItem.Icon>
+							<Image Source="avares://MexManager/Assets/Common/icon_package.png"/>
+						</MenuItem.Icon>
+					</MenuItem>
+					<MenuItem
+						Header="Export Group"
+						ToolTip.Tip="Export Sounds and Scripts"
+						Click="ExportGroup_Click"
+					IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}">
+						<MenuItem.Icon>
+							<Image Source="avares://MexManager/Assets/Common/file_export.png"/>
+						</MenuItem.Icon>
+					</MenuItem>
+				</controls:IconMenuItem>
+				<controls:IconMenuItem
+					Text="Create"
+					ToolTip.Tip="Create"
+					IconSource="avares://MexManager/Assets/Common/icon_create.png"
+					Click="AddGroup_Click"/>
+				<controls:IconMenuItem
+					Text="Copy"
+					ToolTip.Tip="Copy"
+					IconSource="avares://MexManager/Assets/Common/icon_copy.png"
+					IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+					Click="CopyGroup_Click"/>
+				<controls:IconMenuItem
+					Text="Delete"
+					ToolTip.Tip="Delete"
+					IconSource="avares://MexManager/Assets/Common/icon_delete.png"
+					IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+					Click="RemoveGroup_Click"/>
+			</Menu>
+			<ListBox
+				Name="GroupList"
+				DockPanel.Dock="Bottom"
+				ItemsSource="{Binding SoundGroups}"
+				SelectedItem="{Binding SelectedSoundGroup, Mode=TwoWay}"
+				ItemTemplate="{StaticResource IndexedItemTemplate}"
+				Padding="0"
+				Width="280"
+				SelectedIndex="0"/>
+		</DockPanel>
+		
+		<TabControl
+			IsVisible="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+			DockPanel.Dock="Right">
+			<TabItem Header="General">
+				<ScrollViewer>
+					<controls:PropertyGridExt
+						Margin="4"
+						AllowQuickFilter="False"
+						DataContext="{Binding SelectedSoundGroup}">
+					</controls:PropertyGridExt>
+				</ScrollViewer>
+			</TabItem>
+			<TabItem Header="Scripts">
+				<DockPanel>
+					<Menu DockPanel.Dock="Top"
+							Height="48">
+						<controls:IconMenuItem
+							Text="Create"
+							ToolTip.Tip="Add"
+							IconSource="avares://MexManager/Assets/Common/icon_plus.png"
+							IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+							>
+							<MenuItem Header="_New Script"
+									  Click="AddScript_Click"
+									  IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+									  />
+							<MenuItem Header="_New Scripts"
+									  Click="AddMushroom_Click"
+									  IsEnabled="{Binding SelectedSoundGroup, Converter={StaticResource NullToBoolConverter}}"
+									  />
+						</controls:IconMenuItem>
+						<controls:IconMenuItem
+							Text="Remove"
+							ToolTip.Tip="Remove"
+							IconSource="avares://MexManager/Assets/Common/icon_delete.png"
+							Click="RemoveScript_Click"
+							IsEnabled="{Binding SelectedScript, Converter={StaticResource NullToBoolConverter}}"
+							/>
+						<controls:IconMenuItem
+							Text="Duplicate"
+							ToolTip.Tip="Duplicate"
+							IconSource="avares://MexManager/Assets/Common/icon_copy.png"
+							Click="DuplicateScript_Click"
+							IsEnabled="{Binding SelectedScript, Converter={StaticResource NullToBoolConverter}}"
+							/>
+						<controls:IconMenuItem
+							Text="Move Up"
+							ToolTip.Tip="Move Up"
+							IconSource="avares://MexManager/Assets/Common/icon_dir_up.png"
+							Click="MoveUpScript_Click"
+							IsEnabled="{Binding SelectedScript, Converter={StaticResource NullToBoolConverter}}"
+							/>
+						<controls:IconMenuItem
+							Text="Move Down"
+							ToolTip.Tip="Move Down"
+							IconSource="avares://MexManager/Assets/Common/icon_dir_down.png"
+							Click="MoveDownScript_Click"
+							IsEnabled="{Binding SelectedScript, Converter={StaticResource NullToBoolConverter}}"
+							/>
+					</Menu>
+					<DockPanel>
+						<ScrollViewer DockPanel.Dock="Left">
+							<ListBox
+								Name="ScriptList"
+								Width="280"
+								DockPanel.Dock="Top"
+								ItemsSource="{Binding SelectedSoundGroup.Scripts}"
+								SelectedItem="{Binding SelectedScript, Mode=TwoWay}"
+								DoubleTapped="ScriptList_DoubleTapped">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<DockPanel
+											Height="24"
+											ToolTip.Tip="{Binding Name}">
+											<TextBlock
+												DockPanel.Dock="Left"
+												VerticalAlignment="Center">
+												<TextBlock.Text>
+													<MultiBinding
+														Converter="{StaticResource ListBoxIndexConverter}">
+														<Binding Path="." />
+														<Binding RelativeSource="{RelativeSource AncestorType=ListBox}" />
+														<Binding RelativeSource="{RelativeSource AncestorType=UserControl}" 
+																 Path="DataContext.ScriptOffset"/>
+													</MultiBinding>
+												</TextBlock.Text>
+											</TextBlock>
+											<TextBlock
+												DockPanel.Dock="Left"
+												Text="{Binding Name}"
+												VerticalAlignment="Center"/>
+										</DockPanel>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+								</ListBox>
+						</ScrollViewer>
+						<controls:SemScriptEditor
+							DockPanel.Dock="Right"
+							DataContext="{Binding SelectedScript}"/>
+					</DockPanel>
+				</DockPanel>
+			</TabItem>
+			<TabItem Header="Sounds">
+				<DockPanel>
+					<Menu DockPanel.Dock="Top"
+							Height="48">
+						<controls:IconMenuItem
+							Text="File"
+							ToolTip.Tip="File"
+							IconSource="avares://MexManager/Assets/Common/icon_file.png">
+							<MenuItem
+								Header="Import"
+								ToolTip.Tip="Import"
+								Click="ImportSound_Click">
+								<MenuItem.Icon>
+									<Image Source="avares://MexManager/Assets/Common/file_import.png"/>
+								</MenuItem.Icon>
+							</MenuItem>
+							<MenuItem
+								Header="Export"
+								ToolTip.Tip="Export"
+								IsEnabled="{Binding SelectedSound, Converter={StaticResource NullToBoolConverter}}"
+								Click="ExportSound_Click">
+								<MenuItem.Icon>
+									<Image Source="avares://MexManager/Assets/Common/file_export.png"/>
+								</MenuItem.Icon>
+							</MenuItem>
+						</controls:IconMenuItem>
+						<controls:IconMenuItem
+							Text="Edit"
+							ToolTip.Tip="Edit"
+							IsEnabled="{Binding SelectedSound, Converter={StaticResource NullToBoolConverter}}"
+							IconSource="avares://MexManager/Assets/Common/icon_edit.png"
+							Click="EditSound_Click"/>
+						<controls:IconMenuItem
+							Text="Delete"
+							ToolTip.Tip="Delete"
+							IsEnabled="{Binding SelectedSound, Converter={StaticResource NullToBoolConverter}}"
+							IconSource="avares://MexManager/Assets/Common/icon_delete.png"
+							Click="RemoveSound_Click"/>
+						<controls:IconMenuItem
+							Text="Preview"
+							ToolTip.Tip="Preview"
+							IsEnabled="{Binding SelectedSound, Converter={StaticResource NullToBoolConverter}}"
+							IconSource="avares://MexManager/Assets/Common/audio_play.png"
+							Click="PreviewSound_Click"/>
+						<controls:IconMenuItem
+							Text="SSM"
+							IconSource="avares://MexManager/Assets/Common/icon_package.png">
+							<MenuItem
+								Header="Import"
+								ToolTip.Tip="Imports all sounds from an SSM file"
+								Click="ImportSSM_Click">
+								<MenuItem.Icon>
+									<Image Source="avares://MexManager/Assets/Common/file_import.png"/>
+								</MenuItem.Icon>
+							</MenuItem>
+							<MenuItem
+								Header="Export"
+								ToolTip.Tip="Exports all sounds to an SSM file"
+								Click="ExportSSM_Click">
+								<MenuItem.Icon>
+									<Image Source="avares://MexManager/Assets/Common/file_export.png"/>
+								</MenuItem.Icon>
+							</MenuItem>
+							<MenuItem
+								Header="Replace"
+								ToolTip.Tip="Replace's all sounds with sounds from an SSM file"
+								Click="ReplaceSSM_Click">
+								<MenuItem.Icon>
+									<Image Source="avares://MexManager/Assets/Common/icon_replace.png"/>
+								</MenuItem.Icon>
+							</MenuItem>
+						</controls:IconMenuItem>
+					</Menu>
+					<DockPanel>
+						<DataGrid
+							DockPanel.Dock="Left"
+								Name="SoundList"
+								Margin="10" 
+								ItemsSource="{Binding SelectedSoundGroup.Sounds}"
+								SelectedItem="{Binding SelectedSound, Mode=TwoWay}"
+								DoubleTapped="ListBox_DoubleTapped"
+								CanUserReorderColumns="True"
+								CanUserResizeColumns="True"
+								CanUserSortColumns="True"
+								GridLinesVisibility="All"
+								BorderThickness="1" 
+								BorderBrush="Gray">
+							<DataGrid.Columns>
+								<DataGridTemplateColumn Header="Index">
+									<DataGridTemplateColumn.CellTemplate>
+										<DataTemplate>
+											<TextBlock>
+												<TextBlock.Text>
+													<MultiBinding Converter="{StaticResource DataGridIndexConverter}">
+														<Binding Path="." />
+														<Binding Path="DataContext.SelectedSoundGroup.Sounds" RelativeSource="{RelativeSource AncestorType=DataGrid}"/>
+													</MultiBinding>
+												</TextBlock.Text>
+											</TextBlock>
+										</DataTemplate>
+									</DataGridTemplateColumn.CellTemplate>
+								</DataGridTemplateColumn>
+								<DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+								<DataGridTextColumn Header="Sample Rate" Binding="{Binding SampleRate}" />
+								<DataGridTextColumn Header="Channel Type" Binding="{Binding ChannelType}" />
+								<DataGridCheckBoxColumn Header="Use Loop" Binding="{Binding Loop, Mode=TwoWay}"/>
+								<DataGridTextColumn Header="Loop Point" Binding="{Binding LoopPoint}"/>
+								<DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="*"/>
+							</DataGrid.Columns>
+						</DataGrid>
+							<!--<ListBox
+							Name="SoundList"
+							DockPanel.Dock="Top"
+							ItemsSource="{Binding SelectedSoundGroup.Sounds}"
+							SelectedItem="{Binding SelectedSound, Mode=TwoWay}"
+							DoubleTapped="ListBox_DoubleTapped">
+								<ListBox.ItemTemplate>
+									<DataTemplate>
+										<DockPanel
+											ToolTip.Tip="{Binding Name}">
+											<TextBlock
+												DockPanel.Dock="Left"
+												VerticalAlignment="Center">
+												<TextBlock.Text>
+													<MultiBinding 
+														Converter="{StaticResource ListBoxIndexConverter}">
+														<Binding Path="." />
+														<Binding RelativeSource="{RelativeSource AncestorType=ListBox}" />
+													</MultiBinding>
+												</TextBlock.Text>
+											</TextBlock>
+											<TextBlock
+												DockPanel.Dock="Left"
+												Text="{Binding Name}"
+												VerticalAlignment="Center"/>
+											<TextBlock
+												DockPanel.Dock="Right"
+												HorizontalAlignment="Right"
+												Text="{Binding SampleRate}"
+												VerticalAlignment="Center"/>
+										</DockPanel>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
+							-->
+					</DockPanel>
+				</DockPanel>
+			</TabItem>
+		</TabControl>
+
+	</DockPanel>
+</UserControl>

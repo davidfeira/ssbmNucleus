@@ -1,0 +1,275 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"			 
+			 xmlns:views="clr-namespace:MexManager.Views"
+			 xmlns:controls="clr-namespace:MexManager.Controls"
+			 xmlns:tabs="clr-namespace:Tabalonia.Controls;assembly=Tabalonia"
+			 xmlns:converters="clr-namespace:MexManager.Converters"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="MexManager.Views.SSSEditorView">
+
+	<UserControl.Resources>
+		<converters:StageIconNameConverter x:Key="StageIdConverter"/>
+	</UserControl.Resources>
+	
+	<DockPanel Background="{DynamicResource TabItemBackgroundBrush}">
+		<StackPanel
+			DockPanel.Dock="Top"
+			Orientation="Horizontal">
+			<TabControl
+				Name="PageList"
+				ItemsSource="{Binding StagePages}"
+				SelectedItem="{Binding StageSelect, Mode=TwoWay}">
+				<TabControl.ItemTemplate>
+					<DataTemplate>
+						<Grid>
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+							</Grid.ColumnDefinitions>
+							<Button
+								Grid.Column="0"
+								Height="32"
+								VerticalAlignment="Center"
+								Background="{DynamicResource ThemeBackgroundBrush}"
+								Command="{Binding DataContext.MoveLeftStagePageCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+								CommandParameter="{Binding}">
+								<Button.Content>
+									<Image Source="/Assets/Common/icon_dir_left.png"/>
+								</Button.Content>
+							</Button>
+							<TextBlock
+								Grid.Column="1"
+								Margin="4 0 4 0"
+								Text="{Binding Name, Mode=TwoWay}"
+								HorizontalAlignment="Center"
+								VerticalAlignment="Center"/>
+							<Button
+								Grid.Column="2"
+								Height="32"
+								VerticalAlignment="Center"
+								Background="{DynamicResource ThemeBackgroundBrush}"
+								Command="{Binding DataContext.DeleteStagePageCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+								CommandParameter="{Binding}">
+								<Button.Content>
+									<Image Source="/Assets/Common/icon_minus.png"/>
+								</Button.Content>
+							</Button>
+							<Button
+								Grid.Column="3"
+								Height="32"
+								VerticalAlignment="Center"
+								Background="{DynamicResource ThemeBackgroundBrush}"
+								Command="{Binding DataContext.MoveRightStagePageCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+								CommandParameter="{Binding}">
+								<Button.Content>
+									<Image Source="/Assets/Common/icon_dir_right.png"/>
+								</Button.Content>
+							</Button>
+						</Grid>
+					</DataTemplate>
+				</TabControl.ItemTemplate>
+				<TabControl.ContentTemplate>
+					<DataTemplate>
+					</DataTemplate>
+				</TabControl.ContentTemplate>
+			</TabControl>
+			<Button
+				Height="32"
+				VerticalAlignment="Center"
+				Background="{DynamicResource ThemeBackgroundBrush}"
+				Command="{ Binding AddStagePageCommand }">
+				<Button.Content>
+					<Image Source="/Assets/Common/icon_plus.png"/>
+				</Button.Content>
+			</Button>
+		</StackPanel>
+		<Border
+			Background="#101010"
+			CornerRadius="10">
+			<TabControl DockPanel.Dock="Left"
+						IsEnabled="{Binding StageSelect, Converter={StaticResource NullToBoolConverter}}">
+				<TabItem Header="Page">
+					<controls:PropertyGridExt
+						Name="StageSelectProperties"
+						Margin="4"
+						AllowQuickFilter="False"
+						AllowFilter="False"
+						AllowToggleView="False"
+						DataContext="{ Binding StageSelect }">
+					</controls:PropertyGridExt>
+				</TabItem>
+				<TabItem Header="Icons">
+					<DockPanel>
+						<Menu DockPanel.Dock="Top"
+								Height="48">
+							<controls:IconMenuItem
+								Text="Add"
+								ToolTip.Tip="Add"
+								IconSource="avares://MexManager/Assets/Common/icon_plus.png"
+								Click="AddIcon_Click"/>
+							<controls:IconMenuItem
+								Text="Remove"
+								ToolTip.Tip="Remove"
+								IconSource="avares://MexManager/Assets/Common/icon_delete.png"
+								Click="RemoveIcon_Click"/>
+							<controls:IconMenuItem
+								Text="Move Up"
+								ToolTip.Tip="Move Up"
+								IconSource="avares://MexManager/Assets/Common/icon_dir_up.png"
+								Click="MoveUpIcon_Click"/>
+							<controls:IconMenuItem
+								Text="Move Down"
+								ToolTip.Tip="Move Down"
+								IconSource="avares://MexManager/Assets/Common/icon_dir_down.png"
+								Click="MoveDownIcon_Click"/>
+						</Menu>
+						<Grid DockPanel.Dock="Top">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+							</Grid.ColumnDefinitions>
+							<ScrollViewer Grid.Column="0">
+								<ListBox
+									Name="IconList"
+									Width="200"
+									ItemsSource="{Binding StageSelect.StageIcons}"
+									SelectedItem="{Binding SelectedSSSIcon, Mode=TwoWay}"
+									SelectionChanged="ListBox_SelectionChanged">
+									<ListBox.ItemTemplate>
+										<DataTemplate>
+											<StackPanel Orientation="Horizontal">
+												<TextBlock
+													VerticalAlignment="Center"
+													Margin="0,0,10,0">
+													<TextBlock.Text>
+														<MultiBinding Converter="{StaticResource ListBoxIndexConverter}">
+															<Binding Path="." />
+															<Binding RelativeSource="{RelativeSource AncestorType=ListBox}" />
+														</MultiBinding>
+													</TextBlock.Text>
+												</TextBlock>
+												<TextBlock Text="{Binding, Converter={StaticResource StageIdConverter}}"/>
+											</StackPanel>
+										</DataTemplate>
+									</ListBox.ItemTemplate>
+								</ListBox>
+							</ScrollViewer>
+							<ScrollViewer Grid.Column="1">
+								<controls:PropertyGridExt
+									Name="IconPropertyGrid"
+									Margin="4"
+									NameWidth="96"
+									Width="240"
+									AllowQuickFilter="False"
+									AllowFilter="False"
+									AllowToggleView="False"
+									ShowStyle="Builtin"
+									DataContext="{Binding SelectedSSSIcon}">
+								</controls:PropertyGridExt>
+							</ScrollViewer>
+						</Grid>
+					</DockPanel>
+				</TabItem>
+				<TabItem Header="Layout Template">
+					<DockPanel>
+						<Menu DockPanel.Dock="Top"
+								Height="48">
+							<controls:IconMenuItem
+									Text="Import"
+									ToolTip.Tip="Import"
+									IconSource="avares://MexManager/Assets/Common/file_import.png"
+									Click="ImportTemplate_Click"/>
+							<controls:IconMenuItem
+									Text="Export"
+									ToolTip.Tip="Export"
+									IconSource="avares://MexManager/Assets/Common/file_export.png"
+									Click="ExportTemplate_Click"/>
+							<controls:IconMenuItem
+									Text="Create"
+									ToolTip.Tip="Create"
+									IconSource="avares://MexManager/Assets/Common/icon_create.png"
+									Click="CreateTemplate_Click"/>
+							<controls:IconMenuItem
+									Text="Apply"
+									ToolTip.Tip="Apply"
+									IconSource="avares://MexManager/Assets/Common/icon_copy.png"
+									Click="ApplyTemplate_Click"/>
+						</Menu>
+						<CheckBox
+							IsChecked="{Binding AutoApplySSSTemplate}"
+							Content="Use Template"
+							DockPanel.Dock="Top"/>
+						<TabControl>
+							<TabItem Header="General">
+								<controls:PropertyGridExt
+										Name="TemplatePropertyGrid"
+										DataContext="{ Binding StageSelect.Template }"
+										Margin="4"
+										AllowQuickFilter="False"
+										AllowFilter="False"
+										AllowToggleView="False"
+										DockPanel.Dock="Top">
+								</controls:PropertyGridExt>
+							</TabItem>
+							<TabItem Header="Placements">
+								<DockPanel>
+									<ScrollViewer DockPanel.Dock="Left">
+										<ListBox
+										Width="200"
+										DockPanel.Dock="Top"
+										ItemsSource="{Binding StageSelect.Template.IconPlacements}"
+										SelectedItem="{Binding SelectedSSSTemplateIcon, Mode=TwoWay}">
+										</ListBox>
+									</ScrollViewer>
+									<ScrollViewer DockPanel.Dock="Right">
+										<controls:PropertyGridExt
+											DockPanel.Dock="Left"
+											Margin="4"
+											NameWidth="96"
+											AllowQuickFilter="False"
+											AllowFilter="False"
+											AllowToggleView="False"
+											ShowStyle="Builtin"
+											DataContext="{Binding SelectedSSSTemplateIcon}">
+										</controls:PropertyGridExt>
+									</ScrollViewer>
+								</DockPanel>
+							</TabItem>
+						</TabControl>
+						</DockPanel>
+					</TabItem>
+				<TabItem Header="Preview">
+					<StackPanel Orientation="Vertical">
+						<Button Click="RefreshIcons_Click"
+								ToolTip.Tip="Refreshes the icon display to reflect changes to icons">Refresh Icons</Button>
+						<controls:PropertyGridExt
+							Name="SelectScreenProperties"
+							Margin="4"
+							AllowQuickFilter="False"
+							AllowFilter="False"
+							AllowToggleView="False"
+							DataContext="{ Binding SelectScreen.Properties }">
+						</controls:PropertyGridExt>
+					</StackPanel>
+				</TabItem>
+			</TabControl>
+		</Border>
+		<DockPanel DockPanel.Dock="Right">
+			<controls:SelectCanvas
+				DockPanel.Dock="Top"
+				Name="SelectScreen"
+				HorizontalAlignment="Stretch"
+				VerticalAlignment="Stretch"
+				TemplateImage="avares://MexManager/Assets/Menu/sss_template.png"
+				TemplateImageWidth="28.59"
+				TemplateImageHeight="23.50"
+				ItemsSource="{Binding StageSelect.StageIcons}"
+				SelectedIcon="{Binding SelectedSSSIcon, Mode=TwoWay}"
+				SwapMode="{Binding AutoApplySSSTemplate}"/>
+		</DockPanel>
+	</DockPanel>
+</UserControl>

@@ -1,24 +1,60 @@
 .app {
   min-height: 100vh;
   background: #0f0f0f;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
-  text-align: center;
-  margin-bottom: 48px;
-  padding-top: 32px;
+  background: #1a1a1a;
+  border-bottom: 2px solid #333;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .app-header h1 {
-  font-size: 48px;
+  font-size: 2rem;
   font-weight: 700;
-  margin: 0 0 12px 0;
+  margin: 0;
   color: #fff;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.app-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tab {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+}
+
+.tab:hover {
+  color: #fff;
+  background: #252525;
+}
+
+.tab.active {
+  color: #fff;
+  border-bottom-color: #667eea;
+}
+
+.app-content {
+  flex: 1;
+  overflow: hidden;
 }
 
 .subtitle {

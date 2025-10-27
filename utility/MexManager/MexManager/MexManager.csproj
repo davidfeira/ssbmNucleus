@@ -1,0 +1,108 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PublishTrimmed>true</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Common\audio_pause.png" />
+    <None Remove="Assets\Common\audio_play.png" />
+    <None Remove="Assets\Common\category_series.png" />
+    <None Remove="Assets\Common\fighter_melee.png" />
+    <None Remove="Assets\Common\fighter_mex.png" />
+    <None Remove="Assets\Common\file_export.png" />
+    <None Remove="Assets\Common\file_import.png" />
+    <None Remove="Assets\Common\icon_copy.png" />
+    <None Remove="Assets\Common\icon_create.png" />
+    <None Remove="Assets\Common\icon_delete.png" />
+    <None Remove="Assets\Common\icon_dir_down.png" />
+    <None Remove="Assets\Common\icon_dir_left.png" />
+    <None Remove="Assets\Common\icon_dir_right.png" />
+    <None Remove="Assets\Common\icon_dir_up.png" />
+    <None Remove="Assets\Common\icon_duplicate.png" />
+    <None Remove="Assets\Common\icon_edit.png" />
+    <None Remove="Assets\Common\icon_export.png" />
+    <None Remove="Assets\Common\icon_file.png" />
+    <None Remove="Assets\Common\icon_hamburger.png" />
+    <None Remove="Assets\Common\icon_import_music.png" />
+    <None Remove="Assets\Common\icon_minus.png" />
+    <None Remove="Assets\Common\icon_plus.png" />
+    <None Remove="Assets\Common\icon_redo.png" />
+    <None Remove="Assets\Common\icon_replace.png" />
+    <None Remove="Assets\Common\icon_undo.png" />
+    <None Remove="Assets\Data\bgm.dat" />
+    <None Remove="Assets\dol.patch" />
+    <None Remove="Assets\Fonts\palatino-linotype-bold.ttf" />
+    <None Remove="Assets\Menu\category_code.png" />
+    <None Remove="Assets\Menu\category_fighter.png" />
+    <None Remove="Assets\Menu\category_filesystem.png" />
+    <None Remove="Assets\Menu\category_menu.png" />
+    <None Remove="Assets\Menu\category_music.png" />
+    <None Remove="Assets\Menu\category_sound.png" />
+    <None Remove="Assets\Menu\category_stage.png" />
+    <None Remove="Assets\Menu\css_hand_grab.png" />
+    <None Remove="Assets\Menu\css_hand_placed.png" />
+    <None Remove="Assets\Menu\css_hand_point.png" />
+    <None Remove="Assets\Menu\css_template.png" />
+    <None Remove="Assets\Menu\sss_template.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.3" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.1.3" />
+    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+    <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.1.3" />
+    <PackageReference Include="bodong.Avalonia.PropertyGrid" Version="11.1.1.1" />
+    <PackageReference Include="bodong.PropertyModels" Version="11.1.1.1" />
+    <PackageReference Include="Octokit" Version="13.0.1" />
+    <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.8.2" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\mexLib\mexLib.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="GCILib">
+      <HintPath>..\MexManager.Desktop\GCILib.dll</HintPath>
+    </Reference>
+    <Reference Include="HSDRaw">
+      <HintPath>..\MexManager.Desktop\HSDRaw.dll</HintPath>
+    </Reference>
+    <Reference Include="MeleeMedia">
+      <HintPath>..\MexManager.Desktop\MeleeMedia.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Remove="Views\BannerEditor.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Views\ProgressWindow.axaml.cs">
+      <DependentUpon>ProgressWindow.axaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Remove="Controls\SemScriptEditor.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Remove="Views\TrophyView.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Remove="Views\ProjectView.axaml" />
+  </ItemGroup>
+</Project>

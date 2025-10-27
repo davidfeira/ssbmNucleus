@@ -10,12 +10,70 @@
   font-size: 18px;
 }
 
+/* Storage Header */
+.storage-header {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
 /* Stats */
 .storage-stats {
   display: flex;
   gap: 20px;
   justify-content: center;
-  margin-bottom: 48px;
+}
+
+/* Actions */
+.storage-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.intake-import-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.intake-import-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.intake-import-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.import-message {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.import-message.success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.import-message.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .stat-card {
@@ -280,12 +338,21 @@
     font-size: 40px;
   }
 
+  .storage-header {
+    gap: 20px;
+  }
+
   .storage-stats {
     flex-direction: column;
   }
 
   .stat-card {
     padding: 20px 32px;
+  }
+
+  .intake-import-btn {
+    font-size: 14px;
+    padding: 10px 24px;
   }
 }
 

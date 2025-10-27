@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:views="clr-namespace:MexManager.Views"
+			 xmlns:converters="clr-namespace:MexManager.Converters"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="MexManager.Views.FighterMediaEditor">
+
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="*"/>
+			<ColumnDefinition Width="*"/>
+		</Grid.ColumnDefinitions>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="32"/>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="32"/>
+		</Grid.RowDefinitions>
+		<Image
+			Grid.Row="1"
+			Grid.Column="0"
+			Grid.ColumnSpan="2"
+			Name="PreviewImage"
+			Stretch="None"
+			Source="/Assets/Common/audio_pause.png"/>
+		<Button
+			Grid.Row="2"
+			Grid.Column="0"
+			HorizontalAlignment="Stretch"
+			HorizontalContentAlignment="Center"
+			Content="Import from .jpg"
+			Click="ImportButton_Click"/>
+		<Button
+			Grid.Row="2"
+			Grid.Column="1"
+			HorizontalAlignment="Stretch"
+			HorizontalContentAlignment="Center"
+			Content="Export as .jpg"
+			Click="ExportButton_Click"/>
+	</Grid>
+	
+</UserControl>

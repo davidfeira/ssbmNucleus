@@ -1,0 +1,388 @@
+.mex-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+.mex-panel.loading,
+.mex-panel.error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.mex-panel.error code {
+  display: block;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: #2a2a2a;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+.mex-header {
+  padding: 1rem 1.5rem;
+  background: #252525;
+  border-bottom: 2px solid #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mex-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.mex-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #2a2a2a;
+  border-radius: 20px;
+  font-size: 0.9rem;
+}
+
+.mex-status.connected .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.mex-actions {
+  padding: 1rem 1.5rem;
+  display: flex;
+  gap: 1rem;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-add,
+.btn-export,
+.btn-download {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: #1976d2;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #1565c0;
+}
+
+.btn-secondary {
+  background: #424242;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #525252;
+}
+
+.btn-add {
+  background: #4caf50;
+  color: white;
+  padding: 0.5rem 1rem;
+}
+
+.btn-add:hover {
+  background: #43a047;
+}
+
+.btn-add:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.mex-stats {
+  display: flex;
+  gap: 2rem;
+  padding: 1rem 1.5rem;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #1976d2;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #999;
+  text-transform: uppercase;
+}
+
+.mex-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  overflow: hidden;
+}
+
+.fighters-list {
+  background: #1e1e1e;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fighters-list h3 {
+  padding: 1rem 1.5rem;
+  margin: 0;
+  border-bottom: 1px solid #333;
+  background: #252525;
+}
+
+.fighter-items {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.fighter-item {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #2a2a2a;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.fighter-item:hover {
+  background: #252525;
+}
+
+.fighter-item.selected {
+  background: #1976d2;
+}
+
+.fighter-name {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.fighter-info {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.fighter-item.selected .fighter-info {
+  color: #fff;
+}
+
+.available-count {
+  color: #4caf50;
+}
+
+.fighter-item.selected .available-count {
+  color: #a5d6a7;
+}
+
+.costumes-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  gap: 0;
+}
+
+.costumes-section {
+  border-bottom: 1px solid #333;
+}
+
+.costumes-section h3 {
+  padding: 1rem 1.5rem;
+  margin: 0;
+  border-bottom: 1px solid #333;
+  background: #252525;
+  font-size: 0.95rem;
+  color: #e0e0e0;
+}
+
+.costume-list {
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  align-content: start;
+  min-height: 150px;
+}
+
+.costume-list.existing {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.costume-card {
+  background: #252525;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #333;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.costume-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.costume-preview {
+  width: 100%;
+  aspect-ratio: 136 / 188;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.costume-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.costume-info {
+  padding: 1rem;
+}
+
+.costume-info h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.costume-code {
+  font-size: 0.85rem;
+  color: #999;
+  margin-bottom: 0.75rem;
+  font-family: 'Courier New', monospace;
+}
+
+.existing-costume {
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+}
+
+.existing-costume .costume-preview {
+  background: #0f0f0f;
+}
+
+.existing-costume .costume-info {
+  padding: 0.75rem;
+}
+
+.existing-costume h4 {
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.costume-file {
+  font-size: 0.75rem;
+  color: #666;
+  margin: 0.25rem 0 0.5rem 0;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.costume-assets {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.stock-icon {
+  width: 24px;
+  height: 24px;
+  background: #0f0f0f;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stock-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.costume-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: #1976d2;
+  color: white;
+  font-size: 0.7rem;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.no-selection,
+.no-costumes {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+/* Scrollbar styling */
+.fighter-items::-webkit-scrollbar,
+.costume-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.fighter-items::-webkit-scrollbar-track,
+.costume-list::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.fighter-items::-webkit-scrollbar-thumb,
+.costume-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+.fighter-items::-webkit-scrollbar-thumb:hover,
+.costume-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

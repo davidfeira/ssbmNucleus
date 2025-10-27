@@ -1,0 +1,50 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:pgc="clr-namespace:Avalonia.PropertyGrid.Controls;assembly=Avalonia.PropertyGrid"
+             xmlns:converters="clr-namespace:MexManager.Converters"
+			 xmlns:controls="clr-namespace:MexManager.Controls"
+			 x:Class="MexManager.App"
+			 xmlns:views="clr-namespace:MexManager.Views"
+             RequestedThemeVariant="Dark">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+	
+	<Application.Resources>
+		<FontFamily x:Key="Palatino">avares://MexManager/Assets/Fonts/Palatino_Linotype.ttf#Palatino Linotype</FontFamily>
+		<!-- <FontFamily x:Key="FolkProH">avares://MexManager/Assets/Fonts/A_OTF_Folk_Pro_H.otf#A-OTF Folk Pro H</FontFamily>-->
+		
+		<!-- Register the IndexConverter -->
+		<converters:ListBoxIndexConverter x:Key="ListBoxIndexConverter"/>
+		<converters:NullToBoolConverter x:Key="NullToBoolConverter"/>
+		<converters:BooleanInverterConverter x:Key="BooleanInverterConverter"/>
+
+		<!-- DataTemplate for ListBox items -->
+		<DataTemplate x:Key="IndexedItemTemplate">
+			<StackPanel Orientation="Horizontal">
+				<TextBlock
+					VerticalAlignment="Center"
+					Margin="0,0,10,0">
+					<TextBlock.Text>
+						<MultiBinding Converter="{StaticResource ListBoxIndexConverter}">
+							<Binding Path="." />
+							<Binding RelativeSource="{RelativeSource AncestorType=ListBox}" />
+						</MultiBinding>
+					</TextBlock.Text>
+				</TextBlock>
+				<TextBlock Text="{Binding Name}"/>
+			</StackPanel>
+		</DataTemplate>
+
+	</Application.Resources>
+	
+	<Application.Styles>
+		<FluentTheme />
+
+		<Style Selector="TabItem">
+			<Setter Property="FontFamily" Value="Segoe UI"/>
+			<Setter Property="FontSize" Value="16"/>
+		</Style>
+
+		<StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+
+    </Application.Styles>
+</Application>

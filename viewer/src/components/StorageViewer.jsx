@@ -2,8 +2,40 @@ import { useState } from 'react'
 import './StorageViewer.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 
+const API_URL = 'http://127.0.0.1:5000/api/mex'
+
 export default function StorageViewer({ metadata }) {
   const [selectedCharacter, setSelectedCharacter] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState('')
+
+  const handleIntakeImport = async () => {
+    setImporting(true)
+    setImportMessage('Importing from intake folder...')
+
+    try {
+      const response = await fetch(`${API_URL}/intake/import`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        setImportMessage('Import successful! Refresh the page to see new costumes.')
+        setTimeout(() => {
+          window.location.reload()
+        }, 2000)
+      } else {
+        setImportMessage(`Import failed: ${data.error}`)
+      }
+    } catch (err) {
+      setImportMessage(`Error: ${err.message}`)
+    } finally {
+      setTimeout(() => {
+        setImporting(false)
+        setImportMessage('')
+      }, 3000)
+    }
+  }
 
   // Merge default characters with metadata
   // Always show all 26 vanilla characters, even if they don't have custom skins
@@ -102,14 +134,30 @@ export default function StorageViewer({ metadata }) {
   // Character selection grid
   return (
     <div className="storage-viewer">
-      <div className="storage-stats">
-        <div className="stat-card">
-          <div className="stat-value">{characters.length}</div>
-          <div className="stat-label">Characters</div>
+      <div className="storage-header">
+        <div className="storage-stats">
+          <div className="stat-card">
+            <div className="stat-value">{characters.length}</div>
+            <div className="stat-label">Characters</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{totalSkins}</div>
+            <div className="stat-label">Total Skins</div>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{totalSkins}</div>
-          <div className="stat-label">Total Skins</div>
+        <div className="storage-actions">
+          <button
+            onClick={handleIntakeImport}
+            disabled={importing}
+            className="intake-import-btn"
+          >
+            {importing ? 'Importing...' : 'Import from Intake'}
+          </button>
+          {importMessage && (
+            <div className={`import-message ${importMessage.includes('failed') || importMessage.includes('Error') ? 'error' : 'success'}`}>
+              {importMessage}
+            </div>
+          )}
         </div>
       </div>
 
