@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+
+# Logs
+logs/
+*.log
+
+# Game files (large and shouldn't be committed)
+*.iso
+
+# Storage data (don't commit user's costume collection)
+storage/
+intake/
+*.dat
+*.zip
+
+# Temporary files
+*.tmp
+*_TEMP.*
+~$*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js / Viewer
+node_modules/
+viewer/node_modules/
+viewer/dist/
+viewer/.cache/
+viewer/public/storage/
+*.lock
+package-lock.json
+yarn.lock
+
+# Build artifacts (MEX build data is large and user-specific)
+build/
+
+# Utility backend tools (large binaries and dependencies)
+utility/website/
+utility/backend/
+
+# Keep vanilla assets but ignore large generated files
+!utility/assets/vanilla/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Generated CSPs and stocks in intake
+intake/*_csp.png
+intake/stock_*.png
+
+# Editor temp files
+*.bak
+*.orig
