@@ -249,7 +249,13 @@ const MexPanel = () => {
       return;
     }
 
-    if (!confirm(`Are you sure you want to remove "${costumeName}" from ${fighterName}?`)) {
+    // Ice Climbers: Mention paired removal in confirmation
+    const isIceClimbers = fighterName === 'Ice Climbers';
+    const confirmMessage = isIceClimbers
+      ? `Are you sure you want to remove "${costumeName}" (and paired Nana) from Ice Climbers?`
+      : `Are you sure you want to remove "${costumeName}" from ${fighterName}?`;
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -257,11 +263,15 @@ const MexPanel = () => {
     console.log(`Fighter: ${fighterName}`);
     console.log(`Costume Index: ${costumeIndex}`);
     console.log(`Costume Name: ${costumeName}`);
+    if (isIceClimbers) {
+      console.log(`Will also remove paired Nana at index ${costumeIndex}`);
+    }
 
     setRemoving(true);
     setRemovingCostume(costumeIndex);
 
     try {
+      // Remove Popo (or regular character)
       const requestBody = {
         fighter: fighterName,
         costumeIndex: costumeIndex
@@ -280,19 +290,48 @@ const MexPanel = () => {
       const data = await response.json();
       console.log('Remove response:', data);
 
-      if (data.success) {
-        console.log(`✓ Successfully removed "${costumeName}" from ${fighterName}`);
-
-        // Immediately refresh to show updated data
-        setRefreshing(true);
-        await Promise.all([
-          fetchFighters(),
-          selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
-        ]);
-        setRefreshing(false);
-      } else {
+      if (!data.success) {
         alert(`Remove failed: ${data.error}`);
+        return;
       }
+
+      console.log(`✓ Successfully removed "${costumeName}" from ${fighterName}`);
+
+      // Ice Climbers: Also remove paired Nana at same index
+      if (isIceClimbers) {
+        console.log(`Removing paired Nana at index ${costumeIndex}...`);
+
+        const nanaRequestBody = {
+          fighter: 'Popo', // MEX uses "Popo" for Nana
+          costumeIndex: costumeIndex
+        };
+
+        const nanaResponse = await fetch(`${API_URL}/remove`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(nanaRequestBody)
+        });
+
+        const nanaData = await nanaResponse.json();
+        console.log('Nana remove response:', nanaData);
+
+        if (!nanaData.success) {
+          alert(`Popo removed but Nana removal failed: ${nanaData.error}`);
+        } else {
+          console.log(`✓ Successfully removed paired Nana`);
+        }
+      }
+
+      // Immediately refresh to show updated data
+      setRefreshing(true);
+      await Promise.all([
+        fetchFighters(),
+        selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
+      ]);
+      setRefreshing(false);
+
     } catch (err) {
       console.error('Remove error:', err);
       alert(`Remove error: ${err.message}`);

@@ -1,27 +1,14 @@
-[2025-10-28 16:26:01.196] Trying to open ALC device
-[2025-10-28 16:26:01.263] Success
-[2025-10-28 16:26:01.263] Trying to create ALC Context
-[2025-10-28 16:26:01.275] Success
-[2025-10-28 16:26:01.275] Trying make ALC context current
-[2025-10-28 16:26:01.275] Success
-[2025-10-28 16:26:02.199] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
-[2025-10-28 16:26:02.199] "codes.ini" is up to date
-[2025-10-28 16:26:02.342] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
-[2025-10-28 16:26:02.342] "codes.gct" is up to date
-[2025-10-28 16:26:02.667] Check Update
-[2025-10-28 16:26:02.667] Name: MexManager [Latest]
-[2025-10-28 16:26:02.667] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
-[2025-10-28 16:26:02.668] Upload Date: 10/18/2025 4:11:43 PM +00:00
-Compiled sounds 00:00:00.2417464
-Compiled MxDt 00:00:00.3353193
-Compiled PlCo 00:00:00.3486066
-Generate IfAll 00:00:00.2655257
-Generate MxSr 00:00:00.0057028
-Generate MnSlChr 00:00:00.6253160
-Generate MnSlMap 00:00:00.1692506
-Generate GmRst 00:00:00.1791276
-Compiled Trophies 00:00:00.4023331
-Compiled codes 00:00:00.0014278
-Save Project Data 00:00:00.1743088
-Save files 00:00:00.2310723
-Total Save Time 00:00:02.9797370
+[2025-10-28 16:41:53.902] Trying to open ALC device
+[2025-10-28 16:41:53.966] Success
+[2025-10-28 16:41:53.966] Trying to create ALC Context
+[2025-10-28 16:41:54.012] Success
+[2025-10-28 16:41:54.012] Trying make ALC context current
+[2025-10-28 16:41:54.012] Success
+[2025-10-28 16:41:54.914] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
+[2025-10-28 16:41:54.915] "codes.ini" is up to date
+[2025-10-28 16:41:55.036] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
+[2025-10-28 16:41:55.036] "codes.gct" is up to date
+[2025-10-28 16:41:55.353] Check Update
+[2025-10-28 16:41:55.353] Name: MexManager [Latest]
+[2025-10-28 16:41:55.353] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
+[2025-10-28 16:41:55.354] Upload Date: 10/18/2025 4:11:43 PM +00:00
