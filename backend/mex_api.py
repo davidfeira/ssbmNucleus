@@ -540,7 +540,7 @@ def list_storage_costumes():
                 zip_path = STORAGE_PATH / char_name / skin['filename']
 
                 if zip_path.exists():
-                    costumes.append({
+                    costume_data = {
                         'character': char_name,
                         'name': f"{char_name} - {skin.get('color', 'Custom')}",
                         'folder': skin['id'],
@@ -548,8 +548,14 @@ def list_storage_costumes():
                         'zipPath': str(zip_path.relative_to(PROJECT_ROOT)),
                         # These paths are relative to viewer/public/ which Vite serves at root
                         'cspUrl': f"/storage/{char_name}/{skin['id']}_csp.png" if skin.get('has_csp') else None,
-                        'stockUrl': f"/storage/{char_name}/{skin['id']}_stc.png" if skin.get('has_stock') else None
-                    })
+                        'stockUrl': f"/storage/{char_name}/{skin['id']}_stc.png" if skin.get('has_stock') else None,
+                        # Ice Climbers pairing metadata
+                        'isPopo': skin.get('is_popo', False),
+                        'isNana': skin.get('is_nana', False),
+                        'pairedNanaId': skin.get('paired_nana_id'),
+                        'pairedPopoId': skin.get('paired_popo_id')
+                    }
+                    costumes.append(costume_data)
 
         return jsonify({
             'success': True,
@@ -865,6 +871,7 @@ def import_file():
 
                 # Import each detected costume
                 results = []
+                imported_skin_ids = {}  # Track actual skin IDs: costume_code -> skin_id
                 for character_info in character_infos_sorted:
                     logger.info(f"  - Importing {character_info['character']} - {character_info['color']}")
                     result = import_character_costume(temp_zip_path, character_info, file.filename)
@@ -873,6 +880,13 @@ def import_file():
                             'character': character_info['character'],
                             'color': character_info['color']
                         })
+                        # Track the actual skin ID that was created
+                        if result.get('skin_id'):
+                            imported_skin_ids[character_info['costume_code']] = result['skin_id']
+
+                # Post-process: Fix Ice Climbers pairing with actual skin IDs
+                if any(ci.get('is_popo') or ci.get('is_nana') for ci in character_infos_sorted):
+                    fix_ice_climbers_pairing(character_infos_sorted, imported_skin_ids)
 
                 return jsonify({
                     'success': True,
@@ -913,6 +927,70 @@ def import_file():
         }), 500
 
 
+def fix_ice_climbers_pairing(character_infos: list, imported_skin_ids: dict):
+    """
+    Fix Ice Climbers pairing after import using actual skin IDs.
+
+    Args:
+        character_infos: List of character info dicts with pairing metadata
+        imported_skin_ids: Dict mapping costume_code -> actual skin_id created
+    """
+    try:
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if 'Ice Climbers' not in metadata.get('characters', {}):
+            return
+
+        # Build a mapping of costume_code -> character_info for easy lookup
+        info_by_code = {ci['costume_code']: ci for ci in character_infos}
+
+        # Update each Ice Climbers skin with actual paired IDs
+        updated = False
+        for skin in metadata['characters']['Ice Climbers']['skins']:
+            costume_code = skin['costume_code']
+
+            # Skip if this costume wasn't just imported
+            if costume_code not in imported_skin_ids:
+                continue
+
+            char_info = info_by_code.get(costume_code)
+            if not char_info:
+                continue
+
+            # Update Popo with actual Nana ID
+            if char_info.get('is_popo') and char_info.get('pair_costume_code'):
+                nana_costume_code = char_info['pair_costume_code']
+                actual_nana_id = imported_skin_ids.get(nana_costume_code)
+                if actual_nana_id:
+                    skin['paired_nana_id'] = actual_nana_id
+                    logger.info(f"Linked Popo {skin['id']} -> Nana {actual_nana_id}")
+                    updated = True
+
+            # Update Nana with actual Popo ID
+            elif char_info.get('is_nana') and char_info.get('pair_costume_code'):
+                popo_costume_code = char_info['pair_costume_code']
+                actual_popo_id = imported_skin_ids.get(popo_costume_code)
+                if actual_popo_id:
+                    skin['paired_popo_id'] = actual_popo_id
+                    logger.info(f"Linked Nana {skin['id']} -> Popo {actual_popo_id}")
+                    updated = True
+
+        # Save metadata if we made changes
+        if updated:
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            logger.info("✓ Updated Ice Climbers pairing with actual skin IDs")
+
+    except Exception as e:
+        logger.error(f"Failed to fix Ice Climbers pairing: {e}", exc_info=True)
+
+
 def import_character_costume(zip_path: str, char_info: dict, original_filename: str) -> dict:
     """Import a character costume to storage"""
     try:
@@ -939,7 +1017,9 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         existing_ids = [skin['id'] for skin in char_data.get('skins', [])]
 
         # Generate sequential ID
-        base_id = f"{character.lower().replace(' ', '-')}-{char_info['color'].lower()}"
+        # Sanitize color name: replace spaces and slashes with hyphens
+        color_safe = char_info['color'].lower().replace(' ', '-').replace('/', '-')
+        base_id = f"{character.lower().replace(' ', '-')}-{color_safe}"
         skin_id = base_id
         counter = 1
         while skin_id in existing_ids:
@@ -1118,21 +1198,19 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         }
 
         # Ice Climbers pairing metadata
+        # Note: paired_nana_id/paired_popo_id will be set by fix_ice_climbers_pairing()
+        # after both costumes are imported, using actual skin IDs
         if char_info.get('is_popo'):
             skin_entry['is_popo'] = True
             skin_entry['visible'] = True
-            if char_info.get('pair_color'):
-                # Generate paired Nana ID
-                nana_id = f"{character.lower().replace(' ', '-')}-{char_info['pair_color'].lower()}"
-                skin_entry['paired_nana_id'] = nana_id
+            # Placeholder - will be updated with actual Nana ID after import
+            skin_entry['paired_nana_id'] = None
 
         elif char_info.get('is_nana'):
             skin_entry['is_nana'] = True
             skin_entry['visible'] = False  # Hidden in UI
-            if char_info.get('pair_color'):
-                # Generate paired Popo ID
-                popo_id = f"{character.lower().replace(' ', '-')}-{char_info['pair_color'].lower()}"
-                skin_entry['paired_popo_id'] = popo_id
+            # Placeholder - will be updated with actual Popo ID after import
+            skin_entry['paired_popo_id'] = None
 
         metadata['characters'][character]['skins'].append(skin_entry)
 
@@ -1147,6 +1225,7 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'type': 'character',
             'character': character,
             'color': char_info['color'],
+            'skin_id': skin_id,  # Return the actual skin ID for pairing
             'message': f"Imported {character} - {char_info['color']} costume"
         }
 

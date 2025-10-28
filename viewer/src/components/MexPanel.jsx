@@ -140,36 +140,98 @@ const MexPanel = () => {
     setImportingCostume(costume.zipPath);
 
     try {
-      const requestBody = {
-        fighter: costume.character,
-        costumePath: costume.zipPath
-      };
+      // Ice Climbers: Auto-import paired Nana when Popo is selected
+      if (costume.isPopo && costume.pairedNanaId) {
+        console.log('Ice Climbers Popo detected - will auto-import paired Nana');
 
-      console.log('Sending import request:', requestBody);
+        // Find paired Nana costume in storage
+        const nanaCostume = storageCostumes.find(c => c.folder === costume.pairedNanaId);
 
-      const response = await fetch(`${API_URL}/import`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
+        if (!nanaCostume) {
+          console.error('Paired Nana costume not found:', costume.pairedNanaId);
+          alert('Paired Nana costume not found in storage');
+          return;
+        }
 
-      const data = await response.json();
-      console.log('Import response:', data);
+        // Import Popo first (MEX calls it "Ice Climbers")
+        const popoResponse = await fetch(`${API_URL}/import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fighter: 'Ice Climbers',
+            costumePath: costume.zipPath
+          })
+        });
 
-      if (data.success) {
-        console.log(`✓ Successfully imported ${data.result.costumesImported} costume(s) to ${costume.character}`);
+        const popoData = await popoResponse.json();
+        console.log('Popo import response:', popoData);
 
-        // Immediately refresh to show updated data
+        if (!popoData.success) {
+          alert(`Popo import failed: ${popoData.error}`);
+          return;
+        }
+
+        // Import Nana second (MEX calls it "Popo", confusingly)
+        const nanaResponse = await fetch(`${API_URL}/import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fighter: 'Popo',
+            costumePath: nanaCostume.zipPath
+          })
+        });
+
+        const nanaData = await nanaResponse.json();
+        console.log('Nana import response:', nanaData);
+
+        if (!nanaData.success) {
+          alert(`Nana import failed: ${nanaData.error}`);
+          return;
+        }
+
+        console.log(`✓ Successfully imported Ice Climbers pair (Popo + Nana)`);
+
+        // Refresh fighters list
         setRefreshing(true);
         await Promise.all([
           fetchFighters(),
           selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
         ]);
         setRefreshing(false);
+
       } else {
-        alert(`Import failed: ${data.error}`);
+        // Normal single costume import
+        const requestBody = {
+          fighter: costume.character,
+          costumePath: costume.zipPath
+        };
+
+        console.log('Sending import request:', requestBody);
+
+        const response = await fetch(`${API_URL}/import`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+        console.log('Import response:', data);
+
+        if (data.success) {
+          console.log(`✓ Successfully imported ${data.result.costumesImported} costume(s) to ${costume.character}`);
+
+          // Immediately refresh to show updated data
+          setRefreshing(true);
+          await Promise.all([
+            fetchFighters(),
+            selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
+          ]);
+          setRefreshing(false);
+        } else {
+          alert(`Import failed: ${data.error}`);
+        }
       }
     } catch (err) {
       console.error('Import error:', err);
@@ -241,7 +303,8 @@ const MexPanel = () => {
   };
 
   const getCostumesForFighter = (fighterName) => {
-    return storageCostumes.filter(c => c.character === fighterName);
+    // Filter out Nana costumes (they're auto-imported with Popo)
+    return storageCostumes.filter(c => c.character === fighterName && !c.isNana);
   };
 
   // DAS Functions
