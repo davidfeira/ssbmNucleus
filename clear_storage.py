@@ -4,7 +4,10 @@ Clear Storage Script - Removes all storage data
 
 This script will:
 - Delete all character folders in storage/
-- Delete storage metadata.json
+- Delete all stage variant folders in storage/das/
+- Delete extracted preview images (CSP/stock icons)
+- Reset storage metadata.json to default structure
+- Clear Python cache directories
 - Optionally clear intake folder
 - Optionally clear logs
 
@@ -20,13 +23,22 @@ Usage:
 
 import sys
 import shutil
+import json
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 STORAGE_DIR = SCRIPT_DIR / "storage"
+DAS_DIR = STORAGE_DIR / "das"
 INTAKE_DIR = SCRIPT_DIR / "intake"
 LOGS_DIR = SCRIPT_DIR / "logs"
 METADATA_FILE = STORAGE_DIR / "metadata.json"
+
+# Default metadata structure
+DEFAULT_METADATA = {
+    "version": "1.0",
+    "characters": {},
+    "stages": {}
+}
 
 
 def clear_storage():
@@ -35,18 +47,38 @@ def clear_storage():
 
     removed_count = 0
 
-    # Remove character folders in storage
+    # Remove character folders in storage (excluding 'das' folder)
     if STORAGE_DIR.exists():
         for item in STORAGE_DIR.iterdir():
-            if item.is_dir():
+            if item.is_dir() and item.name != "das":
                 print(f"  Removing: {item.name}/")
                 shutil.rmtree(item)
                 removed_count += 1
 
-    # Remove metadata.json
-    if METADATA_FILE.exists():
-        print(f"  Removing: metadata.json")
-        METADATA_FILE.unlink()
+    # Remove stage variant folders in storage/das/
+    if DAS_DIR.exists():
+        for stage_folder in DAS_DIR.iterdir():
+            if stage_folder.is_dir():
+                # Clear contents of each stage folder
+                variant_count = 0
+                for variant_item in stage_folder.iterdir():
+                    variant_item.unlink() if variant_item.is_file() else shutil.rmtree(variant_item)
+                    variant_count += 1
+                if variant_count > 0:
+                    print(f"  Removing: das/{stage_folder.name}/ ({variant_count} items)")
+                    removed_count += 1
+
+    # Clear Python cache directories
+    cache_count = clear_cache()
+    if cache_count > 0:
+        removed_count += cache_count
+
+    # Reset metadata.json to default structure
+    if METADATA_FILE.exists() or STORAGE_DIR.exists():
+        print(f"  Resetting: metadata.json")
+        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(METADATA_FILE, 'w') as f:
+            json.dump(DEFAULT_METADATA, f, indent=2)
         removed_count += 1
 
     if removed_count > 0:
@@ -72,6 +104,20 @@ def clear_intake():
         print(f"[OK] Cleared {removed_count} files from intake")
     else:
         print("[INFO] Intake is already empty")
+
+
+def clear_cache():
+    """Clear Python cache directories"""
+    removed_count = 0
+
+    # Find and remove all __pycache__ directories
+    for cache_dir in SCRIPT_DIR.rglob("__pycache__"):
+        if cache_dir.is_dir():
+            print(f"  Removing: {cache_dir.relative_to(SCRIPT_DIR)}")
+            shutil.rmtree(cache_dir)
+            removed_count += 1
+
+    return removed_count
 
 
 def clear_logs():

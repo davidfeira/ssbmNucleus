@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import StorageViewer from './components/StorageViewer'
 import MexPanel from './components/MexPanel'
+import Settings from './components/Settings'
 import './App.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -46,6 +47,12 @@ function App() {
           >
             MEX Manager
           </button>
+          <button
+            className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
         </nav>
       </header>
 
@@ -58,6 +65,7 @@ function App() {
           <>
             {activeTab === 'storage' && <StorageViewer metadata={metadata} />}
             {activeTab === 'mex' && <MexPanel />}
+            {activeTab === 'settings' && <Settings metadata={metadata} />}
           </>
         )}
       </main>

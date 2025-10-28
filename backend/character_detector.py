@@ -4,8 +4,15 @@ Character Detector - Detects character and costume info from DAT files
 import sys
 import os
 from pathlib import Path
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 import zipfile
+
+# Try to import py7zr for 7z support
+try:
+    import py7zr
+    HAS_7Z_SUPPORT = True
+except ImportError:
+    HAS_7Z_SUPPORT = False
 
 # Add utility scripts to path
 SCRIPT_DIR = Path(__file__).parent.parent
@@ -19,43 +26,118 @@ except ImportError:
     DATParser = None
 
 
-def detect_character_from_zip(zip_path: str) -> Optional[Dict]:
+def build_image_indexes(filenames: list) -> tuple:
     """
-    Detect character information from a ZIP file containing a character costume.
+    Build dual indexes for CSPs and stocks from ZIP file list.
 
     Args:
-        zip_path: Path to the ZIP file
+        filenames: List of all filenames in ZIP
 
     Returns:
-        Dict with character info if detected, None otherwise:
+        Tuple of (csps_by_name, csps_by_path, stocks_by_name, stocks_by_path)
+        Each is a dict mapping to file info
+    """
+    csps_by_name = {}
+    csps_by_path = {}
+    stocks_by_name = {}
+    stocks_by_path = {}
+
+    image_extensions = {'.png', '.jpg', '.jpeg'}
+
+    for filename in filenames:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in image_extensions:
+            continue
+
+        basename = os.path.splitext(os.path.basename(filename))[0].lower()
+        folder = os.path.dirname(filename)
+
+        info = {
+            'filename': filename,
+            'folder': folder,
+            'basename': basename
+        }
+
+        # Determine if CSP or stock by filename patterns
+        basename_lower = basename.lower()
+        if any(pattern in basename_lower for pattern in ['csp', 'portrait', 'icon']) and 'stock' not in basename_lower:
+            csps_by_name[basename] = info
+            csps_by_path[filename] = info
+        elif any(pattern in basename_lower for pattern in ['stc', 'stock']):
+            stocks_by_name[basename] = info
+            stocks_by_path[filename] = info
+        else:
+            # Default: treat as potential CSP if no clear stock indicator
+            csps_by_name[basename] = info
+            csps_by_path[filename] = info
+
+    return csps_by_name, csps_by_path, stocks_by_name, stocks_by_path
+
+
+def detect_character_from_zip(zip_path: str) -> List[Dict]:
+    """
+    Detect character information from a ZIP/7z file containing character costumes.
+    Now supports multiple DATs in one archive and 7z files.
+
+    Args:
+        zip_path: Path to the ZIP or 7z file
+
+    Returns:
+        List of dicts with character info. Empty list if none detected.
+        Each dict contains:
         {
             'character': 'Fox',
             'color': 'Green',
             'costume_code': 'PlFxGr',
             'dat_file': 'PlFxGr.dat',
             'csp_file': 'csp.png' or None,
-            'stock_file': 'stc.png' or None
+            'stock_file': 'stc.png' or None,
+            'folder': 'green_fox/' or ''
         }
     """
     if not DATParser:
         print("DATParser not available")
-        return None
+        return []
+
+    # Detect archive type
+    is_7z = zip_path.lower().endswith('.7z')
+
+    if is_7z and not HAS_7Z_SUPPORT:
+        print("7z file provided but py7zr not installed")
+        return []
 
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            filenames = zf.namelist()
+        # Open appropriate archive type
+        if is_7z:
+            archive = py7zr.SevenZipFile(zip_path, 'r')
+            filenames = archive.getnames()
+        else:
+            archive = zipfile.ZipFile(zip_path, 'r')
+            filenames = archive.namelist()
 
-            # Find .dat file
-            dat_files = [f for f in filenames if f.endswith('.dat')]
-            if not dat_files:
-                return None
+        # Find ALL .dat files
+        dat_files = [f for f in filenames if f.endswith('.dat')]
+        if not dat_files:
+            if not is_7z:
+                archive.close()
+            return []
 
-            dat_filename = dat_files[0]
+        # Build dual indexes for smart matching
+        csps_by_name, csps_by_path, stocks_by_name, stocks_by_path = build_image_indexes(filenames)
 
+        results = []
+        import tempfile
+
+        # Process each DAT file
+        for dat_filename in dat_files:
             # Extract DAT to temp location for parsing
-            import tempfile
             with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp:
-                tmp.write(zf.read(dat_filename))
+                # Read file data from appropriate archive type
+                if is_7z:
+                    file_data = archive.read([dat_filename])
+                    tmp.write(file_data[dat_filename].read())
+                else:
+                    tmp.write(archive.read(dat_filename))
                 tmp_path = tmp.name
 
             try:
@@ -65,34 +147,70 @@ def detect_character_from_zip(zip_path: str) -> Optional[Dict]:
 
                 character, symbol = parser.detect_character()
                 if not character:
-                    return None
+                    continue
 
                 # Check if it's a costume (has Ply symbol) vs data mod (only ftData)
                 has_ply_symbol = any('Ply' in node['symbol'] for node in parser.root_nodes)
                 if not has_ply_symbol:
                     # This is a data/effect mod, not a costume
-                    return None
+                    continue
 
                 color_info = parser.detect_costume_color()
                 costume_code = parser.get_character_filename()
 
-                # Find CSP and stock in ZIP
-                csp_file = find_image_in_zip(filenames, ['csp', 'portrait', 'icon'])
-                stock_file = find_image_in_zip(filenames, ['stc', 'stock', 'icon'], exclude=['csp'])
+                # Get folder context for this DAT
+                dat_folder = os.path.dirname(dat_filename)
+                dat_basename = os.path.splitext(os.path.basename(dat_filename))[0].lower()
+
+                # THREE-TIER MATCHING for CSP
+                csp_file = None
+
+                # Tier 1: Exact filename match
+                if dat_basename in csps_by_name:
+                    csp_file = csps_by_name[dat_basename]['filename']
+
+                # Tier 2: Same-folder match
+                if not csp_file:
+                    # Count DATs in this folder
+                    dats_in_folder = sum(1 for d in dat_files if os.path.dirname(d) == dat_folder)
+
+                    if dats_in_folder == 1:
+                        # Only 1 DAT in this folder - match any CSP from same folder
+                        for csp_path, csp_info in csps_by_path.items():
+                            if csp_info['folder'] == dat_folder:
+                                csp_file = csp_info['filename']
+                                break
+
+                # Tier 3: Global fallback (single DAT in entire ZIP)
+                if not csp_file and len(dat_files) == 1 and csps_by_path:
+                    # Take first available CSP
+                    csp_file = next(iter(csps_by_path.values()))['filename']
+
+                # Same matching for stock
+                stock_file = None
+                if dat_basename in stocks_by_name:
+                    stock_file = stocks_by_name[dat_basename]['filename']
+                elif not stock_file and len(dat_files) == 1 and dats_in_folder == 1:
+                    # Same-folder or global fallback for stocks
+                    for stock_path, stock_info in stocks_by_path.items():
+                        if stock_info['folder'] == dat_folder:
+                            stock_file = stock_info['filename']
+                            break
 
                 # Normalize character name
                 if character in ['Ice Climbers (Nana)', 'Ice Climbers (Popo)']:
                     character = 'Ice Climbers'
 
-                return {
+                results.append({
                     'character': character,
                     'color': color_info if color_info else 'Custom',
                     'costume_code': costume_code,
                     'dat_file': dat_filename,
                     'csp_file': csp_file,
                     'stock_file': stock_file,
-                    'symbol': symbol
-                }
+                    'symbol': symbol,
+                    'folder': dat_folder
+                })
 
             finally:
                 # Clean up temp file
@@ -101,9 +219,15 @@ def detect_character_from_zip(zip_path: str) -> Optional[Dict]:
                 except:
                     pass
 
+        # Close archive before returning
+        if not is_7z:
+            archive.close()
+
+        return results
+
     except Exception as e:
         print(f"Error detecting character from {zip_path}: {e}")
-        return None
+        return []
 
 
 def find_image_in_zip(filenames: list, preferred_names: list, exclude: list = None) -> Optional[str]:

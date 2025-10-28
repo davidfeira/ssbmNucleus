@@ -47,6 +47,7 @@ MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
 STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
 LOGS_PATH = PROJECT_ROOT / "logs"
+VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 
 # Ensure directories exist
 OUTPUT_PATH.mkdir(exist_ok=True)
@@ -743,6 +744,60 @@ def get_storage_metadata():
         }), 500
 
 
+@app.route('/api/mex/storage/clear', methods=['POST'])
+def clear_storage_endpoint():
+    """Clear storage based on provided options"""
+    try:
+        data = request.json or {}
+        clear_intake = data.get('clearIntake', False)
+        clear_logs = data.get('clearLogs', False)
+
+        logger.info("=== CLEAR STORAGE REQUEST ===")
+        logger.info(f"Clear Intake: {clear_intake}")
+        logger.info(f"Clear Logs: {clear_logs}")
+
+        # Build command arguments
+        clear_script = PROJECT_ROOT / "clear_storage.py"
+        cmd = [sys.executable, str(clear_script)]
+
+        if clear_intake and clear_logs:
+            cmd.append("--all")
+        elif clear_intake:
+            cmd.append("--clear-intake")
+        elif clear_logs:
+            cmd.append("--clear-logs")
+
+        # Execute clear_storage.py script
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Clear storage script failed: {result.stderr}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to clear storage: {result.stderr}'
+            }), 500
+
+        logger.info(f"Clear storage output:\n{result.stdout}")
+        logger.info("=== CLEAR STORAGE COMPLETE ===")
+
+        return jsonify({
+            'success': True,
+            'message': 'Storage cleared successfully',
+            'output': result.stdout
+        })
+    except Exception as e:
+        logger.error(f"Clear storage error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # REMOVED: Old intake/import endpoint - replaced with unified /api/mex/import/file endpoint
 
 
@@ -771,14 +826,19 @@ def import_file():
                 'error': 'No file selected'
             }), 400
 
-        if not file.filename.endswith('.zip'):
+        # Check if file is a supported archive type
+        is_zip = file.filename.lower().endswith('.zip')
+        is_7z = file.filename.lower().endswith('.7z')
+
+        if not (is_zip or is_7z):
             return jsonify({
                 'success': False,
-                'error': 'Only ZIP files are supported'
+                'error': 'Only ZIP and 7z files are supported'
             }), 400
 
-        # Save uploaded file to temp location
-        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
+        # Save uploaded file to temp location with correct suffix
+        suffix = '.zip' if is_zip else '.7z'
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             file.save(tmp.name)
             temp_zip_path = tmp.name
 
@@ -787,12 +847,29 @@ def import_file():
 
             # PHASE 1: Try character detection first
             logger.info("Phase 1: Attempting character detection...")
-            character_info = detect_character_from_zip(temp_zip_path)
+            character_infos = detect_character_from_zip(temp_zip_path)
 
-            if character_info:
-                logger.info(f"✓ Detected character costume: {character_info['character']} - {character_info['color']}")
-                result = import_character_costume(temp_zip_path, character_info, file.filename)
-                return jsonify(result)
+            if character_infos:
+                logger.info(f"✓ Detected {len(character_infos)} character costume(s)")
+
+                # Import each detected costume
+                results = []
+                for character_info in character_infos:
+                    logger.info(f"  - Importing {character_info['character']} - {character_info['color']}")
+                    result = import_character_costume(temp_zip_path, character_info, file.filename)
+                    if result.get('success'):
+                        results.append({
+                            'character': character_info['character'],
+                            'color': character_info['color']
+                        })
+
+                return jsonify({
+                    'success': True,
+                    'type': 'character',
+                    'imported_count': len(results),
+                    'costumes': results,
+                    'message': f"Imported {len(results)} costume(s)"
+                })
 
             # PHASE 2: Try stage detection
             logger.info("Phase 2: Attempting stage detection...")
@@ -912,12 +989,23 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                     storage_char_folder.mkdir(parents=True, exist_ok=True)
                     (storage_char_folder / f"{skin_id}_csp.png").write_bytes(csp_data)
 
-                # Copy stock if found
+                # Handle stock - copy if found, use vanilla if missing
+                stock_data = None
+                stock_source = 'imported'
                 if char_info['stock_file']:
+                    # Stock found in ZIP (using improved matching from character detector)
                     stock_data = source_zip.read(char_info['stock_file'])
-                    dest_zip.writestr('stc.png', stock_data)
+                else:
+                    # No stock in ZIP - try vanilla matching costume
+                    vanilla_stock_path = VANILLA_ASSETS_DIR / character / char_info['costume_code'] / "stock.png"
+                    if vanilla_stock_path.exists():
+                        with open(vanilla_stock_path, 'rb') as f:
+                            stock_data = f.read()
+                        stock_source = 'vanilla'
 
-                    # Save to storage for preview
+                # Save stock if we have one
+                if stock_data:
+                    dest_zip.writestr('stc.png', stock_data)
                     storage_char_folder = STORAGE_PATH / character
                     (storage_char_folder / f"{skin_id}_stc.png").write_bytes(stock_data)
 
@@ -931,9 +1019,9 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'costume_code': char_info['costume_code'],
             'filename': f"{skin_id}.zip",
             'has_csp': csp_data is not None,
-            'has_stock': char_info['stock_file'] is not None,
+            'has_stock': stock_data is not None,
             'csp_source': csp_source,
-            'stock_source': 'imported' if char_info['stock_file'] else None,
+            'stock_source': stock_source if stock_data else None,
             'date_added': datetime.now().isoformat()
         })
 
