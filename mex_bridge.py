@@ -72,12 +72,15 @@ class MexManager:
         logger.info(f"Running MexCLI command: {' '.join(cmd)}")
 
         try:
+            # Run command from project directory so MexCLI can find project files
+            # (files/, data/, assets/ directories relative to .mexproj)
+            # MexCLI will still find backend resources via AppDomain.CurrentDomain.BaseDirectory
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=False,
-                cwd=str(self.cli_path.parent)
+                cwd=str(self.project_path.parent)
             )
 
             logger.debug(f"MexCLI stdout: {result.stdout}")
@@ -304,12 +307,13 @@ class MexManager:
 
         try:
             # Run process with streaming output for progress
+            # Use project directory as working directory so MexCLI can find project files
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=str(self.cli_path.parent),
+                cwd=str(self.project_path.parent),
                 bufsize=1  # Line buffered
             )
 

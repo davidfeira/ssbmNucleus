@@ -1,9 +1,18 @@
 @echo off
 echo ========================================
-echo Stopping MEX Costume Manager
+echo Stopping MEX Manager
 echo ========================================
 echo.
 
+echo Stopping Electron...
+taskkill /F /IM electron.exe 2>nul
+if %errorlevel% equ 0 (
+    echo Electron stopped successfully
+) else (
+    echo No Electron process found
+)
+
+echo.
 echo Stopping Python (Backend)...
 taskkill /F /IM python.exe 2>nul
 if %errorlevel% equ 0 (
@@ -13,17 +22,17 @@ if %errorlevel% equ 0 (
 )
 
 echo.
-echo Stopping Node (Frontend)...
+echo Stopping Node (Vite Dev Server)...
 taskkill /F /IM node.exe 2>nul
 if %errorlevel% equ 0 (
-    echo Frontend stopped successfully
+    echo Vite stopped successfully
 ) else (
-    echo No frontend process found
+    echo No Vite process found
 )
 
 echo.
 echo ========================================
-echo All servers stopped
+echo All processes stopped
 echo ========================================
 echo.
 pause

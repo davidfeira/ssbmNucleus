@@ -53,7 +53,8 @@ namespace mexLib.Installer
                 if (!Directory.Exists(dasFrameworkPath))
                 {
                     // Try relative to workspace
-                    dasFrameworkPath = Path.GetFullPath(Path.Combine(workspace.WorkingDirectory, "..", "..", "utility", "DynamicAlternateStages"));
+                    string workingDir = Path.GetDirectoryName(workspace.ProjectFilePath) ?? "";
+                    dasFrameworkPath = Path.GetFullPath(Path.Combine(workingDir, "..", "..", "utility", "DynamicAlternateStages"));
                 }
 
                 if (!Directory.Exists(dasFrameworkPath))

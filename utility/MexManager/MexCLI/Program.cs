@@ -20,6 +20,8 @@ namespace MexCLI
 
                 switch (command)
                 {
+                    case "create":
+                        return Commands.CreateCommand.Execute(args);
                     case "open":
                         return Commands.OpenCommand.Execute(args);
                     case "list-fighters":
@@ -68,6 +70,7 @@ namespace MexCLI
             Console.WriteLine("  mexcli <command> [options]");
             Console.WriteLine();
             Console.WriteLine("Commands:");
+            Console.WriteLine("  create <iso> <dir> <name>                  - Create project from vanilla ISO");
             Console.WriteLine("  open <project.mexproj>                     - Open and validate project");
             Console.WriteLine("  list-fighters <project.mexproj>            - List all fighters");
             Console.WriteLine("  get-costumes <project> <fighter>           - Get costumes for fighter");

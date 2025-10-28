@@ -32,7 +32,7 @@ namespace mexLib.Types
             AssetPath = "das/screenshots",
             Width = -1,  // Variable dimensions
             Height = -1, // Variable dimensions
-            Format = HSDRaw.GX.GXTexFmt.CMPR,
+            Format = HSDRaw.GX.GXTexFmt.RGB5A3,
             TlutFormat = HSDRaw.GX.GXTlutFmt.RGB5A3,
         };
 

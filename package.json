@@ -1,0 +1,52 @@
+{
+  "name": "melee-mex-manager",
+  "version": "1.0.0",
+  "description": "MEX Costume and Stage Manager for Super Smash Bros. Melee",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "python backend/mex_api.py",
+    "dev:frontend": "cd viewer && npm run dev",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"npm run dev:backend\" \"npm run electron\"",
+    "build": "cd viewer && npm run build",
+    "package": "npm run build && electron-builder",
+    "install:viewer": "cd viewer && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.meleemex.manager",
+    "productName": "MEX Manager",
+    "files": [
+      "electron/**/*",
+      "viewer/dist/**/*",
+      "backend/**/*.py",
+      "utility/MexManager/MexCLI/bin/Release/**/*",
+      "!utility/MexManager/MexCLI/bin/Release/**/*.pdb"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["**/*.py"]
+      },
+      {
+        "from": "utility/MexManager/MexCLI/bin/Release/net6.0",
+        "to": "utility",
+        "filter": ["**/*"]
+      }
+    ],
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "viewer/public/icon.ico"
+    }
+  }
+}

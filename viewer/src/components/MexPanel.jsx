@@ -408,22 +408,32 @@ const MexPanel = () => {
     return storageVariants.filter(v => v.stageCode === stageCode);
   };
 
-  const handleOpenProject = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (!file.name.endsWith('.mexproj')) {
-      alert('Please select a .mexproj file');
+  const handleOpenProject = async () => {
+    // Check if Electron API is available
+    if (!window.electron) {
+      alert('Electron API not available. Please run this app in Electron mode.');
       return;
     }
 
     setOpeningProject(true);
 
     try {
+      // Open native file picker dialog
+      const filePath = await window.electron.openProjectDialog();
+
+      if (!filePath) {
+        // User canceled
+        setOpeningProject(false);
+        return;
+      }
+
+      console.log('Selected project:', filePath);
+
+      // Send path to backend
       const response = await fetch(`${API_URL}/project/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectPath: file.path })
+        body: JSON.stringify({ projectPath: filePath })
       });
 
       const data = await response.json();
@@ -439,7 +449,6 @@ const MexPanel = () => {
       alert(`Error opening project: ${err.message}`);
     } finally {
       setOpeningProject(false);
-      event.target.value = null;
     }
   };
 
@@ -471,16 +480,13 @@ const MexPanel = () => {
             <div className="project-option">
               <h3>Open Existing Project</h3>
               <p>Select a .mexproj file to continue working on an existing MEX mod</p>
-              <label className="project-btn">
+              <button
+                className="project-btn"
+                onClick={handleOpenProject}
+                disabled={openingProject}
+              >
                 {openingProject ? 'Opening...' : 'Browse for .mexproj'}
-                <input
-                  type="file"
-                  accept=".mexproj"
-                  onChange={handleOpenProject}
-                  disabled={openingProject}
-                  style={{ display: 'none' }}
-                />
-              </label>
+              </button>
             </div>
 
             {/* Create new project (placeholder for now) */}
@@ -830,16 +836,13 @@ const MexPanel = () => {
               <div className="project-option-modal">
                 <h3>Open Existing Project</h3>
                 <p>Select a .mexproj file to switch to a different MEX mod</p>
-                <label className="project-btn">
+                <button
+                  className="project-btn"
+                  onClick={handleOpenProject}
+                  disabled={openingProject}
+                >
                   {openingProject ? 'Opening...' : 'Browse for .mexproj'}
-                  <input
-                    type="file"
-                    accept=".mexproj"
-                    onChange={handleOpenProject}
-                    disabled={openingProject}
-                    style={{ display: 'none' }}
-                  />
-                </label>
+                </button>
               </div>
 
               {/* Create new project (placeholder for now) */}

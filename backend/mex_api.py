@@ -1608,14 +1608,7 @@ if __name__ == '__main__':
         print("Please build it first: cd utility/MexManager/MexCLI && dotnet build -c Release")
         sys.exit(1)
 
-    # Auto-load default project if it exists
-    if MEX_PROJECT_PATH.exists():
-        try:
-            set_project_path(str(MEX_PROJECT_PATH))
-            print(f"✓ Auto-loaded default project: {MEX_PROJECT_PATH}")
-        except Exception as e:
-            print(f"WARNING: Failed to auto-load default project: {e}")
-    else:
-        print(f"INFO: No default project found. User will need to open a project.")
+    # No auto-loading - user must select a project
+    print(f"INFO: MEX Manager ready. Please open a project to get started.")
 
     socketio.run(app, host='127.0.0.1', port=5000, debug=True)
