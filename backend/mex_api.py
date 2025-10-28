@@ -87,6 +87,12 @@ def set_project_path(path):
     current_project_path = Path(path)
     mex_manager = None  # Reset manager so it reinitializes with new path
 
+def get_project_files_dir():
+    """Get the files/ directory for the currently loaded project"""
+    if current_project_path is None:
+        raise Exception("No MEX project loaded. Please open a project first.")
+    return current_project_path.parent / "files"
+
 
 @app.route('/api/mex/status', methods=['GET'])
 def get_status():
@@ -233,8 +239,14 @@ def get_fighter_costumes(fighter_name):
 def serve_mex_asset(asset_path):
     """Serve MEX asset files (CSP, stock icons, etc.)"""
     try:
+        # Get the currently loaded project's directory
+        if current_project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded'}), 400
+
+        project_dir = current_project_path.parent
+
         # Asset path already includes the extension from the URL
-        full_path = PROJECT_ROOT / "build" / asset_path
+        full_path = project_dir / asset_path
 
         if not full_path.exists():
             return jsonify({'success': False, 'error': f'Asset not found: {asset_path}'}), 404
@@ -991,17 +1003,27 @@ DAS_STAGES = {
     'GrIz': {'code': 'GrIz', 'name': 'Fountain of Dreams', 'folder': 'fountain_of_dreams'}
 }
 
+# Mapping of stage codes to default screenshot filenames
+DAS_DEFAULT_SCREENSHOTS = {
+    'GrNBa': 'battlefield.jpg',
+    'GrNLa': 'final destination.png',
+    'GrSt': 'Yoshis story.jpg',
+    'GrOp': 'dreamland.jpg',
+    'GrPs': 'pokemon stadium.jpg',
+    'GrIz': 'Fountain of Dreams.webp'
+}
+
 @app.route('/api/mex/das/status', methods=['GET'])
 def das_get_status():
     """Check if DAS framework is installed"""
     try:
-        # Check if DAS loader files exist in build/files/
-        build_files_path = PROJECT_ROOT / "build" / "files"
+        # Check if DAS loader files exist in current project's files/
+        project_files_path = get_project_files_dir()
         installed_stages = []
 
         for stage_code, stage_info in DAS_STAGES.items():
-            loader_path = build_files_path / f"{stage_code}.dat"
-            folder_path = build_files_path / stage_code
+            loader_path = project_files_path / f"{stage_code}.dat"
+            folder_path = project_files_path / stage_code
 
             if loader_path.exists() and folder_path.exists():
                 installed_stages.append(stage_code)
@@ -1030,7 +1052,7 @@ def das_install():
         logger.info("=== DAS FRAMEWORK INSTALLATION ===")
 
         das_source = PROJECT_ROOT / "utility" / "DynamicAlternateStages"
-        build_files = PROJECT_ROOT / "build" / "files"
+        project_files = get_project_files_dir()
 
         if not das_source.exists():
             return jsonify({
@@ -1038,7 +1060,7 @@ def das_install():
                 'error': f'DAS framework source not found at {das_source}'
             }), 500
 
-        build_files.mkdir(parents=True, exist_ok=True)
+        project_files.mkdir(parents=True, exist_ok=True)
 
         # Install each stage
         for stage_code, stage_info in DAS_STAGES.items():
@@ -1047,35 +1069,37 @@ def das_install():
             # Pokemon Stadium uses .usd, others use .dat
             file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
 
-            # Copy loader file
-            loader_src = das_source / f"{stage_code}{file_ext}"
-            loader_dst = build_files / f"{stage_code}{file_ext}"
-
-            if loader_src.exists():
-                # Backup original stage file if it exists
-                if loader_dst.exists():
-                    backup_dst = build_files / f"{stage_code}_vanilla{file_ext}"
-                    if not backup_dst.exists():
-                        shutil.copy2(loader_dst, backup_dst)
-                        logger.info(f"  Backed up original {stage_code}{file_ext} to {stage_code}_vanilla{file_ext}")
-
-                # Copy loader file
-                shutil.copy2(loader_src, loader_dst)
-                logger.info(f"  Installed loader: {stage_code}{file_ext}")
-            else:
-                logger.warning(f"  Loader not found: {loader_src}")
-
-            # Create stage folder
-            stage_folder = build_files / stage_code
+            # Create stage folder first
+            stage_folder = project_files / stage_code
             stage_folder.mkdir(exist_ok=True)
             logger.info(f"  Created folder: {stage_code}/")
 
-            # Copy vanilla stage into folder if backup exists
-            vanilla_backup = build_files / f"{stage_code}_vanilla{file_ext}"
-            if vanilla_backup.exists():
-                vanilla_in_folder = stage_folder / f"{stage_code}_00{file_ext}"
-                shutil.copy2(vanilla_backup, vanilla_in_folder)
+            # Get paths
+            original_stage = project_files / f"{stage_code}{file_ext}"
+            loader_src = das_source / f"{stage_code}{file_ext}"
+            vanilla_in_folder = stage_folder / f"{stage_code}_00{file_ext}"
+
+            # If vanilla variant doesn't exist yet and original stage exists, copy it into folder
+            if not vanilla_in_folder.exists() and original_stage.exists():
+                shutil.copy2(original_stage, vanilla_in_folder)
                 logger.info(f"  Copied vanilla stage to {stage_code}/{stage_code}_00{file_ext}")
+
+                # Copy default screenshot for vanilla variant
+                if stage_code in DAS_DEFAULT_SCREENSHOTS:
+                    default_screenshot = PROJECT_ROOT / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
+                    if default_screenshot.exists():
+                        viewer_das_folder = VIEWER_STORAGE / 'das' / stage_info['folder']
+                        viewer_das_folder.mkdir(parents=True, exist_ok=True)
+                        viewer_screenshot = viewer_das_folder / f"{stage_code}_00_screenshot.png"
+                        shutil.copy2(default_screenshot, viewer_screenshot)
+                        logger.info(f"  Copied default screenshot to {viewer_screenshot.name}")
+
+            # Install DAS loader (replaces original stage file)
+            if loader_src.exists():
+                shutil.copy2(loader_src, original_stage)
+                logger.info(f"  Installed DAS loader: {stage_code}{file_ext}")
+            else:
+                logger.warning(f"  DAS loader not found: {loader_src}")
 
         logger.info("DAS framework installed successfully")
 
@@ -1124,8 +1148,9 @@ def das_get_stage_variants(stage_code):
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # List stage files in build/files/{stage_code}/ (.dat or .usd for Pokemon Stadium)
-        stage_folder = PROJECT_ROOT / "build" / "files" / stage_code
+        # List stage files in current project's files/{stage_code}/ (.dat or .usd for Pokemon Stadium)
+        project_files = get_project_files_dir()
+        stage_folder = project_files / stage_code
         variants = []
 
         if stage_folder.exists() and stage_folder.is_dir():
@@ -1235,7 +1260,8 @@ def das_import_variant():
         import zipfile
         import shutil
 
-        stage_folder = PROJECT_ROOT / "build" / "files" / stage_code
+        project_files = get_project_files_dir()
+        stage_folder = project_files / stage_code
         stage_folder.mkdir(exist_ok=True)
 
         # Pokemon Stadium uses .usd, others use .dat
@@ -1322,7 +1348,8 @@ def das_remove_variant():
         # Find and remove the variant file
         # Pokemon Stadium uses .usd, others use .dat
         file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
-        stage_folder = PROJECT_ROOT / "build" / "files" / stage_code
+        project_files = get_project_files_dir()
+        stage_folder = project_files / stage_code
         variant_path = stage_folder / f"{variant_name}{file_ext}"
 
         if not variant_path.exists():
