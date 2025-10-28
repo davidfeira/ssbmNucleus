@@ -20,12 +20,15 @@ const MexPanel = () => {
   const [mexCostumes, setMexCostumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [projectLoaded, setProjectLoaded] = useState(false);
+  const [openingProject, setOpeningProject] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importingCostume, setImportingCostume] = useState(null);
   const [removing, setRemoving] = useState(false);
   const [removingCostume, setRemovingCostume] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showIsoBuilder, setShowIsoBuilder] = useState(false);
+  const [showProjectModal, setShowProjectModal] = useState(false);
 
   // DAS state
   const [dasInstalled, setDasInstalled] = useState(false);
@@ -39,9 +42,14 @@ const MexPanel = () => {
 
   useEffect(() => {
     fetchMexStatus();
-    fetchFighters();
-    fetchStorageCostumes();
   }, []);
+
+  useEffect(() => {
+    if (projectLoaded) {
+      fetchFighters();
+      fetchStorageCostumes();
+    }
+  }, [projectLoaded]);
 
   useEffect(() => {
     if (selectedFighter) {
@@ -68,9 +76,12 @@ const MexPanel = () => {
       const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
       setMexStatus(data);
+      setProjectLoaded(data.projectLoaded || false);
+      setLoading(false);
     } catch (err) {
       setError('Failed to connect to MEX API');
       console.error(err);
+      setLoading(false);
     }
   };
 
@@ -397,6 +408,41 @@ const MexPanel = () => {
     return storageVariants.filter(v => v.stageCode === stageCode);
   };
 
+  const handleOpenProject = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.mexproj')) {
+      alert('Please select a .mexproj file');
+      return;
+    }
+
+    setOpeningProject(true);
+
+    try {
+      const response = await fetch(`${API_URL}/project/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: file.path })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('✓ Project opened:', data.project.name);
+        await fetchMexStatus();
+        setShowProjectModal(false); // Close modal on success
+      } else {
+        alert(`Failed to open project: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error opening project: ${err.message}`);
+    } finally {
+      setOpeningProject(false);
+      event.target.value = null;
+    }
+  };
+
   if (loading) {
     return <div className="mex-panel loading">Loading MEX Manager...</div>;
   }
@@ -408,6 +454,45 @@ const MexPanel = () => {
         <p>{error}</p>
         <p>Make sure the backend is running:</p>
         <code>python backend/mex_api.py</code>
+      </div>
+    );
+  }
+
+  // Show project selection screen if no project is loaded
+  if (!projectLoaded) {
+    return (
+      <div className="mex-panel">
+        <div className="project-selection">
+          <h1>MEX Manager</h1>
+          <p className="subtitle">Select a project to get started</p>
+
+          <div className="project-options">
+            {/* Open existing project */}
+            <div className="project-option">
+              <h3>Open Existing Project</h3>
+              <p>Select a .mexproj file to continue working on an existing MEX mod</p>
+              <label className="project-btn">
+                {openingProject ? 'Opening...' : 'Browse for .mexproj'}
+                <input
+                  type="file"
+                  accept=".mexproj"
+                  onChange={handleOpenProject}
+                  disabled={openingProject}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
+            {/* Create new project (placeholder for now) */}
+            <div className="project-option disabled">
+              <h3>Create New Project</h3>
+              <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
+              <button className="project-btn" disabled>
+                Coming Soon
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -430,6 +515,12 @@ const MexPanel = () => {
           onClick={() => setShowIsoBuilder(true)}
         >
           Export ISO
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => setShowProjectModal(true)}
+        >
+          Switch Project
         </button>
         <button
           className="btn-secondary"
@@ -725,6 +816,50 @@ const MexPanel = () => {
 
       {showIsoBuilder && (
         <IsoBuilder onClose={() => setShowIsoBuilder(false)} />
+      )}
+
+      {/* Project Selection Modal */}
+      {showProjectModal && (
+        <div className="project-modal-overlay" onClick={() => setShowProjectModal(false)}>
+          <div className="project-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Switch Project</h2>
+            <p className="modal-subtitle">Select a different project or create a new one</p>
+
+            <div className="project-options-modal">
+              {/* Open existing project */}
+              <div className="project-option-modal">
+                <h3>Open Existing Project</h3>
+                <p>Select a .mexproj file to switch to a different MEX mod</p>
+                <label className="project-btn">
+                  {openingProject ? 'Opening...' : 'Browse for .mexproj'}
+                  <input
+                    type="file"
+                    accept=".mexproj"
+                    onChange={handleOpenProject}
+                    disabled={openingProject}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+
+              {/* Create new project (placeholder for now) */}
+              <div className="project-option-modal disabled">
+                <h3>Create New Project</h3>
+                <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
+                <button className="project-btn" disabled>
+                  Coming Soon
+                </button>
+              </div>
+            </div>
+
+            <button
+              className="btn-cancel-modal"
+              onClick={() => setShowProjectModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

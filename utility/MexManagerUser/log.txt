@@ -1,14 +1,27 @@
-[2025-10-27 19:13:32.160] Trying to open ALC device
-[2025-10-27 19:13:32.254] Success
-[2025-10-27 19:13:32.255] Trying to create ALC Context
-[2025-10-27 19:13:32.310] Success
-[2025-10-27 19:13:32.310] Trying make ALC context current
-[2025-10-27 19:13:32.311] Success
-[2025-10-27 19:13:33.189] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
-[2025-10-27 19:13:33.189] "codes.ini" is up to date
-[2025-10-27 19:13:33.353] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
-[2025-10-27 19:13:33.353] "codes.gct" is up to date
-[2025-10-27 19:13:33.718] Check Update
-[2025-10-27 19:13:33.718] Name: MexManager [Latest]
-[2025-10-27 19:13:33.718] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
-[2025-10-27 19:13:33.718] Upload Date: 10/18/2025 4:11:43 PM +00:00
+[2025-10-27 22:48:21.578] Trying to open ALC device
+[2025-10-27 22:48:21.681] Success
+[2025-10-27 22:48:21.682] Trying to create ALC Context
+[2025-10-27 22:48:21.698] Success
+[2025-10-27 22:48:21.698] Trying make ALC context current
+[2025-10-27 22:48:21.698] Success
+[2025-10-27 22:48:22.638] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
+[2025-10-27 22:48:22.638] "codes.ini" is up to date
+[2025-10-27 22:48:22.783] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
+[2025-10-27 22:48:22.783] "codes.gct" is up to date
+[2025-10-27 22:48:23.180] Check Update
+[2025-10-27 22:48:23.180] Name: MexManager [Latest]
+[2025-10-27 22:48:23.180] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
+[2025-10-27 22:48:23.181] Upload Date: 10/18/2025 4:11:43 PM +00:00
+Compiled sounds 00:00:00.1049771
+Compiled MxDt 00:00:00.1244832
+Compiled PlCo 00:00:00.1330624
+Generate IfAll 00:00:00.1520434
+Generate MxSr 00:00:00.0018342
+Generate MnSlChr 00:00:00.3884082
+Generate MnSlMap 00:00:00.0695736
+Generate GmRst 00:00:00.1222373
+Compiled Trophies 00:00:00.2651189
+Compiled codes 00:00:00.0000671
+Save Project Data 00:00:00.0543542
+Save files 00:00:00.0980306
+Total Save Time 00:00:01.5141902

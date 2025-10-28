@@ -60,26 +60,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global MEX manager instance
+# Global MEX manager instance and current project path
 mex_manager = None
+current_project_path = None
 
 def get_mex_manager():
     """Get or initialize MEX manager instance"""
-    global mex_manager
+    global mex_manager, current_project_path
+
+    if current_project_path is None:
+        raise Exception("No MEX project loaded. Please open a project first.")
+
     if mex_manager is None:
         try:
             mex_manager = MexManager(
                 cli_path=str(MEXCLI_PATH),
-                project_path=str(MEX_PROJECT_PATH)
+                project_path=str(current_project_path)
             )
         except MexManagerError as e:
             raise Exception(f"Failed to initialize MexManager: {e}")
     return mex_manager
 
+def set_project_path(path):
+    """Set the current project path and reset manager"""
+    global mex_manager, current_project_path
+    current_project_path = Path(path)
+    mex_manager = None  # Reset manager so it reinitializes with new path
+
 
 @app.route('/api/mex/status', methods=['GET'])
 def get_status():
     """Get MEX project status"""
+    global current_project_path
+
+    # Check if a project is loaded
+    if current_project_path is None:
+        return jsonify({
+            'success': True,
+            'connected': True,
+            'projectLoaded': False,
+            'message': 'No project loaded'
+        })
+
     try:
         mex = get_mex_manager()
         info = mex.get_info()
@@ -87,10 +109,11 @@ def get_status():
         return jsonify({
             'success': True,
             'connected': True,
+            'projectLoaded': True,
             'project': {
                 'name': info['build']['name'],
                 'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
-                'path': str(MEX_PROJECT_PATH)
+                'path': str(current_project_path)
             },
             'counts': info['counts']
         })
@@ -98,6 +121,61 @@ def get_status():
         return jsonify({
             'success': False,
             'connected': False,
+            'projectLoaded': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/project/open', methods=['POST'])
+def open_project():
+    """Open a MEX project from a given path"""
+    try:
+        data = request.json
+        project_path = data.get('projectPath')
+
+        if not project_path:
+            return jsonify({
+                'success': False,
+                'error': 'No project path provided'
+            }), 400
+
+        project_file = Path(project_path)
+
+        # Validate the path
+        if not project_file.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Project file not found: {project_path}'
+            }), 404
+
+        if not project_file.suffix == '.mexproj':
+            return jsonify({
+                'success': False,
+                'error': 'File must be a .mexproj file'
+            }), 400
+
+        # Set the project path
+        set_project_path(project_path)
+
+        # Try to get project info to verify it works
+        mex = get_mex_manager()
+        info = mex.get_info()
+
+        logger.info(f"✓ Opened MEX project: {project_path}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Project opened successfully',
+            'project': {
+                'name': info['build']['name'],
+                'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
+                'path': str(project_path)
+            }
+        })
+    except Exception as e:
+        logger.error(f"Failed to open project: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
             'error': str(e)
         }), 500
 
@@ -1521,7 +1599,7 @@ def handle_disconnect():
 if __name__ == '__main__':
     print(f"Starting MEX API Backend...")
     print(f"MexCLI: {MEXCLI_PATH}")
-    print(f"Project: {MEX_PROJECT_PATH}")
+    print(f"Default Project: {MEX_PROJECT_PATH}")
     print(f"Storage: {STORAGE_PATH}")
 
     # Verify MexCLI exists
@@ -1530,8 +1608,14 @@ if __name__ == '__main__':
         print("Please build it first: cd utility/MexManager/MexCLI && dotnet build -c Release")
         sys.exit(1)
 
-    # Verify project exists
-    if not MEX_PROJECT_PATH.exists():
-        print(f"WARNING: MEX project not found at {MEX_PROJECT_PATH}")
+    # Auto-load default project if it exists
+    if MEX_PROJECT_PATH.exists():
+        try:
+            set_project_path(str(MEX_PROJECT_PATH))
+            print(f"✓ Auto-loaded default project: {MEX_PROJECT_PATH}")
+        except Exception as e:
+            print(f"WARNING: Failed to auto-load default project: {e}")
+    else:
+        print(f"INFO: No default project found. User will need to open a project.")
 
     socketio.run(app, host='127.0.0.1', port=5000, debug=True)
