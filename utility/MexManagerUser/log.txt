@@ -1,79 +1,14 @@
-[2025-10-28 00:59:54.795] Trying to open ALC device
-[2025-10-28 00:59:54.862] Success
-[2025-10-28 00:59:54.862] Trying to create ALC Context
-[2025-10-28 00:59:54.874] Success
-[2025-10-28 00:59:54.874] Trying make ALC context current
-[2025-10-28 00:59:54.875] Success
-[2025-10-28 00:59:55.860] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
-[2025-10-28 00:59:55.860] "codes.ini" is up to date
-[2025-10-28 00:59:56.010] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
-[2025-10-28 00:59:56.010] "codes.gct" is up to date
-[2025-10-28 00:59:56.333] Check Update
-[2025-10-28 00:59:56.333] Name: MexManager [Latest]
-[2025-10-28 00:59:56.333] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
-[2025-10-28 00:59:56.333] Upload Date: 10/18/2025 4:11:43 PM +00:00
-Compiled sounds 00:00:00.1845962
-Compiled MxDt 00:00:00.2899890
-Compiled PlCo 00:00:00.3043008
-Generate IfAll 00:00:01.2025928
-Generate MxSr 00:00:00.0057414
-Generate MnSlChr 00:00:00.7825806
-Generate MnSlMap 00:00:00.5632101
-Generate GmRst 00:00:00.5417376
-Compiled Trophies 00:00:00.7377165
-Compiled codes 00:00:00.0015025
-Save Project Data 00:00:00.1856205
-Save files 00:00:00.2406314
-Total Save Time 00:00:05.0402194
-Compiled sounds 00:00:00.1306106
-Compiled MxDt 00:00:00.1716828
-Compiled PlCo 00:00:00.1798258
-Generate IfAll 00:00:00.2330859
-Generate MxSr 00:00:00.0027204
-Generate MnSlChr 00:00:00.5341301
-Generate MnSlMap 00:00:00.1636055
-Generate GmRst 00:00:00.1379181
-Compiled Trophies 00:00:00.2940862
-Compiled codes 00:00:00.0000872
-Save Project Data 00:00:00.0747260
-Save files 00:00:00.1327644
-Total Save Time 00:00:02.0552430
-Compiled sounds 00:00:00.1193513
-Compiled MxDt 00:00:00.1543594
-Compiled PlCo 00:00:00.1624655
-Generate IfAll 00:00:00.2369373
-Generate MxSr 00:00:00.0022906
-Generate MnSlChr 00:00:00.5272088
-Generate MnSlMap 00:00:00.1801715
-Generate GmRst 00:00:00.1578945
-Compiled Trophies 00:00:00.3261710
-Compiled codes 00:00:00.0000578
-Save Project Data 00:00:00.0654227
-Save files 00:00:00.1138396
-Total Save Time 00:00:02.0461700
-Compiled sounds 00:00:00.1511098
-Compiled MxDt 00:00:00.1929050
-Compiled PlCo 00:00:00.2034332
-Generate IfAll 00:00:00.2783177
-Generate MxSr 00:00:00.0030162
-Generate MnSlChr 00:00:00.5810676
-Generate MnSlMap 00:00:00.1434783
-Generate GmRst 00:00:00.1460957
-Compiled Trophies 00:00:00.3254274
-Compiled codes 00:00:00.0000604
-Save Project Data 00:00:00.0689054
-Save files 00:00:00.1183534
-Total Save Time 00:00:02.2121701
-Compiled sounds 00:00:00.1119309
-Compiled MxDt 00:00:00.1479041
-Compiled PlCo 00:00:00.1569024
-Generate IfAll 00:00:00.2433331
-Generate MxSr 00:00:00.0018247
-Generate MnSlChr 00:00:00.5819560
-Generate MnSlMap 00:00:00.1711604
-Generate GmRst 00:00:00.1594075
-Compiled Trophies 00:00:00.3460163
-Compiled codes 00:00:00.0000481
-Save Project Data 00:00:00.0623466
-Save files 00:00:00.1096216
-Total Save Time 00:00:02.0924517
+[2025-10-28 14:57:08.694] Trying to open ALC device
+[2025-10-28 14:57:08.798] Success
+[2025-10-28 14:57:08.798] Trying to create ALC Context
+[2025-10-28 14:57:08.843] Success
+[2025-10-28 14:57:08.843] Trying make ALC context current
+[2025-10-28 14:57:08.843] Success
+[2025-10-28 14:57:09.825] codes.ini 9/7/2025 5:08:06 AM 10/18/2025 8:09:48 PM
+[2025-10-28 14:57:09.825] "codes.ini" is up to date
+[2025-10-28 14:57:09.997] codes.gct 10/17/2025 2:32:22 AM 10/18/2025 8:09:48 PM
+[2025-10-28 14:57:09.997] "codes.gct" is up to date
+[2025-10-28 14:57:10.303] Check Update
+[2025-10-28 14:57:10.303] Name: MexManager [Latest]
+[2025-10-28 14:57:10.303] URL: https://github.com/Ploaj/MexManager/releases/download/Latest/MexManager.zip
+[2025-10-28 14:57:10.304] Upload Date: 10/18/2025 4:11:43 PM +00:00

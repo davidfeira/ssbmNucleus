@@ -272,7 +272,9 @@ export default function StorageViewer({ metadata }) {
 
   const characters = Object.keys(allCharacters).sort()
   const totalSkins = characters.reduce((sum, char) => {
-    return sum + (allCharacters[char]?.skins?.length || 0)
+    // Only count visible skins (exclude hidden Ice Climbers Nana entries)
+    const visibleSkins = allCharacters[char]?.skins?.filter(skin => skin.visible !== false) || []
+    return sum + visibleSkins.length
   }, 0)
 
   // Calculate total stage variants
@@ -482,7 +484,9 @@ export default function StorageViewer({ metadata }) {
   // If a character is selected, show their skins
   if (selectedCharacter) {
     const charData = allCharacters[selectedCharacter]
-    const skinCount = charData?.skins?.length || 0
+    // Filter out hidden skins (e.g., Ice Climbers Nana entries)
+    const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
+    const skinCount = visibleSkins.length
 
     return (
       <div className="storage-viewer">
@@ -503,7 +507,7 @@ export default function StorageViewer({ metadata }) {
             </div>
           ) : (
             <div className="skins-grid">
-              {charData.skins.map((skin) => (
+              {visibleSkins.map((skin) => (
                 <div key={skin.id} className="skin-card">
                   <div className="skin-header">
                     <h4 className="skin-title">{selectedCharacter} - {skin.color}</h4>
@@ -651,11 +655,13 @@ export default function StorageViewer({ metadata }) {
         <div className="characters-grid">
         {characters.map((characterName) => {
           const charData = allCharacters[characterName]
-          const skinCount = charData?.skins?.length || 0
+          // Only count visible skins (exclude hidden Ice Climbers Nana entries)
+          const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
+          const skinCount = visibleSkins.length
 
           // Find default color skin (color === "Default") to get costume code
-          const defaultSkin = charData?.skins?.find(s => s.color === 'Default')
-                            || charData?.skins?.[0]
+          const defaultSkin = visibleSkins.find(s => s.color === 'Default')
+                            || visibleSkins[0]
 
           // Determine costume code: from skin metadata or from DEFAULT_CHARACTERS
           const costumeCode = defaultSkin?.costume_code || DEFAULT_CHARACTERS[characterName]?.defaultCostume

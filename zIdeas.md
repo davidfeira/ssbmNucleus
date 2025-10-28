@@ -1,8 +1,4 @@
-+fix stock import/copy system, imported zips are not getting stocks now
 
-
-
-+make clear_storage work and add settings page with button for it
 
 +ice climbers - when importing import both nana and popo
 - make sure the website workflow works correctly
@@ -26,7 +22,7 @@ will need some kind of zip,unzip thing
 
 nazi ui
     +make peach use nr not white csp in preview
-    Ics also dont use default
+    Ics also dont use default                   -dumb shit defers to what costumes exist, not always just uses Nr
     - make things smaller
     +dont refresh everything each time
     +remove white box when saving iso

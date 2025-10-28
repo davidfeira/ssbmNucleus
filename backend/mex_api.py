@@ -852,9 +852,20 @@ def import_file():
             if character_infos:
                 logger.info(f"✓ Detected {len(character_infos)} character costume(s)")
 
+                # Sort Ice Climbers: Popo before Nana (Nana copies Popo's CSP)
+                def ice_climbers_sort_key(char_info):
+                    if char_info.get('is_popo'):
+                        return 0  # Popo first
+                    elif char_info.get('is_nana'):
+                        return 1  # Nana second
+                    else:
+                        return 0  # Other characters
+
+                character_infos_sorted = sorted(character_infos, key=ice_climbers_sort_key)
+
                 # Import each detected costume
                 results = []
-                for character_info in character_infos:
+                for character_info in character_infos_sorted:
                     logger.info(f"  - Importing {character_info['character']} - {character_info['color']}")
                     result = import_character_costume(temp_zip_path, character_info, file.filename)
                     if result.get('success'):
@@ -955,31 +966,92 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                 else:
                     # No CSP in ZIP - generate one
                     logger.info("No CSP found in ZIP, generating...")
-                    # Extract DAT to temp location for generation
-                    with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
-                        tmp_dat.write(dat_data)
-                        tmp_dat_path = tmp_dat.name
 
-                    try:
-                        generated_csp_path = generate_csp(tmp_dat_path)
-                        if generated_csp_path and os.path.exists(generated_csp_path):
-                            with open(generated_csp_path, 'rb') as f:
-                                csp_data = f.read()
-                            logger.info("Successfully generated CSP")
-                            csp_source = 'generated'
-                            # Clean up generated CSP
+                    # Ice Climbers Popo: Extract both Popo and Nana DATs to same temp dir
+                    # so generate_csp can find the pair and create composite CSP
+                    if char_info.get('is_popo'):
+                        logger.info("Ice Climbers Popo detected - extracting pair for composite CSP")
+                        temp_dir = tempfile.mkdtemp()
+                        try:
+                            # Extract Popo DAT
+                            popo_dat_name = os.path.basename(char_info['dat_file'])
+                            tmp_dat_path = os.path.join(temp_dir, popo_dat_name)
+                            with open(tmp_dat_path, 'wb') as f:
+                                f.write(dat_data)
+
+                            # Extract paired Nana DAT
+                            nana_dat_name = os.path.basename(char_info['pair_dat_file'])
+                            nana_dat_path = os.path.join(temp_dir, nana_dat_name)
+                            nana_dat_data = source_zip.read(char_info['pair_dat_file'])
+                            with open(nana_dat_path, 'wb') as f:
+                                f.write(nana_dat_data)
+
+                            # Generate composite CSP (generate_csp will detect pair)
+                            generated_csp_path = generate_csp(tmp_dat_path)
+                            if generated_csp_path and os.path.exists(generated_csp_path):
+                                with open(generated_csp_path, 'rb') as f:
+                                    csp_data = f.read()
+                                logger.info("Successfully generated composite Ice Climbers CSP")
+                                csp_source = 'generated'
+                                # Clean up generated CSP
+                                try:
+                                    os.unlink(generated_csp_path)
+                                except:
+                                    pass
+                            else:
+                                logger.warning("Ice Climbers CSP generation failed")
+                        finally:
+                            # Clean up temp directory
                             try:
-                                os.unlink(generated_csp_path)
+                                import shutil
+                                shutil.rmtree(temp_dir)
                             except:
                                 pass
-                        else:
-                            logger.warning("CSP generation failed")
-                    finally:
-                        # Clean up temp DAT
+                    else:
+                        # Regular character or Nana - single DAT extraction
+                        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
+                            tmp_dat.write(dat_data)
+                            tmp_dat_path = tmp_dat.name
+
                         try:
-                            os.unlink(tmp_dat_path)
-                        except:
-                            pass
+                            generated_csp_path = generate_csp(tmp_dat_path)
+                            if generated_csp_path and os.path.exists(generated_csp_path):
+                                with open(generated_csp_path, 'rb') as f:
+                                    csp_data = f.read()
+                                logger.info("Successfully generated CSP")
+                                csp_source = 'generated'
+                                # Clean up generated CSP
+                                try:
+                                    os.unlink(generated_csp_path)
+                                except:
+                                    pass
+                            else:
+                                logger.warning("CSP generation failed")
+                        finally:
+                            # Clean up temp DAT
+                            try:
+                                os.unlink(tmp_dat_path)
+                            except:
+                                pass
+
+                # Ice Climbers: Nana should copy composite CSP from Popo
+                if char_info.get('is_nana') and not csp_data:
+                    # Look for paired Popo in metadata
+                    popo_color = char_info.get('pair_color')
+                    if popo_color:
+                        popo_id = f"{character.lower().replace(' ', '-')}-{popo_color.lower()}"
+
+                        # Check if Popo already imported
+                        if character in metadata.get('characters', {}):
+                            for skin in metadata['characters'][character]['skins']:
+                                if skin['id'] == popo_id:
+                                    # Found Popo - copy its CSP
+                                    popo_csp_path = STORAGE_PATH / character / f"{popo_id}_csp.png"
+                                    if popo_csp_path.exists():
+                                        csp_data = popo_csp_path.read_bytes()
+                                        csp_source = 'copied_from_popo'
+                                        logger.info(f"Copied composite CSP from Popo: {popo_id}")
+                                    break
 
                 # Save CSP to ZIP and storage if we have one
                 if csp_data:
@@ -1003,6 +1075,25 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                             stock_data = f.read()
                         stock_source = 'vanilla'
 
+                # Ice Climbers: Nana should copy stock from Popo
+                if char_info.get('is_nana') and not stock_data:
+                    # Look for paired Popo in metadata
+                    popo_color = char_info.get('pair_color')
+                    if popo_color:
+                        popo_id = f"{character.lower().replace(' ', '-')}-{popo_color.lower()}"
+
+                        # Check if Popo already imported
+                        if character in metadata.get('characters', {}):
+                            for skin in metadata['characters'][character]['skins']:
+                                if skin['id'] == popo_id:
+                                    # Found Popo - copy its stock
+                                    popo_stock_path = STORAGE_PATH / character / f"{popo_id}_stc.png"
+                                    if popo_stock_path.exists():
+                                        stock_data = popo_stock_path.read_bytes()
+                                        stock_source = 'copied_from_popo'
+                                        logger.info(f"Copied stock from Popo: {popo_id}")
+                                    break
+
                 # Save stock if we have one
                 if stock_data:
                     dest_zip.writestr('stc.png', stock_data)
@@ -1013,7 +1104,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         if character not in metadata['characters']:
             metadata['characters'][character] = {'skins': []}
 
-        metadata['characters'][character]['skins'].append({
+        # Build skin entry
+        skin_entry = {
             'id': skin_id,
             'color': char_info['color'],
             'costume_code': char_info['costume_code'],
@@ -1023,7 +1115,26 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'csp_source': csp_source,
             'stock_source': stock_source if stock_data else None,
             'date_added': datetime.now().isoformat()
-        })
+        }
+
+        # Ice Climbers pairing metadata
+        if char_info.get('is_popo'):
+            skin_entry['is_popo'] = True
+            skin_entry['visible'] = True
+            if char_info.get('pair_color'):
+                # Generate paired Nana ID
+                nana_id = f"{character.lower().replace(' ', '-')}-{char_info['pair_color'].lower()}"
+                skin_entry['paired_nana_id'] = nana_id
+
+        elif char_info.get('is_nana'):
+            skin_entry['is_nana'] = True
+            skin_entry['visible'] = False  # Hidden in UI
+            if char_info.get('pair_color'):
+                # Generate paired Popo ID
+                popo_id = f"{character.lower().replace(' ', '-')}-{char_info['pair_color'].lower()}"
+                skin_entry['paired_popo_id'] = popo_id
+
+        metadata['characters'][character]['skins'].append(skin_entry)
 
         # Save metadata
         with open(metadata_file, 'w') as f:

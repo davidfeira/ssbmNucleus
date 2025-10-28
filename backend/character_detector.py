@@ -223,7 +223,59 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
         if not is_7z:
             archive.close()
 
-        return results
+        # Post-process Ice Climbers: Match Popo with Nana pairs
+        processed_results = []
+        ice_climbers_entries = [r for r in results if r['character'] == 'Ice Climbers']
+        other_entries = [r for r in results if r['character'] != 'Ice Climbers']
+
+        if ice_climbers_entries:
+            # Separate Popo and Nana
+            popo_entries = [r for r in ice_climbers_entries if 'PlPp' in r.get('costume_code', '')]
+            nana_entries = [r for r in ice_climbers_entries if 'PlNn' in r.get('costume_code', '')]
+
+            # Color mapping: Popo color -> Nana color
+            POPO_TO_NANA = {
+                'Default': 'Default',
+                'Red': 'White',
+                'Orange': 'Aqua/Light Blue',
+                'Green': 'Yellow',
+            }
+            NANA_TO_POPO = {v: k for k, v in POPO_TO_NANA.items()}
+
+            paired_nanas = set()
+
+            # Match each Popo with Nana
+            for popo in popo_entries:
+                expected_nana_color = POPO_TO_NANA.get(popo['color'])
+                matching_nana = None
+
+                if expected_nana_color:
+                    for nana in nana_entries:
+                        if nana['color'] == expected_nana_color and id(nana) not in paired_nanas:
+                            matching_nana = nana
+                            paired_nanas.add(id(nana))
+                            break
+
+                # Only add if paired (skip unpaired)
+                if matching_nana:
+                    # Mark Popo entry
+                    popo['is_popo'] = True
+                    popo['is_nana'] = False
+                    popo['pair_dat_file'] = matching_nana['dat_file']
+                    popo['pair_color'] = matching_nana['color']
+                    popo['pair_costume_code'] = matching_nana['costume_code']
+                    processed_results.append(popo)
+
+                    # Mark Nana entry
+                    matching_nana['is_nana'] = True
+                    matching_nana['is_popo'] = False
+                    matching_nana['pair_dat_file'] = popo['dat_file']
+                    matching_nana['pair_color'] = popo['color']
+                    matching_nana['pair_costume_code'] = popo['costume_code']
+                    processed_results.append(matching_nana)
+
+        processed_results.extend(other_entries)
+        return processed_results
 
     except Exception as e:
         print(f"Error detecting character from {zip_path}: {e}")
