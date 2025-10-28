@@ -33,7 +33,6 @@ STORAGE_DIR = SCRIPT_DIR / "storage"
 BUILD_ASSETS_DIR = SCRIPT_DIR / "build" / "assets" / "icons"
 VANILLA_ASSETS_DIR = SCRIPT_DIR / "utility" / "assets" / "vanilla"
 LOGS_DIR = SCRIPT_DIR / "logs"
-VIEWER_STORAGE = SCRIPT_DIR / "viewer" / "public" / "storage"
 METADATA_FILE = STORAGE_DIR / "metadata.json"
 LOG_FILE = LOGS_DIR / "storage_manager.log"
 
@@ -97,12 +96,6 @@ class StorageManager:
             METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(METADATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.metadata, f, indent=2)
-
-            # Also copy to viewer's public storage for the web interface
-            viewer_metadata = VIEWER_STORAGE / "metadata.json"
-            viewer_metadata.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(METADATA_FILE, viewer_metadata)
-            logger.debug(f"Copied metadata to viewer: {viewer_metadata}")
 
     def detect_character_from_dat(self, dat_path: Path) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
@@ -483,12 +476,6 @@ class StorageManager:
 
         zip_path = char_folder / zip_filename
 
-        # Create viewer storage folder for character
-        viewer_char_folder = VIEWER_STORAGE / character
-        if not self.dry_run:
-            viewer_char_folder.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"  Created viewer character folder: {viewer_char_folder}")
-
         # Determine new DAT name (simple increment system)
         dat_name = f"{costume_code}Mod.dat"
         logger.debug(f"  DAT will be renamed to: {dat_name}")
@@ -497,18 +484,7 @@ class StorageManager:
 
         if not self.dry_run:
             try:
-                # Save CSP and stock to viewer directory BEFORE zipping
-                if csp_path and csp_path.exists():
-                    viewer_csp = viewer_char_folder / f"{skin_id}_csp.png"
-                    shutil.copy2(csp_path, viewer_csp)
-                    logger.debug(f"  Saved CSP to viewer: {viewer_csp}")
-
-                if stock_path and stock_path.exists():
-                    viewer_stock = viewer_char_folder / f"{skin_id}_stc.png"
-                    shutil.copy2(stock_path, viewer_stock)
-                    logger.debug(f"  Saved stock to viewer: {viewer_stock}")
-
-                # Now create the zip
+                # Create the zip
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                     # Add DAT file
                     zf.write(dat_path, dat_name)

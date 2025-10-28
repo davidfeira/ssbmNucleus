@@ -25,24 +25,28 @@ from werkzeug.utils import secure_filename
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from mex_bridge import MexManager, MexManagerError
 
+# Configuration
+PROJECT_ROOT = Path(__file__).parent.parent
+
 # Add backend directory to path for detectors
 BACKEND_DIR = Path(__file__).parent
 sys.path.insert(0, str(BACKEND_DIR))
 from character_detector import detect_character_from_zip
 from stage_detector import detect_stage_from_zip, extract_stage_files
 
+# Add processor tools to path for CSP generation
+PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
+sys.path.insert(0, str(PROCESSOR_DIR))
+from generate_csp import generate_csp
+
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
-
-# Configuration
-PROJECT_ROOT = Path(__file__).parent.parent
 MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/mexcli.exe"
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
 STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
 LOGS_PATH = PROJECT_ROOT / "logs"
-VIEWER_STORAGE = PROJECT_ROOT / "viewer" / "public" / "storage"
 
 # Ensure directories exist
 OUTPUT_PATH.mkdir(exist_ok=True)
@@ -858,17 +862,51 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         final_zip = char_folder / f"{skin_id}.zip"
 
         # Copy files from uploaded ZIP to final ZIP with correct structure
+        csp_source = 'imported'
         with zipfile.ZipFile(zip_path, 'r') as source_zip:
             with zipfile.ZipFile(final_zip, 'w') as dest_zip:
                 # Copy DAT file
                 dat_data = source_zip.read(char_info['dat_file'])
                 dest_zip.writestr(f"{char_info['costume_code']}Mod.dat", dat_data)
 
-                # Copy CSP if found
+                # Handle CSP - copy if found, generate if missing
+                csp_data = None
                 if char_info['csp_file']:
+                    # CSP found in ZIP - copy it
                     csp_data = source_zip.read(char_info['csp_file'])
-                    dest_zip.writestr('csp.png', csp_data)
+                    logger.info(f"Using CSP from ZIP: {char_info['csp_file']}")
+                else:
+                    # No CSP in ZIP - generate one
+                    logger.info("No CSP found in ZIP, generating...")
+                    # Extract DAT to temp location for generation
+                    with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
+                        tmp_dat.write(dat_data)
+                        tmp_dat_path = tmp_dat.name
 
+                    try:
+                        generated_csp_path = generate_csp(tmp_dat_path)
+                        if generated_csp_path and os.path.exists(generated_csp_path):
+                            with open(generated_csp_path, 'rb') as f:
+                                csp_data = f.read()
+                            logger.info("Successfully generated CSP")
+                            csp_source = 'generated'
+                            # Clean up generated CSP
+                            try:
+                                os.unlink(generated_csp_path)
+                            except:
+                                pass
+                        else:
+                            logger.warning("CSP generation failed")
+                    finally:
+                        # Clean up temp DAT
+                        try:
+                            os.unlink(tmp_dat_path)
+                        except:
+                            pass
+
+                # Save CSP to ZIP and storage if we have one
+                if csp_data:
+                    dest_zip.writestr('csp.png', csp_data)
                     # Save to storage for preview
                     storage_char_folder = STORAGE_PATH / character
                     storage_char_folder.mkdir(parents=True, exist_ok=True)
@@ -892,10 +930,10 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'color': char_info['color'],
             'costume_code': char_info['costume_code'],
             'filename': f"{skin_id}.zip",
-            'has_csp': char_info['csp_file'] is not None,
+            'has_csp': csp_data is not None,
             'has_stock': char_info['stock_file'] is not None,
-            'csp_source': 'imported',
-            'stock_source': 'imported',
+            'csp_source': csp_source,
+            'stock_source': 'imported' if char_info['stock_file'] else None,
             'date_added': datetime.now().isoformat()
         })
 
@@ -1602,7 +1640,7 @@ def update_stage_screenshot():
                     json.dump(metadata, f, indent=2)
 
         logger.info(f"✓ Updated screenshot for {stage_folder}/{variant_id}")
-        logger.info(f"  Saved to: {viewer_screenshot_path}")
+        logger.info(f"  Saved to: {storage_screenshot_path}")
 
         return jsonify({
             'success': True,

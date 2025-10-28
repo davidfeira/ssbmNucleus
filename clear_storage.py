@@ -5,9 +5,11 @@ Clear Storage Script - Removes all storage data
 This script will:
 - Delete all character folders in storage/
 - Delete storage metadata.json
-- Delete extracted images in viewer/public/storage/
 - Optionally clear intake folder
 - Optionally clear logs
+
+Note: No longer clears viewer/public/storage/ as the frontend now uses
+      a proxy to serve files directly from storage/ folder.
 
 Usage:
     python clear_storage.py                # Clear storage only
@@ -24,7 +26,6 @@ SCRIPT_DIR = Path(__file__).parent
 STORAGE_DIR = SCRIPT_DIR / "storage"
 INTAKE_DIR = SCRIPT_DIR / "intake"
 LOGS_DIR = SCRIPT_DIR / "logs"
-VIEWER_STORAGE = SCRIPT_DIR / "viewer" / "public" / "storage"
 METADATA_FILE = STORAGE_DIR / "metadata.json"
 
 
@@ -46,21 +47,6 @@ def clear_storage():
     if METADATA_FILE.exists():
         print(f"  Removing: metadata.json")
         METADATA_FILE.unlink()
-        removed_count += 1
-
-    # Remove extracted images in viewer
-    if VIEWER_STORAGE.exists():
-        for item in VIEWER_STORAGE.iterdir():
-            if item.is_dir():
-                print(f"  Removing: viewer/public/storage/{item.name}/")
-                shutil.rmtree(item)
-                removed_count += 1
-
-    # Remove viewer metadata.json
-    viewer_metadata = VIEWER_STORAGE / "metadata.json"
-    if viewer_metadata.exists():
-        print(f"  Removing: viewer/public/storage/metadata.json")
-        viewer_metadata.unlink()
         removed_count += 1
 
     if removed_count > 0:

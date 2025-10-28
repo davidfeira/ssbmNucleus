@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """
-Extract CSP and stock images from storage zips for viewing
+DEPRECATED: This script is no longer needed as of the single-source-of-truth refactor.
 
-This script extracts csp.png and stc.png from each zip file in storage
-and places them in a viewer-accessible location with proper naming.
+Previously extracted CSP and stock images from storage zips to viewer/public/storage.
+Now the frontend uses a Vite proxy to fetch images directly from the Flask backend,
+which serves files from the storage/ folder via the /storage/* endpoint.
+
+No file duplication is needed - the backend serves images on demand.
+
+This file is kept for reference only and should not be used.
 """
 
 import os

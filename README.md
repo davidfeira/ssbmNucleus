@@ -75,9 +75,8 @@ melee-costume-manager/
 │   │   ├── fox-green-001.zip
 │   │   └── ...
 │   └── ...
-├── viewer/                 # Web interface
+├── viewer/                 # Web interface (uses Vite proxy to serve from storage/)
 │   ├── public/
-│   │   ├── storage/        # Extracted CSPs/stocks
 │   │   └── vanilla/        # Vanilla Melee assets
 │   └── src/
 ├── utility/                # Detection and generation tools
@@ -351,8 +350,10 @@ rm intake/*.dat intake/*.png
 
 ### Viewer not updating
 - Hard refresh browser (Ctrl+Shift+R)
-- Check `viewer/public/storage/metadata.json` exists
+- Check backend is running: `http://127.0.0.1:5000/storage/metadata.json` should load
+- Check Vite proxy is working: Frontend at `localhost:3000` should proxy `/storage/*` to Flask
 - Restart dev server: `cd viewer && npm run dev`
+- Restart backend: `python backend/mex_api.py`
 
 ## Technical Details
 

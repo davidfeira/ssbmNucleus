@@ -86,7 +86,7 @@ def detect_character_from_zip(zip_path: str) -> Optional[Dict]:
 
                 return {
                     'character': character,
-                    'color': color_info.get('color', 'Custom') if color_info else 'Custom',
+                    'color': color_info if color_info else 'Custom',
                     'costume_code': costume_code,
                     'dat_file': dat_filename,
                     'csp_file': csp_file,

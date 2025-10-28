@@ -9,6 +9,13 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false, // Don't auto-open browser in Electron mode
+    proxy: {
+      // Proxy /storage requests to Flask backend (single source of truth)
+      '/storage': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true
+      }
+    },
     fs: {
       // Allow serving files from the parent directory
       allow: ['..']
