@@ -1158,7 +1158,9 @@ def das_get_stage_variants(stage_code):
             file_pattern = '*.usd' if stage_code == 'GrPs' else '*.dat'
 
             for stage_file in stage_folder.glob(file_pattern):
-                # Check if screenshot exists in viewer/public/storage
+                # Check if screenshot exists in viewer storage
+                # Since we use mod names now, screenshot name matches the .dat filename
+                # e.g., autumn-dreamland.dat → autumn-dreamland_screenshot.png
                 viewer_screenshot = VIEWER_STORAGE / 'das' / DAS_STAGES[stage_code]['folder'] / f"{stage_file.stem}_screenshot.png"
 
                 variants.append({
@@ -1280,31 +1282,28 @@ def das_import_variant():
             stage_file = stage_files[0]
             stage_data = zip_ref.read(stage_file)
 
-            # Find next available slot
-            existing_count = 0
-            while True:
-                final_name = f"{stage_code}_{existing_count:02d}"
-                final_path = stage_folder / f"{final_name}{file_ext}"
-                if not final_path.exists():
-                    break
-                existing_count += 1
+            # Use mod name from ZIP filename instead of sequential numbering
+            variant_id = Path(full_variant_path).stem  # e.g., "autumn-dreamland"
+            final_name = variant_id
+            final_path = stage_folder / f"{final_name}{file_ext}"
+
+            # If file already exists, append suffix to avoid conflicts
+            if final_path.exists():
+                count = 1
+                while True:
+                    final_name = f"{variant_id}_{count}"
+                    final_path = stage_folder / f"{final_name}{file_ext}"
+                    if not final_path.exists():
+                        break
+                    count += 1
 
             # Write directly to final location
             final_path.write_bytes(stage_data)
             logger.info(f"✓ Extracted stage file to: {final_path}")
+            logger.info(f"  Using mod name: {final_name}")
 
-            # Also extract screenshot if it exists in the ZIP
-            screenshot_files = [f for f in zip_ref.namelist() if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
-            if screenshot_files:
-                screenshot_file = screenshot_files[0]
-                screenshot_data = zip_ref.read(screenshot_file)
-
-                # Save to viewer/public/storage for display
-                viewer_das_folder = VIEWER_STORAGE / 'das' / DAS_STAGES[stage_code]['folder']
-                viewer_das_folder.mkdir(parents=True, exist_ok=True)
-                viewer_screenshot_path = viewer_das_folder / f"{final_name}_screenshot.png"
-                viewer_screenshot_path.write_bytes(screenshot_data)
-                logger.info(f"✓ Saved screenshot: {viewer_screenshot_path}")
+            # No screenshot copying needed - frontend references storage folder directly
+            # Screenshot path: storage/das/{folder}/{variant_id}_screenshot.png
 
         logger.info(f"DAS variant imported to: {final_path}")
 
