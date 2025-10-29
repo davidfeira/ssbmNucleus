@@ -813,6 +813,206 @@ def rename_storage_costume():
         }), 500
 
 
+@app.route('/api/mex/storage/costumes/update-csp', methods=['POST'])
+def update_costume_csp():
+    """Update CSP image for a character costume"""
+    try:
+        character = request.form.get('character')
+        skin_id = request.form.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        if 'csp' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No CSP file provided'
+            }), 400
+
+        csp_file = request.files['csp']
+
+        if csp_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+
+        # Validate image file
+        if not csp_file.content_type.startswith('image/'):
+            return jsonify({
+                'success': False,
+                'error': 'File must be an image'
+            }), 400
+
+        # Read the image data
+        csp_data = csp_file.read()
+
+        # Paths
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+        standalone_csp = char_folder / f"{skin_id}_csp.png"
+
+        if not zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Costume zip not found: {skin_id}'
+            }), 404
+
+        # Update standalone CSP file
+        with open(standalone_csp, 'wb') as f:
+            f.write(csp_data)
+
+        # Update CSP inside the zip file
+        temp_zip = char_folder / f"{skin_id}_temp.zip"
+
+        with zipfile.ZipFile(zip_path, 'r') as source_zip:
+            with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                # Copy all existing entries except csp.png
+                for item in source_zip.infolist():
+                    if item.filename.lower() not in ['csp.png', 'csp']:
+                        data = source_zip.read(item.filename)
+                        dest_zip.writestr(item, data)
+
+                # Write new CSP
+                dest_zip.writestr('csp.png', csp_data)
+
+        # Replace original zip with updated one
+        zip_path.unlink()
+        temp_zip.rename(zip_path)
+
+        # Update metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            if character in metadata.get('characters', {}):
+                for skin in metadata['characters'][character].get('skins', []):
+                    if skin['id'] == skin_id:
+                        skin['has_csp'] = True
+                        skin['csp_source'] = 'custom'
+                        break
+
+                with open(metadata_file, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Updated CSP for {character} - {skin_id}")
+
+        return jsonify({
+            'success': True,
+            'message': 'CSP updated successfully'
+        })
+    except Exception as e:
+        logger.error(f"Update CSP error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/costumes/update-stock', methods=['POST'])
+def update_costume_stock():
+    """Update stock icon for a character costume"""
+    try:
+        character = request.form.get('character')
+        skin_id = request.form.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        if 'stock' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No stock file provided'
+            }), 400
+
+        stock_file = request.files['stock']
+
+        if stock_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+
+        # Validate image file
+        if not stock_file.content_type.startswith('image/'):
+            return jsonify({
+                'success': False,
+                'error': 'File must be an image'
+            }), 400
+
+        # Read the image data
+        stock_data = stock_file.read()
+
+        # Paths
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+        standalone_stock = char_folder / f"{skin_id}_stc.png"
+
+        if not zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Costume zip not found: {skin_id}'
+            }), 404
+
+        # Update standalone stock file
+        with open(standalone_stock, 'wb') as f:
+            f.write(stock_data)
+
+        # Update stock inside the zip file
+        temp_zip = char_folder / f"{skin_id}_temp.zip"
+
+        with zipfile.ZipFile(zip_path, 'r') as source_zip:
+            with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                # Copy all existing entries except stc.png
+                for item in source_zip.infolist():
+                    if item.filename.lower() not in ['stc.png', 'stock.png', 'stock']:
+                        data = source_zip.read(item.filename)
+                        dest_zip.writestr(item, data)
+
+                # Write new stock icon
+                dest_zip.writestr('stc.png', stock_data)
+
+        # Replace original zip with updated one
+        zip_path.unlink()
+        temp_zip.rename(zip_path)
+
+        # Update metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            if character in metadata.get('characters', {}):
+                for skin in metadata['characters'][character].get('skins', []):
+                    if skin['id'] == skin_id:
+                        skin['has_stock'] = True
+                        skin['stock_source'] = 'custom'
+                        break
+
+                with open(metadata_file, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Updated stock icon for {character} - {skin_id}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Stock icon updated successfully'
+        })
+    except Exception as e:
+        logger.error(f"Update stock error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/storage/metadata', methods=['GET'])
 def get_storage_metadata():
     """Get storage metadata.json"""
@@ -1674,16 +1874,32 @@ def das_list_storage_variants():
         stage_code = request.args.get('stage')
         variants = []
 
+        # Load metadata to get proper names
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        metadata = {}
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
         # Determine which stages to scan
         stages_to_scan = {stage_code: DAS_STAGES[stage_code]} if stage_code and stage_code in DAS_STAGES else DAS_STAGES
 
         for code, stage_info in stages_to_scan.items():
-            stage_storage_path = STORAGE_PATH / "das" / stage_info['folder']
+            stage_folder = stage_info['folder']
+            stage_storage_path = STORAGE_PATH / "das" / stage_folder
+
+            # Get variants from metadata for this stage
+            stage_metadata = metadata.get('stages', {}).get(stage_folder, {})
+            metadata_variants = {v['id']: v for v in stage_metadata.get('variants', [])}
 
             if stage_storage_path.exists():
                 # Look for .zip files and their associated screenshots
                 for zip_file in stage_storage_path.glob('*.zip'):
                     variant_id = zip_file.stem
+
+                    # Get name from metadata, fallback to ID if not found
+                    variant_meta = metadata_variants.get(variant_id, {})
+                    variant_name = variant_meta.get('name', variant_id)
 
                     # Check for screenshot in storage (single source of truth)
                     storage_screenshot = stage_storage_path / f"{variant_id}_screenshot.png"
@@ -1691,7 +1907,8 @@ def das_list_storage_variants():
                     variants.append({
                         'stageCode': code,
                         'stageName': stage_info['name'],
-                        'name': variant_id,
+                        'id': variant_id,  # ← Immutable ID (filename)
+                        'name': variant_name,  # ← Editable display name
                         'zipPath': str(zip_file.relative_to(PROJECT_ROOT)),
                         'hasScreenshot': storage_screenshot.exists(),
                         'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None

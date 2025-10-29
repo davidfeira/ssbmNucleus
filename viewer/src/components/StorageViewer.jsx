@@ -29,6 +29,10 @@ export default function StorageViewer({ metadata }) {
   const [deleting, setDeleting] = useState(false)
   const [newScreenshot, setNewScreenshot] = useState(null) // File object for new screenshot
   const [screenshotPreview, setScreenshotPreview] = useState(null) // Preview URL for new screenshot
+  const [newCsp, setNewCsp] = useState(null) // File object for new CSP
+  const [cspPreview, setCspPreview] = useState(null) // Preview URL for new CSP
+  const [newStock, setNewStock] = useState(null) // File object for new stock
+  const [stockPreview, setStockPreview] = useState(null) // Preview URL for new stock
 
   // Fetch stage variants when in stages mode
   useEffect(() => {
@@ -109,6 +113,10 @@ export default function StorageViewer({ metadata }) {
     setEditName(name)
     setNewScreenshot(null)
     setScreenshotPreview(null)
+    setNewCsp(null)
+    setCspPreview(null)
+    setNewStock(null)
+    setStockPreview(null)
     setShowEditModal(true)
   }
 
@@ -128,6 +136,46 @@ export default function StorageViewer({ metadata }) {
     const reader = new FileReader()
     reader.onload = (e) => {
       setScreenshotPreview(e.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCspChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    setNewCsp(file)
+
+    // Create preview URL
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setCspPreview(e.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleStockChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    setNewStock(file)
+
+    // Create preview URL
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setStockPreview(e.target.result)
     }
     reader.readAsDataURL(file)
   }
@@ -188,6 +236,48 @@ export default function StorageViewer({ metadata }) {
 
         if (!screenshotData.success) {
           alert(`Screenshot upload failed: ${screenshotData.error}`)
+          setSaving(false)
+          return
+        }
+      }
+
+      // If this is a character costume and there's a new CSP, upload it
+      if (editingItem.type === 'costume' && newCsp) {
+        const formData = new FormData()
+        formData.append('character', editingItem.data.character)
+        formData.append('skinId', editingItem.data.id)
+        formData.append('csp', newCsp)
+
+        const cspResponse = await fetch(`${API_URL}/storage/costumes/update-csp`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const cspData = await cspResponse.json()
+
+        if (!cspData.success) {
+          alert(`CSP upload failed: ${cspData.error}`)
+          setSaving(false)
+          return
+        }
+      }
+
+      // If this is a character costume and there's a new stock icon, upload it
+      if (editingItem.type === 'costume' && newStock) {
+        const formData = new FormData()
+        formData.append('character', editingItem.data.character)
+        formData.append('skinId', editingItem.data.id)
+        formData.append('stock', newStock)
+
+        const stockResponse = await fetch(`${API_URL}/storage/costumes/update-stock`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const stockData = await stockResponse.json()
+
+        if (!stockData.success) {
+          alert(`Stock icon upload failed: ${stockData.error}`)
           setSaving(false)
           return
         }
@@ -257,6 +347,10 @@ export default function StorageViewer({ metadata }) {
     setEditName('')
     setNewScreenshot(null)
     setScreenshotPreview(null)
+    setNewCsp(null)
+    setCspPreview(null)
+    setNewStock(null)
+    setStockPreview(null)
   }
 
   // Merge default characters with metadata
@@ -291,17 +385,83 @@ export default function StorageViewer({ metadata }) {
             {/* Preview Image */}
             <div className="edit-preview">
               {editingItem.type === 'costume' ? (
-                editingItem.data.has_csp ? (
-                  <img
-                    src={editingItem.data.cspUrl}
-                    alt="Preview"
-                    onError={(e) => e.target.style.display = 'none'}
-                  />
-                ) : (
-                  <div className="edit-placeholder">
-                    <span>{editingItem.data.color[0]}</span>
+                <>
+                  {/* CSP Preview and edit */}
+                  <div style={{ position: 'relative', marginBottom: '1rem' }}>
+                    <h4>CSP</h4>
+                    {cspPreview ? (
+                      <img
+                        src={cspPreview}
+                        alt="New CSP preview"
+                        style={{ width: '100%', maxHeight: '300px', objectFit: 'contain' }}
+                      />
+                    ) : editingItem.data.has_csp ? (
+                      <img
+                        src={editingItem.data.cspUrl}
+                        alt="CSP"
+                        style={{ width: '100%', maxHeight: '300px', objectFit: 'contain' }}
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                    ) : (
+                      <div className="edit-placeholder">
+                        <span>{editingItem.data.color[0]}</span>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCspChange}
+                      style={{ display: 'none' }}
+                      id="csp-file-input"
+                    />
+                    <button
+                      className="btn-edit-screenshot"
+                      onClick={() => document.getElementById('csp-file-input').click()}
+                      title="Replace CSP"
+                      style={{ position: 'absolute', bottom: '10px', right: '10px' }}
+                    >
+                      ✎
+                    </button>
                   </div>
-                )
+
+                  {/* Stock Icon Preview and edit */}
+                  <div style={{ position: 'relative' }}>
+                    <h4>Stock Icon</h4>
+                    {stockPreview ? (
+                      <img
+                        src={stockPreview}
+                        alt="New stock preview"
+                        style={{ width: '100px', height: 'auto', objectFit: 'contain' }}
+                      />
+                    ) : editingItem.data.has_stock ? (
+                      <img
+                        src={editingItem.data.stockUrl}
+                        alt="Stock"
+                        style={{ width: '100px', height: 'auto', objectFit: 'contain' }}
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                    ) : (
+                      <div className="edit-placeholder" style={{ width: '100px', height: '100px' }}>
+                        <span>{editingItem.data.color[0]}</span>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleStockChange}
+                      style={{ display: 'none' }}
+                      id="stock-file-input"
+                    />
+                    <button
+                      className="btn-edit-screenshot"
+                      onClick={() => document.getElementById('stock-file-input').click()}
+                      title="Replace stock icon"
+                      style={{ position: 'absolute', bottom: '10px', right: '10px' }}
+                    >
+                      ✎
+                    </button>
+                  </div>
+                </>
               ) : (
                 <>
                   {/* Show new screenshot preview if selected, otherwise show current screenshot */}
@@ -423,7 +583,7 @@ export default function StorageViewer({ metadata }) {
           ) : (
             <div className="skins-grid">
               {variants.map((variant) => (
-                <div key={variant.name} className="skin-card">
+                <div key={variant.id} className="skin-card">
                   <div className="skin-header">
                     <h4 className="skin-title">{variant.name}</h4>
                   </div>
@@ -452,8 +612,8 @@ export default function StorageViewer({ metadata }) {
                           e.stopPropagation()
                           e.preventDefault()
                           handleEditClick('stage', {
-                            id: variant.name,
-                            name: variant.name,
+                            id: variant.id,  // ← Use the immutable ID for API calls
+                            name: variant.name,  // ← Use the editable name for display
                             stageFolder: stageInfo?.folder,
                             stageName: stageInfo?.name,
                             screenshotUrl: variant.screenshotUrl,
@@ -468,8 +628,8 @@ export default function StorageViewer({ metadata }) {
                   </div>
 
                   <div className="skin-info">
-                    <div className="skin-color">{stageInfo?.name}</div>
-                    <div className="skin-id">{variant.name}</div>
+                    <div className="skin-color">{variant.name}</div>
+                    <div className="skin-id">{variant.id}</div>
                   </div>
                 </div>
               ))}
@@ -509,10 +669,6 @@ export default function StorageViewer({ metadata }) {
             <div className="skins-grid">
               {visibleSkins.map((skin) => (
                 <div key={skin.id} className="skin-card">
-                  <div className="skin-header">
-                    <h4 className="skin-title">{selectedCharacter} - {skin.color}</h4>
-                  </div>
-
                   <div className="skin-images">
                     <div className="skin-image-container">
                       {skin.has_csp ? (
@@ -548,7 +704,6 @@ export default function StorageViewer({ metadata }) {
                       >
                         ✎
                       </button>
-                      <div className="image-label">CSP</div>
                     </div>
 
                     {skin.has_stock && (
@@ -558,7 +713,6 @@ export default function StorageViewer({ metadata }) {
                           alt={`${selectedCharacter} stock`}
                           className="skin-stock"
                         />
-                        <div className="image-label">Stock</div>
                       </div>
                     )}
                   </div>
@@ -566,10 +720,6 @@ export default function StorageViewer({ metadata }) {
                   <div className="skin-info">
                     <div className="skin-color">{skin.color}</div>
                     <div className="skin-id">{skin.id}</div>
-                    <div className="skin-sources">
-                      <div className="source-line">CSP: {skin.csp_source}</div>
-                      <div className="source-line">Stock: {skin.stock_source}</div>
-                    </div>
                   </div>
                 </div>
               ))}
