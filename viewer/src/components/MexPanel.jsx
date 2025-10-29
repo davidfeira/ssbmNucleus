@@ -30,6 +30,7 @@ const MexPanel = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showIsoBuilder, setShowIsoBuilder] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
+  const [recentProjects, setRecentProjects] = useState([]);
 
   // DAS state
   const [dasInstalled, setDasInstalled] = useState(false);
@@ -41,8 +42,47 @@ const MexPanel = () => {
 
   const API_URL = 'http://127.0.0.1:5000/api/mex';
 
+  // Recent projects management
+  const loadRecentProjects = () => {
+    try {
+      const stored = localStorage.getItem('mex_recent_projects');
+      if (stored) {
+        const projects = JSON.parse(stored);
+        setRecentProjects(projects);
+      }
+    } catch (err) {
+      console.error('Failed to load recent projects:', err);
+    }
+  };
+
+  const addToRecentProjects = (projectPath, projectName) => {
+    try {
+      const stored = localStorage.getItem('mex_recent_projects');
+      let projects = stored ? JSON.parse(stored) : [];
+
+      // Remove if already exists
+      projects = projects.filter(p => p.path !== projectPath);
+
+      // Add to front
+      projects.unshift({
+        path: projectPath,
+        name: projectName,
+        timestamp: Date.now()
+      });
+
+      // Keep only 5 most recent
+      projects = projects.slice(0, 5);
+
+      localStorage.setItem('mex_recent_projects', JSON.stringify(projects));
+      setRecentProjects(projects);
+    } catch (err) {
+      console.error('Failed to save recent project:', err);
+    }
+  };
+
   useEffect(() => {
     fetchMexStatus();
+    loadRecentProjects();
   }, []);
 
   useEffect(() => {
@@ -530,6 +570,36 @@ const MexPanel = () => {
     return storageVariants.filter(v => v.stageCode === stageCode);
   };
 
+  const handleOpenProjectFromPath = async (projectPath) => {
+    setOpeningProject(true);
+
+    try {
+      console.log('Opening project:', projectPath);
+
+      // Send path to backend
+      const response = await fetch(`${API_URL}/project/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: projectPath })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('✓ Project opened:', data.project.name);
+        addToRecentProjects(projectPath, data.project.name);
+        await fetchMexStatus();
+        setShowProjectModal(false); // Close modal on success
+      } else {
+        alert(`Failed to open project: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error opening project: ${err.message}`);
+    } finally {
+      setOpeningProject(false);
+    }
+  };
+
   const handleOpenProject = async () => {
     // Check if Electron API is available
     if (!window.electron) {
@@ -562,6 +632,7 @@ const MexPanel = () => {
 
       if (data.success) {
         console.log('✓ Project opened:', data.project.name);
+        addToRecentProjects(filePath, data.project.name);
         await fetchMexStatus();
         setShowProjectModal(false); // Close modal on success
       } else {
@@ -637,6 +708,7 @@ const MexPanel = () => {
 
         if (openData.success) {
           console.log('✓ Project opened:', openData.project.name);
+          addToRecentProjects(data.projectPath, openData.project.name);
           await fetchMexStatus();
           setShowProjectModal(false); // Close modal on success
         } else {
@@ -674,6 +746,25 @@ const MexPanel = () => {
         <div className="project-selection">
           <h1>MEX Manager</h1>
           <p className="subtitle">Select a project to get started</p>
+
+          {/* Recent Projects */}
+          {recentProjects.length > 0 && (
+            <div className="recent-projects">
+              <h3>Recent Projects</h3>
+              <div className="recent-projects-list">
+                {recentProjects.map((project, idx) => (
+                  <div
+                    key={idx}
+                    className="recent-project-item"
+                    onClick={() => handleOpenProjectFromPath(project.path)}
+                  >
+                    <div className="recent-project-name">{project.name}</div>
+                    <div className="recent-project-path">{project.path}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="project-options">
             {/* Open existing project */}
@@ -1034,6 +1125,25 @@ const MexPanel = () => {
           <div className="project-modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Switch Project</h2>
             <p className="modal-subtitle">Select a different project or create a new one</p>
+
+            {/* Recent Projects in Modal */}
+            {recentProjects.length > 0 && (
+              <div className="recent-projects-modal">
+                <h3>Recent Projects</h3>
+                <div className="recent-projects-list-modal">
+                  {recentProjects.map((project, idx) => (
+                    <div
+                      key={idx}
+                      className="recent-project-item-modal"
+                      onClick={() => handleOpenProjectFromPath(project.path)}
+                    >
+                      <div className="recent-project-name">{project.name}</div>
+                      <div className="recent-project-path">{project.path}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="project-options-modal">
               {/* Open existing project */}

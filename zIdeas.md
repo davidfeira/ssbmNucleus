@@ -2,22 +2,19 @@
 
 
 
-+create from vanilla iso workflow (add path, create from vanilla iso)
 
 
-+show recent opened .mexprojs
-+dont refresh everything each time, annoying needing to reload mexproj, keep same mexproj open until app is closed
 
-
++maintain zip/folder/something name when importing stages/chars
 
 
 ++renaming
-+maintain zip/folder/something name when importing stages/chars
+
 
 +editing, make everything editable (CSP, names, etc,) - 
 will need some kind of zip,unzip thing
 
-+(fix game and watch)
+
 
 
 
@@ -37,3 +34,7 @@ docker
 actual custom stages
 movesets
 patches
+
+
+
++(fix game and watch)

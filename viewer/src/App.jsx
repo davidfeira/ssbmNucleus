@@ -63,9 +63,15 @@ function App() {
           </div>
         ) : (
           <>
-            {activeTab === 'storage' && <StorageViewer metadata={metadata} />}
-            {activeTab === 'mex' && <MexPanel />}
-            {activeTab === 'settings' && <Settings metadata={metadata} />}
+            <div style={{ display: activeTab === 'storage' ? 'block' : 'none' }}>
+              <StorageViewer metadata={metadata} />
+            </div>
+            <div style={{ display: activeTab === 'mex' ? 'block' : 'none' }}>
+              <MexPanel />
+            </div>
+            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+              <Settings metadata={metadata} />
+            </div>
           </>
         )}
       </main>
