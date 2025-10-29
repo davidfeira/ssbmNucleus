@@ -22,6 +22,7 @@ const MexPanel = () => {
   const [error, setError] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [openingProject, setOpeningProject] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importingCostume, setImportingCostume] = useState(null);
   const [removing, setRemoving] = useState(false);
@@ -171,12 +172,21 @@ const MexPanel = () => {
           return;
         }
 
-        // Import Nana second (MEX calls it "Popo", confusingly)
+        // Import Nana second - find Nana fighter (ID 11, could be named "Nana" or "Popo")
+        const nanaFighter = fighters.find(f => f.internalId === 11);
+
+        if (!nanaFighter) {
+          alert(`Popo imported but could not find Nana fighter (ID 11) in project`);
+          return;
+        }
+
+        console.log(`Importing Nana to fighter: ${nanaFighter.name}`);
+
         const nanaResponse = await fetch(`${API_URL}/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fighter: 'Popo',
+            fighter: nanaFighter.name, // Use actual fighter name (could be "Nana" or "Popo")
             costumePath: nanaCostume.zipPath
           })
         });
@@ -301,26 +311,36 @@ const MexPanel = () => {
       if (isIceClimbers) {
         console.log(`Removing paired Nana at index ${costumeIndex}...`);
 
-        const nanaRequestBody = {
-          fighter: 'Popo', // MEX uses "Popo" for Nana
-          costumeIndex: costumeIndex
-        };
+        // Find Nana fighter (internal ID 11) - could be named "Nana" or "Popo"
+        const nanaFighter = fighters.find(f => f.internalId === 11);
 
-        const nanaResponse = await fetch(`${API_URL}/remove`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(nanaRequestBody)
-        });
-
-        const nanaData = await nanaResponse.json();
-        console.log('Nana remove response:', nanaData);
-
-        if (!nanaData.success) {
-          alert(`Popo removed but Nana removal failed: ${nanaData.error}`);
+        if (!nanaFighter) {
+          console.warn('Nana fighter (ID 11) not found in project');
+          alert(`Popo removed but could not find Nana fighter in project`);
         } else {
-          console.log(`✓ Successfully removed paired Nana`);
+          console.log(`Found Nana fighter named: ${nanaFighter.name}`);
+
+          const nanaRequestBody = {
+            fighter: nanaFighter.name, // Use actual fighter name (could be "Nana" or "Popo")
+            costumeIndex: costumeIndex
+          };
+
+          const nanaResponse = await fetch(`${API_URL}/remove`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(nanaRequestBody)
+          });
+
+          const nanaData = await nanaResponse.json();
+          console.log('Nana remove response:', nanaData);
+
+          if (!nanaData.success) {
+            alert(`Popo removed but Nana removal failed: ${nanaData.error}`);
+          } else {
+            console.log(`✓ Successfully removed paired Nana from ${nanaFighter.name}`);
+          }
         }
       }
 
@@ -554,6 +574,84 @@ const MexPanel = () => {
     }
   };
 
+  const handleCreateProject = async () => {
+    // Check if Electron API is available
+    if (!window.electron) {
+      alert('Electron API not available. Please run this app in Electron mode.');
+      return;
+    }
+
+    setCreatingProject(true);
+
+    try {
+      // Step 1: Select vanilla ISO
+      const isoPath = await window.electron.openIsoDialog();
+
+      if (!isoPath) {
+        // User canceled
+        setCreatingProject(false);
+        return;
+      }
+
+      console.log('Selected ISO:', isoPath);
+
+      // Step 2: Select project folder
+      const projectDir = await window.electron.selectDirectory();
+
+      if (!projectDir) {
+        // User canceled
+        setCreatingProject(false);
+        return;
+      }
+
+      console.log('Selected project directory:', projectDir);
+
+      // Step 3: Use default project name
+      const projectName = 'MexProject';
+      console.log('Project name:', projectName);
+
+      // Step 4: Call backend to create project
+      const response = await fetch(`${API_URL}/project/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isoPath: isoPath,
+          projectDir: projectDir,
+          projectName: projectName
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('✓ Project created:', data.projectPath);
+
+        // Step 5: Auto-open the newly created project
+        const openResponse = await fetch(`${API_URL}/project/open`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath: data.projectPath })
+        });
+
+        const openData = await openResponse.json();
+
+        if (openData.success) {
+          console.log('✓ Project opened:', openData.project.name);
+          await fetchMexStatus();
+          setShowProjectModal(false); // Close modal on success
+        } else {
+          alert(`Project created but failed to open: ${openData.error}`);
+        }
+      } else {
+        alert(`Failed to create project: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error creating project: ${err.message}`);
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   if (loading) {
     return <div className="mex-panel loading">Loading MEX Manager...</div>;
   }
@@ -591,12 +689,16 @@ const MexPanel = () => {
               </button>
             </div>
 
-            {/* Create new project (placeholder for now) */}
-            <div className="project-option disabled">
+            {/* Create new project */}
+            <div className="project-option">
               <h3>Create New Project</h3>
               <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
-              <button className="project-btn" disabled>
-                Coming Soon
+              <button
+                className="project-btn"
+                onClick={handleCreateProject}
+                disabled={creatingProject}
+              >
+                {creatingProject ? 'Creating Project...' : 'Create from Vanilla ISO'}
               </button>
             </div>
           </div>
@@ -947,12 +1049,16 @@ const MexPanel = () => {
                 </button>
               </div>
 
-              {/* Create new project (placeholder for now) */}
-              <div className="project-option-modal disabled">
+              {/* Create new project */}
+              <div className="project-option-modal">
                 <h3>Create New Project</h3>
                 <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
-                <button className="project-btn" disabled>
-                  Coming Soon
+                <button
+                  className="project-btn"
+                  onClick={handleCreateProject}
+                  disabled={creatingProject}
+                >
+                  {creatingProject ? 'Creating Project...' : 'Create from Vanilla ISO'}
                 </button>
               </div>
             </div>

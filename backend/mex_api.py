@@ -191,6 +191,94 @@ def open_project():
         }), 500
 
 
+@app.route('/api/mex/project/create', methods=['POST'])
+def create_project():
+    """Create a new MEX project from a vanilla ISO"""
+    try:
+        data = request.json
+        iso_path = data.get('isoPath')
+        project_dir = data.get('projectDir')
+        project_name = data.get('projectName', 'MexProject')
+
+        logger.info(f"=== CREATE PROJECT REQUEST ===")
+        logger.info(f"ISO Path: {iso_path}")
+        logger.info(f"Project Dir: {project_dir}")
+        logger.info(f"Project Name: {project_name}")
+
+        if not iso_path or not project_dir:
+            return jsonify({
+                'success': False,
+                'error': 'Missing isoPath or projectDir parameter'
+            }), 400
+
+        # Validate ISO exists
+        iso_file = Path(iso_path)
+        if not iso_file.exists():
+            return jsonify({
+                'success': False,
+                'error': f'ISO file not found: {iso_path}'
+            }), 404
+
+        # Validate project directory exists
+        proj_dir = Path(project_dir)
+        if not proj_dir.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Project directory not found: {project_dir}'
+            }), 404
+
+        # Call MexCLI create command
+        mexcli_path = str(MEXCLI_PATH)
+        cmd = [mexcli_path, 'create', str(iso_file), str(proj_dir), project_name]
+
+        logger.info(f"Running command: {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT
+        )
+
+        logger.info(f"MexCLI stdout:\n{result.stdout}")
+        logger.info(f"MexCLI stderr:\n{result.stderr}")
+        logger.info(f"MexCLI return code: {result.returncode}")
+
+        if result.returncode != 0:
+            error_message = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"MexCLI create failed: {error_message}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to create project: {error_message}'
+            }), 500
+
+        # The created project file should be at projectDir/project.mexproj
+        created_project_path = proj_dir / "project.mexproj"
+
+        if not created_project_path.exists():
+            logger.error(f"Project file not found after creation: {created_project_path}")
+            return jsonify({
+                'success': False,
+                'error': 'Project was created but .mexproj file not found'
+            }), 500
+
+        logger.info(f"✓ Project created successfully: {created_project_path}")
+        logger.info(f"=== CREATE PROJECT COMPLETE ===")
+
+        return jsonify({
+            'success': True,
+            'message': 'Project created successfully',
+            'projectPath': str(created_project_path)
+        })
+
+    except Exception as e:
+        logger.error(f"Create project error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/fighters', methods=['GET'])
 def list_fighters():
     """List all fighters in MEX project"""
