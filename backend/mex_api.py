@@ -19,6 +19,7 @@ from logging.handlers import RotatingFileHandler
 import tempfile
 import shutil
 import zipfile
+import re
 from werkzeug.utils import secure_filename
 
 # Add parent directory to path for mex_bridge import
@@ -1079,6 +1080,58 @@ def fix_ice_climbers_pairing(character_infos: list, imported_skin_ids: dict):
         logger.error(f"Failed to fix Ice Climbers pairing: {e}", exc_info=True)
 
 
+def extract_custom_name_from_filename(filename: str, character_name: str) -> str:
+    """
+    Extract a custom name from the zip filename to use in costume ID.
+
+    Args:
+        filename: Original zip filename (e.g., "Villager Climbers (2).zip")
+        character_name: Detected character name (e.g., "Ice Climbers")
+
+    Returns:
+        Custom name string, or None if no meaningful name could be extracted
+
+    Examples:
+        "Villager Climbers (2).zip" -> "villager-climbers"
+        "Fox - Shadow Link.zip" -> "shadow-link"
+        "Ice Climbers_CustomSkin.zip" -> "customskin"
+        "costume.zip" -> None (too generic)
+    """
+    # Remove file extension
+    base_name = Path(filename).stem
+
+    # Remove numbers in parentheses: "(2)", "(1)", etc.
+    base_name = re.sub(r'\s*\(\d+\)\s*$', '', base_name)
+
+    # Try to remove character name prefix if present
+    # Handle patterns like "Fox - CustomName" or "Ice Climbers - CustomName"
+    char_pattern = re.escape(character_name)
+    base_name = re.sub(rf'^{char_pattern}\s*[-_:]\s*', '', base_name, flags=re.IGNORECASE)
+
+    # Remove common version patterns: v1, v2, V1.0, etc.
+    base_name = re.sub(r'\s*[vV]\d+(\.\d+)?\s*$', '', base_name)
+
+    # Clean up: convert to lowercase, replace spaces/underscores with hyphens
+    base_name = base_name.lower()
+    base_name = re.sub(r'[_\s]+', '-', base_name)
+
+    # Remove special characters except hyphens
+    base_name = re.sub(r'[^a-z0-9-]', '', base_name)
+
+    # Remove multiple consecutive hyphens
+    base_name = re.sub(r'-+', '-', base_name)
+
+    # Remove leading/trailing hyphens
+    base_name = base_name.strip('-')
+
+    # Check if result is too generic or empty
+    generic_names = {'costume', 'skin', 'mod', 'custom', 'default', 'new', 'import'}
+    if not base_name or base_name in generic_names or len(base_name) < 2:
+        return None
+
+    return base_name
+
+
 def import_character_costume(zip_path: str, char_info: dict, original_filename: str) -> dict:
     """Import a character costume to storage"""
     try:
@@ -1104,14 +1157,25 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         char_data = metadata.get('characters', {}).get(character, {'skins': []})
         existing_ids = [skin['id'] for skin in char_data.get('skins', [])]
 
-        # Generate sequential ID
+        # Try to extract custom name from filename
+        custom_name = extract_custom_name_from_filename(original_filename, character)
+
         # Sanitize color name: replace spaces and slashes with hyphens
         color_safe = char_info['color'].lower().replace(' ', '-').replace('/', '-')
-        base_id = f"{character.lower().replace(' ', '-')}-{color_safe}"
+
+        # Generate base ID: use custom name if found, otherwise use character name
+        if custom_name:
+            base_id = f"{custom_name}-{color_safe}"
+            logger.info(f"Using custom name from filename: '{custom_name}' -> '{base_id}'")
+        else:
+            base_id = f"{character.lower().replace(' ', '-')}-{color_safe}"
+            logger.info(f"Using default naming: '{base_id}'")
+
+        # Handle duplicates: append 2-digit counter without dash (e.g., "name01", "name02")
         skin_id = base_id
         counter = 1
         while skin_id in existing_ids:
-            skin_id = f"{base_id}-{counter:03d}"
+            skin_id = f"{base_id}{counter:02d}"
             counter += 1
 
         # Final paths
