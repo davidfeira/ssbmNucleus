@@ -3,6 +3,7 @@ Character Detector - Detects character and costume info from DAT files
 """
 import sys
 import os
+import re
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 import zipfile
@@ -26,6 +27,28 @@ except ImportError:
     DATParser = None
 
 
+def extract_costume_code_from_filename(filename: str) -> Optional[str]:
+    """
+    Extract Melee costume code (PlXxYy format) from a filename.
+
+    Costume codes follow the pattern: Pl + 2 chars (character) + 2 chars (color)
+    Examples: PlFxGr, PlPkBu, PlCaRd, PlMsBu, PlGwWh
+
+    Args:
+        filename: The filename to search for a costume code
+
+    Returns:
+        Costume code if found (preserves case), None otherwise
+    """
+    # Pattern: Pl + 2 letters + 2 letters (case-insensitive search)
+    pattern = r'[Pp][Ll]([A-Za-z]{2})([A-Za-z]{2})'
+    match = re.search(pattern, filename)
+    if match:
+        # Return the matched costume code (preserving original case from filename)
+        return match.group(0)
+    return None
+
+
 def build_image_indexes(filenames: list) -> tuple:
     """
     Build dual indexes for CSPs and stocks from ZIP file list.
@@ -34,13 +57,15 @@ def build_image_indexes(filenames: list) -> tuple:
         filenames: List of all filenames in ZIP
 
     Returns:
-        Tuple of (csps_by_name, csps_by_path, stocks_by_name, stocks_by_path)
-        Each is a dict mapping to file info
+        Tuple of (csps_by_name, csps_by_path, csps_by_costume, stocks_by_name, stocks_by_path, stocks_by_costume)
+        Each is a dict mapping to file info. costume indexes map costume code -> list of matching files
     """
     csps_by_name = {}
     csps_by_path = {}
+    csps_by_costume = {}  # costume_code -> list of file info
     stocks_by_name = {}
     stocks_by_path = {}
+    stocks_by_costume = {}  # costume_code -> list of file info
 
     image_extensions = {'.png', '.jpg', '.jpeg'}
 
@@ -52,10 +77,17 @@ def build_image_indexes(filenames: list) -> tuple:
         basename = os.path.splitext(os.path.basename(filename))[0].lower()
         folder = os.path.dirname(filename)
 
+        # Extract costume code from filename (case-insensitive)
+        costume_code = extract_costume_code_from_filename(filename)
+        if costume_code:
+            # Normalize to consistent case for indexing
+            costume_code = costume_code.upper()
+
         info = {
             'filename': filename,
             'folder': folder,
-            'basename': basename
+            'basename': basename,
+            'costume_code': costume_code
         }
 
         # Determine if CSP or stock by filename patterns
@@ -63,15 +95,30 @@ def build_image_indexes(filenames: list) -> tuple:
         if any(pattern in basename_lower for pattern in ['csp', 'portrait', 'icon']) and 'stock' not in basename_lower:
             csps_by_name[basename] = info
             csps_by_path[filename] = info
+            # Add to costume index
+            if costume_code:
+                if costume_code not in csps_by_costume:
+                    csps_by_costume[costume_code] = []
+                csps_by_costume[costume_code].append(info)
         elif any(pattern in basename_lower for pattern in ['stc', 'stock']):
             stocks_by_name[basename] = info
             stocks_by_path[filename] = info
+            # Add to costume index
+            if costume_code:
+                if costume_code not in stocks_by_costume:
+                    stocks_by_costume[costume_code] = []
+                stocks_by_costume[costume_code].append(info)
         else:
             # Default: treat as potential CSP if no clear stock indicator
             csps_by_name[basename] = info
             csps_by_path[filename] = info
+            # Add to costume index
+            if costume_code:
+                if costume_code not in csps_by_costume:
+                    csps_by_costume[costume_code] = []
+                csps_by_costume[costume_code].append(info)
 
-    return csps_by_name, csps_by_path, stocks_by_name, stocks_by_path
+    return csps_by_name, csps_by_path, csps_by_costume, stocks_by_name, stocks_by_path, stocks_by_costume
 
 
 def detect_character_from_zip(zip_path: str) -> List[Dict]:
@@ -123,7 +170,7 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
             return []
 
         # Build dual indexes for smart matching
-        csps_by_name, csps_by_path, stocks_by_name, stocks_by_path = build_image_indexes(filenames)
+        csps_by_name, csps_by_path, csps_by_costume, stocks_by_name, stocks_by_path, stocks_by_costume = build_image_indexes(filenames)
 
         results = []
         import tempfile
@@ -165,9 +212,18 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
                 # THREE-TIER MATCHING for CSP
                 csp_file = None
 
-                # Tier 1: Exact filename match
-                if dat_basename in csps_by_name:
-                    csp_file = csps_by_name[dat_basename]['filename']
+                # Tier 1: Costume code match
+                if costume_code:
+                    costume_code_upper = costume_code.upper()
+                    if costume_code_upper in csps_by_costume:
+                        candidates = csps_by_costume[costume_code_upper]
+                        # If multiple CSPs match, prefer same folder
+                        same_folder = [c for c in candidates if c['folder'] == dat_folder]
+                        if same_folder:
+                            csp_file = same_folder[0]['filename']
+                        else:
+                            # Use first match
+                            csp_file = candidates[0]['filename']
 
                 # Tier 2: Same-folder match
                 if not csp_file:
@@ -186,16 +242,34 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
                     # Take first available CSP
                     csp_file = next(iter(csps_by_path.values()))['filename']
 
-                # Same matching for stock
+                # THREE-TIER MATCHING for Stock
                 stock_file = None
-                if dat_basename in stocks_by_name:
-                    stock_file = stocks_by_name[dat_basename]['filename']
-                elif not stock_file and len(dat_files) == 1 and dats_in_folder == 1:
-                    # Same-folder or global fallback for stocks
+
+                # Tier 1: Costume code match
+                if costume_code:
+                    costume_code_upper = costume_code.upper()
+                    if costume_code_upper in stocks_by_costume:
+                        candidates = stocks_by_costume[costume_code_upper]
+                        # If multiple stocks match, prefer same folder
+                        same_folder = [c for c in candidates if c['folder'] == dat_folder]
+                        if same_folder:
+                            stock_file = same_folder[0]['filename']
+                        else:
+                            # Use first match
+                            stock_file = candidates[0]['filename']
+
+                # Tier 2: Same-folder match
+                if not stock_file and dats_in_folder == 1:
+                    # Only 1 DAT in this folder - match any stock from same folder
                     for stock_path, stock_info in stocks_by_path.items():
                         if stock_info['folder'] == dat_folder:
                             stock_file = stock_info['filename']
                             break
+
+                # Tier 3: Global fallback (single DAT in entire ZIP)
+                if not stock_file and len(dat_files) == 1 and stocks_by_path:
+                    # Take first available stock
+                    stock_file = next(iter(stocks_by_path.values()))['filename']
 
                 # Normalize character name
                 if character in ['Ice Climbers (Nana)', 'Ice Climbers (Popo)']:

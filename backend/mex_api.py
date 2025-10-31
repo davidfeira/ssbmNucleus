@@ -1974,6 +1974,7 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str) ->
             'filename': f"{variant_id}.zip",
             'has_screenshot': has_screenshot,
             'date_added': datetime.now().isoformat()
+            # No default slippi status - will show as "Unknown" until manually set
         })
 
         # Save metadata

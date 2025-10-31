@@ -11,12 +11,6 @@
 
 
 
-slippi safe detection on scan
-indicator on char cards
-edit
-    button to retest, and button to manually set
-
-    manual setting for stages - we dont have a way to test stages
 
 ==============
 

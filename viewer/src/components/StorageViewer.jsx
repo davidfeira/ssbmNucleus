@@ -221,18 +221,15 @@ export default function StorageViewer({ metadata }) {
     }
   }
 
-  const handleStageSlippiToggle = async () => {
+  const handleStageSlippiToggle = async (newStatus) => {
     if (!editingItem || editingItem.type !== 'stage') return
-
-    const currentStatus = editingItem.data.slippi_safe || false
-    const newStatus = !currentStatus
 
     try {
       const response = await fetch(`${API_URL}/storage/stages/set-slippi`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stageName: editingItem.data.stageName,
+          stageName: editingItem.data.stageFolder,  // Use folder name, not display name
           variantId: editingItem.data.id,
           slippiSafe: newStatus
         })
@@ -255,6 +252,8 @@ export default function StorageViewer({ metadata }) {
     const name = type === 'costume' ? data.color : data.name
     setEditingItem(item)
     setEditName(name)
+    setSaving(false)
+    setDeleting(false)
     setNewScreenshot(null)
     setScreenshotPreview(null)
     setNewCsp(null)
@@ -653,6 +652,7 @@ export default function StorageViewer({ metadata }) {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder="Enter name..."
+                disabled={saving || deleting}
                 autoFocus
               />
             </div>
@@ -745,10 +745,14 @@ export default function StorageViewer({ metadata }) {
                   <p style={{ marginBottom: '0.5rem', color: '#ccc' }}>
                     <strong>Status:</strong>{' '}
                     <span style={{
-                      color: editingItem.data.slippi_safe ? '#4caf50' : '#f44336',
+                      color: editingItem.data.slippi_tested
+                        ? (editingItem.data.slippi_safe ? '#4caf50' : '#f44336')
+                        : '#6c757d',
                       fontWeight: 'bold'
                     }}>
-                      {editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+                      {editingItem.data.slippi_tested
+                        ? (editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe')
+                        : 'Unknown'}
                     </span>
                   </p>
                   <p style={{ fontSize: '0.9em', color: '#999', marginBottom: '0.75rem' }}>
@@ -756,14 +760,19 @@ export default function StorageViewer({ metadata }) {
                   </p>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: '#ccc', fontSize: '0.9em' }}>
-                      Manual Override:
+                      Manual Setting:
                     </label>
                     <select
-                      value={editingItem.data.slippi_safe ? 'safe' : 'unsafe'}
+                      value={editingItem.data.slippi_tested
+                        ? (editingItem.data.slippi_safe ? 'safe' : 'unsafe')
+                        : 'unknown'}
                       onChange={(e) => {
-                        const newStatus = e.target.value === 'safe'
-                        if (newStatus !== editingItem.data.slippi_safe) {
-                          handleStageSlippiToggle()
+                        const newValue = e.target.value
+                        if (newValue !== 'unknown') {
+                          const newStatus = newValue === 'safe'
+                          if (!editingItem.data.slippi_tested || newStatus !== editingItem.data.slippi_safe) {
+                            handleStageSlippiToggle(newStatus)
+                          }
                         }
                       }}
                       disabled={saving || deleting}
@@ -777,6 +786,7 @@ export default function StorageViewer({ metadata }) {
                         fontSize: '1rem'
                       }}
                     >
+                      <option value="unknown">Unknown</option>
                       <option value="safe">Slippi Safe</option>
                       <option value="unsafe">Not Slippi Safe</option>
                     </select>
@@ -927,23 +937,25 @@ export default function StorageViewer({ metadata }) {
                           <span className="skin-initial">{variant.name[0]}</span>
                         </div>
                       )}
-                      {/* Slippi badge for stages */}
-                      {variant.slippi_tested && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '8px',
-                          left: '8px',
-                          backgroundColor: variant.slippi_safe ? '#28a745' : '#dc3545',
-                          color: 'white',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}>
-                          {variant.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
-                        </div>
-                      )}
+                      {/* Slippi badge for stages - show unknown if not set */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        backgroundColor: variant.slippi_tested
+                          ? (variant.slippi_safe ? '#28a745' : '#dc3545')
+                          : '#6c757d',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}>
+                        {variant.slippi_tested
+                          ? (variant.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe')
+                          : 'Unknown'}
+                      </div>
                       <button
                         className="btn-edit"
                         onClick={(e) => {
