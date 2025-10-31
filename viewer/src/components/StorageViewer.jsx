@@ -5,12 +5,12 @@ import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 
 const DAS_STAGES = [
-  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: '/vanilla/stages/battlefield.jpg' },
-  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: '/vanilla/stages/final destination.png' },
-  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: '/vanilla/stages/Yoshis story.jpg' },
   { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: '/vanilla/stages/dreamland.jpg' },
   { code: 'GrPs', name: 'Pokemon Stadium', folder: 'pokemon_stadium', vanillaImage: '/vanilla/stages/pokemon stadium.jpg' },
-  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: '/vanilla/stages/Fountain of Dreams.webp' }
+  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: '/vanilla/stages/Yoshis story.jpg' },
+  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: '/vanilla/stages/battlefield.jpg' },
+  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: '/vanilla/stages/Fountain of Dreams.webp' },
+  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: '/vanilla/stages/final destination.png' }
 ]
 
 export default function StorageViewer({ metadata }) {
@@ -508,14 +508,6 @@ export default function StorageViewer({ metadata }) {
   })
 
   const characters = Object.keys(allCharacters).sort()
-  const totalSkins = characters.reduce((sum, char) => {
-    // Only count visible skins (exclude hidden Ice Climbers Nana entries)
-    const visibleSkins = allCharacters[char]?.skins?.filter(skin => skin.visible !== false) || []
-    return sum + visibleSkins.length
-  }, 0)
-
-  // Calculate total stage variants
-  const totalStageVariants = Object.values(stageVariants).reduce((sum, variants) => sum + variants.length, 0)
 
   // Edit Modal Component (reusable)
   const renderEditModal = () => (
@@ -1022,70 +1014,58 @@ export default function StorageViewer({ metadata }) {
             <div className="skins-grid">
               {visibleSkins.map((skin) => (
                 <div key={skin.id} className="skin-card">
-                  <div className="skin-images">
-                    <div className="skin-image-container">
-                      {skin.has_csp ? (
-                        <img
-                          src={`/storage/${selectedCharacter}/${skin.id}_csp.png`}
-                          alt={`${selectedCharacter} - ${skin.color}`}
-                          className="skin-csp"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                            e.target.nextSibling.style.display = 'flex'
-                          }}
-                        />
-                      ) : null}
-                      <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
-                        <span className="skin-initial">{skin.color[0]}</span>
-                      </div>
-                      {/* Slippi badge */}
-                      {skin.slippi_tested && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '8px',
-                          left: '8px',
-                          backgroundColor: skin.slippi_safe ? '#28a745' : '#dc3545',
-                          color: 'white',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}>
-                          {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
-                        </div>
-                      )}
-                      <button
-                        className="btn-edit"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          e.preventDefault()
-                          handleEditClick('costume', {
-                            id: skin.id,
-                            character: selectedCharacter,
-                            color: skin.color,
-                            has_csp: skin.has_csp,
-                            has_stock: skin.has_stock,
-                            cspUrl: `/storage/${selectedCharacter}/${skin.id}_csp.png`,
-                            stockUrl: skin.has_stock ? `/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
-                            slippi_safe: skin.slippi_safe,
-                            slippi_tested: skin.slippi_tested,
-                            slippi_manual_override: skin.slippi_manual_override
-                          })
+                  <div className="skin-image-container">
+                    {skin.has_csp ? (
+                      <img
+                        src={`/storage/${selectedCharacter}/${skin.id}_csp.png`}
+                        alt={`${selectedCharacter} - ${skin.color}`}
+                        className="skin-csp"
+                        onError={(e) => {
+                          e.target.style.display = 'none'
+                          e.target.nextSibling.style.display = 'flex'
                         }}
-                        title="Edit costume"
-                      >
-                        ✎
-                      </button>
+                      />
+                    ) : null}
+                    <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
+                      <span className="skin-initial">{skin.color[0]}</span>
                     </div>
+                    <button
+                      className="btn-edit"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        handleEditClick('costume', {
+                          id: skin.id,
+                          character: selectedCharacter,
+                          color: skin.color,
+                          has_csp: skin.has_csp,
+                          has_stock: skin.has_stock,
+                          cspUrl: `/storage/${selectedCharacter}/${skin.id}_csp.png`,
+                          stockUrl: skin.has_stock ? `/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
+                          slippi_safe: skin.slippi_safe,
+                          slippi_tested: skin.slippi_tested,
+                          slippi_manual_override: skin.slippi_manual_override
+                        })
+                      }}
+                      title="Edit costume"
+                    >
+                      ✎
+                    </button>
+                  </div>
 
+                  <div className="skin-badges-row">
                     {skin.has_stock && (
-                      <div className="stock-container">
+                      <div className="stock-icon-small">
                         <img
                           src={`/storage/${selectedCharacter}/${skin.id}_stc.png`}
                           alt={`${selectedCharacter} stock`}
                           className="skin-stock"
                         />
+                      </div>
+                    )}
+                    {skin.slippi_tested && (
+                      <div className={`slippi-badge-small ${skin.slippi_safe ? 'safe' : 'unsafe'}`}>
+                        {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
                       </div>
                     )}
                   </div>
@@ -1108,6 +1088,26 @@ export default function StorageViewer({ metadata }) {
   // Character or Stage selection grid
   return (
     <div className="storage-viewer">
+      <div className="storage-header">
+        <div className="storage-actions">
+          <label className="intake-import-btn" style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}>
+            {importing ? 'Importing...' : 'Import File'}
+            <input
+              type="file"
+              accept=".zip"
+              onChange={handleFileImport}
+              disabled={importing}
+              style={{ display: 'none' }}
+            />
+          </label>
+          {importMessage && (
+            <div className={`import-message ${importMessage.includes('failed') || importMessage.includes('Error') || importMessage.includes('✗') ? 'error' : 'success'}`}>
+              {importMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Mode Switcher */}
       <div className="mode-switcher">
         <button
@@ -1130,51 +1130,6 @@ export default function StorageViewer({ metadata }) {
         </button>
       </div>
 
-      <div className="storage-header">
-        <div className="storage-stats">
-          {mode === 'characters' ? (
-            <>
-              <div className="stat-card">
-                <div className="stat-value">{characters.length}</div>
-                <div className="stat-label">Characters</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{totalSkins}</div>
-                <div className="stat-label">Total Skins</div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="stat-card">
-                <div className="stat-value">{DAS_STAGES.length}</div>
-                <div className="stat-label">Stages</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{totalStageVariants}</div>
-                <div className="stat-label">Total Variants</div>
-              </div>
-            </>
-          )}
-        </div>
-        <div className="storage-actions">
-          <label className="intake-import-btn" style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}>
-            {importing ? 'Importing...' : 'Import File'}
-            <input
-              type="file"
-              accept=".zip"
-              onChange={handleFileImport}
-              disabled={importing}
-              style={{ display: 'none' }}
-            />
-          </label>
-          {importMessage && (
-            <div className={`import-message ${importMessage.includes('failed') || importMessage.includes('Error') || importMessage.includes('✗') ? 'error' : 'success'}`}>
-              {importMessage}
-            </div>
-          )}
-        </div>
-      </div>
-
       {mode === 'characters' ? (
         <div className="characters-grid">
         {characters.map((characterName) => {
@@ -1183,12 +1138,8 @@ export default function StorageViewer({ metadata }) {
           const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
           const skinCount = visibleSkins.length
 
-          // Find default color skin (color === "Default") to get costume code
-          const defaultSkin = visibleSkins.find(s => s.color === 'Default')
-                            || visibleSkins[0]
-
-          // Determine costume code: from skin metadata or from DEFAULT_CHARACTERS
-          const costumeCode = defaultSkin?.costume_code || DEFAULT_CHARACTERS[characterName]?.defaultCostume
+          // ALWAYS use vanilla default costume code from DEFAULT_CHARACTERS
+          const costumeCode = DEFAULT_CHARACTERS[characterName]?.defaultCostume
 
           // ALWAYS use vanilla CSP on homepage for consistency (like vanilla game)
           const vanillaCspPath = costumeCode
@@ -1226,7 +1177,7 @@ export default function StorageViewer({ metadata }) {
       </div>
       ) : (
         // Stages grid
-        <div className="characters-grid">
+        <div className="stages-grid">
           {DAS_STAGES.map((stage) => {
             const variants = stageVariants[stage.code] || []
             const variantCount = variants.length

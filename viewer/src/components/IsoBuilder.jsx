@@ -101,17 +101,6 @@ const IsoBuilder = ({ onClose }) => {
           {!exporting && !complete && !error && (
             <>
               <div className="form-group">
-                <label htmlFor="filename">Output Filename:</label>
-                <input
-                  type="text"
-                  id="filename"
-                  value={filename}
-                  onChange={(e) => setFilename(e.target.value)}
-                  placeholder="game.iso"
-                />
-              </div>
-
-              <div className="form-group">
                 <label htmlFor="compression">
                   CSP Compression
                 </label>
@@ -145,11 +134,10 @@ const IsoBuilder = ({ onClose }) => {
                 />
                 <div className="compression-hints">
                   <span className="hint-label">0.1 (Tiny)</span>
-                  <span className="hint-recommended">Recommended: 0.98</span>
                   <span className="hint-label">1.0 (Full)</span>
                 </div>
                 <p className="compression-info">
-                  Lower values reduce CSP image size. Try 0.98 if CSPs appear corrupted.
+                  Melee can crash if there are too many images. Try reducing the compression ratio to free up more memory.
                 </p>
               </div>
 
@@ -164,13 +152,12 @@ const IsoBuilder = ({ onClose }) => {
                   <span>Enable Color Smash</span>
                 </label>
                 <p className="color-smash-info">
-                  Reduces CSPs to 256 colors to save memory. May result in lower quality/compressed looking images.
+                  Can save a lot of memory, but produces artifacts/compression.
                 </p>
               </div>
 
               <div className="warning-box">
-                <p><strong>Warning:</strong> ISO export may take 5-10 minutes.</p>
-                <p>The browser will remain responsive. You can continue working while the export runs in the background.</p>
+                <p><strong>Note:</strong> This can take a few minutes.</p>
               </div>
 
               <button
