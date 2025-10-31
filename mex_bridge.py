@@ -311,13 +311,16 @@ class MexManager:
         try:
             # Run process with streaming output for progress
             # Use project directory as working directory so MexCLI can find project files
+            # Prevent console window from appearing on Windows
+            creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(self.project_path.parent),
-                bufsize=1  # Line buffered
+                bufsize=1,  # Line buffered
+                creationflags=creation_flags
             )
 
             final_result = None

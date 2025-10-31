@@ -80,7 +80,13 @@ const IsoBuilder = ({ onClose }) => {
   };
 
   const handleDownload = () => {
-    window.open(`${API_URL}/api/mex/export/download/${filename}`, '_blank');
+    // Create a temporary anchor element to trigger download without opening new window
+    const link = document.createElement('a');
+    link.href = `${API_URL}/api/mex/export/download/${filename}`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
