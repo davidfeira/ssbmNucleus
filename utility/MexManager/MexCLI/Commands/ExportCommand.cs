@@ -10,7 +10,7 @@ namespace MexCLI.Commands
         {
             if (args.Length < 3)
             {
-                Console.Error.WriteLine("Usage: mexcli export <project.mexproj> <output.iso> [csp-compression]");
+                Console.Error.WriteLine("Usage: mexcli export <project.mexproj> <output.iso> [csp-compression] [use-color-smash]");
                 return 1;
             }
 
@@ -25,6 +25,21 @@ namespace MexCLI.Commands
                 if (parsedCompression >= 0.1f && parsedCompression <= 1.0f)
                 {
                     cspCompression = parsedCompression;
+                }
+            }
+
+            // Optional use-color-smash parameter (default false)
+            bool useColorSmash = false;
+            if (args.Length >= 5)
+            {
+                if (bool.TryParse(args[4], out bool parsedColorSmash))
+                {
+                    useColorSmash = parsedColorSmash;
+                }
+                else
+                {
+                    Console.Error.WriteLine("Invalid use-color-smash value. Expected true or false.");
+                    return 1;
                 }
             }
 
@@ -47,6 +62,7 @@ namespace MexCLI.Commands
 
             // Set CSP compression before export
             workspace.Project.CharacterSelect.CSPCompression = cspCompression;
+            workspace.Project.CharacterSelect.UseColorSmash = useColorSmash;
 
             // Calculate target dimensions
             int targetWidth = (int)(136 * cspCompression);
@@ -64,9 +80,11 @@ namespace MexCLI.Commands
                 Console.Error.WriteLine($"[DEBUG] CSP Compression Level: {cspCompression}");
                 Console.Error.WriteLine($"[DEBUG] Target CSP Dimensions: {targetWidth}x{targetHeight}");
                 Console.Error.WriteLine($"[DEBUG] Will apply compression: {cspCompression < 1.0f}");
+                Console.Error.WriteLine($"[DEBUG] UseColorSmash setting: {useColorSmash}");
 
                 // Apply compression to CSPs (force=true to ensure it processes even if already at target size)
-                if (cspCompression < 1.0f)
+                // OR if color smash is disabled (need to assign unique ColorSmashGroups)
+                if (cspCompression < 1.0f || !useColorSmash)
                 {
                     var compressionStart = new
                     {

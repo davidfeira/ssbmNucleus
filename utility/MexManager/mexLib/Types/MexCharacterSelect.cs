@@ -24,7 +24,7 @@ namespace mexLib.Types
         public float CSPCompression { get; set; } = 1.0f;
 
         [DisplayName("Use ColorSmash")]
-        public bool UseColorSmash { get; set; } = true;
+        public bool UseColorSmash { get; set; } = false;
 
         /// <summary>
         /// 
@@ -84,6 +84,19 @@ namespace mexLib.Types
 
             if (remainingImages > 0)
             {
+                // If color smash is disabled, assign unique groups to prevent grouping
+                if (!UseColorSmash)
+                {
+                    int uniqueGroupId = -1;
+                    foreach (var fighter in ws.Project.Fighters)
+                    {
+                        foreach (var costume in fighter.Costumes)
+                        {
+                            costume.ColorSmashGroup = uniqueGroupId--;
+                        }
+                    }
+                }
+
                 // Create a list of tasks
                 ManualResetEvent doneEvent = new(false);
 
@@ -120,8 +133,9 @@ namespace mexLib.Types
 
                             // color smash the texture assets if they aren't already?
                             // they are already smashed if their indices are equal
-                            if (group.Key >= 0 &&
-                                colorsmash.Count > 0 && 
+                            if (UseColorSmash &&
+                                group.Key >= 0 &&
+                                colorsmash.Count > 0 &&
                                 colorsmash.Any(e => !e.Item2.ImageData.SequenceEqual(colorsmash[0].Item2.ImageData)))
                             {
                                 // apply color smash

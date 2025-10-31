@@ -517,13 +517,15 @@ def start_export():
     Body:
     {
         "filename": "modded_game.iso",  // optional
-        "cspCompression": 1.0  // optional, 0.1-1.0, default 1.0
+        "cspCompression": 1.0,  // optional, 0.1-1.0, default 1.0
+        "useColorSmash": false  // optional, boolean, default false
     }
     """
     try:
         data = request.json or {}
         filename = data.get('filename', f'game_{datetime.now().strftime("%Y%m%d_%H%M%S")}.iso')
         csp_compression = data.get('cspCompression', 1.0)
+        use_color_smash = data.get('useColorSmash', False)
 
         # Validate compression range
         if not isinstance(csp_compression, (int, float)) or csp_compression < 0.1 or csp_compression > 1.0:
@@ -532,11 +534,19 @@ def start_export():
                 'error': 'cspCompression must be a number between 0.1 and 1.0'
             }), 400
 
+        # Validate useColorSmash
+        if not isinstance(use_color_smash, bool):
+            return jsonify({
+                'success': False,
+                'error': 'useColorSmash must be a boolean'
+            }), 400
+
         output_file = OUTPUT_PATH / filename
 
         logger.info(f"=== ISO EXPORT START ===")
         logger.info(f"Filename: {filename}")
         logger.info(f"CSP Compression: {csp_compression}")
+        logger.info(f"Use Color Smash: {use_color_smash}")
 
         def export_with_progress():
             """Export ISO in background thread with WebSocket progress updates"""
@@ -548,7 +558,7 @@ def start_export():
                     })
 
                 mex = get_mex_manager()
-                result = mex.export_iso(str(output_file), progress_callback, csp_compression)
+                result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash)
 
                 socketio.emit('export_complete', {
                     'success': True,

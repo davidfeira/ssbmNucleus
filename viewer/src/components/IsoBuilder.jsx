@@ -5,6 +5,7 @@ import './IsoBuilder.css';
 const IsoBuilder = ({ onClose }) => {
   const [filename, setFilename] = useState(`game_${new Date().toISOString().slice(0, 10)}.iso`);
   const [cspCompression, setCspCompression] = useState(1.0);
+  const [useColorSmash, setUseColorSmash] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
@@ -61,7 +62,8 @@ const IsoBuilder = ({ onClose }) => {
         },
         body: JSON.stringify({
           filename,
-          cspCompression
+          cspCompression,
+          useColorSmash
         })
       });
 
@@ -142,6 +144,21 @@ const IsoBuilder = ({ onClose }) => {
                 </div>
                 <p className="compression-info">
                   Lower values reduce CSP image size. Try 0.98 if CSPs appear corrupted.
+                </p>
+              </div>
+
+              <div className="form-group color-smash-group">
+                <label className="color-smash-label">
+                  <input
+                    type="checkbox"
+                    checked={useColorSmash}
+                    onChange={(e) => setUseColorSmash(e.target.checked)}
+                    className="color-smash-checkbox"
+                  />
+                  <span>Enable Color Smash</span>
+                </label>
+                <p className="color-smash-info">
+                  Reduces CSPs to 256 colors to save memory. May result in lower quality/compressed looking images.
                 </p>
               </div>
 

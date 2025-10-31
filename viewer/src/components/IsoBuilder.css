@@ -361,3 +361,34 @@
   color: #999;
   line-height: 1.4;
 }
+
+/* Color Smash Checkbox Styling */
+.color-smash-group {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+
+.color-smash-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 500;
+}
+
+.color-smash-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #1976d2;
+}
+
+.color-smash-info {
+  margin-top: 0.5rem;
+  margin-left: 1.5rem;
+  font-size: 0.85rem;
+  color: #999;
+  line-height: 1.4;
+}
