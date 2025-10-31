@@ -288,7 +288,7 @@ const MexPanel = () => {
         if (data.success) {
           console.log(`✓ Successfully imported ${data.result.costumesImported} costume(s) to ${costume.character}`);
 
-          // Immediately refresh to show updated data
+          // Refresh to show updated data
           setRefreshing(true);
           await Promise.all([
             fetchFighters(),

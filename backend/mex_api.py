@@ -98,6 +98,11 @@ def set_project_path(path):
     current_project_path = Path(path)
     mex_manager = None  # Reset manager so it reinitializes with new path
 
+def reload_mex_manager():
+    """Force reload of MEX manager to pick up file changes"""
+    global mex_manager
+    mex_manager = None
+
 def get_project_files_dir():
     """Get the files/ directory for the currently loaded project"""
     if current_project_path is None:
@@ -429,6 +434,11 @@ def import_costume():
         result = mex.import_costume(fighter_name, str(full_costume_path))
 
         logger.info(f"Import result: {json.dumps(result, indent=2)}")
+
+        # Force reload to pick up file changes for subsequent requests
+        reload_mex_manager()
+        logger.info(f"Reloaded MEX manager to pick up changes")
+
         logger.info(f"=== IMPORT COMPLETE ===")
 
         return jsonify({
@@ -489,6 +499,11 @@ def remove_costume():
         result = mex.remove_costume(fighter_name, costume_index)
 
         logger.info(f"Remove result: {json.dumps(result, indent=2)}")
+
+        # Force reload to pick up file changes for subsequent requests
+        reload_mex_manager()
+        logger.info(f"Reloaded MEX manager to pick up changes")
+
         logger.info(f"=== REMOVE COMPLETE ===")
 
         return jsonify({
@@ -561,6 +576,11 @@ def reorder_costume():
         result = mex.reorder_costume(fighter_name, from_index, to_index)
 
         logger.info(f"Reorder result: {json.dumps(result, indent=2)}")
+
+        # Force reload to pick up file changes for subsequent requests
+        reload_mex_manager()
+        logger.info(f"Reloaded MEX manager to pick up changes")
+
         logger.info(f"=== REORDER COMPLETE ===")
 
         return jsonify({
