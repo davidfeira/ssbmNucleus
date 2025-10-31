@@ -21,6 +21,12 @@ export default function StorageViewer({ metadata }) {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
 
+  // Slippi dialog state
+  const [showSlippiDialog, setShowSlippiDialog] = useState(false)
+  const [slippiDialogData, setSlippiDialogData] = useState(null)
+  const [pendingFile, setPendingFile] = useState(null)
+  const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
+
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null) // { type: 'costume'/'stage', data: {...} }
@@ -62,8 +68,8 @@ export default function StorageViewer({ metadata }) {
     }
   }
 
-  const handleFileImport = async (event) => {
-    const file = event.target.files[0]
+  const handleFileImport = async (event, slippiAction = null) => {
+    const file = slippiAction ? pendingFile : event.target.files[0]
     if (!file) return
 
     setImporting(true)
@@ -72,6 +78,9 @@ export default function StorageViewer({ metadata }) {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      if (slippiAction) {
+        formData.append('slippi_action', slippiAction)
+      }
 
       const response = await fetch(`${API_URL}/import/file`, {
         method: 'POST',
@@ -79,9 +88,20 @@ export default function StorageViewer({ metadata }) {
       })
       const data = await response.json()
 
+      // Check if we need to show slippi dialog
+      if (data.type === 'slippi_dialog') {
+        setSlippiDialogData(data)
+        setPendingFile(file)
+        setShowSlippiDialog(true)
+        setImporting(false)
+        setImportMessage('')
+        if (event && event.target) event.target.value = null
+        return
+      }
+
       if (data.success) {
         const typeMsg = data.type === 'character'
-          ? `${data.character} - ${data.color}`
+          ? `${data.imported_count} costume(s)`
           : `${data.stage} stage`
         setImportMessage(`✓ Imported ${typeMsg}! Refreshing...`)
         setTimeout(() => {
@@ -103,7 +123,131 @@ export default function StorageViewer({ metadata }) {
     }
 
     // Reset file input
-    event.target.value = null
+    if (event && event.target) event.target.value = null
+  }
+
+  const handleSlippiChoice = (choice) => {
+    setShowSlippiDialog(false)
+    if (choice === 'cancel') {
+      setPendingFile(null)
+      setSlippiDialogData(null)
+      return
+    }
+    handleFileImport(null, choice)
+  }
+
+  const handleSlippiRetest = async (autoFix = false) => {
+    if (!editingItem || editingItem.type !== 'costume') return
+
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/retest-slippi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id,
+          autoFix: autoFix
+        })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // If not safe and not auto-fixing, show dialog
+        if (!data.slippi_safe && !autoFix) {
+          setRetestingItem(editingItem.data)
+          setSlippiDialogData({
+            unsafe_costumes: [{
+              character: editingItem.data.character,
+              color: editingItem.data.color
+            }]
+          })
+          setShowSlippiDialog(true)
+        } else {
+          // Safe or just fixed - reload
+          alert(data.message)
+          window.location.reload()
+        }
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
+  const handleRetestFixChoice = (choice) => {
+    setShowSlippiDialog(false)
+    if (choice === 'cancel') {
+      setRetestingItem(null)
+      setSlippiDialogData(null)
+      return
+    }
+    if (choice === 'fix') {
+      // Retest with auto-fix
+      handleSlippiRetest(true)
+    } else if (choice === 'import_as_is') {
+      // Just reload to keep current status
+      window.location.reload()
+    }
+    setRetestingItem(null)
+  }
+
+  const handleSlippiOverride = async () => {
+    if (!editingItem || editingItem.type !== 'costume') return
+
+    const currentStatus = editingItem.data.slippi_safe
+    const newStatus = !currentStatus
+
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/override-slippi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id,
+          slippiSafe: newStatus
+        })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        alert(data.message)
+        window.location.reload()
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
+  const handleStageSlippiToggle = async () => {
+    if (!editingItem || editingItem.type !== 'stage') return
+
+    const currentStatus = editingItem.data.slippi_safe || false
+    const newStatus = !currentStatus
+
+    try {
+      const response = await fetch(`${API_URL}/storage/stages/set-slippi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageName: editingItem.data.stageName,
+          variantId: editingItem.data.id,
+          slippiSafe: newStatus
+        })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        alert(data.message)
+        window.location.reload()
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
   }
 
   const handleEditClick = (type, data) => {
@@ -528,6 +672,119 @@ export default function StorageViewer({ metadata }) {
               )}
             </div>
 
+            {/* Slippi Safety Controls */}
+            <div className="slippi-controls" style={{
+              padding: '1rem',
+              margin: '1rem 0',
+              borderRadius: '4px',
+              backgroundColor: '#2a2a2a',
+              border: '1px solid #444'
+            }}>
+              <h4 style={{ marginTop: 0, color: '#fff' }}>Slippi Safety</h4>
+
+              {editingItem.type === 'costume' ? (
+                <>
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <p style={{ marginBottom: '0.5rem', color: '#ccc' }}>
+                      <strong>Current Status:</strong>{' '}
+                      <span style={{
+                        color: editingItem.data.slippi_safe ? '#4caf50' : '#f44336',
+                        fontWeight: 'bold'
+                      }}>
+                        {editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+                      </span>
+                      {editingItem.data.slippi_manual_override && (
+                        <span style={{ marginLeft: '0.5rem', fontSize: '0.85em', color: '#999' }}>
+                          (Manual Override)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleSlippiRetest(false)}
+                      disabled={saving || deleting}
+                      style={{ width: '100%', marginBottom: '0.5rem' }}
+                    >
+                      Retest
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#ccc', fontSize: '0.9em' }}>
+                      Manual Override:
+                    </label>
+                    <select
+                      value={editingItem.data.slippi_safe ? 'safe' : 'unsafe'}
+                      onChange={(e) => {
+                        const newStatus = e.target.value === 'safe'
+                        if (newStatus !== editingItem.data.slippi_safe) {
+                          handleSlippiOverride()
+                        }
+                      }}
+                      disabled={saving || deleting}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        borderRadius: '4px',
+                        border: '1px solid #555',
+                        backgroundColor: '#1a1a1a',
+                        color: '#fff',
+                        fontSize: '1rem'
+                      }}
+                    >
+                      <option value="safe">Slippi Safe</option>
+                      <option value="unsafe">Not Slippi Safe</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ marginBottom: '0.5rem', color: '#ccc' }}>
+                    <strong>Status:</strong>{' '}
+                    <span style={{
+                      color: editingItem.data.slippi_safe ? '#4caf50' : '#f44336',
+                      fontWeight: 'bold'
+                    }}>
+                      {editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+                    </span>
+                  </p>
+                  <p style={{ fontSize: '0.9em', color: '#999', marginBottom: '0.75rem' }}>
+                    Stages cannot be auto-tested. Set manually.
+                  </p>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#ccc', fontSize: '0.9em' }}>
+                      Manual Override:
+                    </label>
+                    <select
+                      value={editingItem.data.slippi_safe ? 'safe' : 'unsafe'}
+                      onChange={(e) => {
+                        const newStatus = e.target.value === 'safe'
+                        if (newStatus !== editingItem.data.slippi_safe) {
+                          handleStageSlippiToggle()
+                        }
+                      }}
+                      disabled={saving || deleting}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        borderRadius: '4px',
+                        border: '1px solid #555',
+                        backgroundColor: '#1a1a1a',
+                        color: '#fff',
+                        fontSize: '1rem'
+                      }}
+                    >
+                      <option value="safe">Slippi Safe</option>
+                      <option value="unsafe">Not Slippi Safe</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Buttons */}
             <div className="edit-buttons">
               <button
@@ -557,6 +814,70 @@ export default function StorageViewer({ metadata }) {
       )}
     </>
   )
+
+  const renderSlippiDialog = () => {
+    const isRetest = retestingItem !== null
+    const handleChoice = isRetest ? handleRetestFixChoice : handleSlippiChoice
+
+    return (
+      <>
+        {showSlippiDialog && slippiDialogData && (
+          <div className="edit-modal-overlay" onClick={() => handleChoice('cancel')}>
+            <div className="edit-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+              <h2>Slippi Safety Warning</h2>
+
+              <div style={{ padding: '1rem 0' }}>
+                <p style={{ marginBottom: '1rem' }}>
+                  This costume is not Slippi safe. Choose an action:
+                </p>
+
+                {slippiDialogData.unsafe_costumes && (
+                  <div style={{
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffc107',
+                    borderRadius: '4px',
+                    padding: '0.75rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <strong>Affected costumes:</strong>
+                    <ul style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                      {slippiDialogData.unsafe_costumes.map((costume, idx) => (
+                        <li key={idx}>{costume.character} - {costume.color}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <button
+                  className="btn-save"
+                  onClick={() => handleChoice('fix')}
+                  style={{ width: '100%' }}
+                >
+                  {isRetest ? 'Fix' : 'Fix & Import'}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleChoice('import_as_is')}
+                  style={{ width: '100%' }}
+                >
+                  {isRetest ? 'Keep As-Is' : 'Import As-Is'}
+                </button>
+                <button
+                  className="btn-cancel"
+                  onClick={() => handleChoice('cancel')}
+                  style={{ width: '100%' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
 
   // If a stage is selected, show its variants
   if (selectedStage) {
@@ -606,6 +927,23 @@ export default function StorageViewer({ metadata }) {
                           <span className="skin-initial">{variant.name[0]}</span>
                         </div>
                       )}
+                      {/* Slippi badge for stages */}
+                      {variant.slippi_tested && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          backgroundColor: variant.slippi_safe ? '#28a745' : '#dc3545',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}>
+                          {variant.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+                        </div>
+                      )}
                       <button
                         className="btn-edit"
                         onClick={(e) => {
@@ -617,7 +955,9 @@ export default function StorageViewer({ metadata }) {
                             stageFolder: stageInfo?.folder,
                             stageName: stageInfo?.name,
                             screenshotUrl: variant.screenshotUrl,
-                            hasScreenshot: variant.hasScreenshot
+                            hasScreenshot: variant.hasScreenshot,
+                            slippi_safe: variant.slippi_safe,
+                            slippi_tested: variant.slippi_tested
                           })
                         }}
                         title="Edit variant"
@@ -637,6 +977,7 @@ export default function StorageViewer({ metadata }) {
           )}
         </div>
         {renderEditModal()}
+        {renderSlippiDialog()}
       </div>
     )
   }
@@ -685,6 +1026,23 @@ export default function StorageViewer({ metadata }) {
                       <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
                         <span className="skin-initial">{skin.color[0]}</span>
                       </div>
+                      {/* Slippi badge */}
+                      {skin.slippi_tested && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          backgroundColor: skin.slippi_safe ? '#28a745' : '#dc3545',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}>
+                          {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+                        </div>
+                      )}
                       <button
                         className="btn-edit"
                         onClick={(e) => {
@@ -697,7 +1055,10 @@ export default function StorageViewer({ metadata }) {
                             has_csp: skin.has_csp,
                             has_stock: skin.has_stock,
                             cspUrl: `/storage/${selectedCharacter}/${skin.id}_csp.png`,
-                            stockUrl: skin.has_stock ? `/storage/${selectedCharacter}/${skin.id}_stc.png` : null
+                            stockUrl: skin.has_stock ? `/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
+                            slippi_safe: skin.slippi_safe,
+                            slippi_tested: skin.slippi_tested,
+                            slippi_manual_override: skin.slippi_manual_override
                           })
                         }}
                         title="Edit costume"
@@ -727,6 +1088,7 @@ export default function StorageViewer({ metadata }) {
           )}
         </div>
         {renderEditModal()}
+        {renderSlippiDialog()}
       </div>
     )
   }
@@ -891,6 +1253,7 @@ export default function StorageViewer({ metadata }) {
       )}
 
       {renderEditModal()}
+      {renderSlippiDialog()}
     </div>
   )
 }

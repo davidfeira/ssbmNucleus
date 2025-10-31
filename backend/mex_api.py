@@ -32,13 +32,18 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Add backend directory to path for detectors
 BACKEND_DIR = Path(__file__).parent
 sys.path.insert(0, str(BACKEND_DIR))
-from character_detector import detect_character_from_zip
+from character_detector import detect_character_from_zip, DATParser
 from stage_detector import detect_stage_from_zip, extract_stage_files
 
-# Add processor tools to path for CSP generation
+# Add processor tools to path for CSP generation and slippi validation
 PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
 sys.path.insert(0, str(PROCESSOR_DIR))
 from generate_csp import generate_csp
+
+# Add services for DAT processing (slippi validation)
+SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
+sys.path.insert(0, str(SERVICES_DIR))
+from dat_processor import validate_for_slippi
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -1013,6 +1018,250 @@ def update_costume_stock():
         }), 500
 
 
+@app.route('/api/mex/storage/costumes/retest-slippi', methods=['POST'])
+def retest_costume_slippi():
+    """Retest a character costume for slippi safety and optionally apply fix"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+        auto_fix = data.get('autoFix', False)
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        # Paths
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+
+        if not zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Costume zip not found: {skin_id}'
+            }), 404
+
+        # Extract DAT from ZIP
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            dat_files = [f for f in zip_ref.namelist() if f.lower().endswith('.dat')]
+            if not dat_files:
+                return jsonify({
+                    'success': False,
+                    'error': 'No DAT file found in costume ZIP'
+                }), 400
+
+            dat_filename = dat_files[0]
+            dat_data = zip_ref.read(dat_filename)
+
+        # Create temp file for validation (same as import - let validate_for_slippi handle detection)
+        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
+            tmp_dat.write(dat_data)
+            tmp_dat_path = tmp_dat.name
+
+        logger.info(f"Retesting {character} - {skin_id}: DAT file = {dat_filename}")
+
+        try:
+            # Validate for slippi
+            logger.info(f"Calling validate_for_slippi with auto_fix={auto_fix}")
+            validation = validate_for_slippi(tmp_dat_path, auto_fix=auto_fix)
+            logger.info(f"Validation result: {validation}")
+
+            # If auto_fix was applied, update the ZIP with the fixed DAT
+            if auto_fix and validation.get('fix_applied'):
+                with open(tmp_dat_path, 'rb') as f:
+                    fixed_dat_data = f.read()
+
+                # Update ZIP with fixed DAT
+                temp_zip = char_folder / f"{skin_id}_temp.zip"
+                with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                    with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                        for item in source_zip.infolist():
+                            if item.filename.lower().endswith('.dat'):
+                                dest_zip.writestr(item.filename, fixed_dat_data)
+                            else:
+                                data = source_zip.read(item.filename)
+                                dest_zip.writestr(item, data)
+
+                zip_path.unlink()
+                temp_zip.rename(zip_path)
+                logger.info(f"Applied slippi fix to {character} - {skin_id}")
+
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(tmp_dat_path)
+            except:
+                pass
+
+        # Update metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            if character in metadata.get('characters', {}):
+                for skin in metadata['characters'][character].get('skins', []):
+                    if skin['id'] == skin_id:
+                        skin['slippi_safe'] = validation['slippi_safe']
+                        skin['slippi_tested'] = True
+                        skin['slippi_test_date'] = datetime.now().isoformat()
+                        # Clear manual override after retest
+                        skin['slippi_manual_override'] = None
+                        break
+
+                with open(metadata_file, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Retested slippi for {character} - {skin_id}: {validation['slippi_safe']}")
+
+        return jsonify({
+            'success': True,
+            'slippi_safe': validation['slippi_safe'],
+            'message': 'Slippi Safe' if validation['slippi_safe'] else 'Not Slippi Safe'
+        })
+    except Exception as e:
+        logger.error(f"Retest slippi error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/costumes/override-slippi', methods=['POST'])
+def override_costume_slippi():
+    """Manually override slippi safety status for a character costume"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+        slippi_safe = data.get('slippiSafe')
+
+        if not character or not skin_id or slippi_safe is None:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, skinId, or slippiSafe parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find and update the skin
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        skin_found = False
+        for skin in metadata['characters'][character].get('skins', []):
+            if skin['id'] == skin_id:
+                skin['slippi_safe'] = slippi_safe
+                skin['slippi_manual_override'] = True
+                skin['slippi_test_date'] = datetime.now().isoformat()
+                skin_found = True
+                break
+
+        if not skin_found:
+            return jsonify({
+                'success': False,
+                'error': f'Skin {skin_id} not found for {character}'
+            }), 404
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Manually set slippi status for {character} - {skin_id}: {slippi_safe}")
+
+        return jsonify({
+            'success': True,
+            'slippi_safe': slippi_safe,
+            'message': f"Manually set to {'Slippi Safe' if slippi_safe else 'Not Slippi Safe'}"
+        })
+    except Exception as e:
+        logger.error(f"Override slippi error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stages/set-slippi', methods=['POST'])
+def set_stage_slippi():
+    """Manually set slippi safety status for a stage variant"""
+    try:
+        data = request.json
+        stage_name = data.get('stageName')
+        variant_id = data.get('variantId')
+        slippi_safe = data.get('slippiSafe')
+
+        if not stage_name or not variant_id or slippi_safe is None:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageName, variantId, or slippiSafe parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find and update the stage variant
+        if stage_name not in metadata.get('stages', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Stage {stage_name} not found in metadata'
+            }), 404
+
+        variant_found = False
+        for variant in metadata['stages'][stage_name].get('variants', []):
+            if variant['id'] == variant_id:
+                variant['slippi_safe'] = slippi_safe
+                variant['slippi_test_date'] = datetime.now().isoformat()
+                variant_found = True
+                break
+
+        if not variant_found:
+            return jsonify({
+                'success': False,
+                'error': f'Variant {variant_id} not found for {stage_name}'
+            }), 404
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Set slippi status for {stage_name} - {variant_id}: {slippi_safe}")
+
+        return jsonify({
+            'success': True,
+            'slippi_safe': slippi_safe,
+            'message': f"Set to {'Slippi Safe' if slippi_safe else 'Not Slippi Safe'}"
+        })
+    except Exception as e:
+        logger.error(f"Set stage slippi error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/storage/metadata', methods=['GET'])
 def get_storage_metadata():
     """Get storage metadata.json"""
@@ -1104,6 +1353,7 @@ def import_file():
     Unified import endpoint for both character costumes and stage mods.
 
     Accepts ZIP file upload, auto-detects type, and processes accordingly.
+    Includes slippi safety validation with user choice to fix or import as-is.
     """
     try:
         # Check if file was uploaded
@@ -1131,6 +1381,9 @@ def import_file():
                 'error': 'Only ZIP and 7z files are supported'
             }), 400
 
+        # Get slippi_action parameter (can be "fix", "import_as_is", or None)
+        slippi_action = request.form.get('slippi_action')
+
         # Save uploaded file to temp location with correct suffix
         suffix = '.zip' if is_zip else '.7z'
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -1147,6 +1400,37 @@ def import_file():
             if character_infos:
                 logger.info(f"✓ Detected {len(character_infos)} character costume(s)")
 
+                # SLIPPI VALIDATION: Check if any costume needs slippi validation dialog
+                if slippi_action is None:
+                    # First time upload - validate slippi safety
+                    unsafe_costumes = []
+                    with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                        for char_info in character_infos:
+                            # Extract DAT to temp file for validation
+                            dat_data = zip_ref.read(char_info['dat_file'])
+                            with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
+                                tmp_dat.write(dat_data)
+                                tmp_dat_path = tmp_dat.name
+
+                            try:
+                                validation = validate_for_slippi(tmp_dat_path, auto_fix=False)
+                                if not validation['slippi_safe']:
+                                    unsafe_costumes.append({
+                                        'character': char_info['character'],
+                                        'color': char_info['color']
+                                    })
+                            finally:
+                                os.unlink(tmp_dat_path)
+
+                    # If any costume is not slippi safe, ask user what to do
+                    if unsafe_costumes:
+                        return jsonify({
+                            'success': False,
+                            'type': 'slippi_dialog',
+                            'unsafe_costumes': unsafe_costumes,
+                            'message': 'This costume is not Slippi safe. Choose an action:'
+                        }), 200
+
                 # Sort Ice Climbers: Popo before Nana (Nana copies Popo's CSP)
                 def ice_climbers_sort_key(char_info):
                     if char_info.get('is_popo'):
@@ -1158,12 +1442,15 @@ def import_file():
 
                 character_infos_sorted = sorted(character_infos, key=ice_climbers_sort_key)
 
+                # Determine auto_fix setting based on user choice
+                auto_fix = (slippi_action == 'fix')
+
                 # Import each detected costume
                 results = []
                 imported_skin_ids = {}  # Track actual skin IDs: costume_code -> skin_id
                 for character_info in character_infos_sorted:
                     logger.info(f"  - Importing {character_info['character']} - {character_info['color']}")
-                    result = import_character_costume(temp_zip_path, character_info, file.filename)
+                    result = import_character_costume(temp_zip_path, character_info, file.filename, auto_fix=auto_fix)
                     if result.get('success'):
                         results.append({
                             'character': character_info['character'],
@@ -1332,8 +1619,16 @@ def extract_custom_name_from_filename(filename: str, character_name: str) -> str
     return base_name
 
 
-def import_character_costume(zip_path: str, char_info: dict, original_filename: str) -> dict:
-    """Import a character costume to storage"""
+def import_character_costume(zip_path: str, char_info: dict, original_filename: str, auto_fix: bool = False) -> dict:
+    """
+    Import a character costume to storage.
+
+    Args:
+        zip_path: Path to the uploaded ZIP file
+        char_info: Character detection info
+        original_filename: Original filename of the upload
+        auto_fix: If True, apply slippi fixes to the DAT file
+    """
     try:
         # Load metadata
         metadata_file = STORAGE_PATH / 'metadata.json'
@@ -1383,10 +1678,31 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
         # Copy files from uploaded ZIP to final ZIP with correct structure
         csp_source = 'imported'
+
+        # SLIPPI VALIDATION: Validate DAT before importing
+        slippi_validation = None
+        with zipfile.ZipFile(zip_path, 'r') as source_zip:
+            # Extract DAT for validation
+            dat_data = source_zip.read(char_info['dat_file'])
+            with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
+                tmp_dat.write(dat_data)
+                tmp_dat_path = tmp_dat.name
+
+            try:
+                slippi_validation = validate_for_slippi(tmp_dat_path, auto_fix=auto_fix)
+                logger.info(f"Slippi validation: slippi_safe={slippi_validation['slippi_safe']}, auto_fix={auto_fix}")
+
+                # If auto_fix was applied, read the fixed DAT
+                if auto_fix and slippi_validation.get('fix_applied'):
+                    with open(tmp_dat_path, 'rb') as f:
+                        dat_data = f.read()
+                    logger.info("Using slippi-fixed DAT file")
+            finally:
+                os.unlink(tmp_dat_path)
+
         with zipfile.ZipFile(zip_path, 'r') as source_zip:
             with zipfile.ZipFile(final_zip, 'w') as dest_zip:
-                # Copy DAT file
-                dat_data = source_zip.read(char_info['dat_file'])
+                # Copy DAT file (potentially fixed version)
                 dest_zip.writestr(f"{char_info['costume_code']}Mod.dat", dat_data)
 
                 # Handle CSP - copy if found, generate if missing
@@ -1546,7 +1862,12 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'has_stock': stock_data is not None,
             'csp_source': csp_source,
             'stock_source': stock_source if stock_data else None,
-            'date_added': datetime.now().isoformat()
+            'date_added': datetime.now().isoformat(),
+            # Slippi safety metadata
+            'slippi_safe': slippi_validation['slippi_safe'] if slippi_validation else False,
+            'slippi_tested': True,
+            'slippi_test_date': datetime.now().isoformat(),
+            'slippi_manual_override': None
         }
 
         # Ice Climbers pairing metadata

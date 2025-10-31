@@ -291,11 +291,6 @@
   margin-bottom: 12px;
 }
 
-.skin-image-container {
-  position: relative;
-  flex: 1;
-}
-
 .stock-container {
   display: flex;
   flex-direction: column;
