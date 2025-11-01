@@ -56,6 +56,10 @@
         "from": "utility/website/backend/tools",
         "to": "utility/website/backend/tools",
         "filter": ["**/*"]
+      },
+      {
+        "from": "clear_storage.py",
+        "to": "clear_storage.py"
       }
     ],
     "directories": {

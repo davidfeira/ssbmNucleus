@@ -40,6 +40,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [cspPreview, setCspPreview] = useState(null) // Preview URL for new CSP
   const [newStock, setNewStock] = useState(null) // File object for new stock
   const [stockPreview, setStockPreview] = useState(null) // Preview URL for new stock
+  const [editSlippiSafe, setEditSlippiSafe] = useState(null) // Track slippi changes for stages
 
   // Fetch stage variants when in stages mode
   useEffect(() => {
@@ -222,32 +223,6 @@ export default function StorageViewer({ metadata, onRefresh }) {
     }
   }
 
-  const handleStageSlippiToggle = async (newStatus) => {
-    if (!editingItem || editingItem.type !== 'stage') return
-
-    try {
-      const response = await fetch(`${API_URL}/storage/stages/set-slippi`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stageName: editingItem.data.stageFolder,  // Use folder name, not display name
-          variantId: editingItem.data.id,
-          slippiSafe: newStatus
-        })
-      })
-      const data = await response.json()
-
-      if (data.success) {
-        alert(data.message)
-        window.location.reload()
-      } else {
-        alert(`Error: ${data.error}`)
-      }
-    } catch (err) {
-      alert(`Error: ${err.message}`)
-    }
-  }
-
   const handleEditClick = (type, data) => {
     const item = { type, data }
     const name = type === 'costume' ? data.color : data.name
@@ -261,6 +236,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setCspPreview(null)
     setNewStock(null)
     setStockPreview(null)
+    setEditSlippiSafe(type === 'stage' ? data.slippi_safe : null)
     setShowEditModal(true)
   }
 
@@ -385,6 +361,27 @@ export default function StorageViewer({ metadata, onRefresh }) {
         }
       }
 
+      // If this is a stage and slippi status changed, save it
+      if (editingItem.type === 'stage' && editSlippiSafe !== editingItem.data.slippi_safe) {
+        const slippiResponse = await fetch(`${API_URL}/storage/stages/set-slippi`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stageName: editingItem.data.stageFolder,
+            variantId: editingItem.data.id,
+            slippiSafe: editSlippiSafe
+          })
+        })
+
+        const slippiData = await slippiResponse.json()
+
+        if (!slippiData.success) {
+          alert(`Slippi status update failed: ${slippiData.error}`)
+          setSaving(false)
+          return
+        }
+      }
+
       // If this is a character costume and there's a new CSP, upload it
       if (editingItem.type === 'costume' && newCsp) {
         const formData = new FormData()
@@ -425,6 +422,11 @@ export default function StorageViewer({ metadata, onRefresh }) {
           setSaving(false)
           return
         }
+      }
+
+      // Refetch stage variants if we just edited a stage (before closing modal)
+      if (editingItem.type === 'stage') {
+        await fetchStageVariants()
       }
 
       setShowEditModal(false)
@@ -472,6 +474,11 @@ export default function StorageViewer({ metadata, onRefresh }) {
       const data = await response.json()
 
       if (data.success) {
+        // Refetch stage variants if we just deleted a stage (before closing modal)
+        if (editingItem.type === 'stage') {
+          await fetchStageVariants()
+        }
+
         setShowEditModal(false)
         setEditingItem(null)
         onRefresh()
@@ -495,6 +502,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setCspPreview(null)
     setNewStock(null)
     setStockPreview(null)
+    setEditSlippiSafe(null)
   }
 
   // Merge default characters with metadata
@@ -738,14 +746,14 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   <p style={{ marginBottom: '0.5rem', color: '#ccc' }}>
                     <strong>Status:</strong>{' '}
                     <span style={{
-                      color: editingItem.data.slippi_tested
-                        ? (editingItem.data.slippi_safe ? '#4caf50' : '#f44336')
-                        : '#6c757d',
+                      color: editSlippiSafe === null
+                        ? '#6c757d'
+                        : (editSlippiSafe ? '#4caf50' : '#f44336'),
                       fontWeight: 'bold'
                     }}>
-                      {editingItem.data.slippi_tested
-                        ? (editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe')
-                        : 'Unknown'}
+                      {editSlippiSafe === null
+                        ? 'Unknown'
+                        : (editSlippiSafe ? 'Slippi Safe' : 'Not Slippi Safe')}
                     </span>
                   </p>
                   <p style={{ fontSize: '0.9em', color: '#999', marginBottom: '0.75rem' }}>
@@ -756,16 +764,15 @@ export default function StorageViewer({ metadata, onRefresh }) {
                       Manual Setting:
                     </label>
                     <select
-                      value={editingItem.data.slippi_tested
-                        ? (editingItem.data.slippi_safe ? 'safe' : 'unsafe')
-                        : 'unknown'}
+                      value={editSlippiSafe === null
+                        ? 'unknown'
+                        : (editSlippiSafe ? 'safe' : 'unsafe')}
                       onChange={(e) => {
                         const newValue = e.target.value
-                        if (newValue !== 'unknown') {
-                          const newStatus = newValue === 'safe'
-                          if (!editingItem.data.slippi_tested || newStatus !== editingItem.data.slippi_safe) {
-                            handleStageSlippiToggle(newStatus)
-                          }
+                        if (newValue === 'unknown') {
+                          setEditSlippiSafe(null)
+                        } else {
+                          setEditSlippiSafe(newValue === 'safe')
                         }
                       }}
                       disabled={saving || deleting}

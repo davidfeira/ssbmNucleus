@@ -1385,11 +1385,19 @@ def override_costume_slippi():
     """Manually override slippi safety status for a character costume"""
     try:
         data = request.json
+        logger.info("=== OVERRIDE COSTUME SLIPPI REQUEST ===")
+        logger.info(f"Request data: {data}")
+
         character = data.get('character')
         skin_id = data.get('skinId')
         slippi_safe = data.get('slippiSafe')
 
+        logger.info(f"character: {character}")
+        logger.info(f"skin_id: {skin_id}")
+        logger.info(f"slippi_safe: {slippi_safe}")
+
         if not character or not skin_id or slippi_safe is None:
+            logger.error("Missing parameters!")
             return jsonify({
                 'success': False,
                 'error': 'Missing character, skinId, or slippiSafe parameter'
@@ -1397,6 +1405,9 @@ def override_costume_slippi():
 
         # Load metadata
         metadata_file = STORAGE_PATH / 'metadata.json'
+        logger.info(f"Metadata file path: {metadata_file}")
+        logger.info(f"Metadata file exists: {metadata_file.exists()}")
+
         if not metadata_file.exists():
             return jsonify({
                 'success': False,
@@ -1406,16 +1417,22 @@ def override_costume_slippi():
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
+        logger.info(f"Loaded metadata, characters: {list(metadata.get('characters', {}).keys())}")
+
         # Find and update the skin
         if character not in metadata.get('characters', {}):
+            logger.error(f"Character {character} not found in metadata!")
             return jsonify({
                 'success': False,
                 'error': f'Character {character} not found in metadata'
             }), 404
 
+        logger.info(f"Found character {character}, skins: {[s['id'] for s in metadata['characters'][character].get('skins', [])]}")
+
         skin_found = False
         for skin in metadata['characters'][character].get('skins', []):
             if skin['id'] == skin_id:
+                logger.info(f"Found skin {skin_id}, updating slippi_safe from {skin.get('slippi_safe')} to {slippi_safe}")
                 skin['slippi_safe'] = slippi_safe
                 skin['slippi_manual_override'] = True
                 skin['slippi_test_date'] = datetime.now().isoformat()
@@ -1423,14 +1440,17 @@ def override_costume_slippi():
                 break
 
         if not skin_found:
+            logger.error(f"Skin {skin_id} not found!")
             return jsonify({
                 'success': False,
                 'error': f'Skin {skin_id} not found for {character}'
             }), 404
 
         # Save updated metadata
+        logger.info(f"Saving updated metadata to {metadata_file}")
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
+        logger.info("Metadata saved successfully")
 
         logger.info(f"✓ Manually set slippi status for {character} - {skin_id}: {slippi_safe}")
 
@@ -1452,11 +1472,19 @@ def set_stage_slippi():
     """Manually set slippi safety status for a stage variant"""
     try:
         data = request.json
+        logger.info("=== SET STAGE SLIPPI REQUEST ===")
+        logger.info(f"Request data: {data}")
+
         stage_name = data.get('stageName')
         variant_id = data.get('variantId')
         slippi_safe = data.get('slippiSafe')
 
+        logger.info(f"stage_name: {stage_name}")
+        logger.info(f"variant_id: {variant_id}")
+        logger.info(f"slippi_safe: {slippi_safe}")
+
         if not stage_name or not variant_id or slippi_safe is None:
+            logger.error("Missing parameters!")
             return jsonify({
                 'success': False,
                 'error': 'Missing stageName, variantId, or slippiSafe parameter'
@@ -1464,6 +1492,9 @@ def set_stage_slippi():
 
         # Load metadata
         metadata_file = STORAGE_PATH / 'metadata.json'
+        logger.info(f"Metadata file path: {metadata_file}")
+        logger.info(f"Metadata file exists: {metadata_file.exists()}")
+
         if not metadata_file.exists():
             return jsonify({
                 'success': False,
@@ -1473,30 +1504,40 @@ def set_stage_slippi():
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
+        logger.info(f"Loaded metadata, stages: {list(metadata.get('stages', {}).keys())}")
+
         # Find and update the stage variant
         if stage_name not in metadata.get('stages', {}):
+            logger.error(f"Stage {stage_name} not found in metadata!")
             return jsonify({
                 'success': False,
                 'error': f'Stage {stage_name} not found in metadata'
             }), 404
 
+        logger.info(f"Found stage {stage_name}, variants: {[v['id'] for v in metadata['stages'][stage_name].get('variants', [])]}")
+
         variant_found = False
         for variant in metadata['stages'][stage_name].get('variants', []):
             if variant['id'] == variant_id:
+                logger.info(f"Found variant {variant_id}, updating slippi_safe from {variant.get('slippi_safe')} to {slippi_safe}")
                 variant['slippi_safe'] = slippi_safe
+                variant['slippi_tested'] = True
                 variant['slippi_test_date'] = datetime.now().isoformat()
                 variant_found = True
                 break
 
         if not variant_found:
+            logger.error(f"Variant {variant_id} not found!")
             return jsonify({
                 'success': False,
                 'error': f'Variant {variant_id} not found for {stage_name}'
             }), 404
 
         # Save updated metadata
+        logger.info(f"Saving updated metadata to {metadata_file}")
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
+        logger.info("Metadata saved successfully")
 
         logger.info(f"✓ Set slippi status for {stage_name} - {variant_id}: {slippi_safe}")
 
@@ -1551,43 +1592,105 @@ def clear_storage_endpoint():
         logger.info(f"Clear Intake: {clear_intake}")
         logger.info(f"Clear Logs: {clear_logs}")
 
-        # Build command arguments
-        clear_script = BASE_PATH / "clear_storage.py"
-        cmd = [sys.executable, str(clear_script)]
+        removed_count = 0
+        output_lines = []
 
-        if clear_intake and clear_logs:
-            cmd.append("--all")
-        elif clear_intake:
-            cmd.append("--clear-intake")
-        elif clear_logs:
-            cmd.append("--clear-logs")
+        # Clear storage
+        logger.info("Clearing storage...")
+        output_lines.append("Clearing storage...")
 
-        # Execute clear_storage.py script
-        # Hide CMD window on Windows
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        # Remove character folders in storage (excluding 'das' folder)
+        if STORAGE_PATH.exists():
+            for item in STORAGE_PATH.iterdir():
+                if item.is_dir() and item.name != "das":
+                    logger.info(f"  Removing: {item.name}/")
+                    output_lines.append(f"  Removing: {item.name}/")
+                    shutil.rmtree(item)
+                    removed_count += 1
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=PROJECT_ROOT,
-            creationflags=creation_flags
-        )
+        # Remove stage variant folders in storage/das/
+        das_dir = STORAGE_PATH / "das"
+        if das_dir.exists():
+            for stage_folder in das_dir.iterdir():
+                if stage_folder.is_dir():
+                    # Clear contents of each stage folder
+                    variant_count = 0
+                    for variant_item in stage_folder.iterdir():
+                        if variant_item.is_file():
+                            variant_item.unlink()
+                        else:
+                            shutil.rmtree(variant_item)
+                        variant_count += 1
+                    if variant_count > 0:
+                        logger.info(f"  Removing: das/{stage_folder.name}/ ({variant_count} items)")
+                        output_lines.append(f"  Removing: das/{stage_folder.name}/ ({variant_count} items)")
+                        removed_count += 1
 
-        if result.returncode != 0:
-            logger.error(f"Clear storage script failed: {result.stderr}")
-            return jsonify({
-                'success': False,
-                'error': f'Failed to clear storage: {result.stderr}'
-            }), 500
+        # Clear Python cache directories
+        for cache_dir in PROJECT_ROOT.rglob("__pycache__"):
+            if cache_dir.is_dir():
+                logger.info(f"  Removing: {cache_dir.relative_to(PROJECT_ROOT)}")
+                output_lines.append(f"  Removing: {cache_dir.relative_to(PROJECT_ROOT)}")
+                shutil.rmtree(cache_dir)
+                removed_count += 1
 
-        logger.info(f"Clear storage output:\n{result.stdout}")
+        # Reset metadata.json to default structure
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if metadata_file.exists() or STORAGE_PATH.exists():
+            logger.info(f"  Resetting: metadata.json")
+            output_lines.append(f"  Resetting: metadata.json")
+            STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+            with open(metadata_file, 'w') as f:
+                json.dump({'version': '1.0', 'characters': {}, 'stages': {}}, f, indent=2)
+            removed_count += 1
+
+        if removed_count > 0:
+            output_lines.append(f"[OK] Cleared {removed_count} items from storage")
+        else:
+            output_lines.append("[INFO] Storage is already empty")
+
+        # Optionally clear intake
+        if clear_intake:
+            logger.info("\nClearing intake...")
+            output_lines.append("\nClearing intake...")
+            intake_dir = PROJECT_ROOT / "intake"
+            intake_count = 0
+            if intake_dir.exists():
+                for item in intake_dir.iterdir():
+                    if item.is_file():
+                        logger.info(f"  Removing: {item.name}")
+                        output_lines.append(f"  Removing: {item.name}")
+                        item.unlink()
+                        intake_count += 1
+            if intake_count > 0:
+                output_lines.append(f"[OK] Cleared {intake_count} files from intake")
+            else:
+                output_lines.append("[INFO] Intake is already empty")
+
+        # Optionally clear logs
+        if clear_logs:
+            logger.info("\nClearing logs...")
+            output_lines.append("\nClearing logs...")
+            logs_count = 0
+            if LOGS_PATH.exists():
+                for item in LOGS_PATH.iterdir():
+                    if item.is_file() and item.suffix == '.log':
+                        logger.info(f"  Removing: {item.name}")
+                        output_lines.append(f"  Removing: {item.name}")
+                        item.unlink()
+                        logs_count += 1
+            if logs_count > 0:
+                output_lines.append(f"[OK] Cleared {logs_count} log files")
+            else:
+                output_lines.append("[INFO] No log files to clear")
+
         logger.info("=== CLEAR STORAGE COMPLETE ===")
+        output_lines.append("\nDone!")
 
         return jsonify({
             'success': True,
             'message': 'Storage cleared successfully',
-            'output': result.stdout
+            'output': '\n'.join(output_lines)
         })
     except Exception as e:
         logger.error(f"Clear storage error: {str(e)}", exc_info=True)
@@ -2575,18 +2678,36 @@ def das_get_stage_variants(stage_code):
             # Pokemon Stadium uses .usd, others use .dat
             file_pattern = '*.usd' if stage_code == 'GrPs' else '*.dat'
 
+            # Load metadata to get slippi status and other info
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            metadata = {}
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+
+            stage_folder_name = DAS_STAGES[stage_code]['folder']
+            stage_metadata = metadata.get('stages', {}).get(stage_folder_name, {})
+            metadata_variants = {v['id']: v for v in stage_metadata.get('variants', [])}
+
             for stage_file in stage_folder.glob(file_pattern):
+                variant_id = stage_file.stem
+
                 # Check if screenshot exists in storage (single source of truth)
                 # Screenshot name matches the .dat filename
                 # e.g., autumn-dreamland.dat → autumn-dreamland_screenshot.png
-                storage_screenshot = STORAGE_PATH / 'das' / DAS_STAGES[stage_code]['folder'] / f"{stage_file.stem}_screenshot.png"
+                storage_screenshot = STORAGE_PATH / 'das' / stage_folder_name / f"{variant_id}_screenshot.png"
+
+                # Get metadata for this variant
+                variant_meta = metadata_variants.get(variant_id, {})
 
                 variants.append({
-                    'name': stage_file.stem,
+                    'name': variant_id,
                     'filename': stage_file.name,
                     'stageCode': stage_code,
                     'hasScreenshot': storage_screenshot.exists(),
-                    'screenshotUrl': f"/storage/das/{DAS_STAGES[stage_code]['folder']}/{stage_file.stem}_screenshot.png" if storage_screenshot.exists() else None
+                    'screenshotUrl': f"/storage/das/{stage_folder_name}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None,
+                    'slippi_safe': variant_meta.get('slippi_safe'),
+                    'slippi_tested': variant_meta.get('slippi_tested', False)
                 })
 
         return jsonify({
@@ -2631,7 +2752,7 @@ def das_list_storage_variants():
                 for zip_file in stage_storage_path.glob('*.zip'):
                     variant_id = zip_file.stem
 
-                    # Get name from metadata, fallback to ID if not found
+                    # Get data from metadata, fallback to defaults if not found
                     variant_meta = metadata_variants.get(variant_id, {})
                     variant_name = variant_meta.get('name', variant_id)
 
@@ -2645,7 +2766,10 @@ def das_list_storage_variants():
                         'name': variant_name,  # ← Editable display name
                         'zipPath': str(zip_file.relative_to(PROJECT_ROOT)),
                         'hasScreenshot': storage_screenshot.exists(),
-                        'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None
+                        'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None,
+                        'slippi_safe': variant_meta.get('slippi_safe'),
+                        'slippi_tested': variant_meta.get('slippi_tested', False),
+                        'slippi_test_date': variant_meta.get('slippi_test_date')
                     })
 
         return jsonify({
@@ -2903,11 +3027,19 @@ def rename_storage_stage():
     """Rename stage variant (update name field)"""
     try:
         data = request.json
+        logger.info("=== RENAME STAGE REQUEST ===")
+        logger.info(f"Request data: {data}")
+
         stage_folder = data.get('stageFolder')
         variant_id = data.get('variantId')
         new_name = data.get('newName')
 
+        logger.info(f"stage_folder: {stage_folder}")
+        logger.info(f"variant_id: {variant_id}")
+        logger.info(f"new_name: {new_name}")
+
         if not stage_folder or not variant_id or not new_name:
+            logger.error("Missing parameters!")
             return jsonify({
                 'success': False,
                 'error': 'Missing stageFolder, variantId, or newName parameter'
@@ -2915,6 +3047,9 @@ def rename_storage_stage():
 
         # Load metadata
         metadata_file = STORAGE_PATH / 'metadata.json'
+        logger.info(f"Metadata file path: {metadata_file}")
+        logger.info(f"Metadata file exists: {metadata_file.exists()}")
+
         if not metadata_file.exists():
             return jsonify({
                 'success': False,
@@ -2924,8 +3059,11 @@ def rename_storage_stage():
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
+        logger.info(f"Loaded metadata, stages: {list(metadata.get('stages', {}).keys())}")
+
         # Find and update the variant in metadata
         if stage_folder not in metadata.get('stages', {}):
+            logger.error(f"Stage folder {stage_folder} not found in metadata!")
             return jsonify({
                 'success': False,
                 'error': f'Stage folder {stage_folder} not found in metadata'
@@ -2933,21 +3071,26 @@ def rename_storage_stage():
 
         stage_data = metadata['stages'][stage_folder]
         variants = stage_data.get('variants', [])
+        logger.info(f"Found stage folder {stage_folder}, variants: {[v['id'] for v in variants]}")
+
         variant_found = False
 
         for variant in variants:
             if variant['id'] == variant_id:
+                logger.info(f"Found variant {variant_id}, updating name from '{variant.get('name')}' to '{new_name}'")
                 variant['name'] = new_name
                 variant_found = True
                 break
 
         if not variant_found:
+            logger.error(f"Variant {variant_id} not found!")
             return jsonify({
                 'success': False,
                 'error': f'Variant {variant_id} not found in {stage_folder}'
             }), 404
 
         # Save updated metadata
+        logger.info(f"Saving updated metadata to {metadata_file}")
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
 
