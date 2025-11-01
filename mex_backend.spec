@@ -122,10 +122,20 @@ validator_dir = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'pr
 if validator_dir.exists():
     datas.append((str(validator_dir), 'utility/website/backend/tools/processor/CostumeValidator'))
 
-# Vanilla assets
+# Vanilla assets (character-specific)
 vanilla_dir = project_root / 'utility' / 'assets' / 'vanilla'
 if vanilla_dir.exists():
     datas.append((str(vanilla_dir), 'utility/assets/vanilla'))
+
+# Build assets (numbered CSPs and stock icons used by MEX)
+build_assets_dir = project_root / 'build' / 'assets'
+if build_assets_dir.exists():
+    datas.append((str(build_assets_dir), 'build/assets'))
+
+# Dynamic Alternate Stages framework
+das_dir = project_root / 'utility' / 'DynamicAlternateStages'
+if das_dir.exists():
+    datas.append((str(das_dir), 'utility/DynamicAlternateStages'))
 
 # =============================================================================
 # BINARIES

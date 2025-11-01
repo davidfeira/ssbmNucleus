@@ -90,8 +90,10 @@ LOGS_PATH = PROJECT_ROOT / "logs"
 VANILLA_ASSETS_DIR = BASE_PATH / "utility" / "assets" / "vanilla"
 
 # Ensure directories exist
+STORAGE_PATH.mkdir(exist_ok=True)
 OUTPUT_PATH.mkdir(exist_ok=True)
 LOGS_PATH.mkdir(exist_ok=True)
+MEX_PROJECT_PATH.parent.mkdir(exist_ok=True)  # Create build/ directory
 
 # Configure logging
 log_file = LOGS_PATH / f"mex_api_{datetime.now().strftime('%Y%m%d')}.log"
@@ -436,7 +438,12 @@ def serve_storage(file_path):
 def serve_vanilla(file_path):
     """Serve vanilla Melee assets (CSPs, stage images, etc.)"""
     try:
-        full_path = VANILLA_ASSETS_DIR / file_path
+        # Stage screenshots are in utility/assets/stages/, not utility/assets/vanilla/stages/
+        if file_path.startswith('stages/'):
+            full_path = BASE_PATH / "utility" / "assets" / file_path
+        else:
+            # Character assets are in utility/assets/vanilla/
+            full_path = VANILLA_ASSETS_DIR / file_path
 
         if not full_path.exists():
             logger.warning(f"Vanilla asset not found: {file_path}")
@@ -464,20 +471,37 @@ def serve_vanilla(file_path):
 
 @app.route('/assets/<path:file_path>', methods=['GET'])
 def serve_mex_assets(file_path):
-    """Serve MEX project assets (CSPs, stock icons from build folder)"""
+    """Serve MEX project assets (CSPs, stock icons from currently opened project)"""
     try:
-        # Remove duplicate "assets/" if present in the path
-        if file_path.startswith('assets/'):
-            file_path = file_path[7:]
+        logger.info(f"========== ASSET REQUEST ==========")
+        logger.info(f"Requested file_path: {file_path}")
+        logger.info(f"current_project_path: {current_project_path}")
 
-        # Build the full path relative to the project build directory
-        build_dir = PROJECT_ROOT / "build"
-        full_path = build_dir / file_path
+        # Check if a project is loaded
+        if current_project_path is None:
+            logger.error("ERROR: No MEX project loaded!")
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
 
-        logger.info(f"Serving MEX asset: {file_path} -> {full_path}")
+        # Use the currently opened project's directory
+        # Flask route strips "/assets/" so we need to add it back
+        # Route receives: "csp/csp_038.png", we need: "assets/csp/csp_038.png"
+        project_dir = current_project_path.parent
+        full_path = project_dir / "assets" / file_path
+
+        logger.info(f"project_dir: {project_dir}")
+        logger.info(f"full_path: {full_path}")
+        logger.info(f"File exists: {full_path.exists()}")
 
         if not full_path.exists():
-            logger.warning(f"MEX asset not found: {full_path}")
+            # Log what files ARE in the parent directory
+            parent_dir = full_path.parent
+            logger.warning(f"File NOT FOUND: {full_path}")
+            logger.warning(f"Parent directory: {parent_dir}")
+            if parent_dir.exists():
+                files = list(parent_dir.glob('*'))[:10]  # First 10 files
+                logger.warning(f"Files in parent dir: {[f.name for f in files]}")
+            else:
+                logger.warning(f"Parent directory does not exist!")
             return jsonify({'success': False, 'error': f'File not found: {file_path}'}), 404
 
         # Determine mimetype based on extension
@@ -487,9 +511,10 @@ def serve_mex_assets(file_path):
         else:
             mimetype = 'application/octet-stream'
 
+        logger.info(f"✓ Serving file: {full_path}")
         return send_file(full_path, mimetype=mimetype)
     except Exception as e:
-        logger.error(f"Error serving MEX asset {file_path}: {e}")
+        logger.error(f"EXCEPTION serving MEX asset {file_path}: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -1513,7 +1538,7 @@ def clear_storage_endpoint():
         logger.info(f"Clear Logs: {clear_logs}")
 
         # Build command arguments
-        clear_script = PROJECT_ROOT / "clear_storage.py"
+        clear_script = BASE_PATH / "clear_storage.py"
         cmd = [sys.executable, str(clear_script)]
 
         if clear_intake and clear_logs:
@@ -2429,7 +2454,8 @@ def das_install():
 
         logger.info("=== DAS FRAMEWORK INSTALLATION ===")
 
-        das_source = PROJECT_ROOT / "utility" / "DynamicAlternateStages"
+        # Use BASE_PATH for bundled resources (includes DAS files)
+        das_source = BASE_PATH / "utility" / "DynamicAlternateStages"
         project_files = get_project_files_dir()
 
         if not das_source.exists():
@@ -2464,7 +2490,7 @@ def das_install():
 
                 # Copy default screenshot for vanilla variant to storage
                 if stage_code in DAS_DEFAULT_SCREENSHOTS:
-                    default_screenshot = PROJECT_ROOT / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
+                    default_screenshot = BASE_PATH / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
                     if default_screenshot.exists():
                         storage_das_folder = STORAGE_PATH / 'das' / stage_info['folder']
                         storage_das_folder.mkdir(parents=True, exist_ok=True)

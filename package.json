@@ -48,13 +48,13 @@
         "filter": ["**/*"]
       },
       {
-        "from": "utility/website/backend/tools",
-        "to": "utility/website/backend/tools",
+        "from": "utility/DynamicAlternateStages",
+        "to": "utility/DynamicAlternateStages",
         "filter": ["**/*"]
       },
       {
-        "from": "viewer/public/vanilla",
-        "to": "utility/assets/vanilla",
+        "from": "utility/website/backend/tools",
+        "to": "utility/website/backend/tools",
         "filter": ["**/*"]
       }
     ],
