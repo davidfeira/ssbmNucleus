@@ -3237,6 +3237,420 @@ def update_stage_screenshot():
         }), 500
 
 
+@app.route('/api/mex/storage/costumes/reorder', methods=['POST'])
+def reorder_costumes():
+    """Reorder character skins in storage"""
+    try:
+        data = request.json
+        character = data.get('character')
+        from_index = data.get('fromIndex')
+        to_index = data.get('toIndex')
+
+        if character is None or from_index is None or to_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, fromIndex, or toIndex parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find character in metadata
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Validate indices
+        if from_index < 0 or from_index >= len(skins) or to_index < 0 or to_index >= len(skins):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid fromIndex or toIndex'
+            }), 400
+
+        # Reorder the skins array
+        skin = skins.pop(from_index)
+        skins.insert(to_index, skin)
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Reordered {character} skins: moved index {from_index} to {to_index}")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Reorder costumes error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/costumes/move-to-top', methods=['POST'])
+def move_costume_to_top():
+    """Move a character skin to the top of the list"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find character in metadata
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find the skin by ID
+        skin_index = None
+        for i, skin in enumerate(skins):
+            if skin['id'] == skin_id:
+                skin_index = i
+                break
+
+        if skin_index is None:
+            return jsonify({
+                'success': False,
+                'error': f'Skin {skin_id} not found'
+            }), 404
+
+        # Move to top (position 0)
+        if skin_index > 0:
+            skin = skins.pop(skin_index)
+            skins.insert(0, skin)
+
+            # Save updated metadata
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"✓ Moved {character} skin {skin_id} to top")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Move costume to top error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/costumes/move-to-bottom', methods=['POST'])
+def move_costume_to_bottom():
+    """Move a character skin to the bottom of the list"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find character in metadata
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find the skin by ID
+        skin_index = None
+        for i, skin in enumerate(skins):
+            if skin['id'] == skin_id:
+                skin_index = i
+                break
+
+        if skin_index is None:
+            return jsonify({
+                'success': False,
+                'error': f'Skin {skin_id} not found'
+            }), 404
+
+        # Move to bottom (last position)
+        if skin_index < len(skins) - 1:
+            skin = skins.pop(skin_index)
+            skins.append(skin)
+
+            # Save updated metadata
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"✓ Moved {character} skin {skin_id} to bottom")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Move costume to bottom error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stages/reorder', methods=['POST'])
+def reorder_stages():
+    """Reorder stage variants in storage"""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        from_index = data.get('fromIndex')
+        to_index = data.get('toIndex')
+
+        if stage_folder is None or from_index is None or to_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageFolder, fromIndex, or toIndex parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find stage in metadata
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Stage folder {stage_folder} not found in metadata'
+            }), 404
+
+        stage_data = metadata['stages'][stage_folder]
+        variants = stage_data.get('variants', [])
+
+        # Validate indices
+        if from_index < 0 or from_index >= len(variants) or to_index < 0 or to_index >= len(variants):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid fromIndex or toIndex'
+            }), 400
+
+        # Reorder the variants array
+        variant = variants.pop(from_index)
+        variants.insert(to_index, variant)
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"✓ Reordered {stage_folder} variants: moved index {from_index} to {to_index}")
+
+        return jsonify({
+            'success': True,
+            'variants': variants
+        })
+    except Exception as e:
+        logger.error(f"Reorder stages error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stages/move-to-top', methods=['POST'])
+def move_stage_to_top():
+    """Move a stage variant to the top of the list"""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        variant_id = data.get('variantId')
+
+        if not stage_folder or not variant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageFolder or variantId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find stage in metadata
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Stage folder {stage_folder} not found in metadata'
+            }), 404
+
+        stage_data = metadata['stages'][stage_folder]
+        variants = stage_data.get('variants', [])
+
+        # Find the variant by ID
+        variant_index = None
+        for i, variant in enumerate(variants):
+            if variant['id'] == variant_id:
+                variant_index = i
+                break
+
+        if variant_index is None:
+            return jsonify({
+                'success': False,
+                'error': f'Variant {variant_id} not found'
+            }), 404
+
+        # Move to top (position 0)
+        if variant_index > 0:
+            variant = variants.pop(variant_index)
+            variants.insert(0, variant)
+
+            # Save updated metadata
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"✓ Moved {stage_folder} variant {variant_id} to top")
+
+        return jsonify({
+            'success': True,
+            'variants': variants
+        })
+    except Exception as e:
+        logger.error(f"Move stage to top error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stages/move-to-bottom', methods=['POST'])
+def move_stage_to_bottom():
+    """Move a stage variant to the bottom of the list"""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        variant_id = data.get('variantId')
+
+        if not stage_folder or not variant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageFolder or variantId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find stage in metadata
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Stage folder {stage_folder} not found in metadata'
+            }), 404
+
+        stage_data = metadata['stages'][stage_folder]
+        variants = stage_data.get('variants', [])
+
+        # Find the variant by ID
+        variant_index = None
+        for i, variant in enumerate(variants):
+            if variant['id'] == variant_id:
+                variant_index = i
+                break
+
+        if variant_index is None:
+            return jsonify({
+                'success': False,
+                'error': f'Variant {variant_id} not found'
+            }), 404
+
+        # Move to bottom (last position)
+        if variant_index < len(variants) - 1:
+            variant = variants.pop(variant_index)
+            variants.append(variant)
+
+            # Save updated metadata
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"✓ Moved {stage_folder} variant {variant_id} to bottom")
+
+        return jsonify({
+            'success': True,
+            'variants': variants
+        })
+    except Exception as e:
+        logger.error(f"Move stage to bottom error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @socketio.on('connect')
 def handle_connect():
     """Handle WebSocket connection"""

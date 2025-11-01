@@ -274,10 +274,10 @@
   border: 2px solid #2a2a2a;
   border-radius: 12px;
   padding: 16px;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.skin-card:hover {
+.skin-card:hover:not(.dragging) {
   background: #222;
   border-color: #667eea;
   transform: translateY(-2px);
@@ -714,4 +714,60 @@
   opacity: 0.6;
   cursor: not-allowed;
   transform: none !important;
+}
+
+/* Drag and Drop Styles */
+.skin-card[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+.skin-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.skin-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+  scale: 0.95;
+  transition: opacity 0.2s ease, scale 0.2s ease;
+}
+
+/* Smooth animation for items moving during drag */
+.skins-grid .skin-card {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+              opacity 0.2s ease,
+              scale 0.2s ease,
+              background 0.3s ease,
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
+}
+
+/* Context Menu Styles */
+.context-menu {
+  position: fixed;
+  background: #1a1a2e;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 10000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 150px;
+}
+
+.context-menu button {
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  font-size: 14px;
+}
+
+.context-menu button:hover {
+  background: rgba(102, 126, 234, 0.2);
 }

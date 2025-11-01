@@ -43,6 +43,13 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [editSlippiSafe, setEditSlippiSafe] = useState(null) // Track slippi changes for stages
   const [lastImageUpdate, setLastImageUpdate] = useState(Date.now()) // For cache-busting images
 
+  // Drag and drop state
+  const [draggedItem, setDraggedItem] = useState(null) // { index, id }
+  const [dragOverIndex, setDragOverIndex] = useState(null)
+  const [reordering, setReordering] = useState(false)
+  const [contextMenu, setContextMenu] = useState(null) // { x, y, type: 'skin'/'variant', item, index }
+  const [previewOrder, setPreviewOrder] = useState(null) // Live preview of reordered items during drag
+
   // Fetch stage variants when in stages mode
   useEffect(() => {
     if (mode === 'stages') {
@@ -520,6 +527,277 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setEditSlippiSafe(null)
   }
 
+  // Drag and drop handlers
+  const handleDragStart = (e, index, items) => {
+    setDraggedItem({ index, id: items[index].id })
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDragEnter = (e, index, items) => {
+    e.preventDefault()
+    if (!draggedItem || draggedItem.index === index) return
+
+    // Only update if we've moved to a different position
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index)
+
+      // Calculate new preview order
+      const currentOrder = previewOrder || [...items]
+
+      // Find current position of dragged item in preview
+      const draggedCurrentPos = currentOrder.findIndex(item => item.id === draggedItem.id)
+      if (draggedCurrentPos === -1) return
+
+      // Create new order with item moved to target position
+      const newOrder = [...currentOrder]
+      const [removed] = newOrder.splice(draggedCurrentPos, 1)
+      newOrder.splice(index, 0, removed)
+
+      setPreviewOrder(newOrder)
+    }
+  }
+
+  const handleDragLeave = (e) => {
+    // Only clear if leaving the container entirely
+    if (e.currentTarget === e.target) {
+      setDragOverIndex(null)
+    }
+  }
+
+  const handleSkinDrop = async (e, toIndex) => {
+    e.preventDefault()
+    if (!draggedItem) return
+
+    const fromIndex = draggedItem.index
+
+    if (fromIndex === toIndex || !selectedCharacter) {
+      setDraggedItem(null)
+      setDragOverIndex(null)
+      setPreviewOrder(null)
+      return
+    }
+
+    setReordering(true)
+
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          fromIndex,
+          toIndex
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh metadata to get updated order
+        await onRefresh()
+      } else {
+        alert(`Reorder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Reorder error:', err)
+      alert(`Reorder error: ${err.message}`)
+    } finally {
+      setReordering(false)
+      setDraggedItem(null)
+      setDragOverIndex(null)
+      setPreviewOrder(null)
+    }
+  }
+
+  const handleVariantDrop = async (e, toIndex) => {
+    e.preventDefault()
+    if (!draggedItem) return
+
+    const fromIndex = draggedItem.index
+
+    if (fromIndex === toIndex || !selectedStage) {
+      setDraggedItem(null)
+      setDragOverIndex(null)
+      setPreviewOrder(null)
+      return
+    }
+
+    setReordering(true)
+
+    try {
+      const response = await fetch(`${API_URL}/storage/stages/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageFolder: selectedStage.folder,
+          fromIndex,
+          toIndex
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh stage variants and metadata
+        await fetchStageVariants()
+        await onRefresh()
+      } else {
+        alert(`Reorder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Reorder error:', err)
+      alert(`Reorder error: ${err.message}`)
+    } finally {
+      setReordering(false)
+      setDraggedItem(null)
+      setDragOverIndex(null)
+      setPreviewOrder(null)
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedItem(null)
+    setDragOverIndex(null)
+    setPreviewOrder(null)
+  }
+
+  // Context menu handlers
+  const handleSkinContextMenu = (e, skin, index) => {
+    e.preventDefault()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'skin',
+      item: skin,
+      index
+    })
+  }
+
+  const handleVariantContextMenu = (e, variant, index) => {
+    e.preventDefault()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'variant',
+      item: variant,
+      index
+    })
+  }
+
+  const handleMoveToTop = async () => {
+    if (!contextMenu) return
+
+    setReordering(true)
+
+    try {
+      const endpoint = contextMenu.type === 'skin'
+        ? `${API_URL}/storage/costumes/move-to-top`
+        : `${API_URL}/storage/stages/move-to-top`
+
+      const body = contextMenu.type === 'skin'
+        ? {
+            character: selectedCharacter,
+            skinId: contextMenu.item.id
+          }
+        : {
+            stageFolder: selectedStage.folder,
+            variantId: contextMenu.item.id
+          }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh data
+        if (contextMenu.type === 'skin') {
+          await onRefresh()
+        } else {
+          await fetchStageVariants()
+          await onRefresh()
+        }
+      } else {
+        alert(`Move to top failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Move to top error:', err)
+      alert(`Move to top error: ${err.message}`)
+    } finally {
+      setReordering(false)
+      setContextMenu(null)
+    }
+  }
+
+  const handleMoveToBottom = async () => {
+    if (!contextMenu) return
+
+    setReordering(true)
+
+    try {
+      const endpoint = contextMenu.type === 'skin'
+        ? `${API_URL}/storage/costumes/move-to-bottom`
+        : `${API_URL}/storage/stages/move-to-bottom`
+
+      const body = contextMenu.type === 'skin'
+        ? {
+            character: selectedCharacter,
+            skinId: contextMenu.item.id
+          }
+        : {
+            stageFolder: selectedStage.folder,
+            variantId: contextMenu.item.id
+          }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh data
+        if (contextMenu.type === 'skin') {
+          await onRefresh()
+        } else {
+          await fetchStageVariants()
+          await onRefresh()
+        }
+      } else {
+        alert(`Move to bottom failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Move to bottom error:', err)
+      alert(`Move to bottom error: ${err.message}`)
+    } finally {
+      setReordering(false)
+      setContextMenu(null)
+    }
+  }
+
+  const closeContextMenu = () => {
+    setContextMenu(null)
+  }
+
+  // Click-outside listener for context menu
+  useEffect(() => {
+    if (contextMenu) {
+      const handleClick = () => closeContextMenu()
+      document.addEventListener('click', handleClick)
+      return () => document.removeEventListener('click', handleClick)
+    }
+  }, [contextMenu])
+
   // Merge default characters with metadata
   // Always show all 26 vanilla characters, even if they don't have custom skins
   const allCharacters = { ...metadata?.characters }
@@ -904,6 +1182,22 @@ export default function StorageViewer({ metadata, onRefresh }) {
     )
   }
 
+  // Context menu component
+  const renderContextMenu = () => {
+    if (!contextMenu) return null
+
+    return (
+      <div
+        className="context-menu"
+        style={{ top: contextMenu.y, left: contextMenu.x }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={handleMoveToTop}>Move to Top</button>
+        <button onClick={handleMoveToBottom}>Move to Bottom</button>
+      </div>
+    )
+  }
+
   // If a stage is selected, show its variants
   if (selectedStage) {
     const stageInfo = DAS_STAGES.find(s => s.code === selectedStage)
@@ -928,8 +1222,22 @@ export default function StorageViewer({ metadata, onRefresh }) {
             </div>
           ) : (
             <div className="skins-grid">
-              {variants.map((variant) => (
-                <div key={variant.id} className="skin-card">
+              {(previewOrder || variants).map((variant, idx) => {
+                const isDragging = draggedItem && variant.id === draggedItem.id
+                return (
+                  <div
+                    key={variant.id}
+                    className={`skin-card ${isDragging ? 'dragging' : ''}`}
+                    draggable={!reordering}
+                    onDragStart={(e) => handleDragStart(e, variants.findIndex(v => v.id === variant.id), variants)}
+                    onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, idx, variants)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleVariantDrop(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    onContextMenu={(e) => handleVariantContextMenu(e, variant, idx)}
+                    style={{ opacity: isDragging ? 0.5 : 1 }}
+                  >
                   <div className="skin-header">
                     <h4 className="skin-title">{variant.name}</h4>
                   </div>
@@ -998,12 +1306,14 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     <div className="skin-id">{variant.id}</div>
                   </div>
                 </div>
-              ))}
+              )
+            })}
             </div>
           )}
         </div>
         {renderEditModal()}
         {renderSlippiDialog()}
+        {renderContextMenu()}
       </div>
     )
   }
@@ -1034,8 +1344,22 @@ export default function StorageViewer({ metadata, onRefresh }) {
             </div>
           ) : (
             <div className="skins-grid">
-              {visibleSkins.map((skin) => (
-                <div key={skin.id} className="skin-card">
+              {(previewOrder || visibleSkins).map((skin, idx) => {
+                const isDragging = draggedItem && skin.id === draggedItem.id
+                return (
+                  <div
+                    key={skin.id}
+                    className={`skin-card ${isDragging ? 'dragging' : ''}`}
+                    draggable={!reordering}
+                    onDragStart={(e) => handleDragStart(e, visibleSkins.findIndex(s => s.id === skin.id), visibleSkins)}
+                    onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, idx, visibleSkins)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleSkinDrop(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    onContextMenu={(e) => handleSkinContextMenu(e, skin, idx)}
+                    style={{ opacity: isDragging ? 0.5 : 1 }}
+                  >
                   <div className="skin-image-container">
                     {skin.has_csp ? (
                       <img
@@ -1097,12 +1421,14 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     <div className="skin-id">{skin.id}</div>
                   </div>
                 </div>
-              ))}
+              )
+            })}
             </div>
           )}
         </div>
         {renderEditModal()}
         {renderSlippiDialog()}
+        {renderContextMenu()}
       </div>
     )
   }
