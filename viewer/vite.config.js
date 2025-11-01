@@ -14,6 +14,11 @@ export default defineConfig({
       '/storage': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true
+      },
+      // Proxy /vanilla requests to Flask backend for vanilla assets
+      '/vanilla': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true
       }
     },
     fs: {

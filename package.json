@@ -21,23 +21,40 @@
   },
   "build": {
     "appId": "com.meleemex.manager",
-    "productName": "MEX Manager",
+    "productName": "Melee Nexus",
     "files": [
       "electron/**/*",
       "viewer/dist/**/*",
-      "backend/**/*.py",
-      "utility/MexManager/MexCLI/bin/Release/**/*",
-      "!utility/MexManager/MexCLI/bin/Release/**/*.pdb"
+      "!backend/**/*",
+      "!utility/**/*"
     ],
     "extraResources": [
       {
-        "from": "backend",
-        "to": "backend",
-        "filter": ["**/*.py"]
+        "from": "dist/mex_backend.exe",
+        "to": "backend/mex_backend.exe"
       },
       {
-        "from": "utility/MexManager/MexCLI/bin/Release/net6.0",
-        "to": "utility",
+        "from": "dist-backend/mex",
+        "to": "utility/mex",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "utility/MexManager/MexCLI/bin/Release/net6.0/codes.gct",
+        "to": "utility/mex/codes.gct"
+      },
+      {
+        "from": "utility/assets",
+        "to": "utility/assets",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "utility/website/backend/tools",
+        "to": "utility/website/backend/tools",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "viewer/public/vanilla",
+        "to": "utility/assets/vanilla",
         "filter": ["**/*"]
       }
     ],
@@ -46,7 +63,17 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "viewer/public/icon.ico"
-    }
+      "icon": "viewer/public/icon.ico",
+      "sign": null,
+      "signingHashAlgorithms": []
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": null,
+    "linux": null
   }
 }

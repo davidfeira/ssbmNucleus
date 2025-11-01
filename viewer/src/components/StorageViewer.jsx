@@ -3,14 +3,15 @@ import './StorageViewer.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
+const BACKEND_URL = 'http://127.0.0.1:5000'
 
 const DAS_STAGES = [
-  { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: '/vanilla/stages/dreamland.jpg' },
-  { code: 'GrPs', name: 'Pokemon Stadium', folder: 'pokemon_stadium', vanillaImage: '/vanilla/stages/pokemon stadium.jpg' },
-  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: '/vanilla/stages/Yoshis story.jpg' },
-  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: '/vanilla/stages/battlefield.jpg' },
-  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: '/vanilla/stages/Fountain of Dreams.webp' },
-  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: '/vanilla/stages/final destination.png' }
+  { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: `${BACKEND_URL}/vanilla/stages/dreamland.jpg` },
+  { code: 'GrPs', name: 'Pokemon Stadium', folder: 'pokemon_stadium', vanillaImage: `${BACKEND_URL}/vanilla/stages/pokemon stadium.jpg` },
+  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: `${BACKEND_URL}/vanilla/stages/Yoshis story.jpg` },
+  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: `${BACKEND_URL}/vanilla/stages/battlefield.jpg` },
+  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: `${BACKEND_URL}/vanilla/stages/Fountain of Dreams.webp` },
+  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: `${BACKEND_URL}/vanilla/stages/final destination.png` }
 ]
 
 export default function StorageViewer({ metadata, onRefresh }) {
@@ -1016,7 +1017,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   <div className="skin-image-container">
                     {skin.has_csp ? (
                       <img
-                        src={`/storage/${selectedCharacter}/${skin.id}_csp.png`}
+                        src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`}
                         alt={`${selectedCharacter} - ${skin.color}`}
                         className="skin-csp"
                         onError={(e) => {
@@ -1039,8 +1040,8 @@ export default function StorageViewer({ metadata, onRefresh }) {
                           color: skin.color,
                           has_csp: skin.has_csp,
                           has_stock: skin.has_stock,
-                          cspUrl: `/storage/${selectedCharacter}/${skin.id}_csp.png`,
-                          stockUrl: skin.has_stock ? `/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
+                          cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`,
+                          stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
                           slippi_safe: skin.slippi_safe,
                           slippi_tested: skin.slippi_tested,
                           slippi_manual_override: skin.slippi_manual_override
@@ -1056,7 +1057,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     {skin.has_stock && (
                       <div className="stock-icon-small">
                         <img
-                          src={`/storage/${selectedCharacter}/${skin.id}_stc.png`}
+                          src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png`}
                           alt={`${selectedCharacter} stock`}
                           className="skin-stock"
                         />
@@ -1142,7 +1143,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
           // ALWAYS use vanilla CSP on homepage for consistency (like vanilla game)
           const vanillaCspPath = costumeCode
-            ? `/vanilla/${characterName}/${costumeCode}/csp.png`
+            ? `${BACKEND_URL}/vanilla/${characterName}/${costumeCode}/csp.png`
             : null
 
           return (

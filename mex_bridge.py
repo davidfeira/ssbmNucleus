@@ -75,12 +75,19 @@ class MexManager:
             # Run command from project directory so MexCLI can find project files
             # (files/, data/, assets/ directories relative to .mexproj)
             # MexCLI will still find backend resources via AppDomain.CurrentDomain.BaseDirectory
+
+            # Hide CMD window on Windows
+            creation_flags = 0
+            if os.name == 'nt':  # Windows
+                creation_flags = subprocess.CREATE_NO_WINDOW
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=False,
-                cwd=str(self.project_path.parent)
+                cwd=str(self.project_path.parent),
+                creationflags=creation_flags
             )
 
             logger.debug(f"MexCLI stdout: {result.stdout}")

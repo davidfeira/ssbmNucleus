@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import './MexPanel.css';
 import IsoBuilder from './IsoBuilder';
 
+const BACKEND_URL = 'http://127.0.0.1:5000'
+
 const DAS_STAGES = [
-  { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: '/vanilla/stages/dreamland.jpg' },
-  { code: 'GrPs', name: 'Pokemon Stadium', folder: 'pokemon_stadium', vanillaImage: '/vanilla/stages/pokemon stadium.jpg' },
-  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: '/vanilla/stages/Yoshis story.jpg' },
-  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: '/vanilla/stages/battlefield.jpg' },
-  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: '/vanilla/stages/Fountain of Dreams.webp' },
-  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: '/vanilla/stages/final destination.png' }
+  { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: `${BACKEND_URL}/vanilla/stages/dreamland.jpg` },
+  { code: 'GrPs', name: 'Pokemon Stadium', folder: 'pokemon_stadium', vanillaImage: `${BACKEND_URL}/vanilla/stages/pokemon stadium.jpg` },
+  { code: 'GrSt', name: "Yoshi's Story", folder: 'yoshis_story', vanillaImage: `${BACKEND_URL}/vanilla/stages/Yoshis story.jpg` },
+  { code: 'GrNBa', name: 'Battlefield', folder: 'battlefield', vanillaImage: `${BACKEND_URL}/vanilla/stages/battlefield.jpg` },
+  { code: 'GrIz', name: 'Fountain of Dreams', folder: 'fountain_of_dreams', vanillaImage: `${BACKEND_URL}/vanilla/stages/Fountain of Dreams.webp` },
+  { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: `${BACKEND_URL}/vanilla/stages/final destination.png` }
 ];
 
 const MexPanel = () => {
@@ -1217,7 +1219,7 @@ const MexPanel = () => {
                         {costume.cspUrl && (
                           <div className="costume-preview">
                             <img
-                              src={`${API_URL}${costume.cspUrl}`}
+                              src={`${API_URL.replace('/api/mex', '')}${costume.cspUrl}`}
                               alt={costume.name}
                               onError={(e) => e.target.style.display = 'none'}
                             />
@@ -1241,7 +1243,7 @@ const MexPanel = () => {
                             <div className="costume-assets">
                               <div className="stock-icon">
                                 <img
-                                  src={`${API_URL}${costume.iconUrl}`}
+                                  src={`${API_URL.replace('/api/mex', '')}${costume.iconUrl}`}
                                   alt="Stock"
                                   onError={(e) => e.target.style.display = 'none'}
                                 />
@@ -1311,7 +1313,7 @@ const MexPanel = () => {
                         <div className="costume-preview">
                           {costume.cspUrl && (
                             <img
-                              src={costume.cspUrl}
+                              src={`${API_URL.replace('/api/mex', '')}${costume.cspUrl}`}
                               alt={costume.name}
                               onError={(e) => e.target.style.display = 'none'}
                             />
@@ -1331,7 +1333,7 @@ const MexPanel = () => {
                             {costume.stockUrl && (
                               <div className="stock-icon">
                                 <img
-                                  src={costume.stockUrl}
+                                  src={`${API_URL.replace('/api/mex', '')}${costume.stockUrl}`}
                                   alt="Stock"
                                   onError={(e) => e.target.style.display = 'none'}
                                 />

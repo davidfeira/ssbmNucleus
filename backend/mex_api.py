@@ -21,13 +21,24 @@ import shutil
 import zipfile
 import re
 from werkzeug.utils import secure_filename
+import signal
+import atexit
 
 # Add parent directory to path for mex_bridge import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from mex_bridge import MexManager, MexManagerError
 
 # Configuration
-PROJECT_ROOT = Path(__file__).parent.parent
+if getattr(sys, 'frozen', False):
+    # Running as bundled exe
+    # When installed: C:\Users\...\AppData\Local\Programs\Melee Nexus\resources\backend\mex_backend.exe
+    EXE_PATH = Path(sys.executable)
+    RESOURCES_DIR = EXE_PATH.parent.parent  # resources/
+    # For user data, use the app's installation root (not resources)
+    PROJECT_ROOT = RESOURCES_DIR.parent  # Melee Nexus/
+else:
+    # Running as Python script
+    PROJECT_ROOT = Path(__file__).parent.parent
 
 # Add backend directory to path for detectors
 BACKEND_DIR = Path(__file__).parent
@@ -36,24 +47,47 @@ from character_detector import detect_character_from_zip, DATParser
 from stage_detector import detect_stage_from_zip, extract_stage_files
 
 # Add processor tools to path for CSP generation and slippi validation
-PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
+if getattr(sys, 'frozen', False):
+    # Running as bundled exe - modules are bundled in the exe
+    PROCESSOR_DIR = Path(sys._MEIPASS) / "utility" / "website" / "backend" / "tools" / "processor"
+    SERVICES_DIR = Path(sys._MEIPASS) / "utility" / "website" / "backend" / "app" / "services"
+else:
+    # Running as Python script
+    PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
+    SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
+
 sys.path.insert(0, str(PROCESSOR_DIR))
 from generate_csp import generate_csp
 
-# Add services for DAT processing (slippi validation)
-SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
 sys.path.insert(0, str(SERVICES_DIR))
 from dat_processor import validate_for_slippi
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-socketio = SocketIO(app, cors_allowed_origins="*")
-MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/mexcli.exe"
+
+# Configure SocketIO - let it auto-detect the best mode
+# Threading mode works in both dev and bundled
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# Determine if running from PyInstaller bundle
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe bundled with Electron
+    # Use resources directory for bundled tools
+    BASE_PATH = RESOURCES_DIR
+    MEXCLI_PATH = RESOURCES_DIR / "utility/mex/mexcli.exe"
+else:
+    # Running as Python script (development)
+    BASE_PATH = PROJECT_ROOT
+    MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/mexcli.exe"
+
+# User data paths (writable locations)
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
 STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
 LOGS_PATH = PROJECT_ROOT / "logs"
-VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
+
+# Asset paths (bundled resources)
+VANILLA_ASSETS_DIR = BASE_PATH / "utility" / "assets" / "vanilla"
 
 # Ensure directories exist
 OUTPUT_PATH.mkdir(exist_ok=True)
@@ -244,11 +278,15 @@ def create_project():
 
         logger.info(f"Running command: {' '.join(cmd)}")
 
+        # Hide CMD window on Windows
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=PROJECT_ROOT
+            cwd=PROJECT_ROOT,
+            creationflags=creation_flags
         )
 
         logger.info(f"MexCLI stdout:\n{result.stdout}")
@@ -321,11 +359,11 @@ def get_fighter_costumes(fighter_name):
             if costume.get('csp'):
                 # Convert backslashes to forward slashes for URLs
                 csp_path = costume['csp'].replace('\\', '/')
-                costume['cspUrl'] = f"/assets/assets/{csp_path}.png"
+                costume['cspUrl'] = f"/assets/{csp_path}.png"
             if costume.get('icon'):
                 # Convert backslashes to forward slashes for URLs
                 icon_path = costume['icon'].replace('\\', '/')
-                costume['iconUrl'] = f"/assets/assets/{icon_path}.png"
+                costume['iconUrl'] = f"/assets/{icon_path}.png"
 
         return jsonify({
             'success': True,
@@ -367,9 +405,15 @@ def serve_mex_asset(asset_path):
 def serve_storage(file_path):
     """Serve files from storage folder (costumes, stages, screenshots, etc.)"""
     try:
+        # Handle Windows path separators
+        file_path = file_path.replace('\\', '/')
         full_path = STORAGE_PATH / file_path
 
+        logger.info(f"Serving storage file: {file_path} -> {full_path}")
+
         if not full_path.exists():
+            logger.warning(f"Storage file not found: {full_path}")
+            # Try to return a placeholder or empty response
             return jsonify({'success': False, 'error': f'File not found: {file_path}'}), 404
 
         # Determine mimetype based on extension
@@ -382,6 +426,70 @@ def serve_storage(file_path):
 
         return send_file(full_path, mimetype=mimetype)
     except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/vanilla/<path:file_path>', methods=['GET'])
+def serve_vanilla(file_path):
+    """Serve vanilla Melee assets (CSPs, stage images, etc.)"""
+    try:
+        full_path = VANILLA_ASSETS_DIR / file_path
+
+        if not full_path.exists():
+            logger.warning(f"Vanilla asset not found: {file_path}")
+            return jsonify({'success': False, 'error': f'File not found: {file_path}'}), 404
+
+        # Determine mimetype
+        ext = file_path.lower().split('.')[-1]
+        mimetype_map = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'webp': 'image/webp',
+            'gif': 'image/gif'
+        }
+        mimetype = mimetype_map.get(ext, 'application/octet-stream')
+
+        return send_file(full_path, mimetype=mimetype)
+    except Exception as e:
+        logger.error(f"Error serving vanilla asset {file_path}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/assets/<path:file_path>', methods=['GET'])
+def serve_mex_assets(file_path):
+    """Serve MEX project assets (CSPs, stock icons from build folder)"""
+    try:
+        # Remove duplicate "assets/" if present in the path
+        if file_path.startswith('assets/'):
+            file_path = file_path[7:]
+
+        # Build the full path relative to the project build directory
+        build_dir = PROJECT_ROOT / "build"
+        full_path = build_dir / file_path
+
+        logger.info(f"Serving MEX asset: {file_path} -> {full_path}")
+
+        if not full_path.exists():
+            logger.warning(f"MEX asset not found: {full_path}")
+            return jsonify({'success': False, 'error': f'File not found: {file_path}'}), 404
+
+        # Determine mimetype based on extension
+        ext = file_path.lower().split('.')[-1]
+        if ext in ('png', 'jpg', 'jpeg', 'webp', 'gif'):
+            mimetype = f'image/{ext if ext != "jpg" else "jpeg"}'
+        else:
+            mimetype = 'application/octet-stream'
+
+        return send_file(full_path, mimetype=mimetype)
+    except Exception as e:
+        logger.error(f"Error serving MEX asset {file_path}: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -1416,11 +1524,15 @@ def clear_storage_endpoint():
             cmd.append("--clear-logs")
 
         # Execute clear_storage.py script
+        # Hide CMD window on Windows
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=PROJECT_ROOT
+            cwd=PROJECT_ROOT,
+            creationflags=creation_flags
         )
 
         if result.returncode != 0:
@@ -2897,6 +3009,47 @@ def handle_disconnect():
     print('Client disconnected')
 
 
+@app.route('/api/mex/shutdown', methods=['POST'])
+def shutdown():
+    """Gracefully shutdown the Flask server"""
+    logger.info("Shutdown request received")
+
+    def shutdown_server():
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func is None:
+            # In production or when using app.run()
+            import os
+            os._exit(0)
+        else:
+            func()
+
+    shutdown_server()
+    return jsonify({'success': True, 'message': 'Server shutting down...'})
+
+
+def cleanup_on_exit():
+    """Cleanup function called on exit"""
+    global mex_manager
+    logger.info("Cleaning up MEX API Backend...")
+
+    # Clean up any temporary files
+    try:
+        if mex_manager:
+            # Close any open project
+            mex_manager = None
+    except:
+        pass
+
+    logger.info("MEX API Backend shutdown complete")
+
+
+def signal_handler(sig, frame):
+    """Handle termination signals"""
+    logger.info(f"Received signal {sig}")
+    cleanup_on_exit()
+    sys.exit(0)
+
+
 if __name__ == '__main__':
     print(f"Starting MEX API Backend...")
     print(f"MexCLI: {MEXCLI_PATH}")
@@ -2909,7 +3062,18 @@ if __name__ == '__main__':
         print("Please build it first: cd utility/MexManager/MexCLI && dotnet build -c Release")
         sys.exit(1)
 
+    # Register cleanup handlers
+    atexit.register(cleanup_on_exit)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    if hasattr(signal, 'SIGBREAK'):
+        # Windows-specific signal
+        signal.signal(signal.SIGBREAK, signal_handler)
+
     # No auto-loading - user must select a project
     print(f"INFO: MEX Manager ready. Please open a project to get started.")
 
-    socketio.run(app, host='127.0.0.1', port=5000, debug=True)
+    # Use regular Flask app.run() to avoid socket issues on Windows
+    # SocketIO will still work through the middleware
+    # Set use_reloader=False in production to prevent double startup
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)

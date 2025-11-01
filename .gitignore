@@ -20,6 +20,8 @@ output/
 build/
 viewer/dist/
 viewer/public/storage/
+dist-electron/
+dist-backend/
 
 # Dependencies
 node_modules/
