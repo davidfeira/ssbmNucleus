@@ -4,8 +4,8 @@
 export const DEFAULT_CHARACTERS = {
   "Mario": { defaultCostume: "PlMrNr" },
   "Fox": { defaultCostume: "PlFxNr" },
-  "Captain Falcon": { defaultCostume: "PlCaNr" },
-  "Donkey Kong": { defaultCostume: "PlDkNr" },
+  "C. Falcon": { defaultCostume: "PlCaNr" },
+  "DK": { defaultCostume: "PlDkNr" },
   "Kirby": { defaultCostume: "PlKbNr" },
   "Bowser": { defaultCostume: "PlKpNr" },
   "Link": { defaultCostume: "PlLkNr" },

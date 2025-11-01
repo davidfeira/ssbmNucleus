@@ -95,6 +95,64 @@ OUTPUT_PATH.mkdir(exist_ok=True)
 LOGS_PATH.mkdir(exist_ok=True)
 MEX_PROJECT_PATH.parent.mkdir(exist_ok=True)  # Create build/ directory
 
+def migrate_legacy_character_names():
+    """
+    Migrate old character names to MEX format.
+    Renames:
+    - "Captain Falcon" -> "C. Falcon"
+    - "Donkey Kong" -> "DK"
+
+    This affects both metadata.json and storage folder names.
+    """
+    migrations = {
+        "Captain Falcon": "C. Falcon",
+        "Donkey Kong": "DK"
+    }
+
+    metadata_file = STORAGE_PATH / 'metadata.json'
+    if not metadata_file.exists():
+        return
+
+    try:
+        # Load metadata
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Track if any changes were made
+        changes_made = False
+
+        # Migrate character names in metadata
+        if 'characters' in metadata:
+            old_chars = list(metadata['characters'].keys())
+            for old_name, new_name in migrations.items():
+                if old_name in old_chars:
+                    logger.info(f"Migrating character metadata: {old_name} -> {new_name}")
+                    metadata['characters'][new_name] = metadata['characters'].pop(old_name)
+                    changes_made = True
+
+        # Save updated metadata if changes were made
+        if changes_made:
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            logger.info("Updated metadata.json with migrated character names")
+
+        # Rename storage folders
+        for old_name, new_name in migrations.items():
+            old_folder = STORAGE_PATH / old_name
+            new_folder = STORAGE_PATH / new_name
+
+            if old_folder.exists() and old_folder.is_dir():
+                logger.info(f"Migrating storage folder: {old_name}/ -> {new_name}/")
+                # If new folder already exists, we need to merge
+                if new_folder.exists():
+                    logger.warning(f"Target folder {new_name}/ already exists, skipping folder rename")
+                else:
+                    old_folder.rename(new_folder)
+                    logger.info(f"Renamed storage folder: {old_name}/ -> {new_name}/")
+
+    except Exception as e:
+        logger.error(f"Error during character name migration: {e}", exc_info=True)
+
 # Configure logging
 log_file = LOGS_PATH / f"mex_api_{datetime.now().strftime('%Y%m%d')}.log"
 logging.basicConfig(
@@ -3252,6 +3310,10 @@ if __name__ == '__main__':
     if hasattr(signal, 'SIGBREAK'):
         # Windows-specific signal
         signal.signal(signal.SIGBREAK, signal_handler)
+
+    # Run migration for legacy character names
+    print("Checking for legacy character names to migrate...")
+    migrate_legacy_character_names()
 
     # No auto-loading - user must select a project
     print(f"INFO: MEX Manager ready. Please open a project to get started.")

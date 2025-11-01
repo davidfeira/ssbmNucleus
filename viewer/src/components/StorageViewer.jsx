@@ -41,6 +41,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [newStock, setNewStock] = useState(null) // File object for new stock
   const [stockPreview, setStockPreview] = useState(null) // Preview URL for new stock
   const [editSlippiSafe, setEditSlippiSafe] = useState(null) // Track slippi changes for stages
+  const [lastImageUpdate, setLastImageUpdate] = useState(Date.now()) // For cache-busting images
 
   // Fetch stage variants when in stages mode
   useEffect(() => {
@@ -424,14 +425,21 @@ export default function StorageViewer({ metadata, onRefresh }) {
         }
       }
 
-      // Refetch stage variants if we just edited a stage (before closing modal)
+      // Refetch data before closing modal
       if (editingItem.type === 'stage') {
         await fetchStageVariants()
       }
 
+      // Always await metadata refresh for costumes (CSP/stock updates)
+      await onRefresh()
+
+      // If we uploaded a CSP or stock, update cache-busting timestamp to force image reload
+      if (newCsp || newStock) {
+        setLastImageUpdate(Date.now())
+      }
+
       setShowEditModal(false)
       setEditingItem(null)
-      onRefresh()
     } catch (err) {
       alert(`Save error: ${err.message}`)
     } finally {
@@ -474,14 +482,21 @@ export default function StorageViewer({ metadata, onRefresh }) {
       const data = await response.json()
 
       if (data.success) {
-        // Refetch stage variants if we just deleted a stage (before closing modal)
+        // Refetch data before closing modal
         if (editingItem.type === 'stage') {
           await fetchStageVariants()
         }
 
+        // Always await metadata refresh for costumes
+        await onRefresh()
+
+        // Update cache-busting timestamp to force image reload after deletion
+        if (editingItem.type === 'costume') {
+          setLastImageUpdate(Date.now())
+        }
+
         setShowEditModal(false)
         setEditingItem(null)
-        onRefresh()
       } else {
         alert(`Delete failed: ${data.error}`)
       }
@@ -541,7 +556,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                       />
                     ) : editingItem.data.has_csp ? (
                       <img
-                        src={editingItem.data.cspUrl}
+                        src={`${editingItem.data.cspUrl}?t=${lastImageUpdate}`}
                         alt="CSP"
                         style={{ width: '100%', maxHeight: '300px', objectFit: 'contain' }}
                         onError={(e) => e.target.style.display = 'none'}
@@ -579,7 +594,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                       />
                     ) : editingItem.data.has_stock ? (
                       <img
-                        src={editingItem.data.stockUrl}
+                        src={`${editingItem.data.stockUrl}?t=${lastImageUpdate}`}
                         alt="Stock"
                         style={{ width: '100px', height: 'auto', objectFit: 'contain' }}
                         onError={(e) => e.target.style.display = 'none'}
@@ -1024,7 +1039,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   <div className="skin-image-container">
                     {skin.has_csp ? (
                       <img
-                        src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`}
+                        src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png?t=${lastImageUpdate}`}
                         alt={`${selectedCharacter} - ${skin.color}`}
                         className="skin-csp"
                         onError={(e) => {
@@ -1064,7 +1079,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     {skin.has_stock && (
                       <div className="stock-icon-small">
                         <img
-                          src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png`}
+                          src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
                           alt={`${selectedCharacter} stock`}
                           className="skin-stock"
                         />
