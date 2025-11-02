@@ -6,10 +6,15 @@ Comprehensive bundling with all dependencies audited
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 import os
+import sys
 from pathlib import Path
 
 # In PyInstaller spec files, use SPECPATH instead of __file__
 project_root = Path(SPECPATH)
+
+# Platform detection for executable naming
+IS_WINDOWS = sys.platform == 'win32'
+EXE_EXTENSION = '.exe' if IS_WINDOWS else ''
 
 # =============================================================================
 # THIRD-PARTY PACKAGES (hiddenimports)
@@ -56,6 +61,14 @@ hiddenimports = [
     'PIL.ImageOps',
     'PIL.ImageDraw',
     'PIL.ImageFont',
+    'PIL.ImageEnhance',
+    'PIL.ImageStat',
+
+    # NumPy for image processing
+    'numpy',
+
+    # YAML parsing
+    'yaml',
 
     # Compression
     'zipfile',
@@ -68,6 +81,9 @@ hiddenimports = [
     'backend.character_detector',
     'backend.stage_detector',
     'backend.mex_api',
+
+    # MexBridge - CRITICAL module
+    'mex_bridge',
 
     # Utility modules (dynamically imported)
     'generate_csp',
@@ -151,7 +167,7 @@ binaries = []
 # =============================================================================
 
 a = Analysis(
-    ['backend/mex_api.py'],
+    ['backend/mex_api.py', 'mex_bridge.py'],
     pathex=additional_paths,
     binaries=binaries,
     datas=datas,
@@ -195,7 +211,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='mex_backend',
+    name=f'mex_backend{EXE_EXTENSION}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

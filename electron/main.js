@@ -38,8 +38,9 @@ function startFlaskServer() {
     backendArgs = [backendPath];
     backendCwd = path.dirname(backendPath);
   } else {
-    // Production: Use bundled .exe
-    const backendExe = path.join(process.resourcesPath, 'backend', 'mex_backend.exe');
+    // Production: Use bundled executable (platform-aware)
+    const backendName = process.platform === 'win32' ? 'mex_backend.exe' : 'mex_backend';
+    const backendExe = path.join(process.resourcesPath, 'backend', backendName);
     console.log('[Electron] Production mode - Backend exe:', backendExe);
 
     if (!fs.existsSync(backendExe)) {
@@ -235,8 +236,11 @@ app.on('before-quit', async (event) => {
     if (pythonProcess && !pythonProcess.killed) {
       console.log('[Electron] Force killing Flask process...');
 
-      if (process.platform === 'win32') {
-        // On Windows, use taskkill to terminate the entire process tree
+      // Detect if running under Wine (Wine sets WINEPREFIX or other Wine-specific env vars)
+      const isWine = process.env.WINEPREFIX || process.env.WINE;
+
+      if (process.platform === 'win32' && !isWine) {
+        // On native Windows, use taskkill to terminate the entire process tree
         exec(`taskkill /F /T /PID ${pythonProcess.pid}`, (error) => {
           if (error) {
             console.error('[Electron] Error killing process tree:', error);
@@ -252,14 +256,21 @@ app.on('before-quit', async (event) => {
           }
         });
       } else {
-        // On Unix systems, kill process group
+        // On Unix systems (including Wine), kill process group
+        const backendName = process.platform === 'win32' ? 'mex_backend.exe' : 'mex_backend';
         try {
+          // Try to kill process group first
           process.kill(-pythonProcess.pid);
+          console.log('[Electron] Process group killed');
         } catch (e) {
+          // Fallback to direct kill
           pythonProcess.kill('SIGKILL');
         }
-        pythonProcess = null;
-        app.quit();
+        // Also try pkill as backup
+        exec(`pkill -f ${backendName}`, () => {
+          pythonProcess = null;
+          app.quit();
+        });
       }
     } else {
       pythonProcess = null;

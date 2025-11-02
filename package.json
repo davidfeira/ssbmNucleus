@@ -12,6 +12,8 @@
     "electron:dev": "concurrently \"npm run dev:backend\" \"npm run electron\"",
     "build": "cd viewer && npm run build",
     "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win",
+    "package:linux": "npm run build && electron-builder --linux",
     "install:viewer": "cd viewer && npm install"
   },
   "devDependencies": {
@@ -30,13 +32,14 @@
     ],
     "extraResources": [
       {
-        "from": "dist/mex_backend.exe",
-        "to": "backend/mex_backend.exe"
+        "from": "dist/",
+        "to": "backend/",
+        "filter": ["mex_backend*"]
       },
       {
-        "from": "dist-backend/mex",
-        "to": "utility/mex",
-        "filter": ["**/*"]
+        "from": "dist-backend/",
+        "to": "utility/",
+        "filter": ["mex*/**"]
       },
       {
         "from": "utility/MexManager/MexCLI/bin/Release/net6.0/codes.gct",
@@ -78,6 +81,12 @@
       "createStartMenuShortcut": true
     },
     "mac": null,
-    "linux": null
+    "linux": {
+      "target": "AppImage",
+      "icon": "viewer/public/icon.png",
+      "category": "Game",
+      "description": "MEX Costume and Stage Manager for Super Smash Bros. Melee",
+      "maintainer": "Melee Nexus Team"
+    }
   }
 }

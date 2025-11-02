@@ -143,8 +143,9 @@ def lookup_stock_icon(costume_code: str, json_path: Path) -> Optional[str]:
             if 'file' in costume and costume['file'].get('fileName', '') == dat_filename:
                 icon_path = costume.get('icon')
                 if icon_path:
-                    # Extract filename from path like "icons\\ft_010"
-                    icon_name = icon_path.split('\\')[-1]
+                    # Extract filename from path like "icons\\ft_010" or "icons/ft_010"
+                    # Use os.path.basename for cross-platform compatibility
+                    icon_name = os.path.basename(icon_path.replace('\\', '/'))
                     return f"{icon_name}.png"
 
         print(f"Warning: Could not find costume {dat_filename} in {json_path.name}")

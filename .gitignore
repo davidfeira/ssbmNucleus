@@ -35,3 +35,4 @@ utility/website/
 
 # Environment
 .env
+venv/

@@ -5,14 +5,9 @@
 
 
 
+1.0 ratio export bug
+ice climber metadata messed up
 
-
-
-
-
-
-
-reorder vault
 
 
 loading indicators

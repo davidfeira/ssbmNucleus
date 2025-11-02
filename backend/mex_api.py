@@ -34,8 +34,15 @@ if getattr(sys, 'frozen', False):
     # When installed: C:\Users\...\AppData\Local\Programs\Melee Nexus\resources\backend\mex_backend.exe
     EXE_PATH = Path(sys.executable)
     RESOURCES_DIR = EXE_PATH.parent.parent  # resources/
-    # For user data, use the app's installation root (not resources)
-    PROJECT_ROOT = RESOURCES_DIR.parent  # Melee Nexus/
+
+    # For user data, detect if running in AppImage (Linux read-only mount)
+    if os.name != 'nt' and '/tmp/.mount_' in str(EXE_PATH):
+        # AppImage: Use home directory for writable data
+        PROJECT_ROOT = Path.home() / '.melee-nexus'
+        PROJECT_ROOT.mkdir(exist_ok=True)
+    else:
+        # Windows installer: Use the app's installation root
+        PROJECT_ROOT = RESOURCES_DIR.parent  # Melee Nexus/
 else:
     # Running as Python script
     PROJECT_ROOT = Path(__file__).parent.parent
@@ -74,11 +81,22 @@ if getattr(sys, 'frozen', False):
     # Running as compiled exe bundled with Electron
     # Use resources directory for bundled tools
     BASE_PATH = RESOURCES_DIR
-    MEXCLI_PATH = RESOURCES_DIR / "utility/mex/mexcli.exe"
+    # Platform-aware executable naming and paths
+    if os.name == 'nt':
+        MEXCLI_PATH = RESOURCES_DIR / "utility/mex/mexcli.exe"
+    else:
+        # Linux: Check mex-linux first (production), then mex (fallback)
+        linux_path = RESOURCES_DIR / "utility/mex-linux/mexcli"
+        fallback_path = RESOURCES_DIR / "utility/mex/mexcli"
+        MEXCLI_PATH = linux_path if linux_path.exists() else fallback_path
 else:
     # Running as Python script (development)
     BASE_PATH = PROJECT_ROOT
-    MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/mexcli.exe"
+    if os.name == 'nt':
+        MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/mexcli.exe"
+    else:
+        # On Linux in dev mode, look for linux-x64 build
+        MEXCLI_PATH = PROJECT_ROOT / "utility/MexManager/MexCLI/bin/Release/net6.0/linux-x64/mexcli"
 
 # User data paths (writable locations)
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
