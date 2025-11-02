@@ -48,6 +48,10 @@ const MexPanel = () => {
   const [storageVariants, setStorageVariants] = useState([]);
   const [mexVariants, setMexVariants] = useState([]);
   const [mexVariantCounts, setMexVariantCounts] = useState({}); // { stageCode: count }
+  const [selectedVariants, setSelectedVariants] = useState(new Set());
+
+  // Button token selection state
+  const [selectedButton, setSelectedButton] = useState(null);
 
   const API_URL = 'http://127.0.0.1:5000/api/mex';
 
@@ -135,6 +139,9 @@ const MexPanel = () => {
   useEffect(() => {
     if (selectedStage && dasInstalled) {
       fetchMexVariants(selectedStage.code);
+      // Clear selections when switching stages
+      setSelectedVariants(new Set());
+      setSelectedButton(null);
     }
   }, [selectedStage, dasInstalled]);
 
@@ -462,6 +469,28 @@ const MexPanel = () => {
 
   const clearSelection = () => {
     setSelectedCostumes(new Set());
+  };
+
+  // Stage variant selection functions
+  const toggleVariantSelection = (zipPath) => {
+    setSelectedVariants(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(zipPath)) {
+        newSet.delete(zipPath);
+      } else {
+        newSet.add(zipPath);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllVariants = () => {
+    if (!selectedStage) return;
+    setSelectedVariants(new Set(storageVariants.map(v => v.zipPath)));
+  };
+
+  const clearVariantSelection = () => {
+    setSelectedVariants(new Set());
   };
 
   const handleBatchImport = async () => {
@@ -816,6 +845,155 @@ const MexPanel = () => {
     }
   };
 
+  const handleBatchImportVariants = async () => {
+    if (selectedVariants.size === 0 || batchImporting) return;
+
+    setBatchImporting(true);
+    const variantsToImport = Array.from(selectedVariants);
+    const total = variantsToImport.length;
+    setBatchProgress({ current: 0, total });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < variantsToImport.length; i++) {
+      const zipPath = variantsToImport[i];
+      const variant = storageVariants.find(v => v.zipPath === zipPath);
+
+      if (!variant) {
+        failCount++;
+        continue;
+      }
+
+      setBatchProgress({ current: i + 1, total });
+
+      try {
+        const response = await fetch(`${API_URL}/das/import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stageCode: variant.stageCode,
+            variantPath: variant.zipPath
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          successCount++;
+        } else {
+          console.error(`Import failed for ${variant.name}:`, data.error);
+          failCount++;
+        }
+      } catch (err) {
+        console.error(`Import error for ${variant.name}:`, err);
+        failCount++;
+      }
+    }
+
+    // Refresh data once at the end
+    setRefreshing(true);
+    await Promise.all([
+      selectedStage ? fetchMexVariants(selectedStage.code) : Promise.resolve(),
+      fetchStorageVariants(),
+      fetchAllMexVariantCounts()
+    ]);
+    setRefreshing(false);
+
+    // Clear selections
+    setSelectedVariants(new Set());
+    setBatchImporting(false);
+    setBatchProgress({ current: 0, total: 0 });
+
+    // Show summary
+    if (failCount > 0) {
+      alert(`Batch import completed:\n${successCount} succeeded, ${failCount} failed`);
+    } else {
+      console.log(`✓ Successfully imported ${successCount} stage variant(s)`);
+    }
+  };
+
+  // Button token click handlers
+  const handleButtonClick = (button) => {
+    // Toggle selection: if already selected, deselect; otherwise select
+    setSelectedButton(selectedButton === button ? null : button);
+  };
+
+  const handleVariantClick = async (variant) => {
+    // If no button is selected, do nothing
+    if (!selectedButton) return;
+
+    // If variant already has this button, do nothing
+    if (variant.button === selectedButton) {
+      console.log(`Variant already has button ${selectedButton}`);
+      return;
+    }
+
+    const buttonToAdd = selectedButton;
+    const variantNameWithoutExt = variant.name;
+    const variantNameWithoutButton = variantNameWithoutExt.replace(/\([ABXYLRZ]\)$/i, '');
+    const newVariantName = `${variantNameWithoutButton}(${buttonToAdd})`;
+
+    try {
+      const response = await fetch(`${API_URL}/das/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageCode: variant.stageCode,
+          oldName: variantNameWithoutExt,
+          newName: newVariantName
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✓ Added button ${buttonToAdd} to ${variant.name}`);
+        // Clear button selection after successful assignment
+        setSelectedButton(null);
+        // Refresh the variants list
+        await fetchMexVariants(selectedStage.code);
+      } else {
+        alert(`Failed to add button: ${data.error}`);
+      }
+    } catch (err) {
+      console.error('Button add error:', err);
+      alert(`Error adding button: ${err.message}`);
+    }
+  };
+
+  const handleRemoveButton = async (variant) => {
+    if (!variant.button) return;
+
+    const variantNameWithoutExt = variant.name;
+    const variantNameWithoutButton = variantNameWithoutExt.replace(/\([ABXYLRZ]\)$/i, '');
+
+    try {
+      const response = await fetch(`${API_URL}/das/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageCode: variant.stageCode,
+          oldName: variantNameWithoutExt,
+          newName: variantNameWithoutButton
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✓ Removed button ${variant.button} from ${variant.name}`);
+        // Refresh the variants list
+        await fetchMexVariants(selectedStage.code);
+      } else {
+        alert(`Failed to remove button: ${data.error}`);
+      }
+    } catch (err) {
+      console.error('Button remove error:', err);
+      alert(`Error removing button: ${err.message}`);
+    }
+  };
+
   const handleRemoveVariant = async (stageCode, variantName) => {
     if (removing) return;
 
@@ -1121,6 +1299,27 @@ const MexPanel = () => {
     );
   }
 
+  // Button Tokens Component
+  const ButtonTokens = () => {
+    const buttons = ['B', 'X', 'Y', 'L', 'R', 'Z'];
+    const BACKEND_URL = 'http://127.0.0.1:5000';
+
+    return (
+      <div className="button-tokens">
+        {buttons.map(btn => (
+          <div
+            key={btn}
+            className={`button-token ${selectedButton === btn ? 'selected' : ''}`}
+            onClick={() => handleButtonClick(btn)}
+            title={selectedButton === btn ? `Click to deselect ${btn} button` : `Click to select ${btn} button`}
+          >
+            <img src={`${BACKEND_URL}/utility/buttons/${btn}.svg`} alt={btn} />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="mex-panel">
       <div className="mex-header">
@@ -1419,7 +1618,10 @@ const MexPanel = () => {
                 {selectedStage ? (
                   <>
                     <div className="costumes-section">
-                      <h3>Already in MEX ({mexVariants.length})</h3>
+                      <div className="costumes-section-header">
+                        <h3>Already in MEX ({mexVariants.length})</h3>
+                        <ButtonTokens />
+                      </div>
                       <div className="costume-list existing">
                         {mexVariants.map((variant, idx) => {
                           // Use vanilla image for vanilla.dat and vanilla.usd stages
@@ -1428,9 +1630,15 @@ const MexPanel = () => {
                             ? selectedStage.vanillaImage
                             : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null);
                           const hasImage = isVanilla ? true : variant.hasScreenshot;
+                          const canAssignButton = selectedButton && variant.button !== selectedButton;
 
                           return (
-                            <div key={idx} className="costume-card existing-costume">
+                            <div
+                              key={idx}
+                              className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''}`}
+                              onClick={() => handleVariantClick(variant)}
+                              style={{ cursor: canAssignButton ? 'pointer' : 'default' }}
+                            >
                               <div className="costume-preview">
                                 {hasImage && (
                                   <img
@@ -1454,6 +1662,18 @@ const MexPanel = () => {
                               <div className="costume-info">
                                 <h4>{variant.name}</h4>
                                 <p className="costume-file">{variant.filename}</p>
+                                {variant.button && (
+                                  <div
+                                    className="button-badge"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveButton(variant);
+                                    }}
+                                    title={`Click to remove ${variant.button} button`}
+                                  >
+                                    <img src={`${BACKEND_URL}/utility/buttons/${variant.button}.svg`} alt={variant.button} />
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -1467,7 +1687,43 @@ const MexPanel = () => {
                     </div>
 
                     <div className="costumes-section">
-                      <h3>Available to Import</h3>
+                      <div className="costumes-section-header">
+                        <h3>
+                          Available to Import
+                          {selectedVariants.size > 0 && ` (${selectedVariants.size} selected)`}
+                        </h3>
+                        {getVariantsForStage(selectedStage.code).length > 0 && (
+                          <div className="batch-controls">
+                            {selectedVariants.size > 0 ? (
+                              <>
+                                <button
+                                  className="btn-batch-import"
+                                  onClick={handleBatchImportVariants}
+                                  disabled={batchImporting}
+                                >
+                                  {batchImporting
+                                    ? `Importing ${batchProgress.current}/${batchProgress.total}...`
+                                    : `Import Selected (${selectedVariants.size})`}
+                                </button>
+                                <button
+                                  className="btn-clear-selection"
+                                  onClick={clearVariantSelection}
+                                  disabled={batchImporting}
+                                >
+                                  Clear
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="btn-select-all"
+                                onClick={selectAllVariants}
+                              >
+                                Select All
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="costume-list">
                         {getVariantsForStage(selectedStage.code).map((variant, idx) => {
                           // Use vanilla image for vanilla.dat and vanilla.usd stages
@@ -1476,9 +1732,14 @@ const MexPanel = () => {
                             ? selectedStage.vanillaImage
                             : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null);
                           const hasImage = isVanilla ? true : variant.hasScreenshot;
+                          const isSelected = selectedVariants.has(variant.zipPath);
 
                           return (
-                            <div key={idx} className="costume-card">
+                            <div
+                              key={idx}
+                              className={`costume-card ${isSelected ? 'selected' : ''}`}
+                              onClick={() => !batchImporting && toggleVariantSelection(variant.zipPath)}
+                            >
                               <div className="costume-preview">
                                 {hasImage && (
                                   <img
@@ -1487,17 +1748,17 @@ const MexPanel = () => {
                                     onError={(e) => e.target.style.display = 'none'}
                                   />
                                 )}
+                                <input
+                                  type="checkbox"
+                                  className="costume-checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  disabled={batchImporting}
+                                />
                               </div>
                               <div className="costume-info">
                                 <h4>{variant.name}</h4>
                                 <p className="costume-code">{selectedStage.name}</p>
-                                <button
-                                  className="btn-add"
-                                  onClick={() => handleImportVariant(variant)}
-                                  disabled={importing}
-                                >
-                                  {importingCostume === variant.zipPath ? 'Importing...' : importing ? 'Wait...' : 'Add to MEX'}
-                                </button>
                               </div>
                             </div>
                           );

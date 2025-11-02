@@ -559,6 +559,35 @@ def serve_vanilla(file_path):
         }), 500
 
 
+@app.route('/utility/<path:file_path>', methods=['GET'])
+def serve_utility_assets(file_path):
+    """Serve utility assets (button icons, etc.)"""
+    try:
+        # Serve files from utility/assets/
+        full_path = BASE_PATH / "utility" / "assets" / file_path
+
+        if not full_path.exists():
+            logger.warning(f"Utility asset not found: {file_path}")
+            return jsonify({'success': False, 'error': f'File not found: {file_path}'}), 404
+
+        # Determine mimetype
+        ext = file_path.lower().split('.')[-1]
+        mimetype_map = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'webp': 'image/webp',
+            'gif': 'image/gif',
+            'svg': 'image/svg+xml'
+        }
+        mimetype = mimetype_map.get(ext, 'application/octet-stream')
+
+        return send_file(full_path, mimetype=mimetype)
+    except Exception as e:
+        logger.error(f"Error serving utility asset: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/assets/<path:file_path>', methods=['GET'])
 def serve_mex_assets(file_path):
     """Serve MEX project assets (CSPs, stock icons from currently opened project)"""
@@ -2599,6 +2628,33 @@ DAS_STAGES = {
     'GrIz': {'code': 'GrIz', 'name': 'Fountain of Dreams', 'folder': 'fountain_of_dreams'}
 }
 
+# Button indicator utility functions for DAS stage variants
+def strip_button_indicator(filename):
+    """
+    Remove button indicator from filename stem
+    Example: vanilla(B) -> vanilla
+    """
+    import re
+    return re.sub(r'\(([ABXYLRZ])\)$', '', filename, flags=re.IGNORECASE)
+
+def extract_button_indicator(filename):
+    """
+    Extract button indicator from filename stem
+    Example: vanilla(B) -> B
+    Returns None if no button indicator found
+    """
+    import re
+    match = re.search(r'\(([ABXYLRZ])\)$', filename, flags=re.IGNORECASE)
+    return match.group(1).upper() if match else None
+
+def add_button_indicator(filename, button):
+    """
+    Add button indicator to filename (replaces existing if present)
+    Example: vanilla, B -> vanilla(B)
+    """
+    cleaned = strip_button_indicator(filename)
+    return f"{cleaned}({button.upper()})"
+
 # Mapping of stage codes to default screenshot filenames
 DAS_DEFAULT_SCREENSHOTS = {
     'GrNBa': 'battlefield.jpg',
@@ -2768,20 +2824,28 @@ def das_get_stage_variants(stage_code):
             for stage_file in stage_folder.glob(file_pattern):
                 variant_id = stage_file.stem
 
-                # Check if screenshot exists in storage (single source of truth)
-                # Screenshot name matches the .dat filename
-                # e.g., autumn-dreamland.dat → autumn-dreamland_screenshot.png
-                storage_screenshot = STORAGE_PATH / 'das' / stage_folder_name / f"{variant_id}_screenshot.png"
+                # Extract button indicator (e.g., vanilla(B) -> B)
+                button = extract_button_indicator(variant_id)
 
-                # Get metadata for this variant
-                variant_meta = metadata_variants.get(variant_id, {})
+                # Strip button indicator for screenshot lookup
+                # e.g., vanilla(B).dat → vanilla_screenshot.png
+                variant_id_for_screenshot = strip_button_indicator(variant_id)
+
+                # Check if screenshot exists in storage (single source of truth)
+                # Screenshot name matches the .dat filename (without button indicator)
+                # e.g., vanilla(B).dat → vanilla_screenshot.png
+                storage_screenshot = STORAGE_PATH / 'das' / stage_folder_name / f"{variant_id_for_screenshot}_screenshot.png"
+
+                # Get metadata for this variant (use stripped name for lookup)
+                variant_meta = metadata_variants.get(variant_id_for_screenshot, {})
 
                 variants.append({
                     'name': variant_id,
                     'filename': stage_file.name,
                     'stageCode': stage_code,
+                    'button': button,  # Button indicator (B, X, Y, L, R, Z) or None
                     'hasScreenshot': storage_screenshot.exists(),
-                    'screenshotUrl': f"/storage/das/{stage_folder_name}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None,
+                    'screenshotUrl': f"/storage/das/{stage_folder_name}/{variant_id_for_screenshot}_screenshot.png" if storage_screenshot.exists() else None,
                     'slippi_safe': variant_meta.get('slippi_safe'),
                     'slippi_tested': variant_meta.get('slippi_tested', False)
                 })
@@ -2995,18 +3059,84 @@ def das_remove_variant():
         variant_path.unlink()
         logger.info(f"DAS variant removed: {variant_path}")
 
-        # Also remove screenshot from storage if it exists
-        storage_screenshot = STORAGE_PATH / 'das' / DAS_STAGES[stage_code]['folder'] / f"{variant_name}_screenshot.png"
-        if storage_screenshot.exists():
-            storage_screenshot.unlink()
-            logger.info(f"Removed screenshot: {storage_screenshot}")
-
         return jsonify({
             'success': True,
             'message': 'DAS variant removed successfully'
         })
     except Exception as e:
         logger.error(f"DAS remove error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/das/rename', methods=['POST'])
+def das_rename_variant():
+    """
+    Rename a DAS variant file (e.g., add/remove button indicator)
+
+    Body:
+    {
+      "stageCode": "GrOp",
+      "oldName": "vanilla",
+      "newName": "vanilla(B)"
+    }
+    """
+    try:
+        data = request.json
+        stage_code = data.get('stageCode')
+        old_name = data.get('oldName')
+        new_name = data.get('newName')
+
+        logger.info(f"DAS Rename Request - Stage: {stage_code}, Old: {old_name}, New: {new_name}")
+
+        if not stage_code or not old_name or not new_name:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageCode, oldName, or newName parameter'
+            }), 400
+
+        if stage_code not in DAS_STAGES:
+            return jsonify({
+                'success': False,
+                'error': f'Unknown stage code: {stage_code}'
+            }), 400
+
+        # Pokemon Stadium uses .usd, others use .dat
+        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+        project_files = get_project_files_dir()
+        stage_folder = project_files / stage_code
+
+        old_path = stage_folder / f"{old_name}{file_ext}"
+        new_path = stage_folder / f"{new_name}{file_ext}"
+
+        # Check if old file exists
+        if not old_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Source file not found: {old_name}{file_ext}'
+            }), 404
+
+        # Check if new file already exists (prevent overwriting)
+        if new_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Target file already exists: {new_name}{file_ext}'
+            }), 409
+
+        # Rename the file
+        old_path.rename(new_path)
+        logger.info(f"DAS variant renamed: {old_path} -> {new_path}")
+
+        return jsonify({
+            'success': True,
+            'message': 'DAS variant renamed successfully',
+            'oldName': old_name,
+            'newName': new_name
+        })
+    except Exception as e:
+        logger.error(f"DAS rename error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
