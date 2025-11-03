@@ -1957,6 +1957,219 @@ def restore_vault():
         }), 500
 
 
+# ============= Mod Export Endpoints =============
+
+@app.route('/api/mex/storage/costumes/export', methods=['POST'])
+def export_costume():
+    """Export a single costume as a ZIP file"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+        color_name = data.get('colorName', 'costume')
+
+        logger.info("=== COSTUME EXPORT REQUEST ===")
+        logger.info(f"Character: {character}, Skin ID: {skin_id}")
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        # Paths
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+        csp_path = char_folder / f"{skin_id}_csp.png"
+        stock_path = char_folder / f"{skin_id}_stc.png"
+
+        if not zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Costume not found: {skin_id}'
+            }), 404
+
+        # Check if this is Ice Climbers Popo with paired Nana
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        paired_nana_id = None
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            if character in metadata.get('characters', {}):
+                for skin in metadata['characters'][character]['skins']:
+                    if skin['id'] == skin_id:
+                        if skin.get('is_popo') and skin.get('paired_nana_id'):
+                            paired_nana_id = skin['paired_nana_id']
+                            logger.info(f"Ice Climbers Popo detected, paired Nana: {paired_nana_id}")
+                        break
+
+        # Create export directory
+        export_dir = OUTPUT_PATH / "mod_exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create export filename
+        safe_character = "".join(c for c in character if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        safe_color = "".join(c for c in color_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        export_filename = f"{safe_character}_{safe_color}.zip"
+        export_path = export_dir / export_filename
+
+        # Create ZIP with .dat, CSP, and stock icon
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as export_zip:
+            # Extract and add .dat file from source ZIP
+            with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                for item in source_zip.namelist():
+                    if item.lower().endswith('.dat'):
+                        dat_data = source_zip.read(item)
+                        export_zip.writestr(item, dat_data)
+                        logger.info(f"  Added: {item}")
+
+            # Add CSP if exists
+            if csp_path.exists():
+                export_zip.write(csp_path, 'csp.png')
+                logger.info(f"  Added: csp.png")
+
+            # Add stock icon if exists
+            if stock_path.exists():
+                export_zip.write(stock_path, 'stc.png')
+                logger.info(f"  Added: stc.png")
+
+            # Ice Climbers: Add paired Nana DAT if this is Popo
+            if paired_nana_id:
+                nana_zip_path = char_folder / f"{paired_nana_id}.zip"
+                if nana_zip_path.exists():
+                    with zipfile.ZipFile(nana_zip_path, 'r') as nana_zip:
+                        for item in nana_zip.namelist():
+                            if item.lower().endswith('.dat'):
+                                nana_dat_data = nana_zip.read(item)
+                                export_zip.writestr(item, nana_dat_data)
+                                logger.info(f"  Added Nana: {item}")
+                else:
+                    logger.warning(f"Paired Nana ZIP not found: {nana_zip_path}")
+
+        logger.info(f"✓ Costume exported: {export_filename}")
+
+        return jsonify({
+            'success': True,
+            'filename': export_filename
+        })
+    except Exception as e:
+        logger.error(f"Costume export error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stages/export', methods=['POST'])
+def export_stage():
+    """Export a single stage variant as a ZIP file"""
+    try:
+        data = request.json
+        stage_code = data.get('stageCode')
+        stage_name = data.get('stageName', 'stage')
+        variant_id = data.get('variantId')
+        variant_name = data.get('variantName', 'variant')
+
+        logger.info("=== STAGE EXPORT REQUEST ===")
+        logger.info(f"Stage Code: {stage_code}, Variant ID: {variant_id}")
+
+        if not stage_code or not variant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing stageCode or variantId parameter'
+            }), 400
+
+        # Get stage folder from DAS_STAGES
+        if stage_code not in DAS_STAGES:
+            return jsonify({
+                'success': False,
+                'error': f'Unknown stage code: {stage_code}'
+            }), 400
+
+        stage_info = DAS_STAGES[stage_code]
+        stage_folder = stage_info['folder']
+
+        # Get stage file extension (.usd for Pokemon Stadium, .dat for others)
+        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+
+        # Paths in storage
+        storage_stage_path = STORAGE_PATH / 'das' / stage_folder
+        stage_zip_path = storage_stage_path / f"{variant_id}.zip"
+        screenshot_path = storage_stage_path / f"{variant_id}_screenshot.png"
+
+        if not stage_zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Stage variant not found in storage: {variant_id}'
+            }), 404
+
+        # Create export directory
+        export_dir = OUTPUT_PATH / "mod_exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create export filename
+        safe_stage = "".join(c for c in stage_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        safe_variant = "".join(c for c in variant_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        export_filename = f"{safe_stage}_{safe_variant}.zip"
+        export_path = export_dir / export_filename
+
+        # Create ZIP with stage file and screenshot
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as export_zip:
+            # Extract and add stage .dat/.usd file from storage ZIP
+            with zipfile.ZipFile(stage_zip_path, 'r') as source_zip:
+                for item in source_zip.namelist():
+                    if item.lower().endswith(file_ext):
+                        stage_data = source_zip.read(item)
+                        export_zip.writestr(item, stage_data)
+                        logger.info(f"  Added: {item}")
+
+            # Add screenshot if exists
+            if screenshot_path.exists():
+                export_zip.write(screenshot_path, 'screenshot.png')
+                logger.info(f"  Added: screenshot.png")
+
+        logger.info(f"✓ Stage exported: {export_filename}")
+
+        return jsonify({
+            'success': True,
+            'filename': export_filename
+        })
+    except Exception as e:
+        logger.error(f"Stage export error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/export/mod/<filename>', methods=['GET'])
+def download_mod(filename):
+    """Download an exported mod file"""
+    try:
+        export_dir = OUTPUT_PATH / "mod_exports"
+        file_path = export_dir / filename
+
+        if not file_path.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Export file not found'
+            }), 404
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        logger.error(f"Mod download error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # REMOVED: Old intake/import endpoint - replaced with unified /api/mex/import/file endpoint
 
 
@@ -2144,12 +2357,12 @@ def fix_ice_climbers_pairing(character_infos: list, imported_skin_ids: dict):
         # Update each Ice Climbers skin with actual paired IDs
         updated = False
         for skin in metadata['characters']['Ice Climbers']['skins']:
-            costume_code = skin['costume_code']
-
-            # Skip if this costume wasn't just imported
-            if costume_code not in imported_skin_ids:
+            # Skip if this specific skin wasn't just imported
+            # Check by skin ID, not costume code, since multiple skins can share the same costume code
+            if skin['id'] not in imported_skin_ids.values():
                 continue
 
+            costume_code = skin['costume_code']
             char_info = info_by_code.get(costume_code)
             if not char_info:
                 continue

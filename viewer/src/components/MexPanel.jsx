@@ -1759,6 +1759,13 @@ const MexPanel = () => {
                               <div className="costume-info">
                                 <h4>{variant.name}</h4>
                                 <p className="costume-code">{selectedStage.name}</p>
+                                <div className="costume-assets">
+                                  {variant.slippi_safe && (
+                                    <div className="slippi-badge" title="Slippi Safe">
+                                      ✓
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );

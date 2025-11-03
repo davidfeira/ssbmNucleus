@@ -34,6 +34,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [editName, setEditName] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [newScreenshot, setNewScreenshot] = useState(null) // File object for new screenshot
   const [screenshotPreview, setScreenshotPreview] = useState(null) // Preview URL for new screenshot
   const [newCsp, setNewCsp] = useState(null) // File object for new CSP
@@ -511,6 +512,54 @@ export default function StorageViewer({ metadata, onRefresh }) {
       alert(`Delete error: ${err.message}`)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+
+    try {
+      const endpoint = editingItem.type === 'costume'
+        ? `${API_URL}/storage/costumes/export`
+        : `${API_URL}/storage/stages/export`
+
+      const body = editingItem.type === 'costume'
+        ? {
+            character: editingItem.data.character,
+            skinId: editingItem.data.id,
+            colorName: editingItem.data.color
+          }
+        : {
+            stageCode: editingItem.data.stageCode,
+            stageName: editingItem.data.stageName,
+            variantId: editingItem.data.id,
+            variantName: editingItem.data.name
+          }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Trigger download
+        const downloadUrl = `${API_URL}/export/mod/${data.filename}`
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = data.filename
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        alert(`Export failed: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Export error: ${err.message}`)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -1093,21 +1142,28 @@ export default function StorageViewer({ metadata, onRefresh }) {
               <button
                 className="btn-save"
                 onClick={handleSave}
-                disabled={saving || deleting}
+                disabled={saving || deleting || exporting}
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
               <button
                 className="btn-cancel"
                 onClick={handleCancel}
-                disabled={saving || deleting}
+                disabled={saving || deleting || exporting}
               >
                 Cancel
               </button>
               <button
+                className="btn-export"
+                onClick={handleExport}
+                disabled={saving || deleting || exporting}
+              >
+                {exporting ? 'Exporting...' : 'Export'}
+              </button>
+              <button
                 className="btn-delete-modal"
                 onClick={handleDelete}
-                disabled={saving || deleting}
+                disabled={saving || deleting || exporting}
               >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
@@ -1286,6 +1342,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
                           handleEditClick('stage', {
                             id: variant.id,  // ← Use the immutable ID for API calls
                             name: variant.name,  // ← Use the editable name for display
+                            stageCode: stageInfo?.code,
                             stageFolder: stageInfo?.folder,
                             stageName: stageInfo?.name,
                             screenshotUrl: variant.screenshotUrl,
