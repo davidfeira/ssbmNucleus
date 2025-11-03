@@ -3,19 +3,6 @@
 
 
 
-
-ice climber metadata messed up - also lets show nana in mex screen still
-
-
-
-
-
-
-
-
-export skin
-
-
 edit costume modal stock is wack
 allow scroll while dragging costumes in vault
 

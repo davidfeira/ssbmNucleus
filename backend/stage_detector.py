@@ -2,9 +2,12 @@
 Stage Detector - Detects which stage a mod is for based on filename patterns
 """
 import os
+import re
 import zipfile
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Set
+from PIL import Image
+from io import BytesIO
 
 # Stage code to folder name mapping
 STAGE_MAPPING = {
@@ -17,39 +20,134 @@ STAGE_MAPPING = {
 }
 
 
-def detect_stage_from_zip(zip_path: str) -> Optional[Dict]:
+def extract_stage_code_from_filename(filename: str) -> Optional[str]:
     """
-    Detect which stage this mod is for by scanning the ZIP contents.
+    Extract stage code (GrNBa, GrPs, etc.) from a filename.
+
+    Args:
+        filename: Filename to extract from (can be full path)
+
+    Returns:
+        Stage code if found, None otherwise
+    """
+    basename = os.path.basename(filename).upper()
+
+    # Try to find any stage code in the filename
+    for stage_code in STAGE_MAPPING.keys():
+        if stage_code.upper() in basename:
+            return stage_code
+
+    return None
+
+
+def build_screenshot_indexes(zf: zipfile.ZipFile, filenames: List[str]) -> Tuple[Dict, Dict, Dict]:
+    """
+    Build indexes of screenshots for smart matching.
+
+    Similar to character_detector.build_image_indexes() but for stage screenshots.
+
+    Args:
+        zf: ZipFile object
+        filenames: List of filenames in ZIP
+
+    Returns:
+        Tuple of (screenshots_by_name, screenshots_by_code, screenshots_by_folder)
+    """
+    image_extensions = {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
+
+    screenshots_by_name = {}  # Cleaned basename -> (filename, aspect_ratio)
+    screenshots_by_code = {}  # Stage code -> [(filename, aspect_ratio, folder)]
+    screenshots_by_folder = {}  # Folder path -> [(filename, aspect_ratio)]
+
+    for filename in filenames:
+        # Skip directories
+        if filename.endswith('/'):
+            continue
+
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in image_extensions:
+            continue
+
+        # Get image dimensions for aspect ratio scoring
+        try:
+            img_data = zf.read(filename)
+            img = Image.open(BytesIO(img_data))
+            width, height = img.size
+            aspect_ratio = width / height if height > 0 else 0
+        except Exception:
+            aspect_ratio = 0
+
+        # Index by cleaned name
+        basename = os.path.basename(filename)
+        name_without_ext = os.path.splitext(basename)[0].lower()
+
+        # Remove common prefixes
+        for prefix in ['screenshot_', 'preview_', 'stage_', 'icon_', 'banner_']:
+            if name_without_ext.startswith(prefix):
+                name_without_ext = name_without_ext[len(prefix):]
+                break
+
+        screenshots_by_name[name_without_ext] = (filename, aspect_ratio)
+
+        # Index by stage code
+        stage_code = extract_stage_code_from_filename(filename)
+        if stage_code:
+            if stage_code not in screenshots_by_code:
+                screenshots_by_code[stage_code] = []
+            folder = os.path.dirname(filename)
+            screenshots_by_code[stage_code].append((filename, aspect_ratio, folder))
+
+        # Index by folder
+        folder = os.path.dirname(filename)
+        if folder not in screenshots_by_folder:
+            screenshots_by_folder[folder] = []
+        screenshots_by_folder[folder].append((filename, aspect_ratio))
+
+    return screenshots_by_name, screenshots_by_code, screenshots_by_folder
+
+
+def detect_stage_from_zip(zip_path: str) -> List[Dict]:
+    """
+    Detect stage mods in a ZIP file. Supports multiple stages per ZIP.
+
+    Uses intelligent screenshot matching similar to character detection:
+    - Tier 0: Exact filename match (screenshot_grnba.png -> GrNBa.dat)
+    - Tier 1: Stage code match (extracts GrNBa from image filename)
+    - Tier 2: Same-folder match (if only 1 stage in folder)
+    - Tier 3: Global fallback (if only 1 stage in entire ZIP)
 
     Args:
         zip_path: Path to the ZIP file
 
     Returns:
-        Dict with stage info if detected, None otherwise:
-        {
+        List of stage info dicts (empty list if none found):
+        [{
             'stage_code': 'GrNBa',
             'stage_name': 'Battlefield',
             'folder': 'battlefield',
             'stage_file': 'GrNBa.dat',
             'screenshot': 'screenshot.png' or None,
             'extension': '.dat' or '.usd'
-        }
+        }, ...]
     """
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
             filenames = zf.namelist()
 
-            # Search for stage files
+            # Find all stage files in the ZIP
+            stage_files = []
             for filename in filenames:
+                # Skip directories
+                if filename.endswith('/'):
+                    continue
+
                 basename = os.path.basename(filename)
                 name_upper = basename.upper()
+                file_ext = os.path.splitext(basename)[1].lower()
 
                 # Check for stage patterns
                 for stage_code, stage_info in STAGE_MAPPING.items():
                     if stage_code.upper() in name_upper:
-                        # Found a matching stage code
-                        file_ext = os.path.splitext(basename)[1].lower()
-
                         # Validate extension (.dat or .usd)
                         if file_ext in ['.dat', '.usd']:
                             # Pokemon Stadium can be .usd or .dat
@@ -59,23 +157,112 @@ def detect_stage_from_zip(zip_path: str) -> Optional[Dict]:
                             elif stage_code != 'GrPs' and file_ext != '.dat':
                                 continue
 
-                            # Find screenshot
-                            screenshot = find_screenshot_in_zip(zf, filenames)
-
-                            return {
+                            stage_files.append({
+                                'filename': filename,
                                 'stage_code': stage_code,
-                                'stage_name': stage_info['name'],
-                                'folder': stage_info['folder'],
-                                'stage_file': filename,
-                                'screenshot': screenshot,
+                                'stage_info': stage_info,
                                 'extension': file_ext
-                            }
+                            })
+                            break  # Found stage code, don't check other codes
 
-        return None
+            # If no stages found, return empty list
+            if not stage_files:
+                return []
+
+            # Build screenshot indexes for smart matching
+            screenshots_by_name, screenshots_by_code, screenshots_by_folder = build_screenshot_indexes(zf, filenames)
+
+            # Track used screenshots to prevent double-matching
+            used_screenshots: Set[str] = set()
+
+            # Match screenshots to each stage using four-tier system
+            results = []
+            for stage_file_info in stage_files:
+                filename = stage_file_info['filename']
+                stage_code = stage_file_info['stage_code']
+                stage_info = stage_file_info['stage_info']
+                file_ext = stage_file_info['extension']
+
+                screenshot = None
+                match_tier = None
+
+                # Get context for this stage file
+                basename = os.path.basename(filename)
+                name_without_ext = os.path.splitext(basename)[0].lower()
+                folder = os.path.dirname(filename)
+
+                # TIER 0: Exact filename match
+                # e.g., "GrNBa.dat" matches with "grnba.png" or "screenshot_grnba.png"
+                if name_without_ext in screenshots_by_name:
+                    candidate_file, aspect_ratio = screenshots_by_name[name_without_ext]
+                    if candidate_file not in used_screenshots:
+                        screenshot = candidate_file
+                        match_tier = 0
+
+                # TIER 1: Stage code match
+                # e.g., "screenshot_grnba.png" or "grnba_preview.png" -> GrNBa.dat
+                if screenshot is None and stage_code in screenshots_by_code:
+                    candidates = screenshots_by_code[stage_code]
+                    # Filter out already used
+                    candidates = [(f, ar, fld) for f, ar, fld in candidates if f not in used_screenshots]
+                    if candidates:
+                        # Prefer same folder if available
+                        same_folder = [c for c in candidates if c[2] == folder]
+                        if same_folder:
+                            screenshot = same_folder[0][0]
+                        else:
+                            screenshot = candidates[0][0]
+                        match_tier = 1
+
+                # TIER 2: Same-folder match (only if single stage in folder)
+                if screenshot is None and folder:
+                    stages_in_folder = [sf for sf in stage_files if os.path.dirname(sf['filename']) == folder]
+                    if len(stages_in_folder) == 1:
+                        # Only one stage in this folder, can safely match any screenshot from folder
+                        if folder in screenshots_by_folder:
+                            candidates = screenshots_by_folder[folder]
+                            # Filter out already used
+                            candidates = [(f, ar) for f, ar in candidates if f not in used_screenshots]
+                            if candidates:
+                                # Pick best aspect ratio (prefer 16:9 = 1.777 for stages)
+                                candidates_sorted = sorted(candidates, key=lambda x: abs(x[1] - 1.777))
+                                screenshot = candidates_sorted[0][0]
+                                match_tier = 2
+
+                # TIER 3: Global fallback (only if single stage in entire ZIP)
+                if screenshot is None and len(stage_files) == 1:
+                    # Only one stage in entire ZIP, can use any screenshot
+                    all_screenshots = []
+                    for folder_path, screenshots in screenshots_by_folder.items():
+                        all_screenshots.extend(screenshots)
+                    # Filter out already used
+                    all_screenshots = [(f, ar) for f, ar in all_screenshots if f not in used_screenshots]
+                    if all_screenshots:
+                        # Pick best aspect ratio
+                        all_screenshots_sorted = sorted(all_screenshots, key=lambda x: abs(x[1] - 1.777))
+                        screenshot = all_screenshots_sorted[0][0]
+                        match_tier = 3
+
+                # Mark screenshot as used
+                if screenshot:
+                    used_screenshots.add(screenshot)
+
+                results.append({
+                    'stage_code': stage_code,
+                    'stage_name': stage_info['name'],
+                    'folder': stage_info['folder'],
+                    'stage_file': filename,
+                    'screenshot': screenshot,
+                    'extension': file_ext
+                })
+
+            return results
 
     except Exception as e:
-        print(f"Error detecting stage from {zip_path}: {e}")
-        return None
+        print(f"Error detecting stages from {zip_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def find_screenshot_in_zip(zf: zipfile.ZipFile, filenames: List[str]) -> Optional[str]:

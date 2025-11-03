@@ -2302,12 +2302,29 @@ def import_file():
 
             # PHASE 2: Try stage detection
             logger.info("Phase 2: Attempting stage detection...")
-            stage_info = detect_stage_from_zip(temp_zip_path)
+            stage_infos = detect_stage_from_zip(temp_zip_path)
 
-            if stage_info:
-                logger.info(f"✓ Detected stage mod: {stage_info['stage_name']}")
-                result = import_stage_mod(temp_zip_path, stage_info, file.filename)
-                return jsonify(result)
+            if stage_infos:
+                logger.info(f"✓ Detected {len(stage_infos)} stage mod(s)")
+
+                # Import each detected stage
+                results = []
+                for stage_info in stage_infos:
+                    logger.info(f"  - Importing {stage_info['stage_name']}")
+                    result = import_stage_mod(temp_zip_path, stage_info, file.filename)
+                    if result.get('success'):
+                        results.append({
+                            'stage': stage_info['stage_name'],
+                            'variant': result.get('variant_id')
+                        })
+
+                return jsonify({
+                    'success': True,
+                    'type': 'stage',
+                    'imported_count': len(results),
+                    'stages': results,
+                    'message': f"Imported {len(results)} stage variant(s)"
+                })
 
             # PHASE 3: Detection failed
             logger.warning("✗ Could not detect type - not a character costume or stage mod")
@@ -2779,10 +2796,23 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str) ->
         # Final paths
         final_zip = das_folder / f"{variant_id}.zip"
 
-        # Copy the entire ZIP
-        shutil.copy2(zip_path, final_zip)
+        # Create a new ZIP with only this stage's files
+        with zipfile.ZipFile(zip_path, 'r') as source_zf:
+            with zipfile.ZipFile(final_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zf:
+                # Add the specific stage DAT file
+                stage_file_data = source_zf.read(stage_info['stage_file'])
+                stage_file_basename = os.path.basename(stage_info['stage_file'])
+                dest_zf.writestr(stage_file_basename, stage_file_data)
+                logger.info(f"✓ Added stage file to ZIP: {stage_file_basename}")
 
-        # Extract screenshot if available
+                # Add screenshot to ZIP if available
+                if stage_info['screenshot']:
+                    screenshot_data = source_zf.read(stage_info['screenshot'])
+                    screenshot_basename = os.path.basename(stage_info['screenshot'])
+                    dest_zf.writestr(screenshot_basename, screenshot_data)
+                    logger.info(f"✓ Added screenshot to ZIP: {screenshot_basename}")
+
+        # Extract screenshot to storage folder for preview
         has_screenshot = False
         if stage_info['screenshot']:
             with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -2794,15 +2824,21 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str) ->
                 screenshot_path.write_bytes(screenshot_data)
 
                 has_screenshot = True
-                logger.info(f"✓ Saved screenshot: {screenshot_path}")
+                logger.info(f"✓ Saved screenshot preview: {screenshot_path}")
 
         # Update metadata
         if stage_folder_name not in metadata['stages']:
             metadata['stages'][stage_folder_name] = {'variants': []}
 
+        # Use the DAT filename (without extension) as the display name
+        stage_file_basename = os.path.basename(stage_info['stage_file'])
+        display_name = os.path.splitext(stage_file_basename)[0]
+        # Clean up the display name: replace underscores with spaces
+        display_name = display_name.replace('_', ' ')
+
         metadata['stages'][stage_folder_name]['variants'].append({
             'id': variant_id,
-            'name': variant_id.replace('-', ' ').title(),
+            'name': display_name,
             'filename': f"{variant_id}.zip",
             'has_screenshot': has_screenshot,
             'date_added': datetime.now().isoformat()
@@ -2819,6 +2855,7 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str) ->
             'success': True,
             'type': 'stage',
             'stage': stage_name,
+            'variant_id': variant_id,
             'message': f"Imported {stage_name} stage variant"
         }
 
