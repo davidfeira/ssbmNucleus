@@ -1,8 +1,6 @@
 
 
 
-
-
 edit costume modal stock is wack
 allow scroll while dragging costumes in vault
 
@@ -18,7 +16,7 @@ fix? menu is gross
 1.0 ratio export bug
 
 
-
+setting stage slippi setting to unknown throws error but works
 
 slippi safe test makes you reset back to homescreen.  why
 
@@ -27,10 +25,10 @@ loading indicators
     importing into MEX
     creating project
 
-
+if you hold this button during stage loading thhis stage will always be selected
 hide hsdraw cmd
 =============
-
+electron logo - just smashball  it
 yellow melee styling
 change name to nucleus
 
