@@ -486,7 +486,8 @@ const MexPanel = () => {
 
   const selectAllVariants = () => {
     if (!selectedStage) return;
-    setSelectedVariants(new Set(storageVariants.map(v => v.zipPath)));
+    const allVariants = getVariantsForStage(selectedStage.code);
+    setSelectedVariants(new Set(allVariants.map(v => v.zipPath)));
   };
 
   const clearVariantSelection = () => {
