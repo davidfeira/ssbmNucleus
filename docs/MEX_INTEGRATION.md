@@ -188,8 +188,8 @@ cd utility/MexManager/MexCLI/bin/Release/net6.0
 
 ```bash
 # From project root
-python mex_bridge.py info
-python mex_bridge.py list
+python scripts/tools/mex_bridge.py info
+python scripts/tools/mex_bridge.py list
 ```
 
 ## Integration Workflow

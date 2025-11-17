@@ -24,7 +24,7 @@ Ensure you have:
 First-time setup:
 ```bash
 # Organize vanilla Melee assets (one-time setup)
-python scripts/organize_vanilla_assets.py
+python scripts/migration/organize_vanilla_assets.py
 
 # Install viewer dependencies
 cd viewer
@@ -45,10 +45,10 @@ Missing files will be automatically handled!
 
 ```bash
 # Process all files in intake
-python manage_storage.py
+python scripts/tools/manage_storage.py
 
 # Dry run (preview without making changes)
-python manage_storage.py --dry-run
+python scripts/tools/manage_storage.py --dry-run
 ```
 
 ### 4. View Collection
@@ -84,12 +84,25 @@ melee-costume-manager/
 │       └── vanilla/        # Organized vanilla assets
 ├── build/                  # Your MEX build data
 ├── logs/                   # Operation logs
-├── scripts/                # Utility scripts
-│   ├── organize_vanilla_assets.py
-│   ├── migrate_to_intake.py
-│   └── ...
-├── manage_storage.py       # Main costume processor
-└── clear_storage.py        # Storage cleanup tool
+├── docs/                   # Documentation
+│   ├── DISTRIBUTION_GUIDE.md
+│   └── LINUX_BUILD.md
+└── scripts/                # All scripts organized by category
+    ├── tools/              # User-facing utility tools
+    │   ├── manage_storage.py   # Main costume processor
+    │   ├── clear_storage.py    # Storage cleanup tool
+    │   └── mex_bridge.py       # MEX CLI wrapper
+    ├── migration/          # Data migration utilities
+    │   ├── organize_vanilla_assets.py
+    │   ├── migrate_to_intake.py
+    │   └── package_costumes.py
+    ├── build/              # Build and packaging scripts
+    │   ├── build.bat, build-linux.sh
+    │   ├── mex_backend.spec    # PyInstaller spec
+    │   └── dotnet-install.sh
+    └── dev/                # Development server scripts
+        ├── start.bat, stop.bat
+        └── test_*.py
 ```
 
 ## Main Commands
@@ -98,16 +111,16 @@ melee-costume-manager/
 
 ```bash
 # Process intake folder
-python manage_storage.py
+python scripts/tools/manage_storage.py
 
 # Clear all storage
-python clear_storage.py
+python scripts/tools/clear_storage.py
 
 # Clear storage and intake
-python clear_storage.py --clear-intake
+python scripts/tools/clear_storage.py --clear-intake
 
 # Clear everything including logs
-python clear_storage.py --all
+python scripts/tools/clear_storage.py --all
 ```
 
 ### Web Viewer
@@ -124,10 +137,10 @@ cd viewer && npm run build
 
 ```bash
 # Organize vanilla Melee assets (one-time setup)
-python scripts/organize_vanilla_assets.py
+python scripts/migration/organize_vanilla_assets.py
 
 # Migrate old costume files
-python scripts/migrate_to_intake.py <source_folder>
+python scripts/migration/migrate_to_intake.py <source_folder>
 ```
 
 ## How It Works
@@ -262,7 +275,7 @@ cp path/to/green_fox_csp.png intake/
 cp path/to/green_stock.png intake/
 
 # 2. Process
-python manage_storage.py
+python scripts/tools/manage_storage.py
 
 # Result: storage/Fox/fox-green-001.zip
 # CSP source: provided
@@ -276,7 +289,7 @@ python manage_storage.py
 cp path/to/PlLgNr.dat intake/
 
 # 2. Process
-python manage_storage.py
+python scripts/tools/manage_storage.py
 
 # Result: storage/Luigi/luigi-default-001.zip
 # CSP source: generated (from DAT)
@@ -291,7 +304,7 @@ cp ~/Downloads/fox-pack/* intake/
 cp ~/Downloads/falco-skins/* intake/
 
 # 2. Process once
-python manage_storage.py
+python scripts/tools/manage_storage.py
 
 # Result: All organized by character
 # storage/Fox/fox-*.zip
@@ -324,8 +337,8 @@ For best automatic matching, include costume codes in filenames:
 
 ```bash
 # Clear and reimport everything
-python clear_storage.py
-python manage_storage.py
+python scripts/tools/clear_storage.py
+python scripts/tools/manage_storage.py
 
 # Clear intake after successful import
 rm intake/*.dat intake/*.png
@@ -377,7 +390,7 @@ No longer generates stocks - uses vanilla assets:
 
 Run once to set up:
 ```bash
-python scripts/organize_vanilla_assets.py
+python scripts/migration/organize_vanilla_assets.py
 ```
 
 Extracts all CSPs and stocks from `build/assets/` into:
@@ -416,15 +429,28 @@ All 26 vanilla Melee characters plus MEX additions:
 ### Repository Structure
 
 ```
-Main Scripts (root):
-- manage_storage.py     # Primary costume processor
-- clear_storage.py      # Storage management
+scripts/
+├── tools/              # User-facing tools
+│   ├── manage_storage.py     # Primary costume processor
+│   ├── clear_storage.py      # Storage management
+│   └── mex_bridge.py         # MEX CLI wrapper
+├── migration/          # Data migration utilities
+│   ├── organize_vanilla_assets.py  # One-time setup
+│   ├── migrate_to_intake.py        # Import old files
+│   ├── extract_csps.py             # Legacy extractor
+│   └── package_costumes.py         # Legacy packager
+├── build/              # Build and packaging
+│   ├── build.bat, build-linux.sh   # Platform builds
+│   ├── mex_backend.spec            # PyInstaller spec
+│   └── dotnet-install.sh           # .NET SDK installer
+└── dev/                # Development tools
+    ├── start.bat, stop.bat         # Server management
+    └── test_*.py                   # Test scripts
 
-Utility Scripts (scripts/):
-- organize_vanilla_assets.py  # One-time setup
-- migrate_to_intake.py        # Import old files
-- extract_csps.py            # Legacy extractor
-- package_costumes.py        # Legacy packager
+docs/                   # Documentation
+├── DISTRIBUTION_GUIDE.md
+├── LINUX_BUILD.md
+└── MEX_INTEGRATION.md
 ```
 
 ## Credits

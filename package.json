@@ -61,8 +61,8 @@
         "filter": ["**/*"]
       },
       {
-        "from": "clear_storage.py",
-        "to": "clear_storage.py"
+        "from": "scripts/tools/clear_storage.py",
+        "to": "scripts/tools/clear_storage.py"
       }
     ],
     "directories": {

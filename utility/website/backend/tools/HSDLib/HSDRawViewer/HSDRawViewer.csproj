@@ -1,0 +1,209 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>dogg.ico</ApplicationIcon>
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="GCILib, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>lib\GCILib.dll</HintPath>
+    </Reference>
+    <Reference Include="IONET, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>lib\IONET.dll</HintPath>
+    </Reference>
+    <Reference Include="netstandard" />
+    <Reference Include="OpenTK.WinForms">
+      <HintPath>lib\OpenTK.WinForms.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Design" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="ContextMenus\Melee\CollDataContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\CommonContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\DOBJContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\FigatreeContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\FighterArticleContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\FOBJContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\JOBJContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\JOBJDescContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\MapHeadContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\MatAnimContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\JointAnimContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\MatAnimJointContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\FighterDataContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\mexStageDataMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\MeleeEffectTable.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\MapGOBJContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\ParticleContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\Melee\SelectCharContextMenu.cs" />
+    <Compile Update="ContextMenus\SplineContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ContextMenus\UnidentifiedContextMenu.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\DockablePropertyGrid.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\DoubleBufferedListBox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\LObjEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\MEXStockIconControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\TextureViewControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\ArrayMemberEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\CustomTrackBar.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\GraphEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Extra\DSPViewer.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Extra\SEMEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Extra\SoundBankEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Extra\SoundScriptEditor.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="GUI\Controls\ViewportControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Tools\FlagEnumEditor.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <None Update="lib\Consolas.bff">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="lib\GraphArial.bff">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_cpu.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_weapon.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\ps.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\ps.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_rider.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_color.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\ptcl.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_fighter.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_item.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\command_controls.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx_alpha_test.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx_lightmap.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx_material.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shader\gx_uv.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="DockPanelSuite" Version="3.1.1" />
+    <PackageReference Include="DockPanelSuite.ThemeVS2015" Version="3.1.1" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
+    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.4.336902">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Be.Windows.Forms.HexBox" Version="1.6.1" />
+    <PackageReference Include="CSCore" Version="1.2.1.2" />
+    <PackageReference Include="DotNetZip.Reduced" Version="1.9.1.8" />
+    <PackageReference Include="OpenTK" Version="4.7.4" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.6.1" />
+    <PackageReference Include="VGAudio" Version="2.2.1" />
+    <PackageReference Include="YamlDotNet" Version="12.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HSDRaw\HSDRaw.csproj" />
+  </ItemGroup>
+
+</Project>

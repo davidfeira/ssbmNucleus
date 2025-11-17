@@ -1,0 +1,319 @@
+﻿- code: 10
+  name: Graphic Effect
+  parameters:
+  - name: Bone ID
+    bitCount: 10
+  - name: Unk1
+    bitCount: 16
+  - name: GFX ID
+    bitCount: 16
+  - name: Unused
+    bitCount: 16
+  - name: X Offset
+    bitCount: 16
+    signed: true
+  - name: Y Offset
+    bitCount: 16
+    signed: true
+  - name: Z Offset
+    bitCount: 16
+    signed: true
+  - name: Range Z
+    bitCount: 16
+    signed: true
+  - name: Range Y
+    bitCount: 16
+    signed: true
+  - name: Range X
+    bitCount: 16
+    signed: true
+
+- code: 11
+  name: Create Hitbox
+  parameters:
+  - name: ID
+    bitCount: 3
+  - name: Unk1
+    bitCount: 3    
+  - name: Bone
+    bitCount: 7 
+  - name: Damage
+    bitCount: 13 
+  - name: Size
+    bitCount: 16 
+  - name: X Offset
+    bitCount: 16 
+    signed: true
+  - name: Y Offset
+    bitCount: 16  
+    signed: true
+  - name: Z Offset
+    bitCount: 16  
+    signed: true
+  - name: Knockback Angle
+    bitCount: 9 
+  - name: Knockback Growth
+    bitCount: 9
+  - name: Weight Set Knockback
+    bitCount: 9
+  - name: Padding
+    bitCount: 5
+  - name: Base Knockback
+    bitCount: 9
+  - name: Element
+    bitCount: 5
+    enums:
+    - Normal
+    - Fire
+    - Electric
+    - Slash
+    - Coin
+    - Ice
+    - Sleep - Short
+    - Sleep - Long
+    - Grab
+    - Grounded
+    - Cape
+    - Empty
+    - Disable
+    - Darkness
+    - Screw Attack
+    - Poison Flower
+    - Nothing
+  - name: Can Clank
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Shield Damage
+    bitCount: 8
+    signed: true
+  - name: SFX Severity
+    bitCount: 3
+    enums:
+    - Weak
+    - Moderate
+    - Strong
+  - name: SFX Group
+    bitCount: 4
+    enums:
+    - None
+    - NHit (Punch)
+    - MHit (Kick)
+    - SwdHit (Sword)
+    - SJP_Hit (Super Jump/Coin)
+    - MHit+Bat
+    - Harisen (Fan)
+    - EleHit (Electric)
+    - FireHit (Fire)
+    - Nage_Kamu (Yoshi Chew)
+    - KameKr_Hit (Shell Hit)
+    - GHit (Energy)
+    - Peach_Item (Pan, Club, Racket)
+    - IceHit (Bat)
+    - Empty
+    - Empty
+  - name: Hit Grounded Fighters
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Hit Aerial Fighters
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Hit Cooldown (per fighter)
+    bitCount: 8
+  - name: Timed Rehit on Non-Fighter Enabled
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Timed Rehit on Fighter Enabled
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Timed Rehit on Shield Enabled
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Reflectable
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Absorbable
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Can Shield
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Only Hit Facing (0x20 @ 0x42)
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Deflectable
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Can Reflect
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Hit Fighters (0x04 @ 0x42)
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Ignore Ungrabbable Hurtboxes
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Interact with Non-Fighter
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Item Hit Interaction
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Pokemon and Warp Star Hitbox
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Flag18
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Flag19
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: padding
+    bitCount: 8 
+ 
+- code: 12
+  name: Adjust Hitbox Damage
+  parameters:
+  - name: Hitbox ID
+    bitCount: 3
+  - name: Damage
+    bitCount: 23
+
+- code: 13
+  name: Adjust Hitbox Size
+  parameters:
+  - name: Hitbox ID
+    bitCount: 3
+  - name: Size
+    bitCount: 23
+
+- code: 14
+  name: Remove Hitbox
+  parameters:
+  - name: Index
+    bitCount: 26
+
+- code: 15
+  name: Clear Hitboxes
+  parameters:
+  - name: None
+    bitCount: 26
+
+- code: 16
+  name: Sound Effect
+  parameters:
+  - name: Behavior
+    bitCount: 8
+  - name: Unknown
+    bitCount: 18
+  - name: SFX ID
+    bitCount: 32
+  - name: Padding
+    bitCount: 16
+  - name: Volume
+    bitCount: 8
+  - name: Panning
+    bitCount: 8
+
+- code: 17
+  name: Set flag at 0xDAC
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 18
+  name: Set flag at 0xDB0
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 19
+  name: Set flag at 0xDB4
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 20
+  name: Set flag at 0xDBC
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 21
+  name: Rumble Related 1
+  parameters:
+  - name: Unk1
+    bitCount: 13
+  - name: Unk2
+    bitCount: 13
+
+- code: 22
+  name: Remove Rumble
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 23
+  name: Rumble Related 2
+  parameters:
+  - name: Unk1
+    bitCount: 13
+  - name: Unk2
+    bitCount: 13
+
+- code: 24
+  name: CheckToZeroGFXQueue
+  parameters:
+  - name: Unk1
+    bitCount: 8
+  - name: Unk2
+    bitCount: 18
+
+- code: 25
+  name: Color Something
+  parameters:
+  - name: None
+    bitCount: 26
+    hex: true

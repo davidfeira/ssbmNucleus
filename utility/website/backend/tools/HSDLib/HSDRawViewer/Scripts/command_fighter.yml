@@ -1,0 +1,658 @@
+﻿- code: 10
+  name: Graphic Effect
+  parameters:
+  - name: Bone ID
+    bitCount: 8
+  - name: Use Common Bone IDs
+    bitCount: 1
+  - name: Destroy on State Change
+    bitCount: 1
+  - name: Unk1
+    bitCount: 16
+  - name: GFX ID
+    bitCount: 16
+  - name: Unk2
+    bitCount: 16
+  - name: Z
+    bitCount: 16
+    signed: true
+  - name: Y
+    bitCount: 16
+    signed: true
+  - name: X
+    bitCount: 16
+    signed: true
+  - name: Range Z
+    bitCount: 16
+    signed: true
+  - name: Range Y
+    bitCount: 16
+    signed: true
+  - name: Range X
+    bitCount: 16
+    signed: true
+
+- code: 11
+  name: Create Hitbox
+  parameters:
+  - name: ID
+    bitCount: 3
+  - name: Hit Group
+    bitCount: 3
+  - name: Only Hit Grabbed Fighter (bugged)
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Bone
+    bitCount: 8
+  - name: Use Common Bone IDs
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Damage
+    bitCount: 10
+  - name: Size
+    bitCount: 16
+  - name: Z-Offset
+    bitCount: 16
+    signed: true
+  - name: Y-Offset
+    bitCount: 16
+    signed: true
+  - name: X-Offset
+    bitCount: 16
+    signed: true
+  - name: Angle
+    bitCount: 9
+  - name: Knockback Growth
+    bitCount: 9
+  - name: Weight Set Knockback
+    bitCount: 9
+  - name: Item Hit Interaction
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Ignore Thrown Fighters
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Ignore Fighter Scale
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Clank
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Rebound
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Base Knockback
+    bitCount: 9
+  - name: Element
+    bitCount: 5
+    enums:
+    - Normal
+    - Fire
+    - Electric
+    - Slash
+    - Coin
+    - Ice
+    - Sleep (103 Frames)
+    - Sleep (412 Frames)
+    - Grab
+    - Grounded (97 Frames)
+    - Cape
+    - Empty
+    - Disable
+    - Darkness
+    - Screw Attack
+    - Poison Flower
+    - Nothing (No Graphic)
+  - name: Shield Damage
+    bitCount: 8
+    signed: true
+  - name: Hit SFX Severity
+    bitCount: 3
+    enums:
+    - Weak
+    - Moderate
+    - Strong
+  - name: Hit SFX Kind
+    bitCount: 5
+    enums:
+    - None
+    - NHit (Punch)
+    - MHit (Kick)
+    - SwdHit (Sword)
+    - SJP_Hit (Super Jump/Coin)
+    - MHit+Bat
+    - Harisen (Fan)
+    - EleHit (Electric)
+    - FireHit (Fire)
+    - Nage_Kamu (Yoshi Chew)
+    - KameKr_Hit (Shell Hit)
+    - GHit (Energy)
+    - Peach_Item (Pan, Club, Racket)
+    - IceHit (Bat)
+    - Empty
+    - Empty
+  - name: Hit Grounded Fighters
+    bitCount: 1
+    enums:
+    - false
+    - true
+  - name: Hit Aerial Fighters
+    bitCount: 1
+    enums:
+    - false
+    - true
+
+- code: 12
+  name: Adjust Hitbox Damage
+  parameters:
+  - name: Hitbox ID
+    bitCount: 3
+  - name: Damage
+    bitCount: 23
+
+- code: 13
+  name: Adjust Hitbox Size
+  parameters:
+  - name: Hitbox ID
+    bitCount: 3
+  - name: Size
+    bitCount: 23
+
+- code: 14
+  name: Set Hitbox Interaction
+  parameters:
+  - name: Hitbox ID
+    bitCount: 24
+  - name: Type
+    bitCount: 1
+    enums:
+    - Fighter interaction
+    - Non-fighter interaction
+  - name: Value
+    bitCount: 1
+    enums:
+    - Cannot interact
+    - Can interact
+
+- code: 15
+  name: Remove Hitbox
+  parameters:
+  - name: Index
+    bitCount: 26
+
+- code: 16
+  name: Clear Hitboxes
+  parameters:
+  - name: None
+    bitCount: 26
+
+- code: 17
+  name: Sound Effect
+  parameters:
+  - name: Behavior
+    bitCount: 8
+  - name: Unknown
+    bitCount: 18
+  - name: SFX ID
+    bitCount: 32
+  - name: Padding
+    bitCount: 16
+  - name: Volume
+    bitCount: 8
+  - name: Panning
+    bitCount: 8
+
+- code: 18
+  name: Random Smash SFX
+  parameters:
+  - name: Value
+    bitCount: 26
+
+- code: 19
+  name: Set Flag
+  parameters:
+  - name: Flag
+    bitCount: 2
+  - name: Value
+    bitCount: 24
+
+- code: 20
+  name: Reverse Direction
+  parameters:
+  - name: Enabled
+    bitCount: 26
+
+- code: 21
+  name: Set flag 0x2210 to 10
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 22
+  name: Set flag 0x2210 to 20
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 23
+  name: Allow Interrupt
+  parameters:
+  - name: None
+    bitCount: 26
+    hex: true
+
+- code: 24
+  name: Projectile Flag
+  parameters:
+  - name: Value
+    bitCount: 26
+    hex: true
+
+- code: 25
+  name: Set Jump State
+  parameters:
+  - name: Value
+    bitCount: 26
+    enums:
+    - Fighter Grounded
+    - Airborne 1 Jump
+    - Airborne No Jumps
+
+- code: 26
+  name: Set Body Collision State
+  parameters:
+  - name: Body State
+    bitCount: 26
+    enums:
+    - Normal
+    - Invulnerable
+    - Intangible
+
+
+- code: 27
+  name: Set All Bone Collision States
+  parameters:
+  - name: Unknown
+    bitCount: 26
+    hex: true
+
+- code: 28
+  name: Set Bone Collision State
+  parameters:
+  - name: Bone Id
+    bitCount: 8
+  - name: Collision State
+    bitCount: 18
+
+- code: 29
+  name: Enable Jab Followup
+  parameters:
+  - name: Toggle
+    bitCount: 26
+    enums: 
+    - Normal
+    - Bunny Hood Override
+
+- code: 30
+  name: Set Rapid Jab Flag
+  parameters:
+  - name: Value
+    bitCount: 26
+
+- code: 31
+  name: Change Model State
+  parameters:
+  - name: Struct ID
+    bitCount: 7
+  - name: ExtraBitNonsense
+    bitCount: 1
+  - name: Object ID
+    bitCount: 18
+    signed: true
+
+- code: 32
+  name: Revert Models
+  parameters:
+  - name: Unknown
+    bitCount: 26
+
+- code: 33
+  name: Remove Models
+  parameters:
+  - name: Unknown
+    bitCount: 26
+
+- code: 34
+  name: Throw
+  parameters:
+  - name: Throw Type
+    bitCount: 3
+    enums:
+    - Throw
+    - Release
+  - name: Damage
+    bitCount: 23
+  - name: Angle
+    bitCount: 9
+  - name: Knockback Growth
+    bitCount: 9
+  - name: Weight Knockback
+    bitCount: 9
+  - name: Unused
+    bitCount: 5
+  - name: Base Knockback
+    bitCount: 9
+  - name: Element
+    bitCount: 4
+    enums:
+    - Normal
+    - Fire
+    - Electric
+    - Slash
+    - Coin
+    - Ice
+    - Sleep (103 Frames)
+    - Sleep (412 Frames)
+    - Grounded
+    - Grounded (97 Frames)
+    - Cape
+    - Empty
+    - Disable
+    - Darkness
+    - Screw Attack
+    - Poison Flower
+    - Nothing (No Graphic)
+  - name: Hit SFX Severity
+    bitCount: 3
+    enums:
+    - Weak
+    - Moderate
+    - Strong
+  - name: Hit SFX Kind
+    bitCount: 4
+    enums:
+    - None
+    - NHit (Punch)
+    - MHit (Kick)
+    - SwdHit (Sword)
+    - SJP_Hit (Super Jump/Coin)
+    - MHit+Bat
+    - Harisen (Fan)
+    - EleHit (Electric)
+    - FireHit (Fire)
+    - Nage_Kamu (Yoshi Chew)
+    - KameKr_Hit (Shell Hit)
+    - GHit (Energy)
+    - Peach_Item (Pan, Club, Racket)
+    - IceHit (Bat)
+    - Empty
+    - Empty
+  - name: Unused
+    bitCount: 12
+
+- code: 35
+  name: Held Item Invisibility
+  parameters:
+  - name: Flag
+    bitCount: 26
+
+- code: 36
+  name: Body Article Invisibility
+  parameters:
+  - name: Unknown
+    bitCount: 25
+    hex: true
+  - name: Flag
+    bitCount: 1
+
+- code: 37
+  name: Character Invisibility
+  parameters:
+  - name: Unknown
+    bitCount: 25
+    hex: true
+  - name: Flag
+    bitCount: 1
+
+- code: 38
+  name: Pseudo Random Sound Effect
+  parameters:
+  - name: Unknown1
+    bitCount: 26
+    hex: true
+  - name: SFX ID 1
+    bitCount: 32
+  - name: SFX ID 2
+    bitCount: 32
+  - name: SFX ID 3
+    bitCount: 32
+  - name: SFX ID 4
+    bitCount: 32
+  - name: SFX ID 5
+    bitCount: 32
+  - name: SFX ID 6
+    bitCount: 32
+
+- code: 39
+  name: Unknown0x27
+  parameters:
+  - name: Unknown1
+    bitCount: 2
+  - name: Unknown2
+    bitCount: 8
+  - name: Unknown3
+    bitCount: 8
+  - name: Unknown4
+    bitCount: 8
+  - name: SFX ID
+    bitCount: 32
+  - name: Unknown5
+    bitCount: 32
+  - name: Unknown6
+    bitCount: 8
+  - name: Unknown7
+    bitCount: 8
+  - name: Unknown8
+    bitCount: 8
+  - name: Unknown9
+    bitCount: 8
+
+- code: 40
+  name: Animate Texture
+  parameters:
+  - name: Material Flag
+    bitCount: 1
+  - name: Material Index
+    bitCount: 7
+  - name: Frame Flags
+    bitCount: 7
+  - name: Frame
+    bitCount: 11
+
+- code: 41
+  name: Animate Model
+  parameters:
+  - name: Body Part
+    bitCount: 7
+  - name: State
+    bitCount: 7
+  - name: Unk
+    bitCount: 12
+
+- code: 42
+  name: Change Held Items Action State
+  parameters:
+  - name: Value1
+    bitCount: 13
+  - name: Value2
+    bitCount: 13
+
+- code: 43
+  name: Rumble
+  parameters:
+  - name: Flag
+    bitCount: 1
+  - name: Value1
+    bitCount: 12
+  - name: Value2
+    bitCount: 13
+
+- code: 44
+  name: Set flag 0x221E to 20
+  parameters:
+  - name: Unknown
+    bitCount: 25
+  - name: Flag
+    bitCount: 1
+
+- code: 45
+  name: Body Aura
+  parameters:
+  - name: Unknown
+    bitCount: 8
+  - name: Duration
+    bitCount: 18
+
+- code: 46
+  name: Color Animation
+  parameters:
+  - name: ID
+    bitCount: 8
+  - name: Duration
+    bitCount: 18
+
+- code: 47
+  name: Remove Color Animation
+  parameters:
+  - name: ID
+    bitCount: 8
+  - name: Padding
+    bitCount: 18
+
+- code: 48
+  name: Unknown0xC0
+  parameters:
+  - name: Unknown
+    bitCount: 26
+
+- code: 49
+  name: Sword Trail
+  parameters:
+  - name: Beam Sword
+    bitCount: 1
+  - name: Unknown
+    bitCount: 17
+  - name: Render Status
+    bitCount: 8
+
+- code: 50
+  name: Toggle Bone Physics
+  parameters:
+  - name: Bone ID
+    bitCount: 26
+
+- code: 51
+  name: Self Damage
+  parameters:
+  - name: Unknown
+    bitCount: 26
+
+- code: 52
+  name: Footsnap Behavior
+  parameters:
+  - name: None
+    bitCount: 23
+  - name: Orient Entire Model
+    bitCount: 1
+  - name: Orient Right Leg
+    bitCount: 1
+  - name: Orient Left Leg
+    bitCount: 1
+
+- code: 53
+  name: Set flag 0x2225 to 10
+  parameters:
+  - name: Unknown
+    bitCount: 26
+
+- code: 54
+  name: Footstep Sound and Graphic Effect
+  parameters:
+  - name: Flags
+    bitCount: 26
+    hex: true
+  - name: Sound ID
+    bitCount: 32
+  - name: Padding
+    bitCount: 16
+  - name: Volume
+    bitCount: 8
+  - name: Panning
+    bitCount: 8
+
+- code: 55
+  name: Sound and Graphic Effect
+  parameters:
+  - name: Graphic ID
+    bitCount: 26
+  - name: Sound ID
+    bitCount: 32
+  - name: Padding
+    bitCount: 16
+  - name: Volume
+    bitCount: 8
+  - name: Panning
+    bitCount: 8
+
+- code: 56
+  name: Start Smash Charge
+  parameters:
+  - name: Unknown
+    bitCount: 2
+  - name: Charge Frames
+    bitCount: 8
+  - name: Charge Rate
+    bitCount: 16
+  - name: Color Animation
+    bitCount: 8
+  - name: Unknown
+    bitCount: 24
+
+- code: 57
+  name: Unknown0xE4
+  parameters:
+  - name: Unknown
+    bitCount: 26
+    hex: true
+
+- code: 58
+  name: Aesthetic Wind Effect
+  parameters:
+  - name: Unknown1
+    bitCount: 26
+    hex: true
+  - name: Unknown2
+    bitCount: 32
+    hex: true
+  - name: Unknown3
+    bitCount: 32
+    hex: true
+  - name: Unknown4
+    bitCount: 32
+    hex: true

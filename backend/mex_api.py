@@ -4,7 +4,7 @@ MEX API Backend - Flask server for MexManager operations
 Provides REST API endpoints for costume import and ISO export operations.
 """
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, after_this_request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
@@ -24,8 +24,9 @@ from werkzeug.utils import secure_filename
 import signal
 import atexit
 
-# Add parent directory to path for mex_bridge import
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add scripts/tools to path for mex_bridge import
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "tools"))
 from mex_bridge import MexManager, MexManagerError
 
 # Configuration
@@ -942,6 +943,15 @@ def download_iso(filename):
                 'success': False,
                 'error': 'File not found'
             }), 404
+
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(file_path)
+                logger.info(f"Deleted ISO file after download: {filename}")
+            except Exception as error:
+                logger.error(f"Error deleting ISO file {filename}: {str(error)}")
+            return response
 
         return send_file(
             file_path,
@@ -1863,6 +1873,15 @@ def download_backup(filename):
                 'error': 'Backup file not found'
             }), 404
 
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(backup_path)
+                logger.info(f"Deleted backup file after download: {filename}")
+            except Exception as error:
+                logger.error(f"Error deleting backup file {filename}: {str(error)}")
+            return response
+
         return send_file(
             backup_path,
             as_attachment=True,
@@ -2155,6 +2174,15 @@ def download_mod(filename):
                 'success': False,
                 'error': 'Export file not found'
             }), 404
+
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(file_path)
+                logger.info(f"Deleted mod export file after download: {filename}")
+            except Exception as error:
+                logger.error(f"Error deleting mod export file {filename}: {str(error)}")
+            return response
 
         return send_file(
             file_path,

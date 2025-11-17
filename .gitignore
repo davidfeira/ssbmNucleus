@@ -1,38 +1,38 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
 
 # Logs
 logs/
 *.log
 
-# Large game files
-*.iso
-*.dat
-*.zip
-
-# User-specific data (costume collections)
+# User data
 storage/
 intake/
 output/
 
-# Build output
-build/
-viewer/dist/
-viewer/public/storage/
+# Build outputs
+dist/
 dist-electron/
 dist-backend/
+/build/
+viewer/dist/
 
 # Dependencies
 node_modules/
-
-# Utility subprojects (separate tools)
-utility/website/
-
-# IDE
-.vscode/
-.claude/
+venv/
 
 # Environment
 .env
-venv/
+
+# IDE
+.claude/
+
+# Game files (user-specific)
+*.iso
+*.dat
+*.zip

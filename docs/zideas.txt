@@ -1,0 +1,23 @@
+edit costume modal stock is wack allow scroll while dragging costumes in vault
+
+make refresh on mex page acc reload order and everything, or just make it refresh better and remove the button
+
+still not refreshing when deleting sometimes or adding hide file bar
+
+fix? menu is gross 1.0 ratio export bug
+
+setting stage slippi setting to unknown throws error but works
+
+slippi safe test makes you reset back to homescreen. why
+
+loading indicators importing importing into MEX creating project
+
+if you hold this button during stage loading thhis stage will always be selected hide hsdraw cmd
+electron logo - just smashball it yellow melee styling change name to nucleus
+
+actual custom stages movesets patches
+
++(fix game and watch)
+
+delete output folder shit after 'download'
+when i select all dreamland and import it imports all stages all skins

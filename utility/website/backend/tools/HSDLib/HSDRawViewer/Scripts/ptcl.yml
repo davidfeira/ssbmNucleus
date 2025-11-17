@@ -1,0 +1,488 @@
+﻿- code: 0x00
+  name: Wait
+  description: Waits for a set number of frames before continuing
+  paramDesc: w
+  params:
+  - Frames
+
+- code: 0x40
+  name: Set Texture Index
+  description: Sets the texture index from the referenced TexG
+  paramDesc: wb
+  params:
+  - Wait
+  - Image Index
+
+- code: 0x80
+  name: Set Position
+  description: Sets the Position of the particle
+  paramDesc: v
+  params:
+  - Value
+
+- code: 0x88
+  name: Add Position
+  description: 
+  paramDesc: v
+  params:
+  - Value
+  
+- code: 0x90
+  name: Set Velocity
+  description: 
+  paramDesc: v
+  params:
+  - Value
+
+- code: 0x98
+  name: Add Velocity
+  description: 
+  paramDesc: v
+  params:
+  - Value
+  
+- code: 0xA0
+  name: Set Size Count and Target
+  description: 
+  paramDesc: ef
+  params:
+  - Size Count
+  - Size Target
+  
+- code: 0xA1
+  name: Disable Texture
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xA2
+  name: Set Gravity
+  description: 
+  paramDesc: f
+  params:
+  - Value
+  
+- code: 0xA3
+  name: Set Friction
+  description: 
+  paramDesc: f
+  params:
+  - Value
+  
+- code: 0xA4
+  name: Spawn Particle At Position
+  description: 
+  paramDesc: s
+  params:
+  - Particle ID
+  
+- code: 0xA5
+  name: Spawn Generator At Position
+  description: 
+  paramDesc: s
+  params:
+  - Particle ID
+  
+- code: 0xA6
+  name: Set Life
+  description: 
+  paramDesc: ss
+  params:
+  - Value
+  - Random Range
+  
+- code: 0xA7
+  name: Chance to Destroy out of 100
+  description: 
+  paramDesc: b
+  params:
+  - Chance
+  
+- code: 0xA8
+  name: Randomize Position
+  description: 
+  paramDesc: fff
+  params:
+  - X
+  - Y
+  - Z
+  
+- code: 0xA9
+  name: Rotate Velocity
+  description: 
+  paramDesc: f
+  params:
+  - Value
+  
+- code: 0xAA
+  name: Spawn Random Particle At Position
+  description: 
+  paramDesc: ss
+  params:
+  - Start Particle ID
+  - Range
+  
+- code: 0xAB
+  name: Multiply Velocity
+  description: 
+  paramDesc: f
+  params:
+  - Value
+  
+- code: 0xAC
+  name: Size Count and Target Range
+  description: 
+  paramDesc: eff
+  params:
+  - Size Count
+  - Target Value
+  - Target Range
+  
+- code: 0xAD
+  name: Enable PrimEnv
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xAE
+  name: Disable PrimEnv
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xAF
+  name: Set MirrorS
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB0
+  name: Set MirrorT
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB1
+  name: Set MirrorS and MirrorT
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB2
+  name: Remove AppSRT
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB3
+  name: Set Alpha Compare
+  description: 
+  paramDesc: ebbb
+  params:
+  - Count
+  - Compare Mode
+  - Compare1 Target
+  - Comapre2 Target
+  
+- code: 0xB4
+  name: Use Linear Interpolation
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB5
+  name: Use Near Interpolation
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xB6
+  name: Set Rotate Count and Target
+  description: 
+  paramDesc: ef
+  params:
+  - Count Value
+  - Target Value
+  
+- code: 0xB7
+  name: Move Toward JObj
+  description: 
+  paramDesc: b
+  params:
+  - JObj Index
+  
+- code: 0xB8
+  name: Move to JObj
+  description: 
+  paramDesc: bff
+  params:
+  - Jobj Index
+  - Range
+  - Speed
+  
+- code: 0xB9
+  name: Spawn Particle With Current Generator
+  description: 
+  paramDesc: s
+  params:
+  - Particle ID
+  
+- code: 0xBA
+  name: Add Random Prim Color
+  description: 
+  paramDesc: bbbb
+  params:
+  - R Range
+  - G Range
+  - B Range
+  - A Range
+  
+- code: 0xBB
+  name: Add Random Environment Color
+  description: 
+  paramDesc: bbbb
+  params:
+  - R Range
+  - G Range
+  - B Range
+  - A Range
+  
+- code: 0xBC
+  name: Randomize Texture Index
+  description: 
+  paramDesc: bb
+  params:
+  - Base Value
+  - Random Range
+  
+- code: 0xBD
+  name: Multiple Velocity Random
+  description: 
+  paramDesc: ff
+  params:
+  - Base Value
+  - Random Range
+  
+- code: 0xBE
+  name: Multiply Velocity
+  description: 
+  paramDesc: fff
+  params:
+  - X
+  - Y
+  - Z
+  
+- code: 0xBF
+  name: Set PNTJObj
+  description: 
+  paramDesc: b
+  params:
+  - PNTJOBJ value
+  
+- code: 0xC0
+  name: Set Prim Color
+  description: 
+  paramDesc: ec
+  params:
+  - Count
+  - Color
+  
+- code: 0xD0
+  name: Set Env Color
+  description: 
+  paramDesc: ec
+  params:
+  - Count
+  - Color
+  
+- code: 0xE0
+  name: Add Random Prim and Env Color
+  description: 
+  paramDesc: bbbb
+  params:
+  - R
+  - G
+  - B
+  - A
+  
+- code: 0xE1
+  name: Set Callback
+  description: 
+  paramDesc: b
+  params:
+  - Callback Index
+  
+- code: 0xE2
+  name: Set Bit 4 (DepthMask?)
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xE3
+  name: Set PalNum
+  description: 
+  paramDesc: b
+  params:
+  - Value
+  
+- code: 0xE4
+  name: FlipS
+  description: 
+  paramDesc: b
+  params:
+  - Style (0 = none 1 = FlipS 2 = Toggle 3 = Randomize)
+  
+- code: 0xE5
+  name: FlipT
+  description: 
+  paramDesc: b
+  params:
+  - Style (0 = none 1 = FlipS 2 = Toggle 3 = Randomize)
+  
+- code: 0xE6
+  name: Enable DirVec
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xE7
+  name: Disable DirVec
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xE8
+  name: Set Trail Alpha
+  description: 
+  paramDesc: f
+  params:
+  - Alpha (set to 0 to disable)
+  
+- code: 0xE9
+  name: Add Random to PrimEnv Target
+  description: 
+  paramDesc: l
+  params:
+  - Flag
+  - Step
+  - Color
+  
+- code: 0xEA
+  name: Set Material RGBA and Count
+  description: 
+  paramDesc: em
+  params:
+  - Count
+  - Target RGBA
+  
+- code: 0xEB
+  name: Set Ambient RGBA and Count
+  description: 
+  paramDesc: em
+  params:
+  - Count
+  - Target RGBA
+  
+- code: 0xEC
+  name: Set Userdata Value
+  description: 
+  paramDesc: bf
+  params:
+  - SRT Index
+  - Value
+  
+- code: 0xED
+  name: Add Random Rotation
+  description: 
+  paramDesc: ffb
+  params:
+  - Base Value
+  - Range
+  - Step
+  
+- code: 0xEF
+  name: Spawn Generator and Set Flag
+  description: 
+  paramDesc: sb
+  params:
+  - Effect ID
+  - Flag
+  
+- code: 0xF0
+  name: Spawn Generator from Current Bank and Set Flag
+  description: 
+  paramDesc: sb
+  params:
+  - Particle ID
+  - Flag
+  
+- code: 0xF1
+  name: Spawn Particle Generator at Origin
+  description: 
+  paramDesc: s
+  params:
+  - Particle ID
+  
+- code: 0xF2
+  name: Spawn Particle at Current Position and Velocity 
+  description: 
+  paramDesc: s
+  params:
+  - Particle ID
+  
+- code: 0xF3
+  name: KAR 0xF3
+  description: 8042f92c
+  paramDesc: e
+  params:
+  - Unknown
+  
+- code: 0xF4
+  name: KAR 0xF4
+  description: 8042dea4
+  paramDesc: f
+  params:
+  - Unknown
+  
+- code: 0xF5
+  name: KAR 0xF5
+  description: 8042def4
+  paramDesc: 
+  params:
+  
+- code: 0xF6
+  name: KAR 0xF6
+  description: 8042df3c
+  paramDesc: 
+  params:
+  
+- code: 0xF7
+  name: KAR 0xF7
+  description: 8042df74
+  paramDesc: 
+  params:
+  
+- code: 0xFA
+  name: Set Loop
+  description: 
+  paramDesc: b
+  params:
+  - Loop Amt
+  
+- code: 0xFB
+  name: Execute Loop
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xFC
+  name: Set Mark Pointer
+  description: 
+  paramDesc: 
+  params:
+  
+- code: 0xFD
+  name: Goto Mark Pointer
+  description: 
+  paramDesc: 
+  params:
