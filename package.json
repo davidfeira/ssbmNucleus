@@ -1,7 +1,7 @@
 {
-  "name": "melee-mex-manager",
+  "name": "ssbm-nucleus",
   "version": "1.0.0",
-  "description": "MEX Costume and Stage Manager for Super Smash Bros. Melee",
+  "description": "SSBM Nucleus - Costume and Stage Manager for Super Smash Bros. Melee",
   "main": "electron/main.js",
   "type": "commonjs",
   "scripts": {
@@ -22,8 +22,8 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.meleemex.manager",
-    "productName": "Melee Nexus",
+    "appId": "com.ssbm.nucleus",
+    "productName": "SSBM Nucleus",
     "files": [
       "electron/**/*",
       "viewer/dist/**/*",
@@ -70,7 +70,7 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "viewer/public/icon.ico",
+      "icon": "viewer/public/icon.png",
       "sign": null,
       "signingHashAlgorithms": []
     },

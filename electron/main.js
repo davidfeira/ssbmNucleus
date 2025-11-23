@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -85,19 +85,22 @@ function startFlaskServer() {
 }
 
 function createWindow() {
+  // Remove the default menu bar
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 768,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0d1929',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       enableRemoteModule: false
     },
-    icon: path.join(__dirname, '../viewer/public/favicon.ico')
+    icon: path.join(__dirname, '../viewer/public/icon.png')
   });
 
   // Load the app

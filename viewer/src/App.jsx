@@ -207,7 +207,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Melee Nexus</h1>
+        <h1>SSBM Nucleus</h1>
         <nav className="app-tabs">
           <button
             className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
