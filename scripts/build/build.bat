@@ -64,6 +64,9 @@ if %errorlevel% neq 0 (
 
 echo Copying codes.gct to dist-backend\mex...
 copy /Y "bin\Release\net6.0\codes.gct" "%PROJECT_ROOT%\dist-backend\mex\codes.gct"
+
+echo Copying Sheik vanilla CSP assets...
+xcopy /E /I /Y "%PROJECT_ROOT%\utility\assets\vanilla\Sheik" "%PROJECT_ROOT%\dist-backend\mex\utility\assets\vanilla\Sheik"
 cd /d "%PROJECT_ROOT%"
 
 echo.

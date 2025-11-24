@@ -494,6 +494,21 @@ namespace mexLib.Installer
                 }
             }
 
+            // Inject Sheik CSPs from bundled vanilla assets (Sheik has no CSPs in vanilla ISO)
+            MexFighter sheik = workspace.Project.Fighters[7]; // Sheik is internal ID 7
+            string[] sheikCostumeCodes = { "PlSkNr", "PlSkRe", "PlSkBu", "PlSkGr", "PlSkWh" };
+            string vanillaSheikPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "utility", "assets", "vanilla", "Sheik");
+
+            for (int j = 0; j < Math.Min(sheik.Costumes.Count, sheikCostumeCodes.Length); j++)
+            {
+                string cspPath = Path.Combine(vanillaSheikPath, sheikCostumeCodes[j], "csp.png");
+                if (File.Exists(cspPath))
+                {
+                    using FileStream fs = File.OpenRead(cspPath);
+                    sheik.Costumes[j].CSPAsset.SetFromImageFile(workspace, fs);
+                }
+            }
+
             // extract fighter icons
             List<HSD_JOBJ> single_joint = dataTable.SingleMenuModel.TreeList;
             List<HSDRaw.Common.Animation.HSD_AnimJoint> single_anim = dataTable.SingleMenuAnimation.TreeList;
