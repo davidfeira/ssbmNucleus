@@ -9,6 +9,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
 import sys
+import time
 from pathlib import Path
 import json
 import threading
@@ -414,6 +415,17 @@ def list_fighters():
         mex = get_mex_manager()
         fighters = mex.list_fighters()
 
+        # Add default stock icon URL for each fighter
+        for fighter in fighters:
+            name = fighter['name']
+            # Find the Normal costume folder (ends with 'Nr') in vanilla assets
+            vanilla_dir = VANILLA_ASSETS_DIR / name
+            if vanilla_dir.exists():
+                for folder in vanilla_dir.iterdir():
+                    if folder.is_dir() and folder.name.endswith('Nr'):
+                        fighter['defaultStockUrl'] = f"/vanilla/{name}/{folder.name}/stock.png"
+                        break
+
         return jsonify({
             'success': True,
             'fighters': fighters
@@ -692,6 +704,9 @@ def import_costume():
         result = mex.import_costume(fighter_name, str(full_costume_path))
 
         logger.info(f"Import result: {json.dumps(result, indent=2)}")
+
+        # Small delay to ensure file system has flushed the write
+        time.sleep(0.15)
 
         # Force reload to pick up file changes for subsequent requests
         reload_mex_manager()
@@ -2836,10 +2851,10 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str, cu
 
         # Generate sequential ID based on custom_name or original filename
         if custom_name:
-            # Limit stage names to 10 characters to prevent crashes
-            base_name = custom_name[:10].lower().replace(' ', '-')
+            # Sanitize and limit stage names to 10 characters to prevent crashes
+            base_name = sanitize_filename(custom_name)[:10].lower().replace(' ', '-')
         else:
-            base_name = Path(original_filename).stem.lower().replace(' ', '-')
+            base_name = sanitize_filename(Path(original_filename).stem)[:10].lower().replace(' ', '-')
 
         variant_id = base_name
         counter = 1
@@ -2969,6 +2984,27 @@ def sanitize_filename(name):
     # Remove leading/trailing whitespace
     sanitized = sanitized.strip()
     return sanitized
+
+
+def find_stage_screenshot(folder_path: Path, variant_id: str):
+    """
+    Find a stage screenshot with any image extension.
+    Returns (exists: bool, path: Path or None, extension: str or None)
+    """
+    import glob
+    # Look for screenshot with any common image extension
+    pattern = str(folder_path / f"{variant_id}_screenshot.*")
+    matches = glob.glob(pattern)
+
+    # Filter to only image extensions
+    image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+    for match in matches:
+        ext = os.path.splitext(match)[1].lower()
+        if ext in image_extensions:
+            return True, Path(match), ext
+
+    return False, None, None
+
 
 # Mapping of stage codes to default screenshot filenames
 DAS_DEFAULT_SCREENSHOTS = {
@@ -3167,17 +3203,17 @@ def das_get_stage_variants(stage_code):
                     variant_meta = metadata_variants.get(variant_id_for_screenshot, {})
                     logger.info(f"No metadata match for '{display_name_from_file}', using as variant_id (backwards compatibility)")
 
-                # Check if screenshot exists in storage
-                # Screenshot is always named with variant_id, not display name
-                storage_screenshot = STORAGE_PATH / 'das' / stage_folder_name / f"{variant_id_for_screenshot}_screenshot.png"
+                # Check if screenshot exists in storage (supports multiple extensions)
+                screenshot_folder = STORAGE_PATH / 'das' / stage_folder_name
+                has_screenshot, screenshot_path, screenshot_ext = find_stage_screenshot(screenshot_folder, variant_id_for_screenshot)
 
                 variants.append({
                     'name': filename_stem,  # Display name with button indicator (what user sees in files)
                     'filename': stage_file.name,
                     'stageCode': stage_code,
                     'button': button,  # Button indicator (B, X, Y, L, R, Z) or None
-                    'hasScreenshot': storage_screenshot.exists(),
-                    'screenshotUrl': f"/storage/das/{stage_folder_name}/{variant_id_for_screenshot}_screenshot.png" if storage_screenshot.exists() else None,
+                    'hasScreenshot': has_screenshot,
+                    'screenshotUrl': f"/storage/das/{stage_folder_name}/{variant_id_for_screenshot}_screenshot{screenshot_ext}" if has_screenshot else None,
                     'slippi_safe': variant_meta.get('slippi_safe'),
                     'slippi_tested': variant_meta.get('slippi_tested', False)
                 })
@@ -3232,8 +3268,8 @@ def das_list_storage_variants():
                     if zip_file:
                         variant_name = variant_meta.get('name', variant_id)
 
-                        # Check for screenshot in storage (single source of truth)
-                        storage_screenshot = stage_storage_path / f"{variant_id}_screenshot.png"
+                        # Check for screenshot in storage (supports multiple extensions)
+                        has_screenshot, screenshot_path, screenshot_ext = find_stage_screenshot(stage_storage_path, variant_id)
 
                         variants.append({
                             'stageCode': code,
@@ -3241,8 +3277,8 @@ def das_list_storage_variants():
                             'id': variant_id,  # ← Immutable ID (filename)
                             'name': variant_name,  # ← Editable display name
                             'zipPath': str(zip_file.relative_to(PROJECT_ROOT)),
-                            'hasScreenshot': storage_screenshot.exists(),
-                            'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None,
+                            'hasScreenshot': has_screenshot,
+                            'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot{screenshot_ext}" if has_screenshot else None,
                             'slippi_safe': variant_meta.get('slippi_safe'),
                             'slippi_tested': variant_meta.get('slippi_tested', False),
                             'slippi_test_date': variant_meta.get('slippi_test_date')
@@ -3253,7 +3289,7 @@ def das_list_storage_variants():
 
                 # Then, add any remaining zip files that aren't in metadata (shouldn't happen normally)
                 for variant_id, zip_file in zip_files.items():
-                    storage_screenshot = stage_storage_path / f"{variant_id}_screenshot.png"
+                    has_screenshot, screenshot_path, screenshot_ext = find_stage_screenshot(stage_storage_path, variant_id)
 
                     variants.append({
                         'stageCode': code,
@@ -3261,8 +3297,8 @@ def das_list_storage_variants():
                         'id': variant_id,
                         'name': variant_id,  # Fallback: use ID as name
                         'zipPath': str(zip_file.relative_to(PROJECT_ROOT)),
-                        'hasScreenshot': storage_screenshot.exists(),
-                        'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot.png" if storage_screenshot.exists() else None,
+                        'hasScreenshot': has_screenshot,
+                        'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot{screenshot_ext}" if has_screenshot else None,
                         'slippi_safe': None,
                         'slippi_tested': False,
                         'slippi_test_date': None

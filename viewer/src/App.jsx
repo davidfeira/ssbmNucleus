@@ -240,7 +240,7 @@ function App() {
             <div style={{ display: activeTab === 'storage' ? 'block' : 'none' }}>
               <StorageViewer metadata={metadata} onRefresh={fetchMetadata} />
             </div>
-            <div style={{ display: activeTab === 'mex' ? 'block' : 'none' }}>
+            <div style={{ display: activeTab === 'mex' ? 'block' : 'none', height: '100%' }}>
               <MexPanel />
             </div>
             <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>

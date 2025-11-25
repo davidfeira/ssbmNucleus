@@ -1305,10 +1305,6 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     onContextMenu={(e) => handleVariantContextMenu(e, variant, idx)}
                     style={{ opacity: isDragging ? 0.5 : 1 }}
                   >
-                  <div className="skin-header">
-                    <h4 className="skin-title">{variant.name}</h4>
-                  </div>
-
                   <div className="skin-images">
                     <div className="skin-image-container">
                       {variant.hasScreenshot ? (
@@ -1371,7 +1367,6 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
                   <div className="skin-info">
                     <div className="skin-color">{variant.name}</div>
-                    <div className="skin-id">{variant.id}</div>
                   </div>
                 </div>
               )
@@ -1486,7 +1481,6 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
                   <div className="skin-info">
                     <div className="skin-color">{skin.color}</div>
-                    <div className="skin-id">{skin.id}</div>
                   </div>
                 </div>
               )

@@ -25,6 +25,7 @@ const MexPanel = () => {
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [openingProject, setOpeningProject] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [createProjectStatus, setCreateProjectStatus] = useState('');
   const [importing, setImporting] = useState(false);
   const [importingCostume, setImportingCostume] = useState(null);
   const [removing, setRemoving] = useState(false);
@@ -123,8 +124,7 @@ const MexPanel = () => {
   useEffect(() => {
     if (selectedFighter) {
       fetchMexCostumes(selectedFighter.name, true);
-      // Clear selection when switching fighters
-      setSelectedCostumes(new Set());
+      // Don't clear selection - let it persist across fighters for batch import
     }
   }, [selectedFighter]);
 
@@ -464,7 +464,11 @@ const MexPanel = () => {
   const selectAllCostumes = () => {
     if (!selectedFighter) return;
     const allCostumes = getCostumesForFighter(selectedFighter.name);
-    setSelectedCostumes(new Set(allCostumes.map(c => c.zipPath)));
+    setSelectedCostumes(prev => {
+      const newSet = new Set(prev);
+      allCostumes.forEach(c => newSet.add(c.zipPath));
+      return newSet;
+    });
   };
 
   const clearSelection = () => {
@@ -1143,31 +1147,31 @@ const MexPanel = () => {
       return;
     }
 
+    // Step 1: Select vanilla ISO (before showing loading)
+    const isoPath = await window.electron.openIsoDialog();
+
+    if (!isoPath) {
+      // User canceled
+      return;
+    }
+
+    console.log('Selected ISO:', isoPath);
+
+    // Step 2: Select project folder (before showing loading)
+    const projectDir = await window.electron.selectDirectory();
+
+    if (!projectDir) {
+      // User canceled
+      return;
+    }
+
+    console.log('Selected project directory:', projectDir);
+
+    // Now show loading overlay since we have all user input
     setCreatingProject(true);
+    setCreateProjectStatus('Creating project...');
 
     try {
-      // Step 1: Select vanilla ISO
-      const isoPath = await window.electron.openIsoDialog();
-
-      if (!isoPath) {
-        // User canceled
-        setCreatingProject(false);
-        return;
-      }
-
-      console.log('Selected ISO:', isoPath);
-
-      // Step 2: Select project folder
-      const projectDir = await window.electron.selectDirectory();
-
-      if (!projectDir) {
-        // User canceled
-        setCreatingProject(false);
-        return;
-      }
-
-      console.log('Selected project directory:', projectDir);
-
       // Step 3: Use default project name
       const projectName = 'MexProject';
       console.log('Project name:', projectName);
@@ -1189,6 +1193,7 @@ const MexPanel = () => {
         console.log('✓ Project created:', data.projectPath);
 
         // Step 5: Auto-open the newly created project
+        setCreateProjectStatus('Opening project...');
         const openResponse = await fetch(`${API_URL}/project/open`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1201,6 +1206,25 @@ const MexPanel = () => {
           console.log('✓ Project opened:', openData.project.name);
           addToRecentProjects(data.projectPath, openData.project.name);
           await fetchMexStatus();
+
+          // Step 6: Auto-install DAS framework
+          setCreateProjectStatus('Installing stage variants...');
+          console.log('Installing DAS framework...');
+          try {
+            const dasResponse = await fetch(`${API_URL}/das/install`, {
+              method: 'POST'
+            });
+            const dasData = await dasResponse.json();
+            if (dasData.success) {
+              console.log('✓ DAS framework installed');
+              setDasInstalled(true);
+            } else {
+              console.error('DAS installation failed:', dasData.error);
+            }
+          } catch (dasErr) {
+            console.error('DAS installation error:', dasErr);
+          }
+
           setShowProjectModal(false); // Close modal on success
         } else {
           alert(`Project created but failed to open: ${openData.error}`);
@@ -1212,6 +1236,7 @@ const MexPanel = () => {
       alert(`Error creating project: ${err.message}`);
     } finally {
       setCreatingProject(false);
+      setCreateProjectStatus('');
     }
   };
 
@@ -1250,7 +1275,7 @@ const MexPanel = () => {
                     onClick={() => handleOpenProjectFromPath(project.path)}
                   >
                     <div>
-                      <div className="recent-project-name">{project.name}</div>
+                      <div className="recent-project-name">{project.path?.split(/[/\\]/).slice(-2, -1)[0] || project.name}</div>
                       <div className="recent-project-path">{project.path}</div>
                     </div>
                     <button
@@ -1325,46 +1350,46 @@ const MexPanel = () => {
   return (
     <div className="mex-panel">
       <div className="mex-header">
-        <h2>MEX Manager</h2>
-        {mexStatus?.connected && (
-          <div className="mex-status connected">
-            <span className="status-dot"></span>
-            <span>{mexStatus.project.name} v{mexStatus.project.version}</span>
+        <div className="header-left">
+          {mexStatus?.connected && (
+            <div className="mex-status connected">
+              <span className="status-dot"></span>
+              <span>{mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}</span>
+            </div>
+          )}
+          <div className="action-buttons-group">
+            <button
+              className="action-btn export-btn"
+              onClick={() => setShowIsoBuilder(true)}
+            >
+              Export ISO
+            </button>
+            <button
+              className="action-btn"
+              onClick={() => setShowProjectModal(true)}
+            >
+              Switch Project
+            </button>
+            <button
+              className="action-btn"
+              onClick={async () => {
+                setRefreshing(true);
+                await Promise.all([
+                  fetchFighters(),
+                  fetchStorageCostumes(),
+                  selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
+                ]);
+                setRefreshing(false);
+              }}
+              disabled={refreshing}
+            >
+              Refresh
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="mex-actions">
-        <div className="action-buttons-group">
-          <button
-            className="action-btn"
-            onClick={() => setShowIsoBuilder(true)}
-          >
-            Export ISO
-          </button>
-          <button
-            className="action-btn"
-            onClick={() => setShowProjectModal(true)}
-          >
-            Switch Project
-          </button>
-          <button
-            className="action-btn"
-            onClick={async () => {
-              setRefreshing(true);
-              await Promise.all([
-                fetchFighters(),
-                fetchStorageCostumes(),
-                selectedFighter ? fetchMexCostumes(selectedFighter.name) : Promise.resolve()
-              ]);
-              setRefreshing(false);
-            }}
-            disabled={refreshing}
-          >
-            Refresh
-          </button>
-        </div>
-
+      <div className="mex-mode-row">
         {/* Mode Switcher */}
         <div className="mode-switcher">
           <button
@@ -1401,12 +1426,22 @@ const MexPanel = () => {
                   className={`fighter-item ${selectedFighter?.internalId === fighter.internalId ? 'selected' : ''}`}
                   onClick={() => setSelectedFighter(fighter)}
                 >
-                  <div className="fighter-name">{fighter.name}</div>
-                  <div className="fighter-info">
-                    <span className="costume-count">{fighter.costumeCount} in MEX</span>
-                    {availableCostumes.length > 0 && (
-                      <span className="available-count">{availableCostumes.length} available</span>
-                    )}
+                  {fighter.defaultStockUrl && (
+                    <img
+                      src={`${BACKEND_URL}${fighter.defaultStockUrl}`}
+                      alt=""
+                      className="fighter-stock-icon"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  )}
+                  <div className="fighter-content">
+                    <div className="fighter-name">{fighter.name}</div>
+                    <div className="fighter-info">
+                      <span className="costume-count">{fighter.costumeCount} in MEX</span>
+                      {availableCostumes.length > 0 && (
+                        <span className="available-count">{availableCostumes.length} available</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1457,7 +1492,6 @@ const MexPanel = () => {
                         )}
                         <div className="costume-info">
                           <h4>{costume.name}</h4>
-                          <p className="costume-file">{costume.fileName}</p>
                           {costume.iconUrl && (
                             <div className="costume-assets">
                               <div className="stock-icon">
@@ -1485,40 +1519,39 @@ const MexPanel = () => {
                 <div className="costumes-section-header">
                   <h3>
                     Available to Import
-                    {selectedCostumes.size > 0 && ` (${selectedCostumes.size} selected)`}
+                    {selectedCostumes.size > 0 && ` (${selectedCostumes.size} total selected)`}
                   </h3>
-                  {getCostumesForFighter(selectedFighter.name).length > 0 && (
-                    <div className="batch-controls">
-                      {selectedCostumes.size > 0 ? (
-                        <>
-                          <button
-                            className="btn-batch-import"
-                            onClick={handleBatchImport}
-                            disabled={batchImporting || loadingFighter}
-                          >
-                            {batchImporting
-                              ? `Importing ${batchProgress.current}/${batchProgress.total}...`
-                              : `Import Selected (${selectedCostumes.size})`}
-                          </button>
-                          <button
-                            className="btn-clear-selection"
-                            onClick={clearSelection}
-                            disabled={batchImporting || loadingFighter}
-                          >
-                            Clear
-                          </button>
-                        </>
-                      ) : (
+                  <div className="batch-controls">
+                    {getCostumesForFighter(selectedFighter.name).length > 0 && (
+                      <button
+                        className="btn-select-all"
+                        onClick={selectAllCostumes}
+                        disabled={loadingFighter || batchImporting}
+                      >
+                        Select All
+                      </button>
+                    )}
+                    {selectedCostumes.size > 0 && (
+                      <>
                         <button
-                          className="btn-select-all"
-                          onClick={selectAllCostumes}
-                          disabled={loadingFighter}
+                          className="btn-batch-import"
+                          onClick={handleBatchImport}
+                          disabled={batchImporting || loadingFighter}
                         >
-                          Select All
+                          {batchImporting
+                            ? `Importing ${batchProgress.current}/${batchProgress.total}...`
+                            : `Import All Selected (${selectedCostumes.size})`}
                         </button>
-                      )}
-                    </div>
-                  )}
+                        <button
+                          className="btn-clear-selection"
+                          onClick={clearSelection}
+                          disabled={batchImporting || loadingFighter}
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className={`costume-list ${loadingFighter ? 'processing' : ''}`}>
                   {getCostumesForFighter(selectedFighter.name).map((costume, idx) => {
@@ -1546,8 +1579,7 @@ const MexPanel = () => {
                           />
                         </div>
                         <div className="costume-info">
-                          <h4>{costume.name}</h4>
-                          <p className="costume-code">{costume.costumeCode}</p>
+                          <h4>{costume.name?.includes(' - ') ? costume.name.split(' - ').slice(1).join(' - ') : costume.name}</h4>
                           <div className="costume-assets">
                             {costume.stockUrl && (
                               <div className="stock-icon">
@@ -1672,7 +1704,6 @@ const MexPanel = () => {
                               </div>
                               <div className="costume-info">
                                 <h4>{variant.name}</h4>
-                                <p className="costume-file">{variant.filename}</p>
                                 {variant.button && (
                                   <div
                                     className="button-badge"
@@ -1769,7 +1800,6 @@ const MexPanel = () => {
                               </div>
                               <div className="costume-info">
                                 <h4>{variant.name}</h4>
-                                <p className="costume-code">{selectedStage.name}</p>
                                 <div className="costume-assets">
                                   {variant.slippi_safe && (
                                     <div className="slippi-badge" title="Slippi Safe">
@@ -1823,7 +1853,7 @@ const MexPanel = () => {
                       onClick={() => handleOpenProjectFromPath(project.path)}
                     >
                       <div>
-                        <div className="recent-project-name">{project.name}</div>
+                        <div className="recent-project-name">{project.path?.split(/[/\\]/).slice(-2, -1)[0] || project.name}</div>
                         <div className="recent-project-path">{project.path}</div>
                       </div>
                       <button
@@ -1876,6 +1906,41 @@ const MexPanel = () => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Import Loading Overlay */}
+      {(importing || batchImporting) && (
+        <div className="import-overlay">
+          <div className="import-modal">
+            <div className="import-spinner"></div>
+            <h3>Importing...</h3>
+            {batchImporting && batchProgress.total > 0 && (
+              <div className="import-progress">
+                <div
+                  className="import-progress-bar"
+                  style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                />
+              </div>
+            )}
+            <p>{batchImporting && batchProgress.total > 0
+              ? `${batchProgress.current} of ${batchProgress.total} costumes`
+              : 'Please wait...'}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Project Creation Loading Overlay */}
+      {creatingProject && (
+        <div className="import-overlay">
+          <div className="import-modal">
+            <div className="import-spinner"></div>
+            <h3>Creating Project</h3>
+            <div className="import-progress">
+              <div className="import-progress-bar indeterminate" />
+            </div>
+            <p>{createProjectStatus}</p>
           </div>
         </div>
       )}

@@ -109,17 +109,15 @@ namespace mexLib.Types
                     fstream.CopyTo(stream);
                     fstream.Close();
 
-                    // Screenshot assets
-                    if (Path.GetExtension(entry.Name).ToLower() == ".png" && stage != null)
+                    // Screenshot assets - support PNG, GIF, JPG
+                    string ext = Path.GetExtension(entry.Name).ToLower();
+                    string nameWithoutExt = Path.GetFileNameWithoutExtension(entry.Name).ToLower();
+                    if ((ext == ".png" || ext == ".gif" || ext == ".jpg" || ext == ".jpeg") && stage != null)
                     {
-                        switch (entry.Name.ToLower())
+                        if (nameWithoutExt == "screenshot" || nameWithoutExt == "preview" || nameWithoutExt == "stage")
                         {
-                            case "screenshot.png":
-                            case "preview.png":
-                            case "stage.png":
-                                log.AppendLine($"Imported \"{entry.FullName}\" as screenshot");
-                                stage.ScreenshotAsset.SetFromImageFile(workspace, stream);
-                                break;
+                            log.AppendLine($"Imported \"{entry.FullName}\" as screenshot");
+                            stage.ScreenshotAsset.SetFromImageFile(workspace, stream);
                         }
                     }
                 }
