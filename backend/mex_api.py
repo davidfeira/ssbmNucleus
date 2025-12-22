@@ -998,7 +998,9 @@ def download_iso(filename):
 
 @app.route('/api/mex/storage/costumes', methods=['GET'])
 def list_storage_costumes():
-    """List all costumes in storage with MEX-compatible ZIPs"""
+    """List all costumes in storage with MEX-compatible ZIPs.
+    Folders in the skins array are skipped - only actual skins are returned.
+    """
     try:
         character = request.args.get('character')
 
@@ -1023,9 +1025,20 @@ def list_storage_costumes():
 
         # Build costume list
         for char_name, char_data in characters_data.items():
-            for skin in char_data.get('skins', []):
+            skins = char_data.get('skins', [])
+
+            # Iterate through skins array in order, skipping folders
+            for skin in skins:
+                # Skip folder entries
+                if skin.get('type') == 'folder':
+                    continue
+
+                # Skip hidden skins (e.g., Ice Climbers Nana)
+                if skin.get('visible') is False:
+                    continue
+
                 # ZIPs are stored directly in character folder: storage/Character/filename.zip
-                zip_path = STORAGE_PATH / char_name / skin['filename']
+                zip_path = STORAGE_PATH / char_name / skin.get('filename', '')
 
                 if zip_path.exists():
                     costume_data = {
@@ -3819,9 +3832,29 @@ def update_stage_screenshot():
         }), 500
 
 
+def get_folder_id_at_position(skins, position):
+    """Determine folder membership based on position.
+    Look backwards from position - if we find a skin with folder_id or a folder,
+    that determines our folder membership.
+    """
+    for i in range(position - 1, -1, -1):
+        item = skins[i]
+        if item.get('type') == 'folder':
+            # We're right after a folder - in that folder
+            return item['id']
+        if item.get('folder_id'):
+            # Previous item is in a folder - we're in that folder too
+            return item['folder_id']
+        # Previous item is at root level (no folder_id, not a folder)
+        return None
+    return None  # At the start, root level
+
+
 @app.route('/api/mex/storage/costumes/reorder', methods=['POST'])
 def reorder_costumes():
-    """Reorder character skins in storage"""
+    """Reorder character skins in storage.
+    Also updates folder_id based on new position for proper folder membership.
+    """
     try:
         data = request.json
         character = data.get('character')
@@ -3863,8 +3896,17 @@ def reorder_costumes():
             }), 400
 
         # Reorder the skins array
-        skin = skins.pop(from_index)
-        skins.insert(to_index, skin)
+        item = skins.pop(from_index)
+        skins.insert(to_index, item)
+
+        # Update folder_id based on new position (only for skins, not folders)
+        if item.get('type') != 'folder':
+            new_folder_id = get_folder_id_at_position(skins, to_index)
+            if new_folder_id:
+                item['folder_id'] = new_folder_id
+            elif 'folder_id' in item:
+                del item['folder_id']
+            logger.info(f"[OK] Updated folder_id to {new_folder_id} for item at position {to_index}")
 
         # Save updated metadata
         with open(metadata_file, 'w') as f:
@@ -4020,6 +4062,369 @@ def move_costume_to_bottom():
         })
     except Exception as e:
         logger.error(f"Move costume to bottom error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ============= Folder Management Endpoints =============
+# Simplified approach: folders are entries in the skins array itself.
+# Skins can have optional folder_id to indicate membership.
+# This keeps the existing reorder endpoint working unchanged.
+
+
+def find_folder_in_skins(skins, folder_id):
+    """Find a folder by ID in the skins array."""
+    for i, item in enumerate(skins):
+        if item.get('type') == 'folder' and item.get('id') == folder_id:
+            return item, i
+    return None, -1
+
+
+@app.route('/api/mex/storage/folders/create', methods=['POST'])
+def create_folder():
+    """Create a new folder for organizing skins.
+    Folders are added directly to the skins array.
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        name = data.get('name', 'New Folder')
+
+        if not character:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Generate unique folder ID
+        import uuid
+        folder_id = f"folder_{uuid.uuid4().hex[:8]}"
+
+        # Create new folder (as an entry in skins array)
+        new_folder = {
+            'type': 'folder',
+            'id': folder_id,
+            'name': name,
+            'expanded': True
+        }
+
+        # Add folder to end of skins array
+        skins.append(new_folder)
+        character_data['skins'] = skins
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Created folder '{name}' for {character}")
+
+        return jsonify({
+            'success': True,
+            'folder': new_folder,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Create folder error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/folders/rename', methods=['POST'])
+def rename_folder():
+    """Rename a folder"""
+    try:
+        data = request.json
+        character = data.get('character')
+        folder_id = data.get('folderId')
+        new_name = data.get('newName')
+
+        if not character or not folder_id or not new_name:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, folderId, or newName parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find and update folder
+        folder, idx = find_folder_in_skins(skins, folder_id)
+        if not folder:
+            return jsonify({
+                'success': False,
+                'error': f'Folder {folder_id} not found'
+            }), 404
+
+        folder['name'] = new_name
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Renamed folder {folder_id} to '{new_name}'")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Rename folder error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/folders/delete', methods=['POST'])
+def delete_folder():
+    """Delete a folder.
+    Removes folder_id from any skins that belonged to this folder.
+    Does NOT delete the skins themselves.
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        folder_id = data.get('folderId')
+
+        if not character or not folder_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or folderId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find folder
+        folder, folder_idx = find_folder_in_skins(skins, folder_id)
+        if not folder:
+            return jsonify({
+                'success': False,
+                'error': f'Folder {folder_id} not found'
+            }), 404
+
+        # Remove folder_id from any skins that had it
+        for skin in skins:
+            if skin.get('folder_id') == folder_id:
+                del skin['folder_id']
+
+        # Remove the folder itself from skins array
+        skins.pop(folder_idx)
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Deleted folder {folder_id}")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Delete folder error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/folders/toggle', methods=['POST'])
+def toggle_folder():
+    """Toggle folder expanded state"""
+    try:
+        data = request.json
+        character = data.get('character')
+        folder_id = data.get('folderId')
+
+        if not character or not folder_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or folderId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find and toggle folder
+        folder, idx = find_folder_in_skins(skins, folder_id)
+        if not folder:
+            return jsonify({
+                'success': False,
+                'error': f'Folder {folder_id} not found'
+            }), 404
+
+        folder['expanded'] = not folder.get('expanded', True)
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Toggled folder {folder_id} expanded: {folder['expanded']}")
+
+        return jsonify({
+            'success': True,
+            'expanded': folder['expanded'],
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Toggle folder error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/skins/set-folder', methods=['POST'])
+def set_skin_folder():
+    """Assign or unassign a skin to a folder"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+        folder_id = data.get('folderId')  # null to remove from folder
+
+        if not character or not skin_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or skinId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        if character not in metadata.get('characters', {}):
+            return jsonify({
+                'success': False,
+                'error': f'Character {character} not found in metadata'
+            }), 404
+
+        character_data = metadata['characters'][character]
+        skins = character_data.get('skins', [])
+
+        # Find the skin
+        skin = None
+        for s in skins:
+            if s.get('id') == skin_id and s.get('type') != 'folder':
+                skin = s
+                break
+
+        if not skin:
+            return jsonify({
+                'success': False,
+                'error': f'Skin {skin_id} not found'
+            }), 404
+
+        # Verify folder exists if provided
+        if folder_id:
+            folder, _ = find_folder_in_skins(skins, folder_id)
+            if not folder:
+                return jsonify({
+                    'success': False,
+                    'error': f'Folder {folder_id} not found'
+                }), 404
+
+        # Set or remove folder_id
+        if folder_id:
+            skin['folder_id'] = folder_id
+        elif 'folder_id' in skin:
+            del skin['folder_id']
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Set skin {skin_id} folder to {folder_id}")
+
+        return jsonify({
+            'success': True,
+            'skins': skins
+        })
+    except Exception as e:
+        logger.error(f"Set skin folder error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

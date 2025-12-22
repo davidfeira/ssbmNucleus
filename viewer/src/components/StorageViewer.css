@@ -1393,3 +1393,206 @@
   cursor: not-allowed;
   transform: none;
 }
+
+/* ─────────────────────────────────────────
+   Folder Organization
+   ───────────────────────────────────────── */
+
+/* Header with back button and create folder button */
+.character-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.create-folder-button {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.create-folder-button:hover {
+  color: var(--color-cyan);
+  border-color: var(--color-cyan);
+  background: var(--color-bg-surface);
+}
+
+.create-folder-button:active {
+  transform: scale(0.98);
+}
+
+/* Folder card - styled as accordion trigger, same grid cell as skin cards */
+.folder-card {
+  background: var(--color-bg-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  min-height: 180px;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.folder-card:hover {
+  border-color: var(--color-cyan);
+  background: var(--color-bg-elevated);
+}
+
+.folder-card.drop-target {
+  border-color: var(--color-cyan);
+  border-style: solid;
+  background: rgba(0, 255, 255, 0.15);
+  box-shadow:
+    0 0 0 2px rgba(0, 255, 255, 0.3),
+    inset 0 0 20px rgba(0, 255, 255, 0.1);
+}
+
+.folder-card.dragging {
+  opacity: 0.5;
+}
+
+.folder-card.expanded {
+  border-color: var(--color-cyan);
+  border-style: solid;
+  background: var(--color-bg-elevated);
+}
+
+.folder-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  width: 100%;
+}
+
+.folder-chevron {
+  font-size: var(--text-lg);
+  color: var(--color-text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.folder-card.expanded .folder-chevron {
+  color: var(--color-cyan);
+}
+
+.folder-name {
+  font-family: var(--font-display);
+  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-name-input {
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-cyan);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-display);
+  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  outline: none;
+  width: 100%;
+  max-width: 120px;
+  text-align: center;
+}
+
+.folder-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  background: var(--color-bg-deep);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.folder-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.folder-actions button {
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: var(--space-1);
+  font-size: var(--text-xs);
+  opacity: 0.6;
+  transition: all var(--transition-fast);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.folder-actions button:hover {
+  opacity: 1;
+  border-color: var(--color-cyan);
+  background: var(--color-bg-surface);
+  color: var(--color-cyan);
+}
+
+/* Skin card in folder - subtle left border indicator */
+.skin-card.in-folder {
+  border-left: 3px solid var(--color-cyan);
+}
+
+/* Remove from folder button */
+.btn-remove-folder {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  font-size: var(--text-sm);
+}
+
+.skin-card:hover .btn-remove-folder {
+  opacity: 0.7;
+}
+
+.btn-remove-folder:hover {
+  opacity: 1 !important;
+  border-color: var(--color-cyan);
+  color: var(--color-cyan);
+  background: var(--color-bg-surface);
+}

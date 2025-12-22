@@ -100,10 +100,17 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
   // Drag and drop state
   const [draggedItem, setDraggedItem] = useState(null) // { index, id }
+  const [dragStartIndex, setDragStartIndex] = useState(null) // Original position when drag started
   const [dragOverIndex, setDragOverIndex] = useState(null)
   const [reordering, setReordering] = useState(false)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, type: 'skin'/'variant', item, index }
   const [previewOrder, setPreviewOrder] = useState(null) // Live preview of reordered items during drag
+
+  // Folder state
+  const [expandedFolders, setExpandedFolders] = useState({}) // { folderId: true/false }
+  const [editingFolderId, setEditingFolderId] = useState(null)
+  const [editingFolderName, setEditingFolderName] = useState('')
+  const [dragTargetFolder, setDragTargetFolder] = useState(null) // Folder being hovered over during drag
 
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
@@ -1003,6 +1010,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
   // Drag and drop handlers
   const handleDragStart = (e, index, items) => {
     setDraggedItem({ index, id: items[index].id })
+    setDragStartIndex(index) // Track original position for returning to same spot
     e.dataTransfer.effectAllowed = 'move'
   }
 
@@ -1013,7 +1021,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
   const handleDragEnter = (e, index, items) => {
     e.preventDefault()
-    if (!draggedItem || draggedItem.index === index) return
+    if (!draggedItem) return
 
     // Only update if we've moved to a different position
     if (dragOverIndex !== index) {
@@ -1025,6 +1033,9 @@ export default function StorageViewer({ metadata, onRefresh }) {
       // Find current position of dragged item in preview
       const draggedCurrentPos = currentOrder.findIndex(item => item.id === draggedItem.id)
       if (draggedCurrentPos === -1) return
+
+      // Skip if already at target position in preview
+      if (draggedCurrentPos === index) return
 
       // Create new order with item moved to target position
       const newOrder = [...currentOrder]
@@ -1046,10 +1057,11 @@ export default function StorageViewer({ metadata, onRefresh }) {
     e.preventDefault()
     if (!draggedItem) return
 
-    const fromIndex = draggedItem.index
+    const fromIndex = dragStartIndex
 
     if (fromIndex === toIndex || !selectedCharacter) {
       setDraggedItem(null)
+      setDragStartIndex(null)
       setDragOverIndex(null)
       setPreviewOrder(null)
       return
@@ -1082,6 +1094,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
     } finally {
       setReordering(false)
       setDraggedItem(null)
+      setDragStartIndex(null)
       setDragOverIndex(null)
       setPreviewOrder(null)
     }
@@ -1091,10 +1104,11 @@ export default function StorageViewer({ metadata, onRefresh }) {
     e.preventDefault()
     if (!draggedItem) return
 
-    const fromIndex = draggedItem.index
+    const fromIndex = dragStartIndex
 
     if (fromIndex === toIndex || !selectedStage) {
       setDraggedItem(null)
+      setDragStartIndex(null)
       setDragOverIndex(null)
       setPreviewOrder(null)
       return
@@ -1128,6 +1142,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
     } finally {
       setReordering(false)
       setDraggedItem(null)
+      setDragStartIndex(null)
       setDragOverIndex(null)
       setPreviewOrder(null)
     }
@@ -1135,8 +1150,289 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
   const handleDragEnd = () => {
     setDraggedItem(null)
+    setDragStartIndex(null)
     setDragOverIndex(null)
     setPreviewOrder(null)
+    setDragTargetFolder(null)
+  }
+
+  // Folder helper functions
+  // Build display list from skins array (which now contains both skins and folders)
+  // Folder items are GROUPED right after their folder header when expanded
+  const buildDisplayList = (allSkins) => {
+    if (!allSkins?.length) return []
+
+    // Build folder info and collect folder items
+    const folderItems = {} // folderId -> [items with arrayIndex]
+    const folders = [] // folder objects with arrayIndex
+    const rootItems = [] // items not in any folder
+
+    for (let i = 0; i < allSkins.length; i++) {
+      const item = allSkins[i]
+
+      if (item.type === 'folder') {
+        folders.push({ folder: item, arrayIndex: i })
+        folderItems[item.id] = []
+      } else if (item.visible !== false) {
+        if (item.folder_id) {
+          if (!folderItems[item.folder_id]) {
+            folderItems[item.folder_id] = []
+          }
+          folderItems[item.folder_id].push({ skin: item, arrayIndex: i })
+        } else {
+          rootItems.push({ skin: item, arrayIndex: i })
+        }
+      }
+    }
+
+    // Build display list: root items first, then folders with their items
+    const result = []
+
+    // Add root items that come before all folders
+    // We need to maintain relative order, so track what we've added
+    const addedIndices = new Set()
+
+    // Go through array in order to maintain relative positioning
+    for (let i = 0; i < allSkins.length; i++) {
+      const item = allSkins[i]
+
+      if (item.type === 'folder') {
+        const isExpanded = expandedFolders[item.id] ?? item.expanded ?? true
+        result.push({ type: 'folder', folder: item, isExpanded, arrayIndex: i })
+        addedIndices.add(i)
+
+        // If expanded, add all items belonging to this folder right after it
+        if (isExpanded && folderItems[item.id]) {
+          for (const folderItem of folderItems[item.id]) {
+            result.push({ type: 'skin', skin: folderItem.skin, folderId: item.id, arrayIndex: folderItem.arrayIndex })
+            addedIndices.add(folderItem.arrayIndex)
+          }
+        }
+      } else if (item.visible !== false && !item.folder_id) {
+        // Root item - add it
+        result.push({ type: 'skin', skin: item, folderId: null, arrayIndex: i })
+        addedIndices.add(i)
+      }
+      // Skip folder items here - they're added after their folder
+    }
+
+    return result
+  }
+
+  // Count skins in a folder (by folder_id)
+  const countSkinsInFolder = (folderId, allSkins) => {
+    return allSkins.filter(s => s.folder_id === folderId && s.visible !== false).length
+  }
+
+  // Determine folder membership based on position after reorder
+  // Returns the folder_id the item should have at the given position
+  const getFolderIdAtPosition = (allSkins, position) => {
+    // Look backwards from position to find the context
+    // If we find a skin with folder_id before hitting a folder or start, we're in that folder
+    // If we find a folder, we're right after it (in that folder)
+    // If we hit start or a skin without folder_id, we're at root
+    for (let i = position - 1; i >= 0; i--) {
+      const item = allSkins[i]
+      if (item.type === 'folder') {
+        // We're right after a folder - in that folder
+        return item.id
+      }
+      if (item.folder_id) {
+        // Previous item is in a folder - we're in that folder too
+        return item.folder_id
+      }
+      // Previous item is at root level - we're at root
+      return null
+    }
+    return null // At the start, root level
+  }
+
+  const toggleFolder = async (folderId) => {
+    // Update local state immediately for responsive UI
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folderId]: !(prev[folderId] ?? true)
+    }))
+
+    // Also persist to backend
+    try {
+      await fetch(`${API_URL}/storage/folders/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          folderId
+        })
+      })
+    } catch (err) {
+      console.error('Toggle folder error:', err)
+    }
+  }
+
+  const handleCreateFolder = async () => {
+    try {
+      const response = await fetch(`${API_URL}/storage/folders/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          name: 'New Folder'
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        await onRefresh()
+        // Start editing the new folder name
+        setEditingFolderId(data.folder.id)
+        setEditingFolderName(data.folder.name)
+      } else {
+        alert(`Create folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Create folder error:', err)
+      alert(`Create folder error: ${err.message}`)
+    }
+  }
+
+  const startEditingFolder = (folder) => {
+    setEditingFolderId(folder.id)
+    setEditingFolderName(folder.name)
+  }
+
+  const saveFolderName = async (folderId) => {
+    if (!editingFolderName.trim()) {
+      setEditingFolderId(null)
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/storage/folders/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          folderId,
+          newName: editingFolderName.trim()
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        await onRefresh()
+      } else {
+        alert(`Rename folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Rename folder error:', err)
+      alert(`Rename folder error: ${err.message}`)
+    } finally {
+      setEditingFolderId(null)
+      setEditingFolderName('')
+    }
+  }
+
+  const deleteFolder = async (folderId) => {
+    if (!confirm('Delete this folder? Contents will be moved out, not deleted.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/storage/folders/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          folderId
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        await onRefresh()
+      } else {
+        alert(`Delete folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Delete folder error:', err)
+      alert(`Delete folder error: ${err.message}`)
+    }
+  }
+
+  const handleDropOnFolder = async (e, folderId) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (!draggedItem) return
+
+    setReordering(true)
+
+    try {
+      const response = await fetch(`${API_URL}/storage/items/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          itemId: draggedItem.id,
+          itemType: draggedItem.type || 'skin',
+          targetFolderId: folderId,
+          targetIndex: -1 // Append at end
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        await onRefresh()
+      } else {
+        alert(`Move to folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Move to folder error:', err)
+      alert(`Move to folder error: ${err.message}`)
+    } finally {
+      setReordering(false)
+      setDraggedItem(null)
+      setDragStartIndex(null)
+      setDragOverIndex(null)
+      setPreviewOrder(null)
+      setDragTargetFolder(null)
+    }
+  }
+
+  const handleItemReorder = async (fromIndex, toIndex, parentFolderId = null) => {
+    if (fromIndex === toIndex) return
+
+    setReordering(true)
+
+    try {
+      const response = await fetch(`${API_URL}/storage/items/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          parentFolderId,
+          fromIndex,
+          toIndex
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        await onRefresh()
+      } else {
+        alert(`Reorder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Reorder error:', err)
+      alert(`Reorder error: ${err.message}`)
+    } finally {
+      setReordering(false)
+    }
   }
 
   // Context menu handlers
@@ -1925,107 +2221,264 @@ export default function StorageViewer({ metadata, onRefresh }) {
   // If a character is selected, show their skins
   if (selectedCharacter) {
     const charData = allCharacters[selectedCharacter]
-    // Filter out hidden skins (e.g., Ice Climbers Nana entries)
-    const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
-    const skinCount = visibleSkins.length
+    // Get all skins (including folders) from character data
+    const allSkins = charData?.skins || []
+    // Filter to just actual skins (not folders) for the count
+    const skinCount = allSkins.filter(s => s.type !== 'folder' && s.visible !== false).length
+    // Build display list (handles folder collapse/expand)
+    const displayList = buildDisplayList(allSkins)
+
+    // Helper to delete a folder
+    const handleDeleteFolder = async (folderId) => {
+      try {
+        const response = await fetch(`${API_URL}/storage/folders/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character: selectedCharacter,
+            folderId
+          })
+        })
+
+        const data = await response.json()
+        if (data.success) {
+          await onRefresh()
+        } else {
+          alert(`Failed to delete folder: ${data.error}`)
+        }
+      } catch (err) {
+        console.error('Delete folder error:', err)
+        alert(`Error deleting folder: ${err.message}`)
+      }
+    }
+
+    // Render a folder card
+    const renderFolderCard = (folder, isExpanded, displayIdx, arrayIdx) => {
+      const isEditing = editingFolderId === folder.id
+      const folderSkinCount = countSkinsInFolder(folder.id, allSkins)
+      const isDragging = draggedItem && draggedItem.id === folder.id
+
+      return (
+        <div
+          key={folder.id}
+          className={`folder-card ${isExpanded ? 'expanded' : ''} ${isDragging ? 'dragging' : ''}`}
+          draggable={!reordering && !isEditing}
+          onDragStart={(e) => handleDragStart(e, arrayIdx, allSkins)}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, displayIdx, displayList)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleItemDrop(e, displayIdx)}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="folder-header" onClick={() => toggleFolder(folder.id)}>
+            <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
+            {isEditing ? (
+              <input
+                className="folder-name-input"
+                value={editingFolderName}
+                onChange={(e) => setEditingFolderName(e.target.value)}
+                onBlur={() => saveFolderName(folder.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveFolderName(folder.id)
+                  if (e.key === 'Escape') setEditingFolderId(null)
+                }}
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span className="folder-name">{folder.name}</span>
+            )}
+            <span className="folder-count">{folderSkinCount}</span>
+          </div>
+          <div className="folder-actions">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                startEditingFolder(folder)
+              }}
+              title="Rename folder"
+            >
+              ✎
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteFolder(folder.id)
+              }}
+              title="Delete folder"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // Custom drop handler that converts display index to allSkins index
+    const handleItemDrop = async (e, displayIdx) => {
+      e.preventDefault()
+      if (!draggedItem) return
+
+      const fromIndex = dragStartIndex
+      const targetItem = displayList[displayIdx]
+      const toIndex = targetItem?.arrayIndex ?? allSkins.length - 1
+
+      if (fromIndex === toIndex || !selectedCharacter) {
+        setDraggedItem(null)
+        setDragStartIndex(null)
+        setDragOverIndex(null)
+        setPreviewOrder(null)
+        return
+      }
+
+      setReordering(true)
+
+      try {
+        const response = await fetch(`${API_URL}/storage/costumes/reorder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character: selectedCharacter,
+            fromIndex,
+            toIndex
+          })
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          await onRefresh()
+        } else {
+          alert(`Reorder failed: ${data.error}`)
+        }
+      } catch (err) {
+        console.error('Reorder error:', err)
+        alert(`Reorder error: ${err.message}`)
+      } finally {
+        setReordering(false)
+        setDraggedItem(null)
+        setDragStartIndex(null)
+        setDragOverIndex(null)
+        setPreviewOrder(null)
+      }
+    }
+
+    // Render a skin card
+    const renderSkinCard = (skin, folderId, displayIdx, arrayIdx) => {
+      const isDragging = draggedItem && skin.id === draggedItem.id
+
+      return (
+        <div
+          key={skin.id}
+          className={`skin-card ${isDragging ? 'dragging' : ''} ${folderId ? 'in-folder' : ''}`}
+          draggable={!reordering}
+          onDragStart={(e) => handleDragStart(e, arrayIdx, allSkins)}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, displayIdx, displayList)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleItemDrop(e, displayIdx)}
+          onDragEnd={handleDragEnd}
+          onContextMenu={(e) => handleSkinContextMenu(e, skin, arrayIdx)}
+          style={{ opacity: isDragging ? 0.5 : 1 }}
+        >
+          <div className="skin-image-container">
+            {skin.has_csp ? (
+              <img
+                src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png?t=${lastImageUpdate}`}
+                alt={`${selectedCharacter} - ${skin.color}`}
+                className="skin-csp"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                  e.target.nextSibling.style.display = 'flex'
+                }}
+              />
+            ) : null}
+            <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
+              <span className="skin-initial">{skin.color[0]}</span>
+            </div>
+            <button
+              className="btn-edit"
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                handleEditClick('costume', {
+                  id: skin.id,
+                  character: selectedCharacter,
+                  color: skin.color,
+                  has_csp: skin.has_csp,
+                  has_stock: skin.has_stock,
+                  cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`,
+                  stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
+                  slippi_safe: skin.slippi_safe,
+                  slippi_tested: skin.slippi_tested,
+                  slippi_manual_override: skin.slippi_manual_override
+                })
+              }}
+              title="Edit costume"
+            >
+              ✎
+            </button>
+          </div>
+
+          <div className="skin-badges-row">
+            {skin.has_stock && (
+              <div className="stock-icon-small">
+                <img
+                  src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
+                  alt={`${selectedCharacter} stock`}
+                  className="skin-stock"
+                />
+              </div>
+            )}
+            {skin.slippi_tested && (
+              <div className={`slippi-badge-small ${skin.slippi_safe ? 'safe' : 'unsafe'}`}>
+                {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
+              </div>
+            )}
+          </div>
+
+          <div className="skin-info">
+            <div className="skin-color">{skin.color}</div>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="storage-viewer">
         <div className="character-detail">
-          <button
-            onClick={() => setSelectedCharacter(null)}
-            className="back-button"
-          >
-            ← Back to Characters
-          </button>
+          <div className="character-header">
+            <button
+              onClick={() => setSelectedCharacter(null)}
+              className="back-button"
+            >
+              ← Back to Characters
+            </button>
+            <button
+              onClick={handleCreateFolder}
+              className="create-folder-button"
+              title="Create new folder"
+            >
+              + New Folder
+            </button>
+          </div>
 
           <h2>{selectedCharacter}</h2>
           <p className="skin-count">{skinCount} skin{skinCount !== 1 ? 's' : ''}</p>
 
-          {skinCount === 0 ? (
+          {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
             <div className="no-skins-message">
               <p>No custom skins yet. Add some using the intake system!</p>
             </div>
           ) : (
             <div className="skins-grid">
-              {(previewOrder || visibleSkins).map((skin, idx) => {
-                const isDragging = draggedItem && skin.id === draggedItem.id
-                return (
-                  <div
-                    key={skin.id}
-                    className={`skin-card ${isDragging ? 'dragging' : ''}`}
-                    draggable={!reordering}
-                    onDragStart={(e) => handleDragStart(e, visibleSkins.findIndex(s => s.id === skin.id), visibleSkins)}
-                    onDragOver={handleDragOver}
-                    onDragEnter={(e) => handleDragEnter(e, idx, visibleSkins)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleSkinDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    onContextMenu={(e) => handleSkinContextMenu(e, skin, idx)}
-                    style={{ opacity: isDragging ? 0.5 : 1 }}
-                  >
-                  <div className="skin-image-container">
-                    {skin.has_csp ? (
-                      <img
-                        src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png?t=${lastImageUpdate}`}
-                        alt={`${selectedCharacter} - ${skin.color}`}
-                        className="skin-csp"
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'flex'
-                        }}
-                      />
-                    ) : null}
-                    <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
-                      <span className="skin-initial">{skin.color[0]}</span>
-                    </div>
-                    <button
-                      className="btn-edit"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        handleEditClick('costume', {
-                          id: skin.id,
-                          character: selectedCharacter,
-                          color: skin.color,
-                          has_csp: skin.has_csp,
-                          has_stock: skin.has_stock,
-                          cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`,
-                          stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
-                          slippi_safe: skin.slippi_safe,
-                          slippi_tested: skin.slippi_tested,
-                          slippi_manual_override: skin.slippi_manual_override
-                        })
-                      }}
-                      title="Edit costume"
-                    >
-                      ✎
-                    </button>
-                  </div>
-
-                  <div className="skin-badges-row">
-                    {skin.has_stock && (
-                      <div className="stock-icon-small">
-                        <img
-                          src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
-                          alt={`${selectedCharacter} stock`}
-                          className="skin-stock"
-                        />
-                      </div>
-                    )}
-                    {skin.slippi_tested && (
-                      <div className={`slippi-badge-small ${skin.slippi_safe ? 'safe' : 'unsafe'}`}>
-                        {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="skin-info">
-                    <div className="skin-color">{skin.color}</div>
-                  </div>
-                </div>
-              )
-            })}
+              {displayList.map((item, idx) => {
+                if (item.type === 'folder') {
+                  return renderFolderCard(item.folder, item.isExpanded, idx, item.arrayIndex)
+                } else {
+                  return renderSkinCard(item.skin, item.folderId, idx, item.arrayIndex)
+                }
+              })}
             </div>
           )}
         </div>
