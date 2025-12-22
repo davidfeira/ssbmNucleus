@@ -5092,10 +5092,35 @@ def start_viewer():
             scene_windows_path = to_windows_path(scene_path)
             logger.info(f"Found scene file: {scene_path}")
 
-        # Build command with logs path and optional scene file
+        # Look for AJ file (animation archive) for this character
+        char_prefixes = {
+            "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+            "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+            "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+            "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+            "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+            "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+            "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+            "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+            "Dr. Mario": "PlDr", "G&W": "PlGw"
+        }
+
+        aj_windows_path = None
+        if character in char_prefixes:
+            prefix = char_prefixes[character]
+            aj_path = VANILLA_ASSETS_DIR / character / f"{prefix}AJ.dat"
+            if aj_path.exists():
+                aj_windows_path = to_windows_path(aj_path)
+                logger.info(f"Found AJ file: {aj_path}")
+
+        # Build command with logs path, optional scene file, and optional AJ file
         cmd = [exe_path, '--stream', str(viewer_port), dat_windows_path, logs_windows_path]
         if scene_windows_path:
             cmd.append(scene_windows_path)
+        else:
+            cmd.append('')  # Empty placeholder for scene file
+        if aj_windows_path:
+            cmd.append(aj_windows_path)
 
         logger.info(f"Starting viewer: {' '.join(cmd)}")
 

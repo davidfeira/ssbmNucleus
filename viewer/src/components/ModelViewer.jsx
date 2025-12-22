@@ -27,6 +27,11 @@ const ModelViewer = ({ character, skinId, onClose }) => {
   const [animFrame, setAnimFrame] = useState(0)
   const [animFrameCount, setAnimFrameCount] = useState(0)
 
+  // Animation picker state
+  const [animList, setAnimList] = useState([])
+  const [selectedAnim, setSelectedAnim] = useState('')
+  const [animFilter, setAnimFilter] = useState('')
+
   // Start the viewer backend
   const startViewer = useCallback(async () => {
     // Prevent double-start from React StrictMode
@@ -64,6 +69,8 @@ const ModelViewer = ({ character, skinId, onClose }) => {
         console.log('WebSocket connected to viewer')
         setIsConnected(true)
         setIsLoading(false)
+        // Request animation list
+        ws.send(JSON.stringify({ type: 'getAnimList' }))
       }
 
       ws.onmessage = async (event) => {
@@ -89,6 +96,17 @@ const ModelViewer = ({ character, skinId, onClose }) => {
                 setAnimFrame(msg.animation.currentFrame || 0)
                 setAnimPlaying(msg.animation.playing || false)
               }
+            } else if (msg.type === 'animList') {
+              // Received list of available animations
+              console.log(`Received ${msg.symbols?.length || 0} animations`)
+              setAnimList(msg.symbols || [])
+            } else if (msg.type === 'animLoaded') {
+              // Animation loaded successfully
+              console.log(`Animation loaded: ${msg.symbol}, frames: ${msg.frameCount}`)
+              setSelectedAnim(msg.symbol)
+              setAnimFrameCount(msg.frameCount || 0)
+              setAnimFrame(0)
+              setAnimPlaying(true)
             }
           } catch (e) {
             console.log('Non-JSON message:', event.data)
@@ -153,6 +171,14 @@ const ModelViewer = ({ character, skinId, onClose }) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'animSetFrame', frame }))
       setAnimFrame(frame)
+    }
+  }, [])
+
+  // Load a specific animation by symbol name
+  const loadAnimation = useCallback((symbol) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log(`Loading animation: ${symbol}`)
+      wsRef.current.send(JSON.stringify({ type: 'loadAnim', symbol }))
     }
   }, [])
 
@@ -282,6 +308,37 @@ const ModelViewer = ({ character, skinId, onClose }) => {
             />
           )}
         </div>
+
+        {/* Animation picker */}
+        {animList.length > 0 && (
+          <div className="model-viewer-anim-picker">
+            <input
+              type="text"
+              placeholder="Filter animations..."
+              value={animFilter}
+              onChange={(e) => setAnimFilter(e.target.value)}
+              className="anim-filter-input"
+            />
+            <select
+              value={selectedAnim}
+              onChange={(e) => {
+                const symbol = e.target.value
+                if (symbol) {
+                  loadAnimation(symbol)
+                }
+              }}
+              className="anim-select"
+            >
+              <option value="">Select animation...</option>
+              {animList
+                .filter(sym => !animFilter || sym.toLowerCase().includes(animFilter.toLowerCase()))
+                .map(sym => (
+                  <option key={sym} value={sym}>{sym}</option>
+                ))
+              }
+            </select>
+          </div>
+        )}
 
         {/* Animation controls */}
         {animFrameCount > 0 && (

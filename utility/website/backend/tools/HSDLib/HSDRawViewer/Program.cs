@@ -84,8 +84,8 @@ namespace HSDRawViewer
             {
                 if (args.Length < 3)
                 {
-                    Console.WriteLine("Usage: HSDRawViewer.exe --stream <port> <dat_file> [logs_path] [scene_file]");
-                    Console.WriteLine("Example: HSDRawViewer.exe --stream 8765 PlFxNr.dat C:\\projects\\logs scene.yml");
+                    Console.WriteLine("Usage: HSDRawViewer.exe --stream <port> <dat_file> [logs_path] [scene_file] [aj_file]");
+                    Console.WriteLine("Example: HSDRawViewer.exe --stream 8765 PlFxNr.dat C:\\projects\\logs scene.yml PlFxAJ.dat");
                     return;
                 }
 
@@ -93,6 +93,7 @@ namespace HSDRawViewer
                 string datFile = args[2];
                 string logsPath = args.Length >= 4 ? args[3] : null;
                 string sceneFile = args.Length >= 5 ? args[4] : null;
+                string ajFile = args.Length >= 6 ? args[5] : null;
 
                 Console.WriteLine($"Starting streaming server on port {port}...");
                 Console.WriteLine($"DAT file: {datFile}");
@@ -100,6 +101,8 @@ namespace HSDRawViewer
                     Console.WriteLine($"Logs path: {logsPath}");
                 if (sceneFile != null)
                     Console.WriteLine($"Scene file: {sceneFile}");
+                if (ajFile != null)
+                    Console.WriteLine($"AJ file: {ajFile}");
 
                 using var server = new StreamingServer(port, logsPath);
 
@@ -112,7 +115,7 @@ namespace HSDRawViewer
                 };
 
                 // Run server (blocking)
-                server.StartAsync(datFile, sceneFile).GetAwaiter().GetResult();
+                server.StartAsync(datFile, sceneFile, ajFile).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

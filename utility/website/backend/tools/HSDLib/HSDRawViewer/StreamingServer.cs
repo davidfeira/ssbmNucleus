@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -7,7 +8,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using HSDRaw;
 using HSDRaw.Common;
+using HSDRaw.Common.Animation;
+using HSDRaw.Tools.Melee;
 using HSDRawViewer.GUI;
 using HSDRawViewer.Rendering;
 using HSDRawViewer.Rendering.Models;
@@ -45,6 +49,9 @@ namespace HSDRawViewer
         private float _animationFrame = 0;
         private float _animationFrameCount = 0;
         private float _animationSpeed = 1.0f;
+
+        // Animation archive manager (for loading real Melee animations)
+        private FighterAJManager _ajManager;
 
         public StreamingServer(int port, string logPath = null)
         {
@@ -108,12 +115,14 @@ namespace HSDRawViewer
             catch { /* Ignore logging errors */ }
         }
 
-        public async Task StartAsync(string datFilePath, string sceneFilePath = null)
+        public async Task StartAsync(string datFilePath, string sceneFilePath = null, string ajFilePath = null)
         {
             Log($"Starting streaming server on port {_port}...");
             Log($"Loading DAT file: {datFilePath}");
             if (!string.IsNullOrEmpty(sceneFilePath))
                 Log($"Scene file: {sceneFilePath}");
+            if (!string.IsNullOrEmpty(ajFilePath))
+                Log($"AJ file: {ajFilePath}");
 
             // Initialize core systems
             Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
@@ -333,6 +342,22 @@ namespace HSDRawViewer
 
             Log($"Viewport ready. Starting HTTP listener...");
 
+            // Load animation archive if provided
+            if (!string.IsNullOrEmpty(ajFilePath) && File.Exists(ajFilePath))
+            {
+                try
+                {
+                    Log($"Loading AJ file: {ajFilePath}");
+                    _ajManager = new FighterAJManager(File.ReadAllBytes(ajFilePath));
+                    var animCount = _ajManager.GetAnimationSymbols().Count();
+                    Log($"Loaded {animCount} animations from AJ file");
+                }
+                catch (Exception ex)
+                {
+                    LogError("Failed to load AJ file", ex);
+                }
+            }
+
             // Start HTTP/WebSocket listener
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add($"http://localhost:{_port}/");
@@ -543,7 +568,7 @@ namespace HSDRawViewer
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
                         var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        ProcessCommand(message);
+                        await ProcessCommandAsync(webSocket, message);
                     }
                 }
             }
@@ -553,7 +578,7 @@ namespace HSDRawViewer
             }
         }
 
-        private void ProcessCommand(string json)
+        private async Task ProcessCommandAsync(WebSocket webSocket, string json)
         {
             try
             {
@@ -634,6 +659,79 @@ namespace HSDRawViewer
                         {
                             _animationSpeed = (float)speedVal.GetDouble();
                             Log($"Animation speed: {_animationSpeed}");
+                        }
+                        break;
+
+                    case "getAnimList":
+                        // Return list of available animations from AJ file
+                        Log($"Processing getAnimList, _ajManager is {(_ajManager != null ? "set" : "null")}");
+                        try
+                        {
+                            if (_ajManager != null)
+                            {
+                                var symbols = _ajManager.GetAnimationSymbols().ToArray();
+                                Log($"Sending animation list: {symbols.Length} animations");
+                                await SendJsonAsync(webSocket, new { type = "animList", symbols });
+                            }
+                            else
+                            {
+                                Log("No AJ file loaded, sending empty animation list");
+                                await SendJsonAsync(webSocket, new { type = "animList", symbols = Array.Empty<string>() });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogError("Error in getAnimList", ex);
+                            await SendJsonAsync(webSocket, new { type = "animList", symbols = Array.Empty<string>() });
+                        }
+                        break;
+
+                    case "loadAnim":
+                        // Load a specific animation by symbol name
+                        if (_ajManager != null && root.TryGetProperty("symbol", out var symbolProp))
+                        {
+                            var symbol = symbolProp.GetString();
+                            var animData = _ajManager.GetAnimationData(symbol);
+                            if (animData != null)
+                            {
+                                try
+                                {
+                                    var animFile = new HSDRawFile(animData);
+                                    if (animFile.Roots.Count > 0 && animFile.Roots[0].Data is HSD_FigaTree tree)
+                                    {
+                                        var jointAnim = new JointAnimManager(tree);
+                                        // Clear previous animation before loading new one
+                                        _renderJObj.ClearAnimation(FrameFlags.Joint);
+                                        _renderJObj.LoadAnimation(jointAnim, null, null);
+                                        _animationFrameCount = jointAnim.FrameCount;
+                                        _animationFrame = 0;
+                                        _animationPlaying = true;
+                                        // Apply frame 0 immediately so animation starts
+                                        _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
+                                        Log($"Loaded animation: {symbol}, frames: {_animationFrameCount}");
+
+                                        // Send updated animation info
+                                        await SendJsonAsync(webSocket, new
+                                        {
+                                            type = "animLoaded",
+                                            symbol,
+                                            frameCount = _animationFrameCount
+                                        });
+                                    }
+                                    else
+                                    {
+                                        Log($"Animation data is not a FigaTree: {symbol}");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogError($"Failed to load animation {symbol}", ex);
+                                }
+                            }
+                            else
+                            {
+                                Log($"Animation not found: {symbol}");
+                            }
                         }
                         break;
 
