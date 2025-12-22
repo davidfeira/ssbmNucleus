@@ -470,17 +470,14 @@ namespace HSDRawViewer
                     {
                         lastFrameTime = now;
 
-                        // Render and send frame on UI thread (OpenGL context is thread-bound)
                         try
                         {
                             Image<Rgba32> bitmap = null;
 
-                            // Must render on the UI thread where OpenGL context was created
                             _hostForm.Invoke((Action)(() =>
                             {
                                 Application.DoEvents();
 
-                                // Update animation if playing
                                 if (_animationPlaying && _animationFrameCount > 0 && _renderJObj != null)
                                 {
                                     _animationFrame += _animationSpeed;
@@ -501,7 +498,6 @@ namespace HSDRawViewer
                             using (bitmap)
                             using (var ms = new MemoryStream())
                             {
-                                // Encode as JPEG
                                 var encoder = new JpegEncoder { Quality = 75 };
                                 bitmap.Save(ms, encoder);
                                 frameData = ms.ToArray();
@@ -516,23 +512,18 @@ namespace HSDRawViewer
 
                             frameCount++;
 
-                            // Log stats every 100 frames
-                            if (frameCount % 100 == 0)
-                            {
-                                var totalElapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                                var avgFps = frameCount / totalElapsed;
-                                Log($"Streaming: {frameCount} frames, avg {avgFps:F1} fps, last frame {frameData.Length / 1024.0:F1} KB");
-                            }
+                            if (frameCount % 30 == 0)
+                                Console.Error.WriteLine($"[FRAME] {frameCount} anim={_animationFrame:F0}/{_animationFrameCount} ws={webSocket.State}");
                         }
                         catch (Exception ex)
                         {
-                            LogError("Frame render error", ex);
+                            Console.Error.WriteLine($"[FRAME ERROR] {frameCount}: {ex.Message}");
                         }
                     }
 
-                    // Small delay to prevent busy-waiting
                     await Task.Delay(5);
                 }
+                Console.Error.WriteLine($"[LOOP EXIT] frames={frameCount} ws={webSocket.State} cts={_cts.Token.IsCancellationRequested}");
             }
             catch (WebSocketException ex)
             {
@@ -700,22 +691,26 @@ namespace HSDRawViewer
                                     if (animFile.Roots.Count > 0 && animFile.Roots[0].Data is HSD_FigaTree tree)
                                     {
                                         var jointAnim = new JointAnimManager(tree);
-                                        // Clear previous animation before loading new one
-                                        _renderJObj.ClearAnimation(FrameFlags.Joint);
-                                        _renderJObj.LoadAnimation(jointAnim, null, null);
-                                        _animationFrameCount = jointAnim.FrameCount;
-                                        _animationFrame = 0;
-                                        _animationPlaying = true;
-                                        // Apply frame 0 immediately so animation starts
-                                        _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
-                                        Log($"Loaded animation: {symbol}, frames: {_animationFrameCount}");
+                                        float newFrameCount = jointAnim.FrameCount;
 
-                                        // Send updated animation info
+                                        // MUST run on UI thread for thread safety
+                                        _hostForm.Invoke((Action)(() =>
+                                        {
+                                            _renderJObj.ClearAnimation(FrameFlags.Joint);
+                                            _renderJObj.LoadAnimation(jointAnim, null, null);
+                                            _animationFrameCount = newFrameCount;
+                                            _animationFrame = 0;
+                                            _animationPlaying = true;
+                                            _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
+                                        }));
+
+                                        Log($"Loaded animation: {symbol}, frames: {newFrameCount}");
+
                                         await SendJsonAsync(webSocket, new
                                         {
                                             type = "animLoaded",
                                             symbol,
-                                            frameCount = _animationFrameCount
+                                            frameCount = newFrameCount
                                         });
                                     }
                                     else
