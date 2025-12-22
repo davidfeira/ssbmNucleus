@@ -20,8 +20,9 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Project root
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Project root (go up two levels from scripts/build/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # Add .NET to PATH if installed in home directory
@@ -38,18 +39,25 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Activate virtual environment if it exists
-if [ -d "venv" ]; then
-    echo "Activating virtual environment..."
+# Create/activate virtual environment
+if [ -f "venv/bin/activate" ]; then
+    echo "Activating existing Linux virtual environment..."
     source venv/bin/activate
 else
-    echo -e "${RED}Warning: venv not found. Creating virtual environment...${NC}"
-    python3 -m venv venv
-    source venv/bin/activate
+    echo "Creating Linux virtual environment..."
+    python3 -m venv venv-linux
+    source venv-linux/bin/activate
     echo "Installing Python dependencies..."
     pip install --upgrade pip
-    pip install -r requirements.txt
-    pip install pyinstaller pillow py7zr
+    if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt
+    fi
+    pip install pyinstaller pillow py7zr flask flask-cors
+fi
+
+# If we created venv-linux, use it
+if [ -f "venv-linux/bin/activate" ]; then
+    source venv-linux/bin/activate
 fi
 
 # Check for PyInstaller (should be in venv now)

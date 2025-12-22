@@ -25,6 +25,8 @@ viewer/dist/
 # Dependencies
 node_modules/
 venv/
+venv-*/
+/testing/
 
 # Environment
 .env
