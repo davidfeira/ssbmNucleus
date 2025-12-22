@@ -470,14 +470,17 @@ namespace HSDRawViewer
                     {
                         lastFrameTime = now;
 
+                        // Render and send frame on UI thread (OpenGL context is thread-bound)
                         try
                         {
                             Image<Rgba32> bitmap = null;
 
+                            // Must render on the UI thread where OpenGL context was created
                             _hostForm.Invoke((Action)(() =>
                             {
                                 Application.DoEvents();
 
+                                // Update animation if playing
                                 if (_animationPlaying && _animationFrameCount > 0 && _renderJObj != null)
                                 {
                                     _animationFrame += _animationSpeed;
@@ -498,6 +501,7 @@ namespace HSDRawViewer
                             using (bitmap)
                             using (var ms = new MemoryStream())
                             {
+                                // Encode as JPEG
                                 var encoder = new JpegEncoder { Quality = 75 };
                                 bitmap.Save(ms, encoder);
                                 frameData = ms.ToArray();
@@ -512,18 +516,21 @@ namespace HSDRawViewer
 
                             frameCount++;
 
-                            if (frameCount % 30 == 0)
-                                Console.Error.WriteLine($"[FRAME] {frameCount} anim={_animationFrame:F0}/{_animationFrameCount} ws={webSocket.State}");
+                            if (frameCount % 100 == 0)
+                            {
+                                var totalElapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                                Console.Error.WriteLine($"[STREAM] {frameCount} frames, {frameCount / totalElapsed:F1} fps");
+                            }
                         }
                         catch (Exception ex)
                         {
-                            Console.Error.WriteLine($"[FRAME ERROR] {frameCount}: {ex.Message}");
+                            Console.Error.WriteLine($"[FRAME ERR] {ex.Message}");
                         }
                     }
 
+                    // Small delay to prevent busy-waiting
                     await Task.Delay(5);
                 }
-                Console.Error.WriteLine($"[LOOP EXIT] frames={frameCount} ws={webSocket.State} cts={_cts.Token.IsCancellationRequested}");
             }
             catch (WebSocketException ex)
             {
@@ -693,7 +700,7 @@ namespace HSDRawViewer
                                         var jointAnim = new JointAnimManager(tree);
                                         float newFrameCount = jointAnim.FrameCount;
 
-                                        // MUST run on UI thread for thread safety
+                                        // Must run on UI thread for thread safety
                                         _hostForm.Invoke((Action)(() =>
                                         {
                                             _renderJObj.ClearAnimation(FrameFlags.Joint);
@@ -704,7 +711,7 @@ namespace HSDRawViewer
                                             _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
                                         }));
 
-                                        Log($"Loaded animation: {symbol}, frames: {newFrameCount}");
+                                        Console.Error.WriteLine($"[ANIM] Loaded: {symbol}, {newFrameCount} frames");
 
                                         await SendJsonAsync(webSocket, new
                                         {
@@ -713,14 +720,10 @@ namespace HSDRawViewer
                                             frameCount = newFrameCount
                                         });
                                     }
-                                    else
-                                    {
-                                        Log($"Animation data is not a FigaTree: {symbol}");
-                                    }
                                 }
                                 catch (Exception ex)
                                 {
-                                    LogError($"Failed to load animation {symbol}", ex);
+                                    Console.Error.WriteLine($"[ANIM ERR] {symbol}: {ex.Message}");
                                 }
                             }
                             else
