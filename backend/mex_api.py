@@ -4737,6 +4737,235 @@ def download_xdelta_iso(filename):
         }), 500
 
 
+def run_xdelta_create(create_id, name, description, vanilla_iso_path, modded_iso_path, output_path, image_path=None):
+    """Background thread function to create xdelta patch and emit progress"""
+    try:
+        # Find xdelta executable
+        if os.name == 'nt':
+            if getattr(sys, 'frozen', False):
+                xdelta_exe = RESOURCES_DIR / "utility" / "xdelta" / "xdelta3.exe"
+            else:
+                xdelta_exe = PROJECT_ROOT / "utility" / "xdelta" / "xdelta3.exe"
+            if not xdelta_exe.exists():
+                xdelta_exe = "xdelta3"
+        else:
+            xdelta_exe = "xdelta3"
+
+        # Get modded ISO size for progress estimation
+        modded_size = Path(modded_iso_path).stat().st_size
+
+        cmd = [
+            str(xdelta_exe),
+            '-e',  # Encode (create patch)
+            '-1',  # Fast compression (good speed, slightly larger files)
+            '-s', str(vanilla_iso_path),
+            str(modded_iso_path),
+            str(output_path)
+        ]
+
+        logger.info(f"Creating xdelta patch: {' '.join(cmd)}")
+
+        # Hide CMD window on Windows
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=creation_flags
+        )
+
+        # xdelta3 doesn't output progress, so we just show current output size
+        last_size_mb = 0
+
+        while process.poll() is None:
+            time.sleep(1)  # Check every second
+            try:
+                if output_path.exists():
+                    current_size = output_path.stat().st_size
+                    current_size_mb = current_size / (1024 * 1024)
+                    if int(current_size_mb) != int(last_size_mb):
+                        socketio.emit('xdelta_create_progress', {
+                            'create_id': create_id,
+                            'percentage': -1,  # -1 means indeterminate
+                            'message': f'Creating patch... ({current_size_mb:.1f} MB so far)'
+                        })
+                        last_size_mb = current_size_mb
+            except:
+                pass
+
+        # Process finished - check result
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode() if stderr else stdout.decode() if stdout else 'Unknown xdelta error'
+            logger.error(f"xdelta3 create failed: {error_msg}")
+            # Clean up failed output
+            if output_path.exists():
+                os.remove(output_path)
+            socketio.emit('xdelta_create_error', {
+                'create_id': create_id,
+                'error': f'Failed to create patch: {error_msg}'
+            })
+        else:
+            # Success - save to storage
+            import uuid
+            patch_id = str(uuid.uuid4())[:8]
+
+            # Move to storage
+            final_path = XDELTA_PATH / f"{patch_id}.xdelta"
+            import shutil
+            shutil.move(str(output_path), str(final_path))
+
+            # Copy image if provided
+            if image_path and Path(image_path).exists():
+                image_dest = XDELTA_PATH / f"{patch_id}.png"
+                shutil.copy(str(image_path), str(image_dest))
+
+            # Get patch file size for display
+            patch_size = final_path.stat().st_size
+            patch_size_mb = patch_size / (1024 * 1024)
+
+            # Add to metadata
+            patches = load_xdelta_metadata()
+            patches.append({
+                'id': patch_id,
+                'name': name,
+                'description': description,
+                'filename': f"{name}.xdelta",
+                'size': patch_size,
+                'created': datetime.now().isoformat()
+            })
+            save_xdelta_metadata(patches)
+
+            logger.info(f"[OK] Created xdelta patch: {name} ({patch_id}) - {patch_size_mb:.2f} MB")
+            socketio.emit('xdelta_create_complete', {
+                'create_id': create_id,
+                'patch_id': patch_id,
+                'name': name,
+                'size': patch_size,
+                'size_mb': round(patch_size_mb, 2)
+            })
+
+    except Exception as e:
+        logger.error(f"xdelta create thread error: {str(e)}", exc_info=True)
+        socketio.emit('xdelta_create_error', {
+            'create_id': create_id,
+            'error': str(e)
+        })
+
+
+@app.route('/api/mex/xdelta/create', methods=['POST'])
+def create_xdelta_patch():
+    """Create a new xdelta patch from a modded ISO"""
+    try:
+        data = request.json or {}
+        vanilla_iso_path = data.get('vanillaIsoPath')
+        modded_iso_path = data.get('moddedIsoPath')
+        name = data.get('name', 'New Patch')
+        description = data.get('description', '')
+
+        if not vanilla_iso_path:
+            return jsonify({
+                'success': False,
+                'error': 'No vanilla ISO path provided. Please set it in Settings.'
+            }), 400
+
+        if not modded_iso_path:
+            return jsonify({
+                'success': False,
+                'error': 'No modded ISO path provided.'
+            }), 400
+
+        vanilla_iso = Path(vanilla_iso_path)
+        modded_iso = Path(modded_iso_path)
+
+        if not vanilla_iso.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Vanilla ISO not found: {vanilla_iso_path}'
+            }), 404
+
+        if not modded_iso.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Modded ISO not found: {modded_iso_path}'
+            }), 404
+
+        # Generate unique ID for this creation session
+        import uuid
+        create_id = str(uuid.uuid4())[:8]
+
+        # Create temporary output path
+        safe_name = re.sub(r'[^\w\-_]', '_', name)
+        temp_filename = f"temp_patch_{create_id}.xdelta"
+        temp_output_path = OUTPUT_PATH / temp_filename
+
+        logger.info(f"Creating xdelta patch: {name}")
+        logger.info(f"  Vanilla ISO: {vanilla_iso_path}")
+        logger.info(f"  Modded ISO: {modded_iso_path}")
+        logger.info(f"  Temp output: {temp_output_path}")
+
+        # Run in background thread
+        thread = threading.Thread(
+            target=run_xdelta_create,
+            args=(create_id, name, description, vanilla_iso_path, modded_iso_path, temp_output_path)
+        )
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'message': 'Patch creation started',
+            'create_id': create_id
+        })
+    except Exception as e:
+        logger.error(f"Create xdelta patch error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/xdelta/download-patch/<patch_id>', methods=['GET'])
+def download_xdelta_patch(patch_id):
+    """Download an xdelta patch file"""
+    try:
+        # Get patch info
+        patches = load_xdelta_metadata()
+        patch = next((p for p in patches if p['id'] == patch_id), None)
+
+        if not patch:
+            return jsonify({
+                'success': False,
+                'error': 'Patch not found'
+            }), 404
+
+        file_path = XDELTA_PATH / f"{patch_id}.xdelta"
+
+        if not file_path.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Patch file not found'
+            }), 404
+
+        # Use the original name for the download
+        download_name = f"{patch['name']}.xdelta"
+
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='application/octet-stream'
+        )
+    except Exception as e:
+        logger.error(f"Download xdelta patch error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 def cleanup_on_exit():
     """Cleanup function called on exit"""
     global mex_manager

@@ -994,6 +994,36 @@
   font-size: var(--text-lg);
 }
 
+/* Create New Patch Card */
+.create-patch-row {
+  border-style: dashed !important;
+  border-color: var(--color-border) !important;
+  opacity: 0.8;
+  transition:
+    opacity var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.create-patch-row:hover {
+  opacity: 1;
+  border-color: var(--color-cyan) !important;
+  background: var(--color-bg-hover);
+}
+
+.create-patch-row .patch-row-placeholder {
+  color: var(--color-cyan);
+  font-weight: var(--font-bold);
+}
+
+.create-patch-row .patch-row-name {
+  color: var(--color-text-secondary);
+}
+
+.create-patch-row .patch-row-description {
+  color: var(--color-text-muted);
+}
+
 /* Edit field for modals */
 .edit-field {
   margin-bottom: var(--space-4);

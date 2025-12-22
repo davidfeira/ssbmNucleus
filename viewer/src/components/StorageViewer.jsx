@@ -63,6 +63,16 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [xdeltaBuildMessage, setXdeltaBuildMessage] = useState('')
   const socketRef = useRef(null)
 
+  // XDelta create patch state
+  const [showXdeltaCreateModal, setShowXdeltaCreateModal] = useState(false)
+  const [xdeltaCreateData, setXdeltaCreateData] = useState({ name: '', description: '', moddedIsoPath: '' })
+  const [xdeltaCreateState, setXdeltaCreateState] = useState('idle') // 'idle', 'creating', 'complete', 'error'
+  const [xdeltaCreateId, setXdeltaCreateId] = useState(null)
+  const [xdeltaCreateProgress, setXdeltaCreateProgress] = useState(0)
+  const [xdeltaCreateMessage, setXdeltaCreateMessage] = useState('')
+  const [xdeltaCreateError, setXdeltaCreateError] = useState(null)
+  const [xdeltaCreateResult, setXdeltaCreateResult] = useState(null)
+
   // Slippi dialog state
   const [showSlippiDialog, setShowSlippiDialog] = useState(false)
   const [slippiDialogData, setSlippiDialogData] = useState(null)
@@ -106,7 +116,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
     }
   }, [mode])
 
-  // WebSocket connection for xdelta build progress
+  // WebSocket connection for xdelta build/create progress
   useEffect(() => {
     const socket = io(BACKEND_URL)
     socketRef.current = socket
@@ -137,10 +147,35 @@ export default function StorageViewer({ metadata, onRefresh }) {
       }
     })
 
+    // XDelta create events
+    socket.on('xdelta_create_progress', (data) => {
+      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
+        setXdeltaCreateProgress(data.percentage)
+        setXdeltaCreateMessage(data.message)
+      }
+    })
+
+    socket.on('xdelta_create_complete', (data) => {
+      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
+        setXdeltaCreateProgress(100)
+        setXdeltaCreateResult(data)
+        setXdeltaCreateState('complete')
+        // Refresh patches list
+        fetchXdeltaPatches()
+      }
+    })
+
+    socket.on('xdelta_create_error', (data) => {
+      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
+        setXdeltaCreateError(data.error)
+        setXdeltaCreateState('error')
+      }
+    })
+
     return () => {
       socket.disconnect()
     }
-  }, [xdeltaBuildPatch])
+  }, [xdeltaBuildPatch, xdeltaCreateId])
 
   const fetchXdeltaPatches = async () => {
     try {
@@ -257,6 +292,91 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setXdeltaBuildError(null)
     setXdeltaBuildProgress(0)
     setXdeltaBuildMessage('')
+  }
+
+  const handleSelectModdedIso = async () => {
+    try {
+      // Use Electron's file dialog if available
+      if (window.electron?.openIsoDialog) {
+        const result = await window.electron.openIsoDialog()
+        if (result) {
+          setXdeltaCreateData({ ...xdeltaCreateData, moddedIsoPath: result })
+        }
+      } else {
+        alert('File selection requires the desktop app')
+      }
+    } catch (err) {
+      console.error('Failed to select ISO:', err)
+    }
+  }
+
+  const handleStartCreateXdelta = async () => {
+    if (!xdeltaCreateData.moddedIsoPath) {
+      alert('Please select a modded ISO file')
+      return
+    }
+
+    if (!xdeltaCreateData.name.trim()) {
+      alert('Please enter a name for the patch')
+      return
+    }
+
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
+    if (!vanillaIsoPath) {
+      alert('No vanilla ISO path set. Please set it in Settings first.')
+      return
+    }
+
+    // Switch to creating state
+    setXdeltaCreateState('creating')
+    setXdeltaCreateProgress(0)
+    setXdeltaCreateMessage('Starting...')
+    setXdeltaCreateError(null)
+    setXdeltaCreateResult(null)
+
+    try {
+      const response = await fetch(`${API_URL}/xdelta/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vanillaIsoPath,
+          moddedIsoPath: xdeltaCreateData.moddedIsoPath,
+          name: xdeltaCreateData.name,
+          description: xdeltaCreateData.description
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setXdeltaCreateId(data.create_id)
+      } else {
+        setXdeltaCreateError(data.error)
+        setXdeltaCreateState('error')
+      }
+    } catch (err) {
+      setXdeltaCreateError(err.message)
+      setXdeltaCreateState('error')
+    }
+  }
+
+  const closeXdeltaCreateModal = () => {
+    setShowXdeltaCreateModal(false)
+    setXdeltaCreateState('idle')
+    setXdeltaCreateData({ name: '', description: '', moddedIsoPath: '' })
+    setXdeltaCreateId(null)
+    setXdeltaCreateProgress(0)
+    setXdeltaCreateMessage('')
+    setXdeltaCreateError(null)
+    setXdeltaCreateResult(null)
+  }
+
+  const handleDownloadPatch = (patchId) => {
+    const link = document.createElement('a')
+    link.href = `${API_URL}/xdelta/download-patch/${patchId}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleDeleteXdelta = async (patchId) => {
@@ -1945,56 +2065,93 @@ export default function StorageViewer({ metadata, onRefresh }) {
             </button>
           </div>
 
-          {xdeltaPatches.length === 0 ? (
-            <div className="no-patches-message">
-              <p>No xdelta patches yet. Import a patch to get started!</p>
-            </div>
-          ) : (
-            <div className="patches-list">
-              {xdeltaPatches.map((patch) => (
-                <div key={patch.id} className="patch-row">
-                  <div className="patch-row-image">
-                    {patch.imageUrl ? (
-                      <img
-                        src={`${BACKEND_URL}${patch.imageUrl}`}
-                        alt={patch.name}
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'flex'
-                        }}
-                      />
-                    ) : null}
-                    <div className="patch-row-placeholder" style={{ display: patch.imageUrl ? 'none' : 'flex' }}>
-                      {patch.name[0]}
-                    </div>
-                  </div>
-
-                  <div className="patch-row-info">
-                    <h4 className="patch-row-name">{patch.name}</h4>
-                    {patch.description && (
-                      <p className="patch-row-description">{patch.description}</p>
-                    )}
-                  </div>
-
-                  <div className="patch-row-actions">
-                    <button
-                      className="btn-edit-small"
-                      onClick={() => handleEditXdelta(patch)}
-                      title="Edit"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      className="btn-build-iso"
-                      onClick={() => handleBuildXdeltaIso(patch)}
-                    >
-                      Build ISO
-                    </button>
+          <div className="patches-list">
+            {xdeltaPatches.map((patch) => (
+              <div key={patch.id} className="patch-row">
+                <div className="patch-row-image">
+                  {patch.imageUrl ? (
+                    <img
+                      src={`${BACKEND_URL}${patch.imageUrl}`}
+                      alt={patch.name}
+                      onError={(e) => {
+                        e.target.style.display = 'none'
+                        e.target.nextSibling.style.display = 'flex'
+                      }}
+                    />
+                  ) : null}
+                  <div className="patch-row-placeholder" style={{ display: patch.imageUrl ? 'none' : 'flex' }}>
+                    {patch.name[0]}
                   </div>
                 </div>
-              ))}
+
+                <div className="patch-row-info">
+                  <h4 className="patch-row-name">{patch.name}</h4>
+                  {patch.description && (
+                    <p className="patch-row-description">{patch.description}</p>
+                  )}
+                  {patch.size && (
+                    <p className="patch-row-size" style={{ fontSize: '0.8em', color: 'var(--color-text-muted)', margin: 0 }}>
+                      {(patch.size / (1024 * 1024)).toFixed(2)} MB
+                    </p>
+                  )}
+                </div>
+
+                <div className="patch-row-actions">
+                  <button
+                    className="btn-edit-small"
+                    onClick={() => handleEditXdelta(patch)}
+                    title="Edit"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="btn-edit-small"
+                    onClick={() => handleDownloadPatch(patch.id)}
+                    title="Download Patch"
+                    style={{ fontSize: '14px' }}
+                  >
+                    ⬇
+                  </button>
+                  <button
+                    className="btn-build-iso"
+                    onClick={() => handleBuildXdeltaIso(patch)}
+                  >
+                    Build ISO
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Create New Patch Card */}
+            <div
+              className="patch-row create-patch-row"
+              onClick={() => setShowXdeltaCreateModal(true)}
+              style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+            >
+              <div className="patch-row-image">
+                <div className="patch-row-placeholder" style={{ display: 'flex', fontSize: '2rem' }}>
+                  +
+                </div>
+              </div>
+
+              <div className="patch-row-info">
+                <h4 className="patch-row-name">Create New Patch</h4>
+                <p className="patch-row-description">Create a patch from a modded ISO</p>
+              </div>
+
+              <div className="patch-row-actions">
+                <button
+                  className="btn-build-iso"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowXdeltaCreateModal(true)
+                  }}
+                >
+                  Create
+                </button>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* XDelta Import Modal */}
           {showXdeltaImportModal && (
@@ -2143,6 +2300,137 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   >
                     Delete
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* XDelta Create Patch Modal */}
+          {showXdeltaCreateModal && (
+            <div className="iso-builder-overlay">
+              <div className="iso-builder-modal">
+                <div className="modal-header">
+                  <h2>Create New Patch</h2>
+                  {xdeltaCreateState !== 'creating' && (
+                    <button className="close-btn" onClick={closeXdeltaCreateModal}>×</button>
+                  )}
+                </div>
+
+                <div className="modal-body">
+                  {xdeltaCreateState === 'idle' && (
+                    <div className="create-patch-form">
+                      <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
+                        Create a patch by comparing a modded ISO against your vanilla ISO.
+                        The patch can then be shared and applied to recreate the modded ISO.
+                      </p>
+
+                      <div className="edit-field">
+                        <label>Patch Name:</label>
+                        <input
+                          type="text"
+                          value={xdeltaCreateData.name}
+                          onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, name: e.target.value })}
+                          placeholder="My Awesome Mod Pack"
+                        />
+                      </div>
+
+                      <div className="edit-field">
+                        <label>Description (optional):</label>
+                        <textarea
+                          value={xdeltaCreateData.description}
+                          onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, description: e.target.value })}
+                          placeholder="Describe what's in this patch..."
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="edit-field">
+                        <label>Modded ISO:</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            value={xdeltaCreateData.moddedIsoPath}
+                            onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, moddedIsoPath: e.target.value })}
+                            placeholder="Select a modded ISO file..."
+                            readOnly
+                            style={{ flex: 1 }}
+                          />
+                          <button
+                            className="btn-secondary"
+                            onClick={handleSelectModdedIso}
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            Browse...
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="edit-buttons" style={{ marginTop: '1.5rem' }}>
+                        <button
+                          className="btn-save"
+                          onClick={handleStartCreateXdelta}
+                          disabled={!xdeltaCreateData.moddedIsoPath || !xdeltaCreateData.name.trim()}
+                        >
+                          Create Patch
+                        </button>
+                        <button className="btn-cancel" onClick={closeXdeltaCreateModal}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {xdeltaCreateState === 'creating' && (
+                    <div className="export-progress" style={{ textAlign: 'center' }}>
+                      <div className="export-spinner">
+                        <div className="spinner"></div>
+                      </div>
+
+                      <h3 style={{ marginTop: '1rem' }}>Creating Patch...</h3>
+
+                      <p className="progress-message">
+                        {xdeltaCreateMessage || 'Comparing ISOs...'}
+                      </p>
+                    </div>
+                  )}
+
+                  {xdeltaCreateState === 'complete' && xdeltaCreateResult && (
+                    <div className="export-complete">
+                      <div className="success-icon">✓</div>
+                      <h3>Patch Created!</h3>
+                      <p>Your patch "{xdeltaCreateResult.name}" has been created.</p>
+                      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
+                        Size: {xdeltaCreateResult.size_mb} MB
+                        {xdeltaCreateResult.size_mb < 25 && (
+                          <span style={{ color: 'var(--color-success)', marginLeft: '0.5rem' }}>
+                            (Discord-friendly!)
+                          </span>
+                        )}
+                      </p>
+                      <div className="complete-actions">
+                        <button
+                          className="btn-download"
+                          onClick={() => handleDownloadPatch(xdeltaCreateResult.patch_id)}
+                        >
+                          Download Patch
+                        </button>
+                        <button className="btn-secondary" onClick={closeXdeltaCreateModal}>
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {xdeltaCreateState === 'error' && (
+                    <div className="export-error">
+                      <div className="error-icon">✕</div>
+                      <h3>Creation Failed</h3>
+                      <p className="error-message">{xdeltaCreateError}</p>
+                      <button className="btn-secondary" onClick={closeXdeltaCreateModal}>
+                        Close
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
