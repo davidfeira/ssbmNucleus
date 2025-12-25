@@ -32,6 +32,7 @@ namespace HSDRawViewer.Rendering.Models
         public byte[] RgbaData { get; set; }
         public string ThumbnailBase64 { get; set; }
         public int GlTextureId { get; set; }
+        public HSDRaw.Common.HSD_TOBJ Tobj { get; set; } // Reference for updating HSD data
     }
 
     public class RenderJObj
@@ -1141,7 +1142,8 @@ namespace HSDRawViewer.Rendering.Models
                         Name = $"Texture_{textureIndex}",
                         RgbaData = rgbaData,
                         ThumbnailBase64 = thumbnailBase64,
-                        GlTextureId = glTextureId
+                        GlTextureId = glTextureId,
+                        Tobj = tobj
                     });
 
                     textureIndex++;
@@ -1164,15 +1166,22 @@ namespace HSDRawViewer.Rendering.Models
             if (texInfo.GlTextureId < 0)
                 return;
 
-            // Decode PNG to RGBA
-            using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(pngData);
-            byte[] rgbaData = new byte[image.Width * image.Height * 4];
-            image.CopyPixelDataTo(rgbaData);
+            // Decode PNG to BGRA (matching original texture format)
+            using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngData);
+            byte[] bgraData = new byte[image.Width * image.Height * 4];
+            image.CopyPixelDataTo(bgraData);
 
-            // Update OpenGL texture
+            // Update OpenGL texture for live preview (BGRA format)
             GL.BindTexture(TextureTarget.Texture2D, texInfo.GlTextureId);
             GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, image.Width, image.Height,
-                PixelFormat.Rgba, PixelType.UnsignedByte, rgbaData);
+                PixelFormat.Bgra, PixelType.UnsignedByte, bgraData);
+
+            // Also update the HSD TOBJ data so it can be saved/exported
+            // Store the BGRA data for later export (don't re-encode now to avoid format issues)
+            if (texInfo.Tobj != null)
+            {
+                texInfo.RgbaData = bgraData; // Cache for export (note: actually BGRA)
+            }
         }
     }
 }

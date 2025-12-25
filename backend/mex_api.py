@@ -5743,6 +5743,174 @@ def start_viewer_vanilla():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/mex/viewer/start-vault', methods=['POST'])
+def start_viewer_vault():
+    """Start the 3D model viewer for a vault costume (for skin creator editing)"""
+    global viewer_process, viewer_port
+
+    try:
+        data = request.json
+        character = data.get('character')
+        costume_id = data.get('costumeId')
+
+        if not character or not costume_id:
+            return jsonify({'success': False, 'error': 'Missing character or costumeId'}), 400
+
+        # Stop any existing viewer
+        if viewer_process is not None:
+            try:
+                viewer_process.terminate()
+                viewer_process.wait(timeout=2)
+            except:
+                viewer_process.kill()
+            viewer_process = None
+
+        # Find the costume in the vault
+        char_storage = STORAGE_DIR / character
+        zip_path = char_storage / f"{costume_id}.zip"
+
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Costume not found in vault: {costume_id}'}), 404
+
+        # Extract DAT file to temp location
+        import zipfile
+        temp_dir = Path(tempfile.mkdtemp())
+        dat_path = None
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('.dat'):
+                    zf.extract(name, temp_dir)
+                    dat_path = temp_dir / name
+                    break
+
+        if not dat_path or not dat_path.exists():
+            return jsonify({'success': False, 'error': 'No DAT file found in costume archive'}), 400
+
+        # Check if HSDRawViewer exists
+        if not HSDRAW_EXE.exists():
+            return jsonify({
+                'success': False,
+                'error': f'HSDRawViewer not found at {HSDRAW_EXE}. Please build it first.'
+            }), 500
+
+        # Find an available port
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(('localhost', 0))
+        viewer_port = sock.getsockname()[1]
+        sock.close()
+
+        # Convert paths for Windows if running in WSL
+        def to_windows_path(path):
+            path_str = str(path)
+            if os.name != 'nt' and path_str.startswith('/mnt/'):
+                drive = path_str[5].upper()
+                return f"{drive}:{path_str[6:]}".replace('/', '\\')
+            return path_str
+
+        exe_path = to_windows_path(HSDRAW_EXE)
+        dat_windows_path = to_windows_path(dat_path)
+        logs_windows_path = to_windows_path(LOGS_PATH)
+
+        # Look for a scene file for this character
+        scene_path = None
+        csp_data_dir = PROCESSOR_DIR / "csp_data" / character
+        if csp_data_dir.exists():
+            if (csp_data_dir / "scene.yml").exists():
+                scene_path = csp_data_dir / "scene.yml"
+            else:
+                yml_files = sorted(csp_data_dir.glob("*.yml"))
+                if yml_files:
+                    scene_path = yml_files[0]
+
+        scene_windows_path = to_windows_path(scene_path) if scene_path else None
+
+        # Look for AJ file
+        char_prefixes = {
+            "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+            "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+            "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+            "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+            "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+            "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+            "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+            "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+            "Dr. Mario": "PlDr", "G&W": "PlGw"
+        }
+
+        aj_windows_path = None
+        if character in char_prefixes:
+            prefix = char_prefixes[character]
+            aj_path = VANILLA_ASSETS_DIR / character / f"{prefix}AJ.dat"
+            if aj_path.exists():
+                aj_windows_path = to_windows_path(aj_path)
+
+        # Build command
+        cmd = [exe_path, '--stream', str(viewer_port), dat_windows_path, logs_windows_path]
+        if scene_windows_path:
+            cmd.append(scene_windows_path)
+        else:
+            cmd.append('')
+        if aj_windows_path:
+            cmd.append(aj_windows_path)
+
+        logger.info(f"Starting vault viewer: {' '.join(cmd)}")
+
+        # Start the viewer process
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        viewer_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=creation_flags
+        )
+
+        # Poll until server is ready
+        import urllib.request
+        max_wait = 15
+        poll_interval = 0.5
+        server_ready = False
+
+        for _ in range(int(max_wait / poll_interval)):
+            time.sleep(poll_interval)
+
+            if viewer_process is None:
+                return jsonify({'success': False, 'error': 'Viewer was stopped during startup'}), 500
+
+            if viewer_process.poll() is not None:
+                stdout, stderr = viewer_process.communicate()
+                viewer_process = None
+                return jsonify({
+                    'success': False,
+                    'error': f'Viewer failed to start: {stderr.decode() if stderr else stdout.decode()}'
+                }), 500
+
+            try:
+                req = urllib.request.urlopen(f'http://localhost:{viewer_port}/', timeout=1)
+                if req.status == 200:
+                    server_ready = True
+                    break
+            except:
+                pass
+
+        if not server_ready:
+            if viewer_process:
+                viewer_process.kill()
+                viewer_process = None
+            return jsonify({'success': False, 'error': 'Viewer failed to start within timeout'}), 500
+
+        return jsonify({
+            'success': True,
+            'port': viewer_port,
+            'wsUrl': f'ws://localhost:{viewer_port}/'
+        })
+
+    except Exception as e:
+        logger.error(f"Start vault viewer error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/mex/vanilla/costumes/<character>', methods=['GET'])
 def get_vanilla_costumes(character):
     """Get list of vanilla costumes for a character"""

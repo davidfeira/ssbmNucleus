@@ -57,6 +57,10 @@ namespace HSDRawViewer
         // Cached texture list (populated after first render to avoid Invoke deadlocks)
         private List<TextureInfo> _cachedTextureList = null;
 
+        // Store the raw file and path for exporting modified DAT
+        private HSDRaw.HSDRawFile _rawFile = null;
+        private string _datFilePath = null;
+
         public StreamingServer(int port, string logPath = null)
         {
             _port = port;
@@ -151,8 +155,10 @@ namespace HSDRawViewer
 
             // Load the DAT file to find JOBJ nodes
             Log("Opening DAT file...");
-            var rawFile = new HSDRaw.HSDRawFile();
-            rawFile.Open(datFilePath);
+            _rawFile = new HSDRaw.HSDRawFile();
+            _rawFile.Open(datFilePath);
+            _datFilePath = datFilePath;
+            var rawFile = _rawFile; // Keep local var for rest of method
             Log($"DAT file opened. Root count: {rawFile.Roots.Count}");
 
             // Find character JOBJ
@@ -789,6 +795,54 @@ namespace HSDRawViewer
                         {
                             LogError("Error in updateTexture", ex);
                             await SendJsonAsync(webSocket, new { type = "textureUpdated", success = false, error = ex.Message });
+                        }
+                        break;
+
+                    case "exportDat":
+                        // Export the modified DAT file with updated textures
+                        try
+                        {
+                            if (_rawFile == null)
+                            {
+                                await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = "No DAT file loaded" });
+                                break;
+                            }
+
+                            // Save to a temp file
+                            string tempPath = Path.Combine(Path.GetTempPath(), $"export_{Guid.NewGuid()}.dat");
+                            Log($"Exporting DAT to: {tempPath}");
+
+                            // Must run on UI thread for thread safety
+                            byte[] datBytes = null;
+                            _hostForm.Invoke((Action)(() =>
+                            {
+                                try
+                                {
+                                    _rawFile.Save(tempPath);
+                                    datBytes = File.ReadAllBytes(tempPath);
+                                    File.Delete(tempPath); // Clean up temp file
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogError("Error saving DAT", ex);
+                                }
+                            }));
+
+                            if (datBytes != null)
+                            {
+                                string base64Data = Convert.ToBase64String(datBytes);
+                                await SendJsonAsync(webSocket, new { type = "exportDat", success = true, data = base64Data });
+                                Log($"DAT exported successfully, size: {datBytes.Length} bytes");
+                            }
+                            else
+                            {
+                                await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = "Failed to save DAT file" });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogError("Error in exportDat", ex);
+                            await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = ex.Message });
                         }
                         break;
 

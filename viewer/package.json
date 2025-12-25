@@ -13,6 +13,7 @@
   "description": "Melee Costume Storage Viewer",
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.0",
+    "jszip": "^3.10.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "socket.io-client": "^4.8.1",

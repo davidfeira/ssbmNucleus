@@ -110,6 +110,12 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const paintCanvasRef = useRef(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const lastDrawPos = useRef(null)
+  const [editedTextures, setEditedTextures] = useState({}) // { [index]: dataUrl } - cache of edited textures
+  const [isDirty, setIsDirty] = useState(false) // Track unsaved changes
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [skinName, setSkinName] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
   const [viewerDragging, setViewerDragging] = useState(false)
   const [viewerDragButton, setViewerDragButton] = useState(null)
   const viewerLastMousePos = useRef({ x: 0, y: 0 })
@@ -1724,7 +1730,13 @@ export default function StorageViewer({ metadata, onRefresh }) {
   }
 
   // Skin Creator - Close and cleanup
-  const closeSkinCreator = async () => {
+  const closeSkinCreator = async (force = false) => {
+    // Warn if there are unsaved changes
+    if (isDirty && !force) {
+      const confirmed = window.confirm('You have unsaved changes. Are you sure you want to close?')
+      if (!confirmed) return
+    }
+
     if (viewerWs) {
       viewerWs.close()
       setViewerWs(null)
@@ -1742,6 +1754,8 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setSkinCreatorError(null)
     setModelTextures([])
     setSelectedTextureIndex(null)
+    setEditedTextures({})
+    setIsDirty(false)
   }
 
   // Skin Creator - Open and load costumes
@@ -1749,6 +1763,97 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setShowSkinCreator(true)
     setSkinCreatorStep('select')
     loadVanillaCostumes(selectedCharacter)
+  }
+
+  // Skin Creator - Start from vault costume (for editing existing costumes)
+  const startSkinCreatorFromVault = async (costume) => {
+    try {
+      // Close edit modal if open
+      setShowEditModal(false)
+      setShowSkinCreator(true)
+      setSkinCreatorLoading(true)
+      setSkinCreatorError(null)
+      setSelectedVanillaCostume({ code: costume.id, colorName: costume.color })
+
+      const response = await fetch(`${API_URL}/viewer/start-vault`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          costumeId: costume.id
+        })
+      })
+
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error)
+      }
+
+      // Connect WebSocket (same as startSkinCreatorViewer)
+      const ws = new WebSocket(data.wsUrl)
+      ws.binaryType = 'blob'
+
+      ws.onopen = () => {
+        setSkinCreatorLoading(false)
+        setSkinCreatorStep('edit')
+        ws.send(JSON.stringify({ type: 'getTextures' }))
+      }
+
+      ws.onmessage = async (event) => {
+        if (event.data instanceof Blob) {
+          const bitmap = await createImageBitmap(event.data)
+          const canvas = skinCreatorCanvasRef.current
+          if (canvas) {
+            const ctx = canvas.getContext('2d')
+            canvas.width = bitmap.width
+            canvas.height = bitmap.height
+            ctx.drawImage(bitmap, 0, 0)
+          }
+        } else {
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'textureList') {
+              setModelTextures(msg.textures || [])
+              if (msg.textures?.length > 0) {
+                setSelectedTextureIndex(0)
+              }
+            } else if (msg.type === 'fullTexture') {
+              if (msg.error) return
+              if (!msg.data) return
+              const canvas = paintCanvasRef.current
+              if (canvas) {
+                const img = new Image()
+                img.onload = () => {
+                  canvas.width = msg.width
+                  canvas.height = msg.height
+                  const ctx = canvas.getContext('2d')
+                  ctx.imageSmoothingEnabled = false
+                  ctx.drawImage(img, 0, 0)
+                }
+                img.src = `data:image/png;base64,${msg.data}`
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing WebSocket message:', e)
+          }
+        }
+      }
+
+      ws.onerror = () => {
+        setSkinCreatorError('WebSocket connection failed')
+        setSkinCreatorLoading(false)
+      }
+
+      ws.onclose = () => {
+        setViewerWs(null)
+      }
+
+      setViewerWs(ws)
+
+    } catch (err) {
+      setSkinCreatorError(err.message)
+      setSkinCreatorLoading(false)
+    }
   }
 
   // Skin Creator - Camera controls
@@ -1797,18 +1902,27 @@ export default function StorageViewer({ metadata, onRefresh }) {
   }
 
   // Skin Creator - Load texture onto paint canvas when selected
-  // For now, use thumbnail as source (will upgrade to full res later)
+  // Check editedTextures cache first, fall back to original thumbnail
   useEffect(() => {
     if (selectedTextureIndex === null || !modelTextures[selectedTextureIndex]) return
 
     const tex = modelTextures[selectedTextureIndex]
     const canvas = paintCanvasRef.current
-    if (!canvas || !tex.thumbnail) {
-      console.log('Cannot load texture - canvas or thumbnail missing', { canvas: !!canvas, thumbnail: !!tex.thumbnail })
+    if (!canvas) {
+      console.log('Cannot load texture - canvas missing')
       return
     }
 
-    console.log('Loading texture onto canvas:', { index: selectedTextureIndex, width: tex.width, height: tex.height })
+    // Use cached edit if available, otherwise use original thumbnail
+    const editedData = editedTextures[selectedTextureIndex]
+    const imgSrc = editedData || (tex.thumbnail ? `data:image/png;base64,${tex.thumbnail}` : null)
+
+    if (!imgSrc) {
+      console.log('Cannot load texture - no cached edit or thumbnail available')
+      return
+    }
+
+    console.log('Loading texture onto canvas:', { index: selectedTextureIndex, width: tex.width, height: tex.height, isEdited: !!editedData })
 
     const img = new Image()
     img.onload = () => {
@@ -1817,15 +1931,26 @@ export default function StorageViewer({ metadata, onRefresh }) {
       canvas.height = tex.height
       const ctx = canvas.getContext('2d')
       ctx.imageSmoothingEnabled = false
-      // Draw thumbnail scaled up to full size (for testing)
       ctx.drawImage(img, 0, 0, tex.width, tex.height)
       console.log('Texture loaded onto canvas')
     }
     img.onerror = (err) => {
-      console.error('Failed to load thumbnail image:', err)
+      console.error('Failed to load texture image:', err)
     }
-    img.src = `data:image/png;base64,${tex.thumbnail}`
-  }, [selectedTextureIndex, modelTextures])
+    img.src = imgSrc
+  }, [selectedTextureIndex, modelTextures, editedTextures])
+
+  // Skin Creator - Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isDirty) {
+        e.preventDefault()
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   // Skin Creator - Paint canvas mouse handlers
   const getCanvasCoords = (e) => {
@@ -1928,8 +2053,170 @@ export default function StorageViewer({ metadata, onRefresh }) {
         data: base64
       }))
       console.log('updateTexture sent successfully')
+
+      // Cache the edit locally so switching textures preserves changes
+      setEditedTextures(prev => ({ ...prev, [selectedTextureIndex]: dataUrl }))
+      setIsDirty(true)
     } catch (err) {
       console.error('Error sending updateTexture:', err)
+    }
+  }
+
+  // Skin Creator - Open save modal
+  const openSaveModal = () => {
+    // Default name based on character and costume
+    const defaultName = `${selectedCharacter} Custom`
+    setSkinName(defaultName)
+    setSaveError(null)
+    setShowSaveModal(true)
+  }
+
+  // Skin Creator - Save to vault
+  const handleSaveToVault = async () => {
+    if (!skinName.trim()) {
+      setSaveError('Please enter a name')
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(null)
+
+    try {
+      // Request DAT export from backend
+      const datPromise = new Promise((resolve, reject) => {
+        const handleMessage = (event) => {
+          if (event.data instanceof Blob) return // Skip binary frames
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'exportDat') {
+              viewerWs.removeEventListener('message', handleMessage)
+              if (msg.success) {
+                resolve(msg.data)
+              } else {
+                reject(new Error(msg.error || 'Export failed'))
+              }
+            }
+          } catch {}
+        }
+        viewerWs.addEventListener('message', handleMessage)
+        viewerWs.send(JSON.stringify({ type: 'exportDat' }))
+
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          viewerWs.removeEventListener('message', handleMessage)
+          reject(new Error('Export timed out'))
+        }, 30000)
+      })
+
+      const base64Data = await datPromise
+      console.log('Got DAT data, length:', base64Data.length)
+
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const datBlob = new Blob([byteArray], { type: 'application/octet-stream' })
+
+      // Create a zip with the DAT file
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      zip.file(`${skinName.trim()}.dat`, datBlob)
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+
+      // Upload to import endpoint
+      const formData = new FormData()
+      formData.append('file', new File([zipBlob], `${skinName.trim()}.zip`))
+      formData.append('custom_title', skinName.trim())
+
+      const response = await fetch(`${API_URL}/import/file`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Import failed')
+      }
+
+      const result = await response.json()
+      console.log('Import result:', result)
+
+      // Success!
+      setShowSaveModal(false)
+      setIsDirty(false)
+      setSkinName('')
+
+      // Refresh the costume list
+      fetchMetadata()
+
+      alert(`Skin "${skinName}" saved to vault!`)
+    } catch (error) {
+      console.error('Save error:', error)
+      setSaveError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Skin Creator - Download DAT file
+  const handleDownloadDat = async () => {
+    if (!viewerWs || viewerWs.readyState !== WebSocket.OPEN) {
+      alert('Not connected to viewer')
+      return
+    }
+
+    try {
+      // Request DAT export from backend
+      const datPromise = new Promise((resolve, reject) => {
+        const handleMessage = (event) => {
+          if (event.data instanceof Blob) return
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'exportDat') {
+              viewerWs.removeEventListener('message', handleMessage)
+              if (msg.success) {
+                resolve(msg.data)
+              } else {
+                reject(new Error(msg.error || 'Export failed'))
+              }
+            }
+          } catch {}
+        }
+        viewerWs.addEventListener('message', handleMessage)
+        viewerWs.send(JSON.stringify({ type: 'exportDat' }))
+
+        setTimeout(() => {
+          viewerWs.removeEventListener('message', handleMessage)
+          reject(new Error('Export timed out'))
+        }, 30000)
+      })
+
+      const base64Data = await datPromise
+
+      // Convert base64 to blob and download
+      const byteCharacters = atob(base64Data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const datBlob = new Blob([byteArray], { type: 'application/octet-stream' })
+
+      // Trigger download
+      const url = URL.createObjectURL(datBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${selectedCharacter}_${selectedVanillaCostume?.colorName || 'custom'}.dat`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Download error:', error)
+      alert('Failed to download: ' + error.message)
     }
   }
 
@@ -1947,18 +2234,49 @@ export default function StorageViewer({ metadata, onRefresh }) {
                 {selectedVanillaCostume && (
                   <span className="skin-creator-costume">{selectedVanillaCostume.colorName}</span>
                 )}
+                {isDirty && <span className="skin-creator-dirty">*</span>}
               </div>
-              <button
-                className="skin-creator-close"
-                onClick={closeSkinCreator}
-                title="Close (Esc)"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-                <span>Close</span>
-              </button>
+              <div className="skin-creator-header-buttons">
+                {skinCreatorStep === 'edit' && (
+                  <>
+                    <button
+                      className="skin-creator-save"
+                      onClick={openSaveModal}
+                      title="Save to Vault"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                      </svg>
+                      <span>Save</span>
+                    </button>
+                    <button
+                      className="skin-creator-export"
+                      onClick={handleDownloadDat}
+                      title="Download DAT file"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      <span>Download</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  className="skin-creator-close"
+                  onClick={() => closeSkinCreator()}
+                  title="Close (Esc)"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  <span>Close</span>
+                </button>
+              </div>
             </div>
 
             {/* Costume Selection Step */}
@@ -2012,16 +2330,18 @@ export default function StorageViewer({ metadata, onRefresh }) {
                       modelTextures.map((tex, idx) => (
                         <div
                           key={idx}
-                          className={`skin-creator-texture-item ${selectedTextureIndex === idx ? 'selected' : ''}`}
+                          className={`skin-creator-texture-item ${selectedTextureIndex === idx ? 'selected' : ''} ${editedTextures[idx] ? 'edited' : ''}`}
                           onClick={() => setSelectedTextureIndex(idx)}
                         >
                           <div className="texture-thumbnail">
-                            {tex.thumbnail && (
+                            {editedTextures[idx] ? (
+                              <img src={editedTextures[idx]} alt={tex.name} />
+                            ) : tex.thumbnail && (
                               <img src={`data:image/png;base64,${tex.thumbnail}`} alt={tex.name} />
                             )}
                           </div>
                           <div className="texture-info">
-                            <span className="texture-name">{tex.name}</span>
+                            <span className="texture-name">{tex.name}{editedTextures[idx] && ' *'}</span>
                             <span className="texture-size">{tex.width}x{tex.height}</span>
                           </div>
                         </div>
@@ -2083,6 +2403,46 @@ export default function StorageViewer({ metadata, onRefresh }) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="skin-creator-save-overlay" onClick={() => !isSaving && setShowSaveModal(false)}>
+          <div className="skin-creator-save-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Save to Vault</h2>
+            <p>Enter a name for your custom skin:</p>
+            <input
+              type="text"
+              className="skin-name-input"
+              value={skinName}
+              onChange={(e) => setSkinName(e.target.value)}
+              placeholder="Skin name..."
+              disabled={isSaving}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isSaving) handleSaveToVault()
+                if (e.key === 'Escape' && !isSaving) setShowSaveModal(false)
+              }}
+            />
+            {saveError && <div className="save-error">{saveError}</div>}
+            <div className="save-modal-buttons">
+              <button
+                className="save-cancel"
+                onClick={() => setShowSaveModal(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="save-confirm"
+                onClick={handleSaveToVault}
+                disabled={isSaving || !skinName.trim()}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2212,6 +2572,19 @@ export default function StorageViewer({ metadata, onRefresh }) {
                         <path d="M2 12l10 5 10-5"></path>
                       </svg>
                       <span>View 3D Model</span>
+                    </button>
+
+                    {/* Edit in Skin Creator Button */}
+                    <button
+                      className="edit-modal-skincreator-btn"
+                      onClick={() => startSkinCreatorFromVault(editingItem.data)}
+                      disabled={saving || deleting || exporting}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                      <span>Edit Textures</span>
                     </button>
                   </div>
 
