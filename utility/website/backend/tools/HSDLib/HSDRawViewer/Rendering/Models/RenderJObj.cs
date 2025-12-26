@@ -1,6 +1,8 @@
 ﻿using HSDRaw.Common;
 using HSDRaw.Common.Animation;
+using HSDRaw.GX;
 using HSDRaw.Tools;
+using HSDRawViewer.Extensions;
 using HSDRawViewer.Rendering.GX;
 using HSDRawViewer.Rendering.Shaders;
 using OpenTK.Graphics.OpenGL;
@@ -1177,10 +1179,16 @@ namespace HSDRawViewer.Rendering.Models
                 PixelFormat.Bgra, PixelType.UnsignedByte, bgraData);
 
             // Also update the HSD TOBJ data so it can be saved/exported
-            // Store the BGRA data for later export (don't re-encode now to avoid format issues)
             if (texInfo.Tobj != null)
             {
-                texInfo.RgbaData = bgraData; // Cache for export (note: actually BGRA)
+                // Get the original texture format from the TOBJ
+                var imgFormat = texInfo.Tobj.ImageData?.Format ?? GXTexFmt.RGBA8;
+                var palFormat = texInfo.Tobj.TlutData?.Format ?? GXTlutFmt.RGB565;
+
+                // Inject the new image data into the TOBJ (this updates the HSD data for export)
+                texInfo.Tobj.InjectBitmap(image, imgFormat, palFormat);
+
+                texInfo.RgbaData = bgraData; // Also cache for thumbnails
             }
         }
     }
