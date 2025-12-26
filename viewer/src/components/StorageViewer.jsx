@@ -1793,6 +1793,12 @@ export default function StorageViewer({ metadata, onRefresh }) {
   // Skin Creator - Start from vault costume (for editing existing costumes)
   const startSkinCreatorFromVault = async (costume) => {
     try {
+      // Use the character from the costume data, not selectedCharacter
+      const character = costume.character || selectedCharacter
+      if (!character) {
+        throw new Error('No character specified')
+      }
+
       // Close edit modal if open
       setShowEditModal(false)
       setShowSkinCreator(true)
@@ -1804,7 +1810,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: selectedCharacter,
+          character: character,
           costumeId: costume.id
         })
       })

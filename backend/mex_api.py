@@ -5766,7 +5766,7 @@ def start_viewer_vault():
             viewer_process = None
 
         # Find the costume in the vault
-        char_storage = STORAGE_DIR / character
+        char_storage = STORAGE_PATH / character
         zip_path = char_storage / f"{costume_id}.zip"
 
         if not zip_path.exists():
