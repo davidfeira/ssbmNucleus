@@ -1638,6 +1638,7 @@
   z-index: 10000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .skin-creator-modal {
@@ -1702,8 +1703,15 @@
   font-size: 0.875rem;
 }
 
-/* Body - 3 panel layout */
+/* Body - new layout: main area (canvas + toolbar) | right panel (3D + tools), bottom texture strip */
 .skin-creator-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.skin-creator-main {
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -1719,36 +1727,46 @@
   color: var(--color-text-tertiary);
 }
 
-/* Left Panel - Textures */
-.skin-creator-textures {
-  width: 180px;
-  min-width: 180px;
+/* Bottom Panel - Texture Strip (horizontal, 2 rows) */
+.skin-creator-texture-strip {
+  height: 220px;
+  min-height: 220px;
   background: var(--color-bg-surface);
-  border-right: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
 }
 
+.skin-creator-texture-strip .skin-creator-panel-header {
+  padding: var(--space-1) var(--space-3);
+  flex-shrink: 0;
+}
+
 .skin-creator-texture-list {
   flex: 1;
+  overflow-x: auto;
   overflow-y: auto;
   padding: var(--space-2);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  align-content: flex-start;
 }
 
 .skin-creator-texture-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  gap: 4px;
+  padding: var(--space-1);
   background: var(--color-bg-deep);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
 .skin-creator-texture-item:hover {
@@ -1761,10 +1779,9 @@
 }
 
 .texture-thumbnail {
-  width: 64px;
-  height: 64px;
-  min-width: 64px;
-  min-height: 64px;
+  /* Fixed square box, image shows aspect ratio inside */
+  width: 48px;
+  height: 48px;
   background: var(--color-bg-base);
   border-radius: var(--radius-xs);
   flex-shrink: 0;
@@ -1775,29 +1792,32 @@
 }
 
 .texture-thumbnail img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  /* Fit within box using aspect-ratio from inline style */
+  max-width: 48px;
+  max-height: 48px;
   image-rendering: pixelated;
 }
 
 .texture-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 0;
   min-width: 0;
 }
 
 .texture-name {
-  font-size: 0.8rem;
+  font-size: 0.65rem;
   color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 60px;
+  text-align: center;
 }
 
 .texture-size {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   color: var(--color-text-tertiary);
 }
 
@@ -1908,22 +1928,31 @@
 }
 
 .paint-canvas {
-  max-width: 100%;
-  max-height: 100%;
   image-rendering: pixelated;
   cursor: crosshair;
   background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px;
+  /* Display size is set dynamically via JS using CSS transform */
 }
 
-/* Right Panel - 3D Viewer */
-.skin-creator-viewer {
-  flex: 1;
-  min-width: 400px;
-  max-width: 50%;
+/* Right Panel - Stacked: 3D Preview + Tool Palette */
+.skin-creator-right-panel {
+  width: 350px;
+  min-width: 350px;
   background: var(--color-bg-surface);
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* 3D Preview - square aspect ratio */
+.skin-creator-3d-container {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
 }
 
 .skin-creator-3d {
@@ -1934,6 +1963,7 @@
   background: var(--color-bg-base);
   cursor: grab;
   user-select: none;
+  overflow: hidden;
 }
 
 .skin-creator-3d:active {
@@ -1946,6 +1976,46 @@
   align-items: center;
   justify-content: center;
   color: var(--color-text-tertiary);
+  gap: var(--space-2);
+}
+
+/* Tool Palette - fills remaining space below 3D preview */
+.skin-creator-tool-palette {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+  overflow-y: auto;
+}
+
+.skin-creator-tool-palette .skin-creator-panel-header {
+  flex-shrink: 0;
+}
+
+.tool-palette-content {
+  flex: 1;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tool-palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tool-palette-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+}
+
+.tool-palette-tools {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 

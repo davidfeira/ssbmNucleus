@@ -10,6 +10,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('storage');
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [skinCreatorOpen, setSkinCreatorOpen] = useState(false);
 
   // Slippi dialog state for nucleus:// imports
   const [showSlippiDialog, setShowSlippiDialog] = useState(false);
@@ -206,32 +207,34 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-brand">
-          <img src="/nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
-          <h1>SSBM Nucleus</h1>
-        </div>
-        <nav className="app-tabs">
-          <button
-            className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
-            onClick={() => setActiveTab('storage')}
-          >
-            Vault
-          </button>
-          <button
-            className={`tab ${activeTab === 'mex' ? 'active' : ''}`}
-            onClick={() => setActiveTab('mex')}
-          >
-            Install
-          </button>
-          <button
-            className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            Settings
-          </button>
-        </nav>
-      </header>
+      {!skinCreatorOpen && (
+        <header className="app-header">
+          <div className="header-brand">
+            <img src="/nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
+            <h1>SSBM Nucleus</h1>
+          </div>
+          <nav className="app-tabs">
+            <button
+              className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
+              onClick={() => setActiveTab('storage')}
+            >
+              Vault
+            </button>
+            <button
+              className={`tab ${activeTab === 'mex' ? 'active' : ''}`}
+              onClick={() => setActiveTab('mex')}
+            >
+              Install
+            </button>
+            <button
+              className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              Settings
+            </button>
+          </nav>
+        </header>
+      )}
 
       <main className="app-content">
         {loading ? (
@@ -241,7 +244,7 @@ function App() {
         ) : (
           <>
             <div style={{ display: activeTab === 'storage' ? 'block' : 'none' }}>
-              <StorageViewer metadata={metadata} onRefresh={fetchMetadata} />
+              <StorageViewer metadata={metadata} onRefresh={fetchMetadata} onSkinCreatorChange={setSkinCreatorOpen} />
             </div>
             <div style={{ display: activeTab === 'mex' ? 'block' : 'none', height: '100%' }}>
               <MexPanel />

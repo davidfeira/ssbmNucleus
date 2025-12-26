@@ -37,7 +37,7 @@ const SkeletonSkinCard = () => (
   </div>
 )
 
-export default function StorageViewer({ metadata, onRefresh }) {
+export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange }) {
   const [mode, setMode] = useState('characters') // 'characters', 'stages', or 'patches'
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCharacter, setSelectedCharacter] = useState(null)
@@ -98,6 +98,12 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [show3DViewer, setShow3DViewer] = useState(false) // 3D model viewer
   const [slippiAdvancedOpen, setSlippiAdvancedOpen] = useState(false) // Collapsible Slippi controls
   const [showSkinCreator, setShowSkinCreator] = useState(false) // Skin creator modal
+
+  // Notify parent when skin creator opens/closes
+  useEffect(() => {
+    onSkinCreatorChange?.(showSkinCreator)
+  }, [showSkinCreator, onSkinCreatorChange])
+
   const [skinCreatorStep, setSkinCreatorStep] = useState('select') // 'select' or 'edit'
   const [vanillaCostumes, setVanillaCostumes] = useState([])
   const [selectedVanillaCostume, setSelectedVanillaCostume] = useState(null)
@@ -1700,7 +1706,18 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   const ctx = canvas.getContext('2d')
                   ctx.imageSmoothingEnabled = false
                   ctx.drawImage(img, 0, 0)
-                  console.log('Full texture loaded onto canvas', { canvasWidth: canvas.width, canvasHeight: canvas.height })
+
+                  // Scale display size to be LARGE and editable using CSS transform
+                  // Target: larger dimension should be around 600px for comfortable editing
+                  const largerDim = Math.max(msg.width, msg.height)
+                  const targetDisplaySize = 600 // pixels for larger dimension
+                  const scale = targetDisplaySize / largerDim
+                  // Use transform scale instead of width/height for canvas
+                  canvas.style.transform = `scale(${scale})`
+                  canvas.style.transformOrigin = 'center center'
+                  console.log('Texture scaling:', { original: `${msg.width}x${msg.height}`, scale })
+
+                  console.log('Full texture loaded onto canvas', { canvasWidth: canvas.width, canvasHeight: canvas.height, scale })
                 }
                 img.onerror = (err) => {
                   console.error('Failed to load texture image:', err)
@@ -1862,6 +1879,13 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   const ctx = canvas.getContext('2d')
                   ctx.imageSmoothingEnabled = false
                   ctx.drawImage(img, 0, 0)
+
+                  // Scale display size to be LARGE and editable using CSS transform
+                  const largerDim = Math.max(msg.width, msg.height)
+                  const targetDisplaySize = 600
+                  const scale = targetDisplaySize / largerDim
+                  canvas.style.transform = `scale(${scale})`
+                  canvas.style.transformOrigin = 'center center'
                 }
                 img.src = `data:image/png;base64,${msg.data}`
               }
@@ -1973,7 +1997,14 @@ export default function StorageViewer({ metadata, onRefresh }) {
       const ctx = canvas.getContext('2d')
       ctx.imageSmoothingEnabled = false
       ctx.drawImage(img, 0, 0, tex.width, tex.height)
-      console.log('Texture loaded onto canvas')
+
+      // Scale display size to be LARGE and editable using CSS transform
+      const largerDim = Math.max(tex.width, tex.height)
+      const targetDisplaySize = 600
+      const scale = targetDisplaySize / largerDim
+      canvas.style.transform = `scale(${scale})`
+      canvas.style.transformOrigin = 'center center'
+      console.log('Texture loaded onto canvas with scale:', scale)
     }
     img.onerror = (err) => {
       console.error('Failed to load texture image:', err)
@@ -2371,8 +2402,83 @@ export default function StorageViewer({ metadata, onRefresh }) {
             {/* Editor Step */}
             {skinCreatorStep === 'edit' && (
               <div className="skin-creator-body">
-                {/* Left Panel - Texture List */}
-                <div className="skin-creator-textures">
+                {/* Main area: Canvas + Right Panel */}
+                <div className="skin-creator-main">
+                  {/* Center - Paint Canvas */}
+                  <div className="skin-creator-canvas-area">
+                    <div className="skin-creator-toolbar">
+                      <input type="color" className="color-picker" defaultValue="#ff0000" title="Color" />
+                      <div className="toolbar-separator"></div>
+                      <input type="range" className="brush-size" min="1" max="50" defaultValue="5" title="Brush Size" />
+                    </div>
+                    <div
+                      className="skin-creator-canvas"
+                      onMouseDown={handlePaintMouseDown}
+                      onMouseMove={handlePaintMouseMove}
+                      onMouseUp={handlePaintMouseUp}
+                      onMouseLeave={handlePaintMouseUp}
+                    >
+                      {selectedTextureIndex === null ? (
+                        <div className="canvas-placeholder">
+                          <span>Paint Canvas</span>
+                          <p>Select a texture to start editing</p>
+                        </div>
+                      ) : (
+                        <canvas ref={paintCanvasRef} className="paint-canvas" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Panel - 3D Preview + Tool Palette */}
+                  <div className="skin-creator-right-panel">
+                    {/* 3D Preview (square) */}
+                    <div className="skin-creator-3d-container">
+                      <div className="skin-creator-panel-header">3D Preview</div>
+                      <div
+                        className="skin-creator-3d"
+                        onMouseDown={handleViewerMouseDown}
+                        onMouseMove={handleViewerMouseMove}
+                        onMouseUp={handleViewerMouseUp}
+                        onMouseLeave={handleViewerMouseUp}
+                        onWheel={handleViewerWheel}
+                        onContextMenu={handleViewerContextMenu}
+                      >
+                        {skinCreatorLoading ? (
+                          <div className="viewer-placeholder">
+                            <span>Loading...</span>
+                          </div>
+                        ) : skinCreatorReconnecting ? (
+                          <div className="viewer-placeholder reconnecting">
+                            <span>Reconnecting...</span>
+                            <p>Attempt {skinCreatorReconnectAttempts}/{skinCreatorMaxReconnectAttempts}</p>
+                          </div>
+                        ) : (
+                          <canvas ref={skinCreatorCanvasRef} className="viewer-canvas" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tool Palette */}
+                    <div className="skin-creator-tool-palette">
+                      <div className="skin-creator-panel-header">Tools</div>
+                      <div className="tool-palette-content">
+                        <div className="tool-palette-section">
+                          <div className="tool-palette-section-title">Drawing</div>
+                          <div className="tool-palette-tools">
+                            <button className="tool-btn active" title="Pencil">✏️</button>
+                            <button className="tool-btn" title="Brush">🖌️</button>
+                            <button className="tool-btn" title="Fill">🪣</button>
+                            <button className="tool-btn" title="Eyedropper">💉</button>
+                            <button className="tool-btn" title="Eraser">🧹</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom - Texture Strip */}
+                <div className="skin-creator-texture-strip">
                   <div className="skin-creator-panel-header">Textures ({modelTextures.length})</div>
                   <div className="skin-creator-texture-list">
                     {modelTextures.length === 0 ? (
@@ -2386,9 +2492,21 @@ export default function StorageViewer({ metadata, onRefresh }) {
                         >
                           <div className="texture-thumbnail">
                             {editedTextures[idx] ? (
-                              <img src={editedTextures[idx]} alt={tex.name} />
+                              <img
+                                src={editedTextures[idx]}
+                                alt={tex.name}
+                                style={{
+                                  aspectRatio: `${tex.width} / ${tex.height}`
+                                }}
+                              />
                             ) : tex.thumbnail && (
-                              <img src={`data:image/png;base64,${tex.thumbnail}`} alt={tex.name} />
+                              <img
+                                src={`data:image/png;base64,${tex.thumbnail}`}
+                                alt={tex.name}
+                                style={{
+                                  aspectRatio: `${tex.width} / ${tex.height}`
+                                }}
+                              />
                             )}
                           </div>
                           <div className="texture-info">
@@ -2397,63 +2515,6 @@ export default function StorageViewer({ metadata, onRefresh }) {
                           </div>
                         </div>
                       ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Center - Paint Canvas */}
-                <div className="skin-creator-canvas-area">
-                  <div className="skin-creator-toolbar">
-                    <button className="tool-btn active" title="Pencil">✏️</button>
-                    <button className="tool-btn" title="Brush">🖌️</button>
-                    <button className="tool-btn" title="Fill">🪣</button>
-                    <button className="tool-btn" title="Eyedropper">💉</button>
-                    <button className="tool-btn" title="Eraser">🧹</button>
-                    <div className="toolbar-separator"></div>
-                    <input type="color" className="color-picker" defaultValue="#ff0000" title="Color" />
-                    <input type="range" className="brush-size" min="1" max="50" defaultValue="5" title="Brush Size" />
-                  </div>
-                  <div
-                    className="skin-creator-canvas"
-                    onMouseDown={handlePaintMouseDown}
-                    onMouseMove={handlePaintMouseMove}
-                    onMouseUp={handlePaintMouseUp}
-                    onMouseLeave={handlePaintMouseUp}
-                  >
-                    {selectedTextureIndex === null ? (
-                      <div className="canvas-placeholder">
-                        <span>Paint Canvas</span>
-                        <p>Select a texture to start editing</p>
-                      </div>
-                    ) : (
-                      <canvas ref={paintCanvasRef} className="paint-canvas" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Panel - 3D Viewer */}
-                <div className="skin-creator-viewer">
-                  <div className="skin-creator-panel-header">3D Preview</div>
-                  <div
-                    className="skin-creator-3d"
-                    onMouseDown={handleViewerMouseDown}
-                    onMouseMove={handleViewerMouseMove}
-                    onMouseUp={handleViewerMouseUp}
-                    onMouseLeave={handleViewerMouseUp}
-                    onWheel={handleViewerWheel}
-                    onContextMenu={handleViewerContextMenu}
-                  >
-                    {skinCreatorLoading ? (
-                      <div className="viewer-placeholder">
-                        <span>Loading...</span>
-                      </div>
-                    ) : skinCreatorReconnecting ? (
-                      <div className="viewer-placeholder reconnecting">
-                        <span>Reconnecting...</span>
-                        <p>Attempt {skinCreatorReconnectAttempts}/{skinCreatorMaxReconnectAttempts}</p>
-                      </div>
-                    ) : (
-                      <canvas ref={skinCreatorCanvasRef} className="viewer-canvas" />
                     )}
                   </div>
                 </div>
