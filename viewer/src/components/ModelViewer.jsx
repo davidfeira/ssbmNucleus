@@ -285,6 +285,12 @@ const ModelViewer = ({ character, skinId, onClose }) => {
   const [error, setError] = useState(null)
   const [viewerInfo, setViewerInfo] = useState(null)
 
+  // Reconnection state
+  const [isReconnecting, setIsReconnecting] = useState(false)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const maxReconnectAttempts = 3
+  const reconnectTimeoutRef = useRef(null)
+
   // Camera state
   const [isDragging, setIsDragging] = useState(false)
   const [dragButton, setDragButton] = useState(null) // 0 = left (rotate), 2 = right (pan)
@@ -337,6 +343,8 @@ const ModelViewer = ({ character, skinId, onClose }) => {
         console.log('WebSocket connected to viewer')
         setIsConnected(true)
         setIsLoading(false)
+        setIsReconnecting(false)
+        setReconnectAttempts(0) // Reset on successful connection
         // Request animation list
         ws.send(JSON.stringify({ type: 'getAnimList' }))
       }
@@ -375,6 +383,9 @@ const ModelViewer = ({ character, skinId, onClose }) => {
               setAnimFrameCount(msg.frameCount || 0)
               setAnimFrame(0)
               setAnimPlaying(true)
+            } else if (msg.type === 'ping') {
+              // Respond to keepalive ping with pong
+              ws.send(JSON.stringify({ type: 'pong' }))
             }
           } catch (e) {
             console.log('Non-JSON message:', event.data)
@@ -390,6 +401,23 @@ const ModelViewer = ({ character, skinId, onClose }) => {
       ws.onclose = () => {
         console.log('WebSocket closed')
         setIsConnected(false)
+
+        // Attempt reconnection if we weren't intentionally closing
+        if (reconnectAttempts < maxReconnectAttempts && !error) {
+          const delay = Math.pow(2, reconnectAttempts) * 1000 // 1s, 2s, 4s exponential backoff
+          console.log(`Attempting reconnect in ${delay}ms (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`)
+          setIsReconnecting(true)
+
+          reconnectTimeoutRef.current = setTimeout(() => {
+            setReconnectAttempts(prev => prev + 1)
+            // Restart the viewer
+            viewerStarting = false
+            startViewer()
+          }, delay)
+        } else if (reconnectAttempts >= maxReconnectAttempts) {
+          setError('Connection lost. Click Retry to reconnect.')
+          setIsReconnecting(false)
+        }
       }
 
     } catch (err) {
@@ -402,6 +430,15 @@ const ModelViewer = ({ character, skinId, onClose }) => {
 
   // Stop the viewer
   const stopViewer = useCallback(async () => {
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+
+    // Set error to prevent reconnection attempts
+    setError('closing')
+
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
@@ -552,12 +589,21 @@ const ModelViewer = ({ character, skinId, onClose }) => {
             </div>
           )}
 
-          {error && (
+          {isReconnecting && !isLoading && (
+            <div className="model-viewer-reconnecting">
+              <div className="spinner"></div>
+              <p>Reconnecting... (attempt {reconnectAttempts}/{maxReconnectAttempts})</p>
+            </div>
+          )}
+
+          {error && error !== 'closing' && (
             <div className="model-viewer-error">
               <p>Error: {error}</p>
               <button onClick={() => {
                 viewerStarting = false
                 setError(null)
+                setReconnectAttempts(0)
+                setIsReconnecting(false)
                 startViewer()
               }}>Retry</button>
             </div>
@@ -644,8 +690,8 @@ const ModelViewer = ({ character, skinId, onClose }) => {
         )}
 
         <div className="model-viewer-footer">
-          <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? 'Connected' : 'Disconnected'}
+          <span className={`status-indicator ${isConnected ? 'connected' : isReconnecting ? 'reconnecting' : 'disconnected'}`}>
+            {isConnected ? 'Connected' : isReconnecting ? 'Reconnecting...' : 'Disconnected'}
           </span>
           {viewerInfo && (
             <span className="viewer-info">

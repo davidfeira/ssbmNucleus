@@ -37,9 +37,9 @@ namespace HSDRawViewer
         private Form _hostForm;
         private CancellationTokenSource _cts;
         private int _port;
-        private int _frameWidth = 720;
-        private int _frameHeight = 480;
-        private int _targetFps = 30;
+        private int _frameWidth = 1280;
+        private int _frameHeight = 960;
+        private int _targetFps = 60;
         private bool _isRunning = false;
         private WebSocket _currentClient = null;
         private StreamWriter _logWriter;
@@ -802,45 +802,48 @@ namespace HSDRawViewer
                         // Export the modified DAT file with updated textures
                         try
                         {
+                            // Write to dedicated debug file - bypasses all other logging
+                            var dbg = @"C:\Users\david\projects\new aka\logs\EXPORT_DEBUG.txt";
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP1\n");
+                            Log("Received exportDat command");
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP2\n");
+
                             if (_rawFile == null)
                             {
+                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: _rawFile null\n");
                                 await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = "No DAT file loaded" });
                                 break;
                             }
 
-                            // Save to a temp file
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP3 - rawFile valid\n");
                             string tempPath = Path.Combine(Path.GetTempPath(), $"export_{Guid.NewGuid()}.dat");
-                            Log($"Exporting DAT to: {tempPath}");
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP4 - tempPath: {tempPath}\n");
 
-                            // Must run on UI thread for thread safety
-                            byte[] datBytes = null;
-                            _hostForm.Invoke((Action)(() =>
+                            // Run on background thread - no UI thread needed for file I/O
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP5 - starting Task.Run\n");
+                            byte[] datBytes = await Task.Run(() =>
                             {
-                                try
-                                {
-                                    _rawFile.Save(tempPath);
-                                    datBytes = File.ReadAllBytes(tempPath);
-                                    File.Delete(tempPath); // Clean up temp file
-                                }
-                                catch (Exception ex)
-                                {
-                                    LogError("Error saving DAT", ex);
-                                }
-                            }));
+                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP6 - inside Task.Run\n");
+                                _rawFile.Save(tempPath);
+                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP7 - save done\n");
+                                var data = File.ReadAllBytes(tempPath);
+                                File.Delete(tempPath);
+                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP8 - read {data.Length} bytes\n");
+                                return data;
+                            });
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP9 - Task.Run done\n");
 
-                            if (datBytes != null)
-                            {
-                                string base64Data = Convert.ToBase64String(datBytes);
-                                await SendJsonAsync(webSocket, new { type = "exportDat", success = true, data = base64Data });
-                                Log($"DAT exported successfully, size: {datBytes.Length} bytes");
-                            }
-                            else
-                            {
-                                await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = "Failed to save DAT file" });
-                            }
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP10 - converting to base64\n");
+                            string base64Data = Convert.ToBase64String(datBytes);
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP11 - sending response ({datBytes.Length} bytes)\n");
+                            await SendJsonAsync(webSocket, new { type = "exportDat", success = true, data = base64Data });
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP12 - DONE!\n");
+                            Log($"DAT exported successfully, size: {datBytes.Length} bytes");
                         }
                         catch (Exception ex)
                         {
+                            var dbg = @"C:\Users\david\projects\new aka\logs\EXPORT_DEBUG.txt";
+                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n");
                             LogError("Error in exportDat", ex);
                             await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = ex.Message });
                         }

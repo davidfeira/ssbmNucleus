@@ -119,6 +119,10 @@ export default function StorageViewer({ metadata, onRefresh }) {
   const [viewerDragging, setViewerDragging] = useState(false)
   const [viewerDragButton, setViewerDragButton] = useState(null)
   const viewerLastMousePos = useRef({ x: 0, y: 0 })
+  const [skinCreatorReconnecting, setSkinCreatorReconnecting] = useState(false)
+  const [skinCreatorReconnectAttempts, setSkinCreatorReconnectAttempts] = useState(0)
+  const skinCreatorReconnectTimeoutRef = useRef(null)
+  const skinCreatorMaxReconnectAttempts = 3
 
   // Drag and drop state
   const [draggedItem, setDraggedItem] = useState(null) // { index, id }
@@ -1649,6 +1653,8 @@ export default function StorageViewer({ metadata, onRefresh }) {
       ws.onopen = () => {
         setSkinCreatorLoading(false)
         setSkinCreatorStep('edit')
+        setSkinCreatorReconnecting(false)
+        setSkinCreatorReconnectAttempts(0)
         // Request texture list
         ws.send(JSON.stringify({ type: 'getTextures' }))
       }
@@ -1705,6 +1711,9 @@ export default function StorageViewer({ metadata, onRefresh }) {
               }
             } else if (msg.type === 'textureUpdated') {
               console.log('Received textureUpdated response:', msg)
+            } else if (msg.type === 'ping') {
+              // Respond to keepalive ping
+              ws.send(JSON.stringify({ type: 'pong' }))
             }
           } catch (e) {
             console.error('Error parsing WebSocket message:', e, event.data?.substring?.(0, 100))
@@ -1719,6 +1728,21 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
       ws.onclose = () => {
         setViewerWs(null)
+
+        // Attempt reconnection if not intentionally closed
+        if (skinCreatorReconnectAttempts < skinCreatorMaxReconnectAttempts && !skinCreatorError) {
+          const delay = Math.pow(2, skinCreatorReconnectAttempts) * 1000
+          console.log(`Skin creator reconnecting in ${delay}ms (attempt ${skinCreatorReconnectAttempts + 1}/${skinCreatorMaxReconnectAttempts})`)
+          setSkinCreatorReconnecting(true)
+
+          skinCreatorReconnectTimeoutRef.current = setTimeout(() => {
+            setSkinCreatorReconnectAttempts(prev => prev + 1)
+            startSkinCreatorViewer(costume)
+          }, delay)
+        } else if (skinCreatorReconnectAttempts >= skinCreatorMaxReconnectAttempts) {
+          setSkinCreatorError('Connection lost. Click Retry to reconnect.')
+          setSkinCreatorReconnecting(false)
+        }
       }
 
       setViewerWs(ws)
@@ -1736,6 +1760,15 @@ export default function StorageViewer({ metadata, onRefresh }) {
       const confirmed = window.confirm('You have unsaved changes. Are you sure you want to close?')
       if (!confirmed) return
     }
+
+    // Clear any pending reconnect timeout
+    if (skinCreatorReconnectTimeoutRef.current) {
+      clearTimeout(skinCreatorReconnectTimeoutRef.current)
+      skinCreatorReconnectTimeoutRef.current = null
+    }
+
+    // Set error to prevent reconnection attempts
+    setSkinCreatorError('closing')
 
     if (viewerWs) {
       viewerWs.close()
@@ -1756,6 +1789,8 @@ export default function StorageViewer({ metadata, onRefresh }) {
     setSelectedTextureIndex(null)
     setEditedTextures({})
     setIsDirty(false)
+    setSkinCreatorReconnecting(false)
+    setSkinCreatorReconnectAttempts(0)
   }
 
   // Skin Creator - Open and load costumes
@@ -1796,6 +1831,8 @@ export default function StorageViewer({ metadata, onRefresh }) {
       ws.onopen = () => {
         setSkinCreatorLoading(false)
         setSkinCreatorStep('edit')
+        setSkinCreatorReconnecting(false)
+        setSkinCreatorReconnectAttempts(0)
         ws.send(JSON.stringify({ type: 'getTextures' }))
       }
 
@@ -1832,6 +1869,9 @@ export default function StorageViewer({ metadata, onRefresh }) {
                 }
                 img.src = `data:image/png;base64,${msg.data}`
               }
+            } else if (msg.type === 'ping') {
+              // Respond to keepalive ping
+              ws.send(JSON.stringify({ type: 'pong' }))
             }
           } catch (e) {
             console.error('Error parsing WebSocket message:', e)
@@ -1846,6 +1886,21 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
       ws.onclose = () => {
         setViewerWs(null)
+
+        // Attempt reconnection if not intentionally closed
+        if (skinCreatorReconnectAttempts < skinCreatorMaxReconnectAttempts && !skinCreatorError) {
+          const delay = Math.pow(2, skinCreatorReconnectAttempts) * 1000
+          console.log(`Skin creator (vault) reconnecting in ${delay}ms (attempt ${skinCreatorReconnectAttempts + 1}/${skinCreatorMaxReconnectAttempts})`)
+          setSkinCreatorReconnecting(true)
+
+          skinCreatorReconnectTimeoutRef.current = setTimeout(() => {
+            setSkinCreatorReconnectAttempts(prev => prev + 1)
+            startSkinCreatorFromVault(costume)
+          }, delay)
+        } else if (skinCreatorReconnectAttempts >= skinCreatorMaxReconnectAttempts) {
+          setSkinCreatorError('Connection lost. Click Retry to reconnect.')
+          setSkinCreatorReconnecting(false)
+        }
       }
 
       setViewerWs(ws)
@@ -2163,6 +2218,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
   // Skin Creator - Download DAT file
   const handleDownloadDat = async () => {
+    console.log('handleDownloadDat called', { viewerWs: !!viewerWs, readyState: viewerWs?.readyState })
     if (!viewerWs || viewerWs.readyState !== WebSocket.OPEN) {
       alert('Not connected to viewer')
       return
@@ -2170,11 +2226,13 @@ export default function StorageViewer({ metadata, onRefresh }) {
 
     try {
       // Request DAT export from backend
+      console.log('Sending exportDat command...')
       const datPromise = new Promise((resolve, reject) => {
         const handleMessage = (event) => {
           if (event.data instanceof Blob) return
           try {
             const msg = JSON.parse(event.data)
+            console.log('Received message while waiting for export:', msg.type)
             if (msg.type === 'exportDat') {
               viewerWs.removeEventListener('message', handleMessage)
               if (msg.success) {
@@ -2186,6 +2244,7 @@ export default function StorageViewer({ metadata, onRefresh }) {
           } catch {}
         }
         viewerWs.addEventListener('message', handleMessage)
+        console.log('Sending exportDat via WebSocket')
         viewerWs.send(JSON.stringify({ type: 'exportDat' }))
 
         setTimeout(() => {
@@ -2289,7 +2348,13 @@ export default function StorageViewer({ metadata, onRefresh }) {
                   <div className="skin-creator-loading">Loading costumes...</div>
                 )}
 
-                {skinCreatorError && (
+                {skinCreatorReconnecting && (
+                  <div className="skin-creator-reconnecting">
+                    Reconnecting... (attempt {skinCreatorReconnectAttempts}/{skinCreatorMaxReconnectAttempts})
+                  </div>
+                )}
+
+                {skinCreatorError && skinCreatorError !== 'closing' && (
                   <div className="skin-creator-error">{skinCreatorError}</div>
                 )}
 
@@ -2395,6 +2460,11 @@ export default function StorageViewer({ metadata, onRefresh }) {
                     {skinCreatorLoading ? (
                       <div className="viewer-placeholder">
                         <span>Loading...</span>
+                      </div>
+                    ) : skinCreatorReconnecting ? (
+                      <div className="viewer-placeholder reconnecting">
+                        <span>Reconnecting...</span>
+                        <p>Attempt {skinCreatorReconnectAttempts}/{skinCreatorMaxReconnectAttempts}</p>
                       </div>
                     ) : (
                       <canvas ref={skinCreatorCanvasRef} className="viewer-canvas" />
