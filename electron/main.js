@@ -166,6 +166,119 @@ ipcMain.handle('select-directory-dialog', async () => {
   return result.filePaths[0];
 });
 
+// ============================================
+// Embedded Viewer Management (Named Pipe IPC)
+// ============================================
+const ViewerManager = require('./viewer-manager');
+let viewerManager = null;
+
+ipcMain.handle('viewer:start', async (event, options) => {
+  console.log('[Electron] Starting embedded viewer...');
+  try {
+    if (!viewerManager) {
+      viewerManager = new ViewerManager();
+    }
+
+    // Add isDev flag
+    options.isDev = isDev;
+
+    // Set up message forwarding to renderer
+    viewerManager.onMessage('all', (message) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('viewer:message', message);
+      }
+    });
+
+    const result = await viewerManager.start(options);
+    console.log('[Electron] Viewer started:', result);
+
+    // Set the parent window to embed the viewer into Electron
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const hwndBuffer = mainWindow.getNativeWindowHandle();
+      // Convert Buffer to integer HWND (Windows handle is a pointer, use BigInt for safety)
+      const parentHwnd = hwndBuffer.readBigUInt64LE ? hwndBuffer.readBigUInt64LE(0) : hwndBuffer.readUInt32LE(0);
+      console.log('[Electron] Setting parent HWND:', parentHwnd.toString());
+      viewerManager.send({ type: 'setParent', hwnd: parentHwnd.toString() });
+    }
+
+    return result;
+  } catch (err) {
+    console.error('[Electron] Failed to start viewer:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('viewer:stop', async () => {
+  console.log('[Electron] Stopping viewer...');
+  if (viewerManager) {
+    await viewerManager.stop();
+  }
+  return true;
+});
+
+ipcMain.handle('viewer:send', async (event, message) => {
+  if (viewerManager) {
+    return viewerManager.send(message);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:camera', async (event, deltaRotX, deltaRotY, deltaZoom, deltaX, deltaY) => {
+  if (viewerManager) {
+    return viewerManager.sendCamera(deltaRotX, deltaRotY, deltaZoom, deltaX, deltaY);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:getAnimList', async () => {
+  if (viewerManager) {
+    return viewerManager.getAnimList();
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:loadAnim', async (event, symbol) => {
+  if (viewerManager) {
+    return viewerManager.loadAnim(symbol);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:animToggle', async () => {
+  if (viewerManager) {
+    return viewerManager.animToggle();
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:animSetFrame', async (event, frame) => {
+  if (viewerManager) {
+    return viewerManager.animSetFrame(frame);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:resize', async (event, x, y, width, height) => {
+  if (viewerManager) {
+    return viewerManager.resize(x, y, width, height);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:show', async () => {
+  if (viewerManager) {
+    return viewerManager.show();
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:hide', async () => {
+  if (viewerManager) {
+    return viewerManager.hide();
+  }
+  return false;
+});
+
 // Register nucleus:// protocol handler
 if (process.defaultApp) {
   if (process.argv.length >= 2) {

@@ -55,6 +55,7 @@ export default function SkinCreator({
   const [originalTextureData, setOriginalTextureData] = useState({}) // { [index]: ImageData }
   const pixelGroupMapRef = useRef({}) // Maps pixels to their color group index
   const colorDebounceRef = useRef(null)
+  const exportDatResolverRef = useRef(null) // For promise-based exportDat with Electron IPC
 
   // Keep editedTexturesRef in sync with state for interval callback access
   useEffect(() => {
@@ -99,14 +100,72 @@ export default function SkinCreator({
     }
   }
 
-  // Start viewer with selected costume
+  // Check if Electron API is available
+  const hasElectron = typeof window !== 'undefined' && window.electron?.viewerStart
+
+  // Handle viewer messages (Electron IPC)
+  const handleViewerMessage = (msg) => {
+    lastMessageTimeRef.current = Date.now()
+
+    if (msg.type === 'textureList') {
+      if (modelTextures.length === 0 && msg.textures?.length > 0) {
+        setSelectedTextureIndex(0)
+      }
+      setModelTextures(msg.textures || [])
+    } else if (msg.type === 'fullTexture') {
+      console.log('Received fullTexture', { index: msg.index, width: msg.width, height: msg.height })
+      if (msg.error) return
+      if (!msg.data) return
+      const canvas = paintCanvasRef.current
+      if (canvas) {
+        const img = new Image()
+        img.onload = () => {
+          canvas.width = msg.width
+          canvas.height = msg.height
+          const ctx = canvas.getContext('2d')
+          ctx.imageSmoothingEnabled = false
+          ctx.drawImage(img, 0, 0)
+
+          const largerDim = Math.max(msg.width, msg.height)
+          const targetDisplaySize = 600
+          const scale = targetDisplaySize / largerDim
+          canvas.style.transform = `scale(${scale})`
+          canvas.style.transformOrigin = 'center center'
+        }
+        img.src = `data:image/png;base64,${msg.data}`
+      }
+    } else if (msg.type === 'ready') {
+      setSkinCreatorLoading(false)
+      setSkinCreatorStep('edit')
+      setConnectionFailed(false)
+      // Request textures
+      window.electron.viewerSend({ type: 'getTextures' })
+    } else if (msg.type === 'exportDat') {
+      // Handle exportDat response for save/download operations
+      if (exportDatResolverRef.current) {
+        if (msg.success) {
+          exportDatResolverRef.current.resolve(msg.data)
+        } else {
+          exportDatResolverRef.current.reject(new Error(msg.error || 'Export failed'))
+        }
+        exportDatResolverRef.current = null
+      }
+    }
+  }
+
+  // Start viewer with selected costume (Electron IPC)
   const startSkinCreatorViewer = async (costume) => {
     try {
       setSkinCreatorLoading(true)
       setSkinCreatorError(null)
       setSelectedVanillaCostume(costume)
 
-      const response = await fetch(`${API_URL}/viewer/start-vanilla`, {
+      if (!hasElectron) {
+        throw new Error('Electron environment required for embedded viewer')
+      }
+
+      // Get file paths from Flask (no viewer spawning)
+      const response = await fetch(`${API_URL}/viewer/paths-vanilla`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,116 +179,32 @@ export default function SkinCreator({
         throw new Error(data.error)
       }
 
-      // Connect WebSocket
-      const ws = new WebSocket(data.wsUrl)
-      ws.binaryType = 'blob'
+      // Set up message listener
+      const cleanup = window.electron.onViewerMessage(handleViewerMessage)
+      setViewerWs({ cleanup }) // Store cleanup function
 
-      ws.onopen = () => {
-        setSkinCreatorLoading(false)
-        setSkinCreatorStep('edit')
-        setSkinCreatorReconnecting(false)
-        setSkinCreatorReconnectAttempts(0)
-        setConnectionFailed(false)
-        ws.send(JSON.stringify({ type: 'getTextures' }))
+      // Start embedded viewer via Electron IPC
+      await window.electron.viewerStart({
+        datFile: data.datFile,
+        sceneFile: data.sceneFile,
+        ajFile: data.ajFile,
+        logsPath: data.logsPath
+      })
 
-        // Start auto-refresh interval (every 5 seconds, pauses while drawing)
-        lastMessageTimeRef.current = Date.now()
-        autoRefreshIntervalRef.current = setInterval(() => {
-          if (isDrawingRef.current) return // Skip if user is actively drawing
-          if (ws.readyState === WebSocket.OPEN) {
-            // Resend any edited textures to ensure 3D viewer stays in sync
-            Object.entries(editedTexturesRef.current).forEach(([idx, dataUrl]) => {
-              const base64 = dataUrl.replace('data:image/png;base64,', '')
-              ws.send(JSON.stringify({
-                type: 'updateTexture',
-                index: parseInt(idx),
-                data: base64
-              }))
-            })
-          }
-        }, 5000)
-
-        // Start health check interval (every 3 seconds)
-        // Check if we've received any message recently (frames, pings, etc.)
-        pingIntervalRef.current = setInterval(() => {
-          if (Date.now() - lastMessageTimeRef.current > 6000) {
-            setConnectionFailed(true)
-            clearAllIntervals()
-            ws.close()
-            return
-          }
-        }, 3000)
-      }
-
-      ws.onmessage = async (event) => {
-        // Update last message time for health check
-        lastMessageTimeRef.current = Date.now()
-
-        if (event.data instanceof Blob) {
-          const bitmap = await createImageBitmap(event.data)
-          const canvas = skinCreatorCanvasRef.current
-          if (canvas) {
-            const ctx = canvas.getContext('2d')
-            canvas.width = bitmap.width
-            canvas.height = bitmap.height
-            ctx.drawImage(bitmap, 0, 0)
-          }
-        } else {
-          try {
-            const msg = JSON.parse(event.data)
-            if (msg.type === 'textureList') {
-              // Only set selected index on first load, not on refresh
-              if (modelTextures.length === 0 && msg.textures?.length > 0) {
-                setSelectedTextureIndex(0)
-              }
-              setModelTextures(msg.textures || [])
-            } else if (msg.type === 'fullTexture') {
-              console.log('Received fullTexture', { index: msg.index, width: msg.width, height: msg.height })
-              if (msg.error) return
-              if (!msg.data) return
-              const canvas = paintCanvasRef.current
-              if (canvas) {
-                const img = new Image()
-                img.onload = () => {
-                  canvas.width = msg.width
-                  canvas.height = msg.height
-                  const ctx = canvas.getContext('2d')
-                  ctx.imageSmoothingEnabled = false
-                  ctx.drawImage(img, 0, 0)
-
-                  const largerDim = Math.max(msg.width, msg.height)
-                  const targetDisplaySize = 600
-                  const scale = targetDisplaySize / largerDim
-                  canvas.style.transform = `scale(${scale})`
-                  canvas.style.transformOrigin = 'center center'
-                }
-                img.src = `data:image/png;base64,${msg.data}`
-              }
-            } else if (msg.type === 'ping') {
-              ws.send(JSON.stringify({ type: 'pong' }))
-            }
-          } catch (e) {
-            console.error('Error parsing WebSocket message:', e)
-          }
-        }
-      }
-
-      ws.onerror = () => {
-        setSkinCreatorError('WebSocket connection failed')
-        setSkinCreatorLoading(false)
-        clearAllIntervals()
-      }
-
-      ws.onclose = () => {
-        setViewerWs(null)
-        clearAllIntervals()
-        if (!skinCreatorError && !connectionFailed) {
-          setSkinCreatorError('Connection lost. Click Retry to reconnect.')
-        }
-        setSkinCreatorReconnecting(false)
-      }
-
-      setViewerWs(ws)
+      // Start auto-refresh interval (every 5 seconds, pauses while drawing)
+      lastMessageTimeRef.current = Date.now()
+      autoRefreshIntervalRef.current = setInterval(() => {
+        if (isDrawingRef.current) return
+        // Resend any edited textures to ensure 3D viewer stays in sync
+        Object.entries(editedTexturesRef.current).forEach(([idx, dataUrl]) => {
+          const base64 = dataUrl.replace('data:image/png;base64,', '')
+          window.electron.viewerSend({
+            type: 'updateTexture',
+            index: parseInt(idx),
+            data: base64
+          })
+        })
+      }, 5000)
 
     } catch (err) {
       setSkinCreatorError(err.message)
@@ -237,7 +212,7 @@ export default function SkinCreator({
     }
   }
 
-  // Start from vault costume (for editing existing costumes)
+  // Start from vault costume (for editing existing costumes) - Electron IPC
   const startSkinCreatorFromVault = async (costume) => {
     try {
       const character = costume.character || selectedCharacter
@@ -245,11 +220,16 @@ export default function SkinCreator({
         throw new Error('No character specified')
       }
 
+      if (!hasElectron) {
+        throw new Error('Electron environment required for embedded viewer')
+      }
+
       setSkinCreatorLoading(true)
       setSkinCreatorError(null)
       setSelectedVanillaCostume({ code: costume.id, colorName: costume.color })
 
-      const response = await fetch(`${API_URL}/viewer/start-vault`, {
+      // Get file paths from Flask (no viewer spawning)
+      const response = await fetch(`${API_URL}/viewer/paths-vault`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,114 +243,32 @@ export default function SkinCreator({
         throw new Error(data.error)
       }
 
-      const ws = new WebSocket(data.wsUrl)
-      ws.binaryType = 'blob'
+      // Set up message listener
+      const cleanup = window.electron.onViewerMessage(handleViewerMessage)
+      setViewerWs({ cleanup }) // Store cleanup function
 
-      ws.onopen = () => {
-        setSkinCreatorLoading(false)
-        setSkinCreatorStep('edit')
-        setSkinCreatorReconnecting(false)
-        setSkinCreatorReconnectAttempts(0)
-        setConnectionFailed(false)
-        ws.send(JSON.stringify({ type: 'getTextures' }))
+      // Start embedded viewer via Electron IPC
+      await window.electron.viewerStart({
+        datFile: data.datFile,
+        sceneFile: data.sceneFile,
+        ajFile: data.ajFile,
+        logsPath: data.logsPath
+      })
 
-        // Start auto-refresh interval (every 5 seconds, pauses while drawing)
-        lastMessageTimeRef.current = Date.now()
-        autoRefreshIntervalRef.current = setInterval(() => {
-          if (isDrawingRef.current) return // Skip if user is actively drawing
-          if (ws.readyState === WebSocket.OPEN) {
-            // Resend any edited textures to ensure 3D viewer stays in sync
-            Object.entries(editedTexturesRef.current).forEach(([idx, dataUrl]) => {
-              const base64 = dataUrl.replace('data:image/png;base64,', '')
-              ws.send(JSON.stringify({
-                type: 'updateTexture',
-                index: parseInt(idx),
-                data: base64
-              }))
-            })
-          }
-        }, 5000)
-
-        // Start health check interval (every 3 seconds)
-        // Check if we've received any message recently (frames, pings, etc.)
-        pingIntervalRef.current = setInterval(() => {
-          if (Date.now() - lastMessageTimeRef.current > 6000) {
-            setConnectionFailed(true)
-            clearAllIntervals()
-            ws.close()
-            return
-          }
-        }, 3000)
-      }
-
-      ws.onmessage = async (event) => {
-        // Update last message time for health check
-        lastMessageTimeRef.current = Date.now()
-
-        if (event.data instanceof Blob) {
-          const bitmap = await createImageBitmap(event.data)
-          const canvas = skinCreatorCanvasRef.current
-          if (canvas) {
-            const ctx = canvas.getContext('2d')
-            canvas.width = bitmap.width
-            canvas.height = bitmap.height
-            ctx.drawImage(bitmap, 0, 0)
-          }
-        } else {
-          try {
-            const msg = JSON.parse(event.data)
-            if (msg.type === 'textureList') {
-              // Only set selected index on first load, not on refresh
-              if (modelTextures.length === 0 && msg.textures?.length > 0) {
-                setSelectedTextureIndex(0)
-              }
-              setModelTextures(msg.textures || [])
-            } else if (msg.type === 'fullTexture') {
-              if (msg.error) return
-              if (!msg.data) return
-              const canvas = paintCanvasRef.current
-              if (canvas) {
-                const img = new Image()
-                img.onload = () => {
-                  canvas.width = msg.width
-                  canvas.height = msg.height
-                  const ctx = canvas.getContext('2d')
-                  ctx.imageSmoothingEnabled = false
-                  ctx.drawImage(img, 0, 0)
-
-                  const largerDim = Math.max(msg.width, msg.height)
-                  const targetDisplaySize = 600
-                  const scale = targetDisplaySize / largerDim
-                  canvas.style.transform = `scale(${scale})`
-                  canvas.style.transformOrigin = 'center center'
-                }
-                img.src = `data:image/png;base64,${msg.data}`
-              }
-            } else if (msg.type === 'ping') {
-              ws.send(JSON.stringify({ type: 'pong' }))
-            }
-          } catch (e) {
-            console.error('Error parsing WebSocket message:', e)
-          }
-        }
-      }
-
-      ws.onerror = () => {
-        setSkinCreatorError('WebSocket connection failed')
-        setSkinCreatorLoading(false)
-        clearAllIntervals()
-      }
-
-      ws.onclose = () => {
-        setViewerWs(null)
-        clearAllIntervals()
-        if (!skinCreatorError && !connectionFailed) {
-          setSkinCreatorError('Connection lost. Click Retry to reconnect.')
-        }
-        setSkinCreatorReconnecting(false)
-      }
-
-      setViewerWs(ws)
+      // Start auto-refresh interval (every 5 seconds, pauses while drawing)
+      lastMessageTimeRef.current = Date.now()
+      autoRefreshIntervalRef.current = setInterval(() => {
+        if (isDrawingRef.current) return
+        // Resend any edited textures to ensure 3D viewer stays in sync
+        Object.entries(editedTexturesRef.current).forEach(([idx, dataUrl]) => {
+          const base64 = dataUrl.replace('data:image/png;base64,', '')
+          window.electron.viewerSend({
+            type: 'updateTexture',
+            index: parseInt(idx),
+            data: base64
+          })
+        })
+      }, 5000)
 
     } catch (err) {
       setSkinCreatorError(err.message)
@@ -395,15 +293,19 @@ export default function SkinCreator({
 
     setSkinCreatorError('closing')
 
-    if (viewerWs) {
-      viewerWs.close()
-      setViewerWs(null)
+    // Clean up Electron IPC listener
+    if (viewerWs?.cleanup) {
+      viewerWs.cleanup()
     }
+    setViewerWs(null)
 
-    try {
-      await fetch(`${API_URL}/viewer/stop`, { method: 'POST' })
-    } catch (e) {
-      // Ignore errors on cleanup
+    // Stop embedded viewer via Electron IPC
+    if (hasElectron) {
+      try {
+        await window.electron.viewerStop()
+      } catch (e) {
+        // Ignore errors on cleanup
+      }
     }
 
     // Reset state
@@ -428,10 +330,16 @@ export default function SkinCreator({
     onClose?.()
   }
 
-  // Camera controls
+  // Camera controls (Electron IPC)
   const sendViewerCamera = (deltas) => {
-    if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
-      viewerWs.send(JSON.stringify({ type: 'camera', ...deltas }))
+    if (hasElectron && viewerWs) {
+      window.electron.viewerCamera(
+        deltas.deltaRotX || 0,
+        deltas.deltaRotY || 0,
+        deltas.deltaZoom || 0,
+        deltas.deltaX || 0,
+        deltas.deltaY || 0
+      )
     }
   }
 
@@ -471,17 +379,17 @@ export default function SkinCreator({
     e.preventDefault()
   }
 
-  // Refresh textures - resend all edited textures to viewer
+  // Refresh textures - resend all edited textures to viewer (Electron IPC)
   const refreshTextures = () => {
-    if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
+    if (hasElectron && viewerWs) {
       // Resend any edited textures to ensure 3D viewer is in sync
       Object.entries(editedTextures).forEach(([idx, dataUrl]) => {
         const base64 = dataUrl.replace('data:image/png;base64,', '')
-        viewerWs.send(JSON.stringify({
+        window.electron.viewerSend({
           type: 'updateTexture',
           index: parseInt(idx),
           data: base64
-        }))
+        })
       })
     }
   }
@@ -623,7 +531,7 @@ export default function SkinCreator({
 
   const sendTextureUpdate = () => {
     const canvas = paintCanvasRef.current
-    if (!canvas || !viewerWs || viewerWs.readyState !== WebSocket.OPEN) return
+    if (!canvas || !hasElectron || !viewerWs) return
     if (selectedTextureIndex === null) return
 
     const ctx = canvas.getContext('2d')
@@ -639,11 +547,13 @@ export default function SkinCreator({
     const base64 = dataUrl.replace('data:image/png;base64,', '')
 
     try {
-      viewerWs.send(JSON.stringify({
-        type: 'updateTexture',
-        index: selectedTextureIndex,
-        data: base64
-      }))
+      if (hasElectron) {
+        window.electron.viewerSend({
+          type: 'updateTexture',
+          index: selectedTextureIndex,
+          data: base64
+        })
+      }
 
       setEditedTextures(prev => ({ ...prev, [selectedTextureIndex]: dataUrl }))
       setIsDirty(true)
@@ -979,14 +889,14 @@ export default function SkinCreator({
       ctx.putImageData(result, 0, 0)
       newEditedTextures[texIdx] = canvas.toDataURL('image/png')
 
-      // Send to WebSocket
-      if (viewerWs && viewerWs.readyState === WebSocket.OPEN) {
+      // Send to viewer via Electron IPC
+      if (hasElectron && viewerWs) {
         const base64 = newEditedTextures[texIdx].replace('data:image/png;base64,', '')
-        viewerWs.send(JSON.stringify({
+        window.electron.viewerSend({
           type: 'updateTexture',
           index: texIdx,
           data: base64
-        }))
+        })
       }
     }
 
@@ -1047,31 +957,25 @@ export default function SkinCreator({
       return
     }
 
+    if (!hasElectron) {
+      setSaveError('Electron environment required')
+      return
+    }
+
     setIsSaving(true)
     setSaveError(null)
 
     try {
+      // Use Electron IPC for export
       const datPromise = new Promise((resolve, reject) => {
-        const handleMessage = (event) => {
-          if (event.data instanceof Blob) return
-          try {
-            const msg = JSON.parse(event.data)
-            if (msg.type === 'exportDat') {
-              viewerWs.removeEventListener('message', handleMessage)
-              if (msg.success) {
-                resolve(msg.data)
-              } else {
-                reject(new Error(msg.error || 'Export failed'))
-              }
-            }
-          } catch {}
-        }
-        viewerWs.addEventListener('message', handleMessage)
-        viewerWs.send(JSON.stringify({ type: 'exportDat' }))
+        exportDatResolverRef.current = { resolve, reject }
+        window.electron.viewerSend({ type: 'exportDat' })
 
         setTimeout(() => {
-          viewerWs.removeEventListener('message', handleMessage)
-          reject(new Error('Export timed out'))
+          if (exportDatResolverRef.current) {
+            exportDatResolverRef.current = null
+            reject(new Error('Export timed out'))
+          }
         }, 30000)
       })
 
@@ -1121,33 +1025,22 @@ export default function SkinCreator({
 
   // Download DAT file
   const handleDownloadDat = async () => {
-    if (!viewerWs || viewerWs.readyState !== WebSocket.OPEN) {
+    if (!hasElectron || !viewerWs) {
       alert('Not connected to viewer')
       return
     }
 
     try {
+      // Use Electron IPC for export
       const datPromise = new Promise((resolve, reject) => {
-        const handleMessage = (event) => {
-          if (event.data instanceof Blob) return
-          try {
-            const msg = JSON.parse(event.data)
-            if (msg.type === 'exportDat') {
-              viewerWs.removeEventListener('message', handleMessage)
-              if (msg.success) {
-                resolve(msg.data)
-              } else {
-                reject(new Error(msg.error || 'Export failed'))
-              }
-            }
-          } catch {}
-        }
-        viewerWs.addEventListener('message', handleMessage)
-        viewerWs.send(JSON.stringify({ type: 'exportDat' }))
+        exportDatResolverRef.current = { resolve, reject }
+        window.electron.viewerSend({ type: 'exportDat' })
 
         setTimeout(() => {
-          viewerWs.removeEventListener('message', handleMessage)
-          reject(new Error('Export timed out'))
+          if (exportDatResolverRef.current) {
+            exportDatResolverRef.current = null
+            reject(new Error('Export timed out'))
+          }
         }, 30000)
       })
 

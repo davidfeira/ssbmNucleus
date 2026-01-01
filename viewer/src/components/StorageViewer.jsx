@@ -3,7 +3,7 @@ import { io } from 'socket.io-client'
 import './StorageViewer.css'
 import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
-import ModelViewer from './ModelViewer'
+import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -2048,7 +2048,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
       {/* 3D Model Viewer */}
       {show3DViewer && editingItem && editingItem.type === 'costume' && (
-        <ModelViewer
+        <EmbeddedModelViewer
           character={editingItem.data.character}
           skinId={editingItem.data.id}
           onClose={() => setShow3DViewer(false)}

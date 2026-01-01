@@ -5592,6 +5592,290 @@ def start_viewer():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/viewer/paths', methods=['POST'])
+def get_viewer_paths():
+    """Get file paths for embedded 3D viewer (no streaming, just paths for Electron IPC)"""
+    try:
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({'success': False, 'error': 'Missing character or skinId'}), 400
+
+        # Find the costume in metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({'success': False, 'error': 'No costumes in storage'}), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find the costume
+        characters = metadata.get('characters', {})
+        if character not in characters:
+            return jsonify({'success': False, 'error': f'Character {character} not found'}), 404
+
+        skins = characters[character].get('skins', [])
+        costume = None
+        for skin in skins:
+            if skin.get('id') == skin_id:
+                costume = skin
+                break
+
+        if costume is None:
+            return jsonify({'success': False, 'error': f'Costume {skin_id} not found'}), 404
+
+        # Get the ZIP file path
+        zip_path = STORAGE_PATH / character / costume['filename']
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Costume file not found: {zip_path}'}), 404
+
+        # Extract DAT file to temp location
+        temp_dir = Path(tempfile.mkdtemp(prefix='viewer_'))
+        dat_path = None
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.lower().endswith('.dat'):
+                    zf.extract(name, temp_dir)
+                    dat_path = temp_dir / name
+                    break
+
+        if dat_path is None or not dat_path.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': 'No DAT file found in costume'}), 404
+
+        # Convert paths for Windows if running in WSL
+        def to_windows_path(path):
+            path_str = str(path)
+            if os.name != 'nt' and path_str.startswith('/mnt/'):
+                # Convert WSL path to Windows path
+                drive = path_str[5].upper()
+                return f"{drive}:{path_str[6:]}".replace('/', '\\')
+            return path_str
+
+        dat_windows_path = to_windows_path(dat_path)
+        logs_windows_path = to_windows_path(LOGS_PATH)
+
+        # Look for a scene file for this character
+        scene_path = None
+        csp_data_dir = PROCESSOR_DIR / "csp_data" / character
+
+        if csp_data_dir.exists():
+            # Try scene.yml first (most common)
+            if (csp_data_dir / "scene.yml").exists():
+                scene_path = csp_data_dir / "scene.yml"
+            else:
+                # Look for any .yml file (cspfinal.yml, CSP.yml, etc.)
+                yml_files = sorted(csp_data_dir.glob("*.yml"))
+                if yml_files:
+                    scene_path = yml_files[0]
+
+        scene_windows_path = None
+        if scene_path:
+            scene_windows_path = to_windows_path(scene_path)
+            logger.info(f"Found scene file: {scene_path}")
+
+        # Look for AJ file (animation archive) for this character
+        char_prefixes = {
+            "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+            "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+            "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+            "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+            "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+            "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+            "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+            "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+            "Dr. Mario": "PlDr", "G&W": "PlGw"
+        }
+
+        aj_windows_path = None
+        if character in char_prefixes:
+            prefix = char_prefixes[character]
+            aj_path = VANILLA_ASSETS_DIR / character / f"{prefix}AJ.dat"
+            if aj_path.exists():
+                aj_windows_path = to_windows_path(aj_path)
+                logger.info(f"Found AJ file: {aj_path}")
+
+        return jsonify({
+            'success': True,
+            'datFile': dat_windows_path,
+            'sceneFile': scene_windows_path,
+            'ajFile': aj_windows_path,
+            'logsPath': logs_windows_path,
+            'tempDir': str(temp_dir)  # For cleanup later if needed
+        })
+
+    except Exception as e:
+        logger.error(f"Get viewer paths error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mex/viewer/paths-vanilla', methods=['POST'])
+def get_viewer_paths_vanilla():
+    """Get file paths for vanilla costume viewer (Electron IPC, no spawning)"""
+    try:
+        data = request.json
+        character = data.get('character')
+        costume_code = data.get('costumeCode')  # e.g., "PlFxNr"
+
+        if not character or not costume_code:
+            return jsonify({'success': False, 'error': 'Missing character or costumeCode'}), 400
+
+        # Find the DAT file in vanilla assets
+        dat_path = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
+        if not dat_path.exists():
+            return jsonify({'success': False, 'error': f'Vanilla costume not found: {dat_path}'}), 404
+
+        # Convert paths for Windows if running in WSL
+        def to_windows_path(path):
+            path_str = str(path)
+            if os.name != 'nt' and path_str.startswith('/mnt/'):
+                drive = path_str[5].upper()
+                return f"{drive}:{path_str[6:]}".replace('/', '\\')
+            return path_str
+
+        dat_windows_path = to_windows_path(dat_path)
+        logs_windows_path = to_windows_path(LOGS_PATH)
+
+        # Look for a scene file for this character
+        scene_path = None
+        csp_data_dir = PROCESSOR_DIR / "csp_data" / character
+        if csp_data_dir.exists():
+            if (csp_data_dir / "scene.yml").exists():
+                scene_path = csp_data_dir / "scene.yml"
+            else:
+                yml_files = sorted(csp_data_dir.glob("*.yml"))
+                if yml_files:
+                    scene_path = yml_files[0]
+
+        scene_windows_path = to_windows_path(scene_path) if scene_path else None
+
+        # Look for AJ file
+        char_prefixes = {
+            "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+            "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+            "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+            "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+            "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+            "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+            "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+            "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+            "Dr. Mario": "PlDr", "G&W": "PlGw"
+        }
+
+        aj_windows_path = None
+        if character in char_prefixes:
+            prefix = char_prefixes[character]
+            aj_path = VANILLA_ASSETS_DIR / character / f"{prefix}AJ.dat"
+            if aj_path.exists():
+                aj_windows_path = to_windows_path(aj_path)
+
+        return jsonify({
+            'success': True,
+            'datFile': dat_windows_path,
+            'sceneFile': scene_windows_path,
+            'ajFile': aj_windows_path,
+            'logsPath': logs_windows_path
+        })
+
+    except Exception as e:
+        logger.error(f"Get vanilla viewer paths error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mex/viewer/paths-vault', methods=['POST'])
+def get_viewer_paths_vault():
+    """Get file paths for vault costume viewer (Electron IPC, no spawning)"""
+    try:
+        data = request.json
+        character = data.get('character')
+        costume_id = data.get('costumeId')
+
+        if not character or not costume_id:
+            return jsonify({'success': False, 'error': 'Missing character or costumeId'}), 400
+
+        # Find the costume in the vault
+        char_storage = STORAGE_PATH / character
+        zip_path = char_storage / f"{costume_id}.zip"
+
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Costume not found in vault: {costume_id}'}), 404
+
+        # Extract DAT file to temp location
+        temp_dir = Path(tempfile.mkdtemp(prefix='viewer_vault_'))
+        dat_path = None
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('.dat'):
+                    zf.extract(name, temp_dir)
+                    dat_path = temp_dir / name
+                    break
+
+        if not dat_path or not dat_path.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': 'No DAT file found in costume archive'}), 400
+
+        # Convert paths for Windows if running in WSL
+        def to_windows_path(path):
+            path_str = str(path)
+            if os.name != 'nt' and path_str.startswith('/mnt/'):
+                drive = path_str[5].upper()
+                return f"{drive}:{path_str[6:]}".replace('/', '\\')
+            return path_str
+
+        dat_windows_path = to_windows_path(dat_path)
+        logs_windows_path = to_windows_path(LOGS_PATH)
+
+        # Look for a scene file for this character
+        scene_path = None
+        csp_data_dir = PROCESSOR_DIR / "csp_data" / character
+        if csp_data_dir.exists():
+            if (csp_data_dir / "scene.yml").exists():
+                scene_path = csp_data_dir / "scene.yml"
+            else:
+                yml_files = sorted(csp_data_dir.glob("*.yml"))
+                if yml_files:
+                    scene_path = yml_files[0]
+
+        scene_windows_path = to_windows_path(scene_path) if scene_path else None
+
+        # Look for AJ file
+        char_prefixes = {
+            "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+            "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+            "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+            "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+            "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+            "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+            "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+            "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+            "Dr. Mario": "PlDr", "G&W": "PlGw"
+        }
+
+        aj_windows_path = None
+        if character in char_prefixes:
+            prefix = char_prefixes[character]
+            aj_path = VANILLA_ASSETS_DIR / character / f"{prefix}AJ.dat"
+            if aj_path.exists():
+                aj_windows_path = to_windows_path(aj_path)
+
+        return jsonify({
+            'success': True,
+            'datFile': dat_windows_path,
+            'sceneFile': scene_windows_path,
+            'ajFile': aj_windows_path,
+            'logsPath': logs_windows_path,
+            'tempDir': str(temp_dir)
+        })
+
+    except Exception as e:
+        logger.error(f"Get vault viewer paths error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/mex/viewer/start-vanilla', methods=['POST'])
 def start_viewer_vanilla():
     """Start the 3D model viewer for a vanilla costume (for skin creator)"""

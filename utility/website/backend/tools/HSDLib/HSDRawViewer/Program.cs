@@ -63,6 +63,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for embedded mode (for Electron integration)
+            if (args.Length >= 3 && args[0] == "--embedded")
+            {
+                Console.WriteLine("Embedded mode detected");
+                RunEmbeddedServer(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -120,6 +128,53 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"Streaming server error: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        static void RunEmbeddedServer(string[] args)
+        {
+            try
+            {
+                if (args.Length < 3)
+                {
+                    Console.WriteLine("Usage: HSDRawViewer.exe --embedded <pipe_name> <dat_file> [logs_path] [scene_file] [aj_file]");
+                    Console.WriteLine("Example: HSDRawViewer.exe --embedded HSDViewer_12345 PlFxNr.dat C:\\logs scene.yml PlFxAJ.dat");
+                    return;
+                }
+
+                string pipeName = args[1];
+                string datFile = args[2];
+                string logsPath = args.Length >= 4 ? args[3] : null;
+                string sceneFile = args.Length >= 5 ? args[4] : null;
+                string ajFile = args.Length >= 6 ? args[5] : null;
+
+                Console.WriteLine($"Starting embedded server with pipe: {pipeName}");
+                Console.WriteLine($"DAT file: {datFile}");
+                if (logsPath != null)
+                    Console.WriteLine($"Logs path: {logsPath}");
+                if (sceneFile != null)
+                    Console.WriteLine($"Scene file: {sceneFile}");
+                if (ajFile != null)
+                    Console.WriteLine($"AJ file: {ajFile}");
+
+                using var server = new EmbeddedServer(pipeName, logsPath);
+
+                // Handle Ctrl+C
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    e.Cancel = true;
+                    Console.WriteLine("Shutdown requested...");
+                    server.Stop();
+                };
+
+                // Run server (blocking)
+                server.StartAsync(datFile, sceneFile, ajFile).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Embedded server error: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }
