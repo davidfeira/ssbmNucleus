@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import './StorageViewer.css'  // Reuse existing modal styles
+import './StorageViewer.css'
 
 /**
  * Embedded 3D Model Viewer Component
@@ -8,6 +8,50 @@ import './StorageViewer.css'  // Reuse existing modal styles
  */
 
 console.log('[EmbeddedModelViewer] Module loaded')
+
+// SVG Icons
+const PlayIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M8 5.14v14l11-7-11-7z"/>
+  </svg>
+)
+
+const PauseIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+  </svg>
+)
+
+const ChevronIcon = ({ expanded }) => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    style={{
+      transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+      transition: 'transform 0.15s ease'
+    }}
+  >
+    <path d="M9 18l6-6-6-6"/>
+  </svg>
+)
+
+const SearchIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="11" cy="11" r="8"/>
+    <path d="M21 21l-4.35-4.35"/>
+  </svg>
+)
+
+const CloseIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="18" y1="6" x2="6" y2="18"/>
+    <line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+)
 
 // Animation name mappings (same as ModelViewer.jsx)
 const ANIM_NAMES = {
@@ -97,6 +141,7 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
   const [animList, setAnimList] = useState([])
   const [selectedAnim, setSelectedAnim] = useState('')
   const [animFilter, setAnimFilter] = useState('')
+  const [collapsedCategories, setCollapsedCategories] = useState({})
 
   // Check if Electron API is available
   const hasElectron = typeof window !== 'undefined' && window.electron?.viewerStart
@@ -178,17 +223,23 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
     if (!placeholderRef.current || !hasElectron) return
 
     const rect = placeholderRef.current.getBoundingClientRect()
-    // Account for device pixel ratio on high-DPI displays for size
     const dpr = window.devicePixelRatio || 1
 
-    // Position: screenX/Y + rect offset (CSS pixels work for position)
-    const x = Math.round(window.screenX + rect.left)
-    const y = Math.round(window.screenY + rect.top)
-    // Size: need to account for DPR
-    const width = Math.round(rect.width * dpr)
-    const height = Math.round(rect.height * dpr)
+    // Screen position = window position + element offset within window
+    // On Windows, screenX/Y may have negative values for window chrome, so we use screenLeft/Top
+    const screenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX
+    const screenTop = window.screenTop !== undefined ? window.screenTop : window.screenY
 
-    console.log('[EmbeddedViewer] Updating position:', { x, y, width, height, dpr, rect: { w: rect.width, h: rect.height } })
+    // Account for Electron window chrome (title bar height varies by OS/theme)
+    // outerHeight - innerHeight gives us the chrome height
+    const chromeHeight = window.outerHeight - window.innerHeight
+
+    const x = Math.round(screenLeft + rect.left)
+    const y = Math.round(screenTop + chromeHeight + rect.top)
+    const width = Math.round(rect.width)
+    const height = Math.round(rect.height)
+
+    console.log('[EmbeddedViewer] Position:', { x, y, width, height, screenLeft, screenTop, chromeHeight })
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
 
@@ -311,6 +362,14 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
   // Prevent context menu on right-click
   const handleContextMenu = (e) => e.preventDefault()
 
+  // Toggle category collapse
+  const toggleCategory = (category) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }))
+  }
+
   // Group and filter animations
   const groupedAnims = groupAnimations(animList)
   const filteredGroups = {}
@@ -325,21 +384,20 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
   // Render fallback for non-Electron
   if (!hasElectron) {
     return (
-      <div className="model-viewer-overlay" onClick={onClose}>
-        <div className="model-viewer-container" onClick={(e) => e.stopPropagation()}>
-          <div className="model-viewer-header">
-            <h3>3D Viewer</h3>
-            <button className="model-viewer-close" onClick={onClose}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+      <div className="mv-overlay" onClick={onClose}>
+        <div className="mv-container" onClick={(e) => e.stopPropagation()}>
+          <div className="mv-header">
+            <div className="mv-title">3D Viewer</div>
+            <button className="mv-close-btn" onClick={onClose}>
+              <CloseIcon />
             </button>
           </div>
-          <div className="model-viewer-content">
-            <div className="model-viewer-status">
-              <p>Embedded viewer requires Electron environment.</p>
-              <p>Please use the streaming viewer in browser mode.</p>
+          <div className="mv-body">
+            <div className="mv-viewport">
+              <div className="mv-status">
+                <p>Embedded viewer requires Electron environment.</p>
+                <p className="mv-status-sub">Please use the streaming viewer in browser mode.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -348,25 +406,25 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
   }
 
   return (
-    <div className="model-viewer-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="model-viewer-container" onClick={(e) => e.stopPropagation()}>
+    <div className="mv-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="mv-container" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="model-viewer-header">
-          <h3>3D Viewer - {character}</h3>
-          <button className="model-viewer-close" onClick={onClose}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+        <div className="mv-header">
+          <div className="mv-title">
+            <span className="mv-title-label">Animation Viewer</span>
+            <span className="mv-title-char">{character}</span>
+          </div>
+          <button className="mv-close-btn" onClick={onClose}>
+            <CloseIcon />
           </button>
         </div>
 
-        {/* Main content */}
-        <div className="model-viewer-content">
-          {/* Viewer placeholder - this is where the embedded window appears */}
+        {/* Main body */}
+        <div className="mv-body">
+          {/* 3D Viewport */}
           <div
             ref={placeholderRef}
-            className="model-viewer-canvas-container"
+            className="mv-viewport"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -375,79 +433,106 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
             onContextMenu={handleContextMenu}
           >
             {isLoading && (
-              <div className="model-viewer-status">
-                <div className="model-viewer-spinner" />
+              <div className="mv-status">
+                <div className="mv-spinner" />
                 <p>Loading viewer...</p>
               </div>
             )}
             {error && (
-              <div className="model-viewer-status">
-                <p className="model-viewer-error">{error}</p>
-                <button className="btn-save" onClick={startViewer}>Retry</button>
+              <div className="mv-status mv-status-error">
+                <p>{error}</p>
+                <button className="mv-retry-btn" onClick={startViewer}>Retry</button>
               </div>
             )}
             {!isLoading && !error && !isConnected && (
-              <div className="model-viewer-status">
-                <div className="model-viewer-spinner" />
+              <div className="mv-status">
+                <div className="mv-spinner" />
                 <p>Connecting to viewer...</p>
               </div>
             )}
             {isConnected && (
-              <div className="model-viewer-hint">
-                Viewer window active - drag to rotate, scroll to zoom
+              <div className="mv-hint">
+                Drag to rotate | Scroll to zoom | Right-drag to pan
               </div>
             )}
           </div>
 
           {/* Animation sidebar */}
           {isConnected && animList.length > 0 && (
-            <div className="model-viewer-sidebar">
-              <h4>Animations</h4>
-              <input
-                type="text"
-                placeholder="Search animations..."
-                value={animFilter}
-                onChange={(e) => setAnimFilter(e.target.value)}
-                className="model-viewer-search"
-              />
+            <div className="mv-sidebar">
+              <div className="mv-sidebar-header">
+                <span>Animations</span>
+                <span className="mv-anim-count">{animList.length}</span>
+              </div>
 
-              <div className="model-viewer-anim-list">
-                {Object.entries(filteredGroups).map(([category, anims]) => (
-                  <div key={category} className="model-viewer-anim-category">
-                    <div className="model-viewer-category-header">{category}</div>
-                    {anims.map(anim => (
-                      <div
-                        key={anim}
-                        onClick={() => loadAnimation(anim)}
-                        className={`model-viewer-anim-item ${selectedAnim === anim ? 'selected' : ''}`}
+              <div className="mv-search-box">
+                <SearchIcon />
+                <input
+                  type="text"
+                  placeholder="Filter animations..."
+                  value={animFilter}
+                  onChange={(e) => setAnimFilter(e.target.value)}
+                />
+              </div>
+
+              <div className="mv-anim-list">
+                {Object.entries(filteredGroups).map(([category, anims]) => {
+                  const isCollapsed = collapsedCategories[category]
+                  return (
+                    <div key={category} className="mv-category">
+                      <button
+                        className="mv-category-header"
+                        onClick={() => toggleCategory(category)}
                       >
-                        {getAnimDisplayName(anim)}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                        <ChevronIcon expanded={!isCollapsed} />
+                        <span>{category}</span>
+                        <span className="mv-category-count">{anims.length}</span>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="mv-category-items">
+                          {anims.map(anim => (
+                            <button
+                              key={anim}
+                              onClick={() => loadAnimation(anim)}
+                              className={`mv-anim-item ${selectedAnim === anim ? 'mv-anim-selected' : ''}`}
+                            >
+                              {getAnimDisplayName(anim)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Animation controls footer */}
+        {/* Playback controls */}
         {isConnected && animFrameCount > 0 && (
-          <div className="model-viewer-controls">
-            <button onClick={toggleAnimation} className="model-viewer-play-btn">
-              {animPlaying ? '⏸' : '▶'}
+          <div className="mv-controls">
+            <button onClick={toggleAnimation} className="mv-play-btn" title={animPlaying ? 'Pause' : 'Play'}>
+              {animPlaying ? <PauseIcon /> : <PlayIcon />}
             </button>
-            <input
-              type="range"
-              min={0}
-              max={animFrameCount - 1}
-              value={animFrame}
-              onChange={(e) => setFrame(parseFloat(e.target.value))}
-              className="model-viewer-slider"
-            />
-            <span className="model-viewer-frame-label">
-              {Math.floor(animFrame)} / {Math.floor(animFrameCount)}
-            </span>
+            <div className="mv-scrubber">
+              <input
+                type="range"
+                min={0}
+                max={animFrameCount - 1}
+                value={animFrame}
+                onChange={(e) => setFrame(parseFloat(e.target.value))}
+              />
+              <div
+                className="mv-scrubber-fill"
+                style={{ width: `${(animFrame / (animFrameCount - 1)) * 100}%` }}
+              />
+            </div>
+            <div className="mv-frame-display">
+              <span className="mv-frame-current">{Math.floor(animFrame)}</span>
+              <span className="mv-frame-sep">/</span>
+              <span className="mv-frame-total">{Math.floor(animFrameCount)}</span>
+            </div>
           </div>
         )}
       </div>

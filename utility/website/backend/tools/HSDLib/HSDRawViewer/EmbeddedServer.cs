@@ -42,11 +42,17 @@ namespace HSDRawViewer
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         private const int GWL_STYLE = -16;
+        private const int GWL_EXSTYLE = -20;
+        private const int GWLP_HWNDPARENT = -8;
         private const int WS_CHILD = 0x40000000;
         private const int WS_POPUP = unchecked((int)0x80000000);
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
 
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+
+        private IntPtr _parentHwnd = IntPtr.Zero;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_SHOWWINDOW = 0x0040;
@@ -467,24 +473,45 @@ namespace HSDRawViewer
                         _hostForm.Invoke((Action)(() =>
                         {
                             _hostForm.Location = new System.Drawing.Point(x, y);
-                            _hostForm.Size = new System.Drawing.Size(width, height);
+                            _hostForm.ClientSize = new System.Drawing.Size(width, height);
+                            _hostForm.PerformLayout();
+                            _viewport.RefreshSize();
+                            _viewport.Invalidate();
+                            // Keep window on top - use TOPMOST since owned windows don't stay on top reliably
+                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
                         }));
                         Log($"Resized to {x},{y} {width}x{height}");
                         break;
 
                     case "setParent":
-                        // Make this window always on top so it doesn't go behind Electron
-                        _hostForm.Invoke((Action)(() =>
+                        // Make this window owned by (not child of) the Electron window
+                        // This keeps it on top of Electron while avoiding Chromium compositor issues
+                        if (root.TryGetProperty("hwnd", out var parentHwndProp))
                         {
-                            var hwnd = _hostForm.Handle;
-                            // Set window to TOPMOST
-                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-                            Log("Set window to TOPMOST");
-                        }));
+                            _parentHwnd = new IntPtr(long.Parse(parentHwndProp.GetString()));
+                            _hostForm.Invoke((Action)(() =>
+                            {
+                                var hwnd = _hostForm.Handle;
+                                // Set owner (not parent) - window stays on top of owner
+                                SetWindowLong(hwnd, GWLP_HWNDPARENT, (int)_parentHwnd);
+                                // Make it a tool window so it doesn't show in taskbar
+                                int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+                                // Bring to front
+                                SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                                _hostForm.Show();
+                                Log($"Set owner to HWND: {_parentHwnd}");
+                            }));
+                        }
                         break;
 
                     case "show":
-                        _hostForm.Invoke((Action)(() => _hostForm.Show()));
+                        _hostForm.Invoke((Action)(() =>
+                        {
+                            _hostForm.Show();
+                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                            _hostForm.Invalidate();
+                        }));
                         break;
 
                     case "hide":

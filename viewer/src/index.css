@@ -11,6 +11,7 @@
   /* Background layers (darkest to lightest) */
   --color-bg-deep: #0a1420;
   --color-bg-base: #0d1929;
+  --color-bg-primary: #0d1929;
   --color-bg-elevated: #1a2332;
   --color-bg-surface: #283544;
   --color-bg-hover: #3d4f5c;
@@ -36,6 +37,10 @@
   --color-cyan-dark: #5bc0d8;
   --color-cyan-muted: rgba(125, 211, 232, 0.15);
   --gradient-cyan: linear-gradient(135deg, #7dd3e8 0%, #5bc0d8 100%);
+
+  /* Accent aliases (for compatibility) */
+  --color-accent: var(--color-cyan);
+  --color-accent-hover: var(--color-cyan-light);
 
   /* Text hierarchy */
   --color-text-primary: #f5f5f5;

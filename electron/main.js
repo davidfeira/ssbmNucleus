@@ -117,6 +117,30 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Track window state for embedded viewer visibility
+  mainWindow.on('minimize', () => {
+    if (viewerManager) {
+      viewerManager.send({ type: 'hide' });
+    }
+  });
+
+  mainWindow.on('restore', () => {
+    if (viewerManager) {
+      viewerManager.send({ type: 'show' });
+    }
+  });
+
+  mainWindow.on('focus', () => {
+    if (viewerManager) {
+      viewerManager.send({ type: 'show' });
+    }
+  });
+
+  mainWindow.on('blur', () => {
+    // Don't hide on blur - only on minimize
+    // This allows clicking other windows without losing the viewer
+  });
 }
 
 // IPC Handlers for file dialogs
