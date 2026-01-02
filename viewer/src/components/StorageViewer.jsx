@@ -2657,38 +2657,44 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           {isLoading ? (
             // Skeleton loading for stages
             Array.from({ length: 6 }).map((_, idx) => (
-              <SkeletonCard key={`skeleton-stage-${idx}`} />
+              <div key={`skeleton-stage-${idx}`} className="stage-skeleton">
+                <div className="skeleton-icon"></div>
+                <div className="skeleton-text" style={{ width: '70%' }}></div>
+                <div className="skeleton-text" style={{ width: '40%' }}></div>
+              </div>
             ))
           ) : DAS_STAGES.map((stage) => {
             const variants = stageVariants[stage.code] || []
             const variantCount = variants.length
-
-            // ALWAYS use vanilla stage screenshot (like how characters use vanilla CSPs)
             const vanillaImagePath = stage.vanillaImage
 
             return (
               <div
                 key={stage.code}
-                className="character-card"
+                className="stage-card"
                 onClick={() => setSelectedStage(stage)}
               >
-                <div className="character-image-container">
+                <div className="stage-icon-container">
                   <img
                     src={vanillaImagePath}
                     alt={stage.name}
-                    className="character-csp"
+                    className="stage-icon"
                     onError={(e) => {
                       e.target.style.display = 'none'
                       e.target.nextSibling.style.display = 'flex'
                     }}
                   />
-                  <div className="character-placeholder" style={{ display: 'none' }}>
-                    <span className="character-initial">{stage.name[0]}</span>
+                  <div className="stage-placeholder" style={{ display: 'none' }}>
+                    {stage.name[0]}
                   </div>
                 </div>
 
-                <h3 className="character-name">{stage.name}</h3>
-                <p className="skin-count">{variantCount} variant{variantCount !== 1 ? 's' : ''}</p>
+                <div className="stage-info">
+                  <h3 className="stage-name">{stage.name}</h3>
+                  <p className="stage-variant-count">
+                    <span>{variantCount}</span> variant{variantCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
               </div>
             )
           })}
