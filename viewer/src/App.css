@@ -570,9 +570,10 @@
 }
 
 .edit-modal-fullscreen {
-  width: 70vw;
-  height: 70vh;
-  max-width: 1000px;
+  width: 85vw;
+  height: 80vh;
+  max-width: 1400px;
+  max-height: 900px;
   background: linear-gradient(
     165deg,
     var(--color-bg-elevated) 0%,
@@ -591,6 +592,28 @@
   position: relative;
   overflow: hidden;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
+}
+
+/* Scale modals for larger screens */
+@media (min-width: 1440px) {
+  .edit-modal-fullscreen {
+    max-width: 1600px;
+    max-height: 1000px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .edit-modal-fullscreen {
+    max-width: 1800px;
+    max-height: 1100px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .edit-modal-fullscreen {
+    max-width: 2200px;
+    max-height: 1300px;
+  }
 }
 
 @keyframes modalSlideUp {
@@ -692,7 +715,25 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  width: clamp(200px, 25vw, 320px);
+  width: clamp(200px, 30vw, 400px);
+}
+
+@media (min-width: 1440px) {
+  .edit-modal-csp-section {
+    width: clamp(280px, 35vw, 500px);
+  }
+}
+
+@media (min-width: 1920px) {
+  .edit-modal-csp-section {
+    width: clamp(320px, 38vw, 600px);
+  }
+}
+
+@media (min-width: 2560px) {
+  .edit-modal-csp-section {
+    width: clamp(400px, 40vw, 750px);
+  }
 }
 
 .edit-modal-csp-container {
