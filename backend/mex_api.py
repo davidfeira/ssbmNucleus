@@ -1447,6 +1447,109 @@ def update_costume_csp():
         }), 500
 
 
+@app.route('/api/mex/storage/costumes/<character>/<skin_id>/csp/capture-hd', methods=['POST'])
+def capture_hd_csp(character, skin_id):
+    """Generate HD CSP for a skin at specified resolution"""
+    try:
+        data = request.get_json() or {}
+        scale = data.get('scale', 4)  # Default 4x
+
+        # Validate scale
+        if scale not in [2, 4, 8, 16]:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid scale. Must be 2, 4, 8, or 16'
+            }), 400
+
+        logger.info(f"Generating HD CSP for {character}/{skin_id} at {scale}x")
+
+        # Find the DAT file for this skin
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+
+        if not zip_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Costume zip not found: {skin_id}'
+            }), 404
+
+        # Extract DAT from zip to temp location
+        import tempfile
+        import zipfile
+        # generate_csp already imported at module level
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Extract zip
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(temp_path)
+
+            # Find DAT file
+            dat_files = list(temp_path.glob('*.dat'))
+            if not dat_files:
+                return jsonify({
+                    'success': False,
+                    'error': 'No DAT file found in costume zip'
+                }), 400
+
+            dat_file = dat_files[0]
+            logger.info(f"Found DAT file: {dat_file.name}")
+
+            # Generate HD CSP
+            hd_csp_path = generate_csp(str(dat_file), scale=scale)
+
+            if not hd_csp_path or not Path(hd_csp_path).exists():
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to generate HD CSP'
+                }), 500
+
+            # Copy to storage location
+            final_hd_csp = char_folder / f"{skin_id}_csp_hd.png"
+            import shutil
+            shutil.copy2(hd_csp_path, final_hd_csp)
+            logger.info(f"Saved HD CSP to: {final_hd_csp}")
+
+            # Get image dimensions
+            from PIL import Image
+            with Image.open(final_hd_csp) as img:
+                width, height = img.size
+
+            # Update metadata
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+
+                if character in metadata.get('characters', {}):
+                    for skin in metadata['characters'][character].get('skins', []):
+                        if skin['id'] == skin_id:
+                            skin['has_hd_csp'] = True
+                            skin['hd_csp_resolution'] = f"{scale}x"
+                            skin['hd_csp_size'] = f"{width}x{height}"
+                            break
+
+                    with open(metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Generated HD CSP for {character}/{skin_id} at {scale}x ({width}x{height})")
+
+            return jsonify({
+                'success': True,
+                'message': f'HD CSP generated at {scale}x',
+                'resolution': f"{scale}x",
+                'size': f"{width}x{height}"
+            })
+
+    except Exception as e:
+        logger.error(f"Capture HD CSP error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/storage/costumes/update-stock', methods=['POST'])
 def update_costume_stock():
     """Update stock icon for a character costume"""

@@ -188,9 +188,34 @@ namespace HSDRawViewer
 
                 if (args.Length < 3)
                 {
-                    Console.WriteLine("Usage: HSDRawViewer.exe --csp <dat_file> <output_file> [anim_file] [camera_yml]");
-                    Console.WriteLine("Example: HSDRawViewer.exe --csp PlKpNr.dat bowser_csp.png cspfinal.anim cspfinal.yml");
+                    Console.WriteLine("Usage: HSDRawViewer.exe --csp <dat_file> <output_file> [--scale N] [anim_file] [camera_yml]");
+                    Console.WriteLine("Example: HSDRawViewer.exe --csp PlKpNr.dat bowser_csp.png --scale 4 cspfinal.anim cspfinal.yml");
                     return;
+                }
+
+                // Parse --scale argument if present
+                int cspScale = 1;
+                var argsList = new List<string>(args);
+                int scaleIndex = argsList.IndexOf("--scale");
+                if (scaleIndex >= 0 && scaleIndex + 1 < argsList.Count)
+                {
+                    if (int.TryParse(argsList[scaleIndex + 1], out int parsedScale))
+                    {
+                        cspScale = parsedScale;
+                        Console.WriteLine($"Scale factor: {cspScale}x");
+                    }
+                    // Remove --scale and its value from args
+                    argsList.RemoveAt(scaleIndex + 1);
+                    argsList.RemoveAt(scaleIndex);
+                    args = argsList.ToArray();
+                }
+
+                // Apply scale to CSP dimensions
+                if (cspScale > 1)
+                {
+                    GUI.ViewportControl.CSPWidth = 136 * 2 * cspScale;
+                    GUI.ViewportControl.CSPHeight = 188 * 2 * cspScale;
+                    Console.WriteLine($"CSP dimensions set to: {GUI.ViewportControl.CSPWidth / 2}x{GUI.ViewportControl.CSPHeight / 2}");
                 }
 
                 string datFile = args[1];

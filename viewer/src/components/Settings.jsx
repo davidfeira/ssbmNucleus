@@ -294,25 +294,30 @@ export default function Settings({ metadata }) {
     let successCount = 0
     let failCount = 0
 
+    const scaleNum = parseInt(hdCspResolution.replace('x', ''))
+
     for (let i = 0; i < skinsToProcess.length; i++) {
       const skin = skinsToProcess[i]
       setHdCspProgress({ current: i + 1, total: skinsToProcess.length })
 
       try {
-        // TODO: Call backend endpoint to generate HD CSP
-        // const response = await fetch(`${API_URL}/storage/costumes/${skin.character}/${skin.skinId}/csp/capture-hd`, {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ resolution: '4x' })
-        // })
-        // const data = await response.json()
-        // if (data.success) successCount++
-        // else failCount++
-
-        // Placeholder for now - simulate delay
-        await new Promise(resolve => setTimeout(resolve, 100))
-        successCount++
+        const response = await fetch(
+          `${API_URL}/storage/costumes/${encodeURIComponent(skin.character)}/${encodeURIComponent(skin.skinId)}/csp/capture-hd`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scale: scaleNum })
+          }
+        )
+        const data = await response.json()
+        if (data.success) {
+          successCount++
+        } else {
+          console.error(`Failed to generate HD CSP for ${skin.character}/${skin.skinId}: ${data.error}`)
+          failCount++
+        }
       } catch (err) {
+        console.error(`Error generating HD CSP for ${skin.character}/${skin.skinId}:`, err)
         failCount++
       }
     }

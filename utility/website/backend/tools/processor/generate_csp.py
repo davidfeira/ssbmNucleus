@@ -403,16 +403,25 @@ def composite_ice_climbers_csp(nana_csp_path, popo_csp_path, output_path):
         logger.error(f"Failed to composite Ice Climbers CSP: {e}", exc_info=True)
         return None
 
-def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None):
+def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1):
     """Internal function to generate a single CSP
 
     Used by both normal CSP generation and Ice Climbers composite generation.
     Returns the path to the generated CSP or None if failed.
+
+    Args:
+        dat_filepath: Path to the DAT file
+        character: Character name
+        anim_file: Optional animation file
+        camera_file: Optional camera/scene YAML file
+        scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
     """
     # Generate output filename
     dat_dir = os.path.dirname(os.path.abspath(dat_filepath))
     dat_name = os.path.splitext(os.path.basename(dat_filepath))[0]
-    output_csp = os.path.join(dat_dir, f"{dat_name}_csp.png")
+    # Add _hd suffix for scaled versions
+    suffix = "_csp_hd.png" if scale > 1 else "_csp.png"
+    output_csp = os.path.join(dat_dir, f"{dat_name}{suffix}")
 
     # Convert paths to Windows format for the .exe
     def to_windows_path(path):
@@ -431,6 +440,10 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
         cmd = ["wine", windows_exe, "--csp", windows_dat, windows_output]
     else:
         cmd = [windows_exe, "--csp", windows_dat, windows_output]
+
+    # Add scale argument if not 1x
+    if scale > 1:
+        cmd.extend(["--scale", str(scale)])
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -524,13 +537,17 @@ def generate_ice_climbers_composite_csp(popo_dat, nana_dat):
 
     return result
 
-def generate_csp(dat_filepath):
+def generate_csp(dat_filepath, scale=1):
     """
     Generate CSP for a DAT file using HSDRawViewer headless CSP generation
     Returns path to generated CSP or None if failed
+
+    Args:
+        dat_filepath: Path to the DAT file
+        scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
     """
 
-    logger.info(f"Starting CSP generation for: {dat_filepath}")
+    logger.info(f"Starting CSP generation for: {dat_filepath} (scale={scale}x)")
 
     # 1. Parse DAT to get character and color info
     parser = DATParser(dat_filepath)
@@ -575,7 +592,7 @@ def generate_csp(dat_filepath):
         logger.info(f"Found camera file: {Path(camera_file).name}")
 
     # 3. Generate CSP using internal function
-    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file)
+    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file, scale)
 
     if output_csp:
         # Apply character-specific layers (e.g., Fox gun layer)

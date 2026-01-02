@@ -35,8 +35,10 @@ namespace HSDRawViewer.Converters.SBM
             // Create a shadow image to store shadow data
             Image<Rgba32> shadow = image.Clone();
 
-            int sx = 10; // Shadow offset X
-            int sy = 10; // Shadow offset Y
+            // Scale shadow offset based on image size (base is 136x188 at 1x)
+            int scale = Math.Max(1, width / 136);
+            int sx = 10 * scale; // Shadow offset X
+            int sy = 10 * scale; // Shadow offset Y
 
             // Apply Outline
             for (int y = 0; y < height; y++)

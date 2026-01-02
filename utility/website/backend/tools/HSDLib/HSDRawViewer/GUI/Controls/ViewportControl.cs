@@ -150,8 +150,8 @@ namespace HSDRawViewer.GUI
             get; internal set;
         }
 
-        public static int CSPWidth { get; internal set; } = 136 * 2;
-        public static int CSPHeight { get; internal set; } = 188 * 2;
+        public static int CSPWidth { get; set; } = 136 * 2;
+        public static int CSPHeight { get; set; } = 188 * 2;
 
         private List<IDrawable> Drawables { get; set; } = new List<IDrawable>();
 

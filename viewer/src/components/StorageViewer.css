@@ -3415,6 +3415,19 @@
   cursor: not-allowed;
 }
 
+.csp-manager-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: csp-spin 0.8s linear infinite;
+}
+
+@keyframes csp-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Actions */
 .csp-manager-actions {
   padding: var(--space-4) var(--space-6);
