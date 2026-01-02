@@ -234,17 +234,19 @@
    ───────────────────────────────────────── */
 
 .characters-grid {
+  --char-gap: clamp(8px, 1vw, 24px);
+  --char-row-gap: clamp(16px, 3vh, 48px);
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--space-4);
-  max-width: min(92vw, 1600px);
-  width: 100%;
+  column-gap: var(--char-gap);
+  row-gap: var(--char-row-gap);
+  width: 95vw;
+  max-width: 1800px;
 }
 
 .characters-grid .character-card {
-  flex: 0 0 calc((100% - 8 * var(--space-4)) / 9);
-  max-width: 160px;
+  flex: 0 0 calc((100% - 8 * var(--char-gap)) / 9);
 }
 
 .stages-grid {
@@ -729,28 +731,9 @@
   border: 1px solid var(--color-border-subtle);
 }
 
-/* Slippi Safety Badges */
+/* Slippi Safety Badges - hidden on cards, visible in edit modal */
 .slippi-badge-small {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-display);
-  font-size: var(--text-xs);
-  font-weight: var(--font-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-  white-space: nowrap;
-}
-
-.slippi-badge-small.safe {
-  background: var(--color-teal-muted);
-  color: var(--color-teal);
-  border: 1px solid rgba(0, 212, 170, 0.3);
-}
-
-.slippi-badge-small.unsafe {
-  background: var(--color-danger-muted);
-  color: var(--color-danger);
-  border: 1px solid rgba(255, 71, 87, 0.3);
+  display: none;
 }
 
 /* Skin Info */
@@ -897,39 +880,28 @@
    RESPONSIVE BREAKPOINTS
    ───────────────────────────────────────── */
 
-/* Large screens (1440p+) */
-@media (min-width: 1440px) {
-  .characters-grid .character-card {
-    max-width: 180px;
-  }
-
-  .stages-grid .stage-card {
-    max-width: 320px;
-  }
-}
-
-/* Extra large screens (4K) */
-@media (min-width: 1920px) {
-  .characters-grid .character-card {
-    max-width: 200px;
-  }
-
-  .stages-grid .stage-card {
-    max-width: 360px;
+/* Large screens (1200p+) */
+@media (min-width: 1200px) {
+  .characters-grid {
+    max-width: 2200px;
   }
 
   .character-card {
-    padding: var(--space-4);
-    gap: var(--space-3);
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .skin-count {
+    font-size: var(--text-sm);
+  }
+
+  .stages-grid .stage-card {
+    max-width: 400px;
   }
 
   .stage-card {
     padding: var(--space-5);
     gap: var(--space-4);
-  }
-
-  .skin-count {
-    font-size: var(--text-sm);
   }
 
   .stage-name {
@@ -941,37 +913,23 @@
   }
 }
 
-/* Ultra wide / 4K+ */
-@media (min-width: 2560px) {
-  .characters-grid .character-card {
-    max-width: 240px;
-  }
-
-  .stages-grid .stage-card {
-    max-width: 420px;
-  }
-
+/* Extra large screens (1920p+) */
+@media (min-width: 1920px) {
   .characters-grid {
-    gap: var(--space-6);
+    max-width: 2800px;
   }
+}
 
-  .stages-grid {
-    gap: var(--space-8);
+/* 4K+ */
+@media (min-width: 2560px) {
+  .characters-grid {
+    max-width: 3400px;
   }
 }
 
 @media (max-width: 968px) {
   .storage-viewer {
     padding: var(--space-4);
-  }
-
-  .characters-grid .character-card {
-    flex: 0 0 calc((100% - 5 * var(--space-3)) / 6);
-    max-width: 120px;
-  }
-
-  .characters-grid {
-    gap: var(--space-3);
   }
 
   .character-card {
@@ -1031,27 +989,18 @@
 }
 
 @media (max-width: 640px) {
-  .characters-grid .character-card {
-    flex: 0 0 calc((100% - 4 * var(--space-2)) / 5);
-    max-width: 90px;
-  }
-
-  .characters-grid {
-    gap: var(--space-2);
-  }
-
   .skins-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: var(--space-2);
   }
 
   .character-card {
-    padding: var(--space-2);
-    gap: var(--space-1);
+    padding: var(--space-1);
+    gap: 2px;
   }
 
   .skin-count {
-    font-size: 10px;
+    font-size: 8px;
   }
 
   .grid-wrapper {
@@ -1130,11 +1079,22 @@
 
 /* Import file button container */
 .import-file-container {
+  position: fixed;
+  bottom: var(--space-8);
+  right: var(--space-8);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-3);
-  margin-bottom: var(--space-6);
+  z-index: 100;
+}
+
+.import-file-container .intake-import-btn {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 30px rgba(125, 211, 232, 0.2);
+}
+
+.import-file-container .import-message {
+  text-align: right;
 }
 
 .patches-section {

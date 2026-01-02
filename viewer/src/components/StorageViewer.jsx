@@ -2193,25 +2193,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
                           <span className="skin-initial">{variant.name[0]}</span>
                         </div>
                       )}
-                      {/* Slippi badge for stages - show unknown if not set */}
-                      <div style={{
-                        position: 'absolute',
-                        top: '8px',
-                        left: '8px',
-                        backgroundColor: variant.slippi_tested
-                          ? (variant.slippi_safe ? '#28a745' : '#dc3545')
-                          : '#6c757d',
-                        color: 'white',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}>
-                        {variant.slippi_tested
-                          ? (variant.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe')
-                          : 'Unknown'}
-                      </div>
                       <button
                         className="btn-edit"
                         onClick={(e) => {
