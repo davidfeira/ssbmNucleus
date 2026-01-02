@@ -322,6 +322,8 @@
   justify-content: center;
   background: var(--color-bg-base);
   overflow: hidden;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .canvas-placeholder {
@@ -346,6 +348,9 @@
   image-rendering: pixelated;
   cursor: crosshair;
   background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px;
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
   /* Display size is set dynamically via JS using CSS transform */
 }
 
@@ -453,6 +458,7 @@
   color: var(--color-text-tertiary);
   opacity: 0.6;
   pointer-events: none;
+  user-select: none;
   text-align: center;
   white-space: nowrap;
 }

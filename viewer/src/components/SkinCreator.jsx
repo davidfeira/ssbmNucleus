@@ -547,6 +547,8 @@ export default function SkinCreator({
 
   const handlePaintMouseDown = (e) => {
     if (e.button !== 0) return
+    e.preventDefault() // Prevent browser drag behavior
+    e.stopPropagation()
     setIsDrawing(true)
     isDrawingRef.current = true
     const coords = getCanvasCoords(e)
@@ -1245,7 +1247,7 @@ export default function SkinCreator({
                         <p>Select a texture to start editing</p>
                       </div>
                     ) : (
-                      <canvas ref={paintCanvasRef} className="paint-canvas" />
+                      <canvas ref={paintCanvasRef} className="paint-canvas" draggable="false" />
                     )}
                   </div>
                 </div>
