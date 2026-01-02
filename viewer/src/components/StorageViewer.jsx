@@ -113,6 +113,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
   const [dragTargetFolder, setDragTargetFolder] = useState(null) // Folder being hovered over during drag
+  const justDraggedRef = useRef(false) // Prevent click from firing right after drag
 
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
@@ -1156,6 +1157,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setDragOverIndex(null)
     setPreviewOrder(null)
     setDragTargetFolder(null)
+    // Prevent click from firing right after drag
+    justDraggedRef.current = true
+    setTimeout(() => { justDraggedRef.current = false }, 100)
   }
 
   // Folder helper functions
@@ -2284,9 +2288,16 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleItemDrop(e, displayIdx)}
           onDragEnd={handleDragEnd}
+          onClick={() => !isEditing && !justDraggedRef.current && toggleFolder(folder.id)}
         >
-          <div className="folder-header" onClick={() => toggleFolder(folder.id)}>
-            <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
+          <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
+            {isExpanded ? (
+              <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.17l2 2H20v10z"/>
+            ) : (
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            )}
+          </svg>
+          <div className="folder-header">
             {isEditing ? (
               <input
                 className="folder-name-input"
@@ -2303,7 +2314,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             ) : (
               <span className="folder-name">{folder.name}</span>
             )}
-            <span className="folder-count">{folderSkinCount}</span>
+            <span className="folder-count">{folderSkinCount} skin{folderSkinCount !== 1 ? 's' : ''}</span>
+            <span className="folder-chevron">▼</span>
           </div>
           <div className="folder-actions">
             <button
@@ -2411,6 +2423,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
               <span className="skin-initial">{skin.color[0]}</span>
             </div>
+            {skin.has_stock && (
+              <div className="stock-overlay">
+                <img
+                  src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
+                  alt={`${selectedCharacter} stock`}
+                  className="stock-overlay-img"
+                />
+              </div>
+            )}
             <button
               className="btn-edit"
               onClick={(e) => {
@@ -2433,23 +2454,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             >
               ✎
             </button>
-          </div>
-
-          <div className="skin-badges-row">
-            {skin.has_stock && (
-              <div className="stock-icon-small">
-                <img
-                  src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
-                  alt={`${selectedCharacter} stock`}
-                  className="skin-stock"
-                />
-              </div>
-            )}
-            {skin.slippi_tested && (
-              <div className={`slippi-badge-small ${skin.slippi_safe ? 'safe' : 'unsafe'}`}>
-                {skin.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}
-              </div>
-            )}
           </div>
 
           <div className="skin-info">
@@ -2495,16 +2499,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
                 }
               })}
               <div
-                className="skin-card create-mod-card"
+                className="create-mod-card"
                 onClick={openSkinCreator}
               >
-                <div className="skin-image-container">
-                  <div className="create-mod-placeholder">
-                    <span className="create-mod-icon">+</span>
-                  </div>
-                </div>
-                <div className="skin-info">
-                  <div className="skin-color">Create New Mod</div>
+                <div className="create-mod-content">
+                  <span className="create-mod-icon">+</span>
+                  <span className="create-mod-label">Create New Mod</span>
                 </div>
               </div>
             </div>
