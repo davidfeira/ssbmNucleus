@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import tempfile
 import logging
+import threading
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -40,6 +42,20 @@ class FirstRunSetup:
     # Characters whose CSPs should NOT be overwritten (kept in git)
     # Sheik has custom CSPs since vanilla Melee doesn't have separate Sheik portraits
     PRESERVE_CSP_CHARACTERS = ["Sheik"]
+
+    # Asset overrides for characters with incorrect mappings in fighter JSONs
+    # Mr. Game & Watch's JSON points to wrong CSP/stock indices
+    ASSET_OVERRIDES = {
+        "Mr. Game & Watch": {
+            "PlGwNr": {
+                "csp": "csp/csp_015",
+                "icon": "icons/ft_109"
+            }
+        }
+    }
+
+    # Expected size of extracted ISO in bytes (~1.4GB for vanilla Melee)
+    EXPECTED_EXTRACTION_SIZE = 1_400_000_000
 
     def __init__(self, project_root: Path, mexcli_path: Path):
         """
@@ -191,6 +207,17 @@ class FirstRunSetup:
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp directory: {e}")
 
+    def _get_folder_size(self, folder: Path) -> int:
+        """Calculate total size of all files in a folder."""
+        total = 0
+        try:
+            for f in folder.rglob('*'):
+                if f.is_file():
+                    total += f.stat().st_size
+        except Exception:
+            pass
+        return total
+
     def _extract_iso(
         self,
         iso_path: str,
@@ -217,8 +244,46 @@ class FirstRunSetup:
                 text=True
             )
 
-            # Read output line by line for progress
-            extraction_started = False
+            # Monitor folder size in background thread for progress
+            stop_monitoring = threading.Event()
+            current_phase = {'value': 'extracting', 'base_pct': 0}
+
+            def monitor_size():
+                phase_ticks = {'installing': 0, 'saving': 0}
+                while not stop_monitoring.is_set():
+                    size = self._get_folder_size(temp_dir)
+                    size_mb = size // (1024 * 1024)
+
+                    phase = current_phase['value']
+
+                    if phase == 'extracting':
+                        # Extraction: 0-70% based on folder size
+                        pct = min(70, int((size / self.EXPECTED_EXTRACTION_SIZE) * 70))
+                    elif phase == 'installing':
+                        # Installing: 70-85%, increment over time
+                        phase_ticks['installing'] += 1
+                        pct = min(85, 70 + phase_ticks['installing'])
+                    elif phase == 'saving':
+                        # Saving: 85-95%, increment over time
+                        phase_ticks['saving'] += 1
+                        pct = min(95, 85 + phase_ticks['saving'])
+                    else:
+                        pct = 100
+
+                    if progress_callback and phase != 'complete':
+                        msg = {
+                            'extracting': f'Extracting ISO files... ({size_mb} MB)',
+                            'installing': f'Installing MEX framework... ({size_mb} MB)',
+                            'saving': 'Finalizing project...'
+                        }.get(phase, 'Processing...')
+                        progress_callback('extracting', pct, msg, pct, 100)
+
+                    time.sleep(0.3)
+
+            monitor_thread = threading.Thread(target=monitor_size, daemon=True)
+            monitor_thread.start()
+
+            # Read output line by line for phase changes
             for line in process.stdout:
                 line = line.strip()
                 if not line:
@@ -228,25 +293,23 @@ class FirstRunSetup:
                     data = json.loads(line)
                     status = data.get('status', '')
 
-                    if status == 'extracting':
-                        extraction_started = True
-                        if progress_callback:
-                            progress_callback('extracting', 25, 'Extracting ISO files...', 25, 100)
-                    elif status == 'installing':
-                        if progress_callback:
-                            progress_callback('extracting', 75, 'Installing MEX framework...', 75, 100)
+                    if status == 'installing':
+                        current_phase['value'] = 'installing'
+                        current_phase['base_pct'] = 70
                     elif status == 'saving':
-                        if progress_callback:
-                            progress_callback('extracting', 90, 'Finalizing extraction...', 90, 100)
+                        current_phase['value'] = 'saving'
+                        current_phase['base_pct'] = 85
                     elif status == 'complete':
+                        current_phase['value'] = 'complete'
                         if progress_callback:
                             progress_callback('extracting', 100, 'Extraction complete', 100, 100)
 
                 except json.JSONDecodeError:
-                    # Non-JSON output, ignore
                     pass
 
             process.wait()
+            stop_monitoring.set()
+            monitor_thread.join(timeout=1)
 
             if process.returncode != 0:
                 stderr = process.stderr.read()
@@ -342,16 +405,20 @@ class FirstRunSetup:
                     if dat_path.exists():
                         shutil.copy2(dat_path, costume_dir / costume_file)
 
+                    # Check for asset overrides (e.g., Mr. Game & Watch has wrong mappings)
+                    char_overrides = self.ASSET_OVERRIDES.get(char_name, {})
+                    costume_overrides = char_overrides.get(costume_code, {})
+
                     # Copy CSP (skip for characters with preserved CSPs in git)
                     if char_name not in self.PRESERVE_CSP_CHARACTERS:
-                        csp_ref = costume.get('csp', '')
+                        csp_ref = costume_overrides.get('csp') or costume.get('csp', '')
                         if csp_ref:
                             csp_path = assets_dir / (csp_ref.replace('\\', '/') + '.png')
                             if csp_path.exists():
                                 shutil.copy2(csp_path, costume_dir / 'csp.png')
 
                     # Copy stock icon
-                    icon_ref = costume.get('icon', '')
+                    icon_ref = costume_overrides.get('icon') or costume.get('icon', '')
                     if icon_ref:
                         icon_path = assets_dir / (icon_ref.replace('\\', '/') + '.png')
                         if icon_path.exists():
