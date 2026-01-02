@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import StorageViewer from './components/StorageViewer'
 import MexPanel from './components/MexPanel'
 import Settings from './components/Settings'
+import FirstRunSetup from './components/FirstRunSetup'
 import './App.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -12,13 +13,41 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [skinCreatorOpen, setSkinCreatorOpen] = useState(false);
 
+  // First-run setup state
+  const [setupNeeded, setSetupNeeded] = useState(null); // null = checking, true = needed, false = complete
+
+  // Check if first-run setup is needed
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/setup/status`);
+        const data = await response.json();
+        if (data.success) {
+          setSetupNeeded(!data.complete);
+        } else {
+          // On error, assume setup is not needed to avoid blocking the app
+          console.error('Failed to check setup status:', data.error);
+          setSetupNeeded(false);
+        }
+      } catch (err) {
+        console.error('Failed to check setup status:', err);
+        // On network error, assume setup is not needed
+        setSetupNeeded(false);
+      }
+    };
+    checkSetupStatus();
+  }, []);
+
   // Slippi dialog state for nucleus:// imports
   const [showSlippiDialog, setShowSlippiDialog] = useState(false);
   const [slippiDialogData, setSlippiDialogData] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null); // Stores {blob, name} for retry
 
   useEffect(() => {
-    fetchMetadata();
+    // Don't fetch metadata until setup is complete
+    if (setupNeeded === false) {
+      fetchMetadata();
+    }
 
     // Listen for nucleus:// protocol imports
     if (window.electron?.onNucleusImport) {
@@ -87,7 +116,7 @@ function App() {
       // Cleanup listener on unmount
       return cleanup;
     }
-  }, []);
+  }, [setupNeeded]);
 
   const fetchMetadata = async () => {
     try {
@@ -204,6 +233,37 @@ function App() {
       </>
     );
   };
+
+  // Handle setup completion
+  const handleSetupComplete = () => {
+    setSetupNeeded(false);
+    fetchMetadata();
+  };
+
+  // Show loading state while checking setup status
+  if (setupNeeded === null) {
+    return (
+      <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+          <div className="setup-spinner" style={{
+            width: '48px',
+            height: '48px',
+            border: '3px solid var(--color-border)',
+            borderTopColor: 'var(--color-cyan)',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }}></div>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  // Show first-run setup if needed
+  if (setupNeeded) {
+    return <FirstRunSetup onComplete={handleSetupComplete} />;
+  }
 
   return (
     <div className="app">

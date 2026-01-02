@@ -4724,6 +4724,134 @@ def verify_vanilla_iso():
         }), 500
 
 
+# ============= First-Run Setup =============
+
+from first_run_setup import FirstRunSetup
+
+# Global setup state
+_setup_in_progress = False
+_setup_instance = None
+
+
+@app.route('/api/mex/setup/status', methods=['GET'])
+def check_setup_status():
+    """Check if first-run setup is needed."""
+    try:
+        setup = FirstRunSetup(PROJECT_ROOT, MEXCLI_PATH)
+        status = setup.check_setup_needed()
+        return jsonify({
+            'success': True,
+            **status
+        })
+    except Exception as e:
+        logger.error(f"Setup status check error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/setup/start', methods=['POST'])
+def start_first_run_setup():
+    """Start the first-run setup process."""
+    global _setup_in_progress, _setup_instance
+
+    if _setup_in_progress:
+        return jsonify({
+            'success': False,
+            'error': 'Setup already in progress'
+        }), 400
+
+    try:
+        import hashlib
+
+        data = request.json or {}
+        iso_path = data.get('isoPath')
+
+        if not iso_path:
+            return jsonify({
+                'success': False,
+                'error': 'No ISO path provided'
+            }), 400
+
+        iso_file = Path(iso_path)
+        if not iso_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'ISO file not found'
+            }), 404
+
+        # Verify ISO hash first
+        logger.info(f"Verifying ISO before setup: {iso_path}")
+        md5_hash = hashlib.md5()
+        with open(iso_file, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192 * 1024), b''):
+                md5_hash.update(chunk)
+
+        calculated_md5 = md5_hash.hexdigest()
+        if calculated_md5.lower() != VANILLA_ISO_MD5.lower():
+            return jsonify({
+                'success': False,
+                'error': 'Invalid ISO file. Please provide a vanilla Melee 1.02 ISO.',
+                'md5': calculated_md5,
+                'expected': VANILLA_ISO_MD5
+            }), 400
+
+        # Start setup in background thread
+        _setup_in_progress = True
+        _setup_instance = FirstRunSetup(PROJECT_ROOT, MEXCLI_PATH)
+
+        def run_setup():
+            global _setup_in_progress
+            try:
+                def progress_callback(phase, percentage, message, completed, total):
+                    socketio.emit('setup_progress', {
+                        'phase': phase,
+                        'percentage': percentage,
+                        'message': message,
+                        'completed': completed,
+                        'total': total
+                    })
+
+                result = _setup_instance.run_setup(iso_path, progress_callback)
+
+                if result['success']:
+                    socketio.emit('setup_complete', {
+                        'success': True,
+                        'message': result.get('message', 'Setup complete'),
+                        'characters': result.get('characters', 0),
+                        'stages': result.get('stages', 0)
+                    })
+                else:
+                    socketio.emit('setup_error', {
+                        'error': result.get('error', 'Unknown error')
+                    })
+            except Exception as e:
+                logger.error(f"Setup thread error: {e}", exc_info=True)
+                socketio.emit('setup_error', {
+                    'error': str(e)
+                })
+            finally:
+                _setup_in_progress = False
+
+        import threading
+        setup_thread = threading.Thread(target=run_setup, daemon=True)
+        setup_thread.start()
+
+        return jsonify({
+            'success': True,
+            'message': 'Setup started'
+        })
+
+    except Exception as e:
+        _setup_in_progress = False
+        logger.error(f"Start setup error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # ============= XDelta Patches =============
 
 XDELTA_PATH = STORAGE_PATH / "xdelta"

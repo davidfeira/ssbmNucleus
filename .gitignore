@@ -36,5 +36,11 @@ venv-*/
 
 # Game files (user-specific)
 *.iso
-*.dat
-*.zip
+
+# Vanilla assets (extracted from user's ISO during first-run setup)
+utility/assets/vanilla/
+# Keep Sheik CSPs (not in vanilla Melee, custom assets)
+!utility/assets/vanilla/Sheik/
+!utility/assets/vanilla/Sheik/*/
+!utility/assets/vanilla/Sheik/*/csp.png
+utility/assets/stages/
