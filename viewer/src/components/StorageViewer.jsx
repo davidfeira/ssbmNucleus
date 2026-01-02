@@ -100,6 +100,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [showSkinCreator, setShowSkinCreator] = useState(false) // Skin creator modal
   const [skinCreatorInitialCostume, setSkinCreatorInitialCostume] = useState(null) // For "edit from vault" flow
 
+  // CSP Manager modal state
+  const [showCspManager, setShowCspManager] = useState(false)
+  const [cspManagerSkin, setCspManagerSkin] = useState(null) // Current skin being edited
+  const [alternativeCsps, setAlternativeCsps] = useState([]) // Array of { id, url, file }
+  const [pendingMainCsp, setPendingMainCsp] = useState(null) // New main CSP file pending save
+  const [pendingMainCspPreview, setPendingMainCspPreview] = useState(null) // Preview URL
+  const [hdResolution, setHdResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
+  const [hdCspInfo, setHdCspInfo] = useState(null) // { exists: bool, resolution: '4x', size: '1024x1365' }
+
   // Drag and drop state
   const [draggedItem, setDraggedItem] = useState(null) // { index, id }
   const [dragStartIndex, setDragStartIndex] = useState(null) // Original position when drag started
@@ -741,6 +750,97 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       setStockPreview(e.target.result)
     }
     reader.readAsDataURL(file)
+  }
+
+  // CSP Manager handlers
+  const openCspManager = (skinData) => {
+    setCspManagerSkin(skinData)
+    setAlternativeCsps([])
+    setPendingMainCsp(null)
+    setPendingMainCspPreview(null)
+    setHdResolution('4x')
+    setHdCspInfo(null) // TODO: Check if HD CSP exists and get its info
+    setShowCspManager(true)
+  }
+
+  const closeCspManager = () => {
+    setShowCspManager(false)
+    setCspManagerSkin(null)
+    setAlternativeCsps([])
+    setPendingMainCsp(null)
+    setPendingMainCspPreview(null)
+  }
+
+  const handleCspManagerMainChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+    setPendingMainCsp(file)
+    const reader = new FileReader()
+    reader.onload = (e) => setPendingMainCspPreview(e.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleAddAlternativeCsp = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const newAlt = {
+        id: `alt_${Date.now()}`,
+        url: ev.target.result,
+        file: file
+      }
+      setAlternativeCsps(prev => [...prev, newAlt])
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSwapCsp = (altIndex) => {
+    const altCsp = alternativeCsps[altIndex]
+    if (!altCsp) return
+
+    // Get current main CSP info
+    const currentMainUrl = pendingMainCspPreview ||
+      (cspManagerSkin?.has_csp ? `${cspManagerSkin.cspUrl}?t=${lastImageUpdate}` : null)
+    const currentMainFile = pendingMainCsp
+
+    // Swap: alt becomes main, main becomes alt
+    setPendingMainCspPreview(altCsp.url)
+    setPendingMainCsp(altCsp.file)
+
+    // Update alternatives: replace swapped alt with old main
+    setAlternativeCsps(prev => {
+      const updated = [...prev]
+      if (currentMainUrl) {
+        updated[altIndex] = {
+          id: `alt_${Date.now()}`,
+          url: currentMainUrl,
+          file: currentMainFile
+        }
+      } else {
+        // No main CSP existed, just remove the alt
+        updated.splice(altIndex, 1)
+      }
+      return updated
+    })
+  }
+
+  const handleRemoveAlternativeCsp = (altIndex) => {
+    setAlternativeCsps(prev => prev.filter((_, i) => i !== altIndex))
+  }
+
+  const handleSaveCspManager = () => {
+    // TODO: Implement backend save
+    // For now, just close the modal
+    closeCspManager()
   }
 
   const handleSave = async () => {
@@ -1662,14 +1762,14 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
                       />
                       <button
                         className="edit-modal-image-edit-btn"
-                        onClick={() => document.getElementById('csp-file-input').click()}
-                        title="Replace CSP"
+                        onClick={() => openCspManager(editingItem.data)}
+                        title="Manage CSPs"
                       >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
-                        <span>Edit CSP</span>
+                        <span>Manage CSPs</span>
                       </button>
                     </div>
                     <div className="edit-modal-csp-label">Character Select Portrait</div>
@@ -2056,6 +2156,167 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           skinId={editingItem.data.id}
           onClose={() => setShow3DViewer(false)}
         />
+      )}
+
+      {/* CSP Manager Modal */}
+      {showCspManager && cspManagerSkin && (
+        <div className="csp-manager-overlay" onClick={closeCspManager}>
+          <div className="csp-manager-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Close Button */}
+            <button className="csp-manager-close" onClick={closeCspManager} title="Close">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+
+            {/* Header */}
+            <div className="csp-manager-header">
+              <h2>CSP Manager</h2>
+              <span className="csp-manager-skin-name">{cspManagerSkin.color}</span>
+            </div>
+
+            {/* Body - Two Column Layout */}
+            <div className="csp-manager-body">
+              {/* Left: Main CSP */}
+              <div className="csp-manager-main">
+                <div className="csp-manager-main-label">
+                  Active Portrait
+                  {hdCspInfo?.exists && (
+                    <span className="csp-manager-main-hd-badge">
+                      HD {hdCspInfo.resolution || hdCspInfo.size}
+                    </span>
+                  )}
+                </div>
+                <div className="csp-manager-main-container">
+                  {pendingMainCspPreview ? (
+                    <img src={pendingMainCspPreview} alt="New CSP" className="csp-manager-main-image" />
+                  ) : cspManagerSkin.has_csp ? (
+                    <img
+                      src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
+                      alt="Current CSP"
+                      className="csp-manager-main-image"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  ) : (
+                    <div className="csp-manager-main-placeholder">
+                      <span>{cspManagerSkin.color[0]}</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCspManagerMainChange}
+                    style={{ display: 'none' }}
+                    id="csp-manager-main-input"
+                  />
+                  <button
+                    className="csp-manager-main-replace-btn"
+                    onClick={() => document.getElementById('csp-manager-main-input').click()}
+                    title="Replace main CSP"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Replace
+                  </button>
+                </div>
+              </div>
+
+              {/* Right: Alternatives Grid */}
+              <div className="csp-manager-alternatives">
+                <div className="csp-manager-alternatives-header">
+                  <span>Alternative CSPs</span>
+                  <span className="csp-manager-alternatives-count">({alternativeCsps.length})</span>
+                </div>
+                <div className="csp-manager-alternatives-grid">
+                  {alternativeCsps.map((alt, index) => (
+                    <div key={alt.id} className="csp-manager-alt-card" onClick={() => handleSwapCsp(index)}>
+                      <img src={alt.url} alt={`Alternative ${index + 1}`} className="csp-manager-alt-image" />
+                      <div className="csp-manager-alt-overlay">
+                        <span>Click to swap</span>
+                      </div>
+                      <button
+                        className="csp-manager-alt-remove"
+                        onClick={(e) => { e.stopPropagation(); handleRemoveAlternativeCsp(index); }}
+                        title="Remove"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                  {/* Add New CSP Card */}
+                  <div className="csp-manager-add-card" onClick={() => document.getElementById('csp-manager-alt-input').click()}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>Add CSP</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAddAlternativeCsp}
+                    style={{ display: 'none' }}
+                    id="csp-manager-alt-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* HD Capture Section */}
+            <div className="csp-manager-hd-section">
+              <div className="csp-manager-hd-label">
+                <span>HD Capture</span>
+                {hdCspInfo?.exists && (
+                  <span className="csp-manager-hd-badge">
+                    {hdCspInfo.size || hdCspInfo.resolution}
+                  </span>
+                )}
+              </div>
+              <div className="csp-manager-hd-controls">
+                <div className="csp-manager-hd-options">
+                  {['2x', '4x', '8x', '16x'].map(res => (
+                    <button
+                      key={res}
+                      className={`csp-manager-hd-option ${hdResolution === res ? 'csp-manager-hd-option--active' : ''}`}
+                      onClick={() => setHdResolution(res)}
+                    >
+                      {res}
+                    </button>
+                  ))}
+                </div>
+                <button className="csp-manager-hd-capture-btn" disabled title="Coming soon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                  </svg>
+                  Capture HD CSP
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="csp-manager-actions">
+              <button className="csp-manager-btn csp-manager-btn--cancel" onClick={closeCspManager}>
+                Cancel
+              </button>
+              <button className="csp-manager-btn csp-manager-btn--save" onClick={handleSaveCspManager}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

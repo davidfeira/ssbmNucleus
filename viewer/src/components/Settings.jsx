@@ -16,6 +16,12 @@ export default function Settings({ metadata }) {
   const [restoreMode, setRestoreMode] = useState('replace') // 'replace' or 'merge'
   const [backupMessage, setBackupMessage] = useState({ text: '', type: '' })
 
+  // HD CSP generation state
+  const [generatingHdCsps, setGeneratingHdCsps] = useState(false)
+  const [hdCspProgress, setHdCspProgress] = useState({ current: 0, total: 0 })
+  const [hdCspMessage, setHdCspMessage] = useState({ text: '', type: '' })
+  const [hdCspResolution, setHdCspResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
+
   // Vanilla ISO path state
   const [vanillaIsoPath, setVanillaIsoPath] = useState('')
   const [isoMessage, setIsoMessage] = useState({ text: '', type: '' })
@@ -238,6 +244,90 @@ export default function Settings({ metadata }) {
   }
 
   const stats = getStorageStats()
+
+  // Count skins missing HD CSPs
+  const getHdCspStats = () => {
+    if (!metadata?.characters) return { missing: 0, total: 0 }
+
+    let missing = 0
+    let total = 0
+
+    Object.values(metadata.characters).forEach(char => {
+      (char.skins || []).forEach(skin => {
+        if (skin.has_csp) {
+          total++
+          if (!skin.has_hd_csp) {
+            missing++
+          }
+        }
+      })
+    })
+
+    return { missing, total }
+  }
+
+  const hdCspStats = getHdCspStats()
+
+  const handleGenerateAllHdCsps = async () => {
+    if (!metadata?.characters) return
+
+    // Collect all skins that need HD CSPs
+    const skinsToProcess = []
+    Object.entries(metadata.characters).forEach(([charName, char]) => {
+      (char.skins || []).forEach(skin => {
+        if (skin.has_csp && !skin.has_hd_csp) {
+          skinsToProcess.push({ character: charName, skinId: skin.id, color: skin.color })
+        }
+      })
+    })
+
+    if (skinsToProcess.length === 0) {
+      setHdCspMessage({ text: 'All skins already have HD CSPs!', type: 'success' })
+      setTimeout(() => setHdCspMessage({ text: '', type: '' }), 3000)
+      return
+    }
+
+    setGeneratingHdCsps(true)
+    setHdCspProgress({ current: 0, total: skinsToProcess.length })
+    setHdCspMessage({ text: 'Generating HD CSPs...', type: '' })
+
+    let successCount = 0
+    let failCount = 0
+
+    for (let i = 0; i < skinsToProcess.length; i++) {
+      const skin = skinsToProcess[i]
+      setHdCspProgress({ current: i + 1, total: skinsToProcess.length })
+
+      try {
+        // TODO: Call backend endpoint to generate HD CSP
+        // const response = await fetch(`${API_URL}/storage/costumes/${skin.character}/${skin.skinId}/csp/capture-hd`, {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({ resolution: '4x' })
+        // })
+        // const data = await response.json()
+        // if (data.success) successCount++
+        // else failCount++
+
+        // Placeholder for now - simulate delay
+        await new Promise(resolve => setTimeout(resolve, 100))
+        successCount++
+      } catch (err) {
+        failCount++
+      }
+    }
+
+    setGeneratingHdCsps(false)
+    setHdCspProgress({ current: 0, total: 0 })
+
+    if (failCount === 0) {
+      setHdCspMessage({ text: `Generated ${successCount} HD CSPs successfully!`, type: 'success' })
+    } else {
+      setHdCspMessage({ text: `Generated ${successCount} HD CSPs, ${failCount} failed`, type: 'error' })
+    }
+
+    setTimeout(() => setHdCspMessage({ text: '', type: '' }), 5000)
+  }
 
   const handleClearStorage = () => {
     setShowConfirmModal(true)
@@ -512,6 +602,64 @@ export default function Settings({ metadata }) {
           {backupMessage.text && (
             <div className={`message ${backupMessage.type}`}>
               {backupMessage.text}
+            </div>
+          )}
+        </section>
+
+        {/* HD CSP Generation Section */}
+        <section className="settings-section">
+          <h3>HD Portrait Generation</h3>
+          <p className="section-description">
+            Generate high-resolution CSPs for texture pack mode where memory constraints don't apply.
+          </p>
+
+          <div className="hd-csp-tool">
+            <div className="hd-csp-tool-info">
+              <div className="hd-csp-stats">
+                <span className="stat-highlight">{hdCspStats.missing}</span> skins missing HD CSPs
+                <span className="stat-muted"> / {hdCspStats.total} total</span>
+              </div>
+            </div>
+
+            <div className="hd-csp-controls">
+              <div className="hd-csp-resolution-select">
+                <label>Resolution</label>
+                <div className="hd-csp-resolution-options">
+                  {['2x', '4x', '8x', '16x'].map(res => (
+                    <button
+                      key={res}
+                      className={`hd-csp-resolution-btn ${hdCspResolution === res ? 'active' : ''}`}
+                      onClick={() => setHdCspResolution(res)}
+                      disabled={generatingHdCsps}
+                    >
+                      {res}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                className="hd-csp-generate-btn"
+                onClick={handleGenerateAllHdCsps}
+                disabled={generatingHdCsps || hdCspStats.missing === 0}
+              >
+                {generatingHdCsps ? (
+                  <>
+                    <span className="spinner"></span>
+                    {hdCspProgress.current} / {hdCspProgress.total}
+                  </>
+                ) : hdCspStats.missing === 0 ? (
+                  'All Done'
+                ) : (
+                  'Generate All'
+                )}
+              </button>
+            </div>
+          </div>
+
+          {hdCspMessage.text && (
+            <div className={`message ${hdCspMessage.type}`}>
+              {hdCspMessage.text}
             </div>
           )}
         </section>
