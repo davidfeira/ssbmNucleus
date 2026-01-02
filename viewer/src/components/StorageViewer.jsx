@@ -21,11 +21,10 @@ const DAS_STAGES = [
 // Skeleton loading components
 const SkeletonCard = () => (
   <div className="character-card skeleton-card">
-    <div className="character-image-container">
+    <div className="character-icon-container">
       <div className="skeleton skeleton-image"></div>
     </div>
-    <div className="skeleton skeleton-text" style={{ width: '70%', margin: '0.5rem auto' }}></div>
-    <div className="skeleton skeleton-text" style={{ width: '40%', margin: '0 auto', height: '12px' }}></div>
+    <div className="skeleton skeleton-text" style={{ width: '50%', height: '12px' }}></div>
   </div>
 )
 
@@ -2580,9 +2579,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         </button>
       </div>
 
-      {/* Import File button - only for characters and stages */}
-      {(mode === 'characters' || mode === 'stages') && (
-        <div className="import-file-container">
+      {/* Import button - positioned consistently across all modes */}
+      <div className="import-file-container">
+        {(mode === 'characters' || mode === 'stages') ? (
           <label className="intake-import-btn" style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}>
             {importing ? 'Importing...' : 'Import File'}
             <input
@@ -2593,67 +2592,69 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
               style={{ display: 'none' }}
             />
           </label>
-          {importMessage && (
-            <div className={`import-message ${importMessage.includes('failed') || importMessage.includes('Error') || importMessage.includes('✗') ? 'error' : 'success'}`}>
-              {importMessage}
-            </div>
-          )}
-        </div>
-      )}
+        ) : (
+          <button
+            className="intake-import-btn"
+            onClick={() => setShowXdeltaImportModal(true)}
+          >
+            Import Patch
+          </button>
+        )}
+        {importMessage && (
+          <div className={`import-message ${importMessage.includes('failed') || importMessage.includes('Error') || importMessage.includes('✗') ? 'error' : 'success'}`}>
+            {importMessage}
+          </div>
+        )}
+      </div>
 
       {mode === 'characters' ? (
-        <div className="characters-grid">
-        {isLoading ? (
-          // Skeleton loading for characters
-          Array.from({ length: 12 }).map((_, idx) => (
-            <SkeletonCard key={`skeleton-${idx}`} />
-          ))
-        ) : characters.map((characterName) => {
-          const charData = allCharacters[characterName]
-          // Only count visible skins (exclude hidden Ice Climbers Nana entries)
-          const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
-          const skinCount = visibleSkins.length
+        <div className="grid-wrapper">
+          <div className="characters-grid">
+          {isLoading ? (
+            // Skeleton loading for characters
+            Array.from({ length: 12 }).map((_, idx) => (
+              <SkeletonCard key={`skeleton-${idx}`} />
+            ))
+          ) : characters.map((characterName) => {
+            const charData = allCharacters[characterName]
+            // Only count visible skins (exclude hidden Ice Climbers Nana entries)
+            const visibleSkins = charData?.skins?.filter(skin => skin.visible !== false) || []
+            const skinCount = visibleSkins.length
 
-          // ALWAYS use vanilla default costume code from DEFAULT_CHARACTERS
-          const costumeCode = DEFAULT_CHARACTERS[characterName]?.defaultCostume
+            // Use CSS icon which already includes character name
+            const cssIconPath = `${BACKEND_URL}/vanilla/${characterName}/css_icon.png`
 
-          // ALWAYS use vanilla CSP on homepage for consistency (like vanilla game)
-          const vanillaCspPath = costumeCode
-            ? `${BACKEND_URL}/vanilla/${characterName}/${costumeCode}/csp.png`
-            : null
-
-          return (
-            <div
-              key={characterName}
-              className="character-card"
-              onClick={() => setSelectedCharacter(characterName)}
-            >
-              <div className="character-image-container">
-                {vanillaCspPath ? (
+            return (
+              <div
+                key={characterName}
+                className="character-card"
+                onClick={() => setSelectedCharacter(characterName)}
+              >
+                <div className="character-icon-container">
                   <img
-                    src={vanillaCspPath}
+                    src={cssIconPath}
                     alt={characterName}
-                    className="character-csp"
+                    className="character-css-icon"
                     onError={(e) => {
                       e.target.style.display = 'none'
                       e.target.nextSibling.style.display = 'flex'
                     }}
                   />
-                ) : null}
-                <div className="character-placeholder" style={{ display: vanillaCspPath ? 'none' : 'flex' }}>
-                  <span className="character-initial">{characterName[0]}</span>
+                  <div className="character-placeholder" style={{ display: 'none' }}>
+                    <span className="character-initial">{characterName[0]}</span>
+                  </div>
                 </div>
-              </div>
 
-              <h3 className="character-name">{characterName}</h3>
-              <p className="skin-count">{skinCount} skin{skinCount !== 1 ? 's' : ''}</p>
-            </div>
-          )
-        })}
-      </div>
+                <p className="skin-count"><span>{skinCount}</span> skin{skinCount !== 1 ? 's' : ''}</p>
+              </div>
+            )
+          })}
+          </div>
+        </div>
       ) : mode === 'stages' ? (
         // Stages grid
-        <div className="stages-grid">
+        <div className="grid-wrapper">
+          <div className="stages-grid">
           {isLoading ? (
             // Skeleton loading for stages
             Array.from({ length: 6 }).map((_, idx) => (
@@ -2698,19 +2699,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
               </div>
             )
           })}
+          </div>
         </div>
       ) : (
         // Patches list
         <div className="patches-section">
-          <div className="patches-header">
-            <button
-              className="intake-import-btn"
-              onClick={() => setShowXdeltaImportModal(true)}
-            >
-              Import Patch
-            </button>
-          </div>
-
           <div className="patches-list">
             {xdeltaPatches.map((patch) => (
               <div key={patch.id} className="patch-row">
