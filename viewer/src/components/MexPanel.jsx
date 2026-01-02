@@ -1862,7 +1862,10 @@ const MexPanel = () => {
       )}
 
       {showIsoBuilder && (
-        <IsoBuilder onClose={() => setShowIsoBuilder(false)} />
+        <IsoBuilder
+          onClose={() => setShowIsoBuilder(false)}
+          projectName={mexStatus?.project?.path?.split(/[/\\]/).slice(-2, -1)[0] || 'game'}
+        />
       )}
 
       {/* Project Selection Modal */}

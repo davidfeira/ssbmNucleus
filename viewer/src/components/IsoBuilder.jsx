@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import './IsoBuilder.css';
 
-const IsoBuilder = ({ onClose }) => {
-  const [filename, setFilename] = useState(`game_${new Date().toISOString().slice(0, 10)}.iso`);
+const IsoBuilder = ({ onClose, projectName = 'game' }) => {
+  // Format: BUILDNAME_YYYY-MM-DD_HH-MM.iso
+  const getDefaultFilename = () => {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const time = now.toTimeString().slice(0, 5).replace(':', '-');
+    return `${projectName}_${date}_${time}.iso`;
+  };
+  const [filename, setFilename] = useState(getDefaultFilename());
   const [cspCompression, setCspCompression] = useState(1.0);
   const [useColorSmash, setUseColorSmash] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -26,6 +33,17 @@ const IsoBuilder = ({ onClose }) => {
   const [patchResult, setPatchResult] = useState(null);
   const [patchCreateId, setPatchCreateId] = useState(null);
 
+  // Texture pack mode state
+  const [texturePackMode, setTexturePackMode] = useState(false);
+  const [listeningMode, setListeningMode] = useState(false);
+  const [textureProgress, setTextureProgress] = useState({ matched: 0, total: 0, percentage: 0 });
+  const [matchedTextures, setMatchedTextures] = useState([]);
+  const [buildId, setBuildId] = useState(null);
+  const [slippiDolphinPath, setSlippiDolphinPath] = useState(localStorage.getItem('slippi_dolphin_path') || '');
+  const [characters, setCharacters] = useState([]);
+  const [currentCharIndex, setCurrentCharIndex] = useState(0);
+  const [confirmedChars, setConfirmedChars] = useState(new Set());
+
   const API_URL = 'http://127.0.0.1:5000';
 
   useEffect(() => {
@@ -41,12 +59,72 @@ const IsoBuilder = ({ onClose }) => {
       setMessage(data.message || `Exporting... ${data.percentage}%`);
     });
 
-    newSocket.on('export_complete', (data) => {
+    newSocket.on('export_complete', async (data) => {
       setProgress(100);
       setMessage('Export complete!');
       setComplete(true);
       setExporting(false);
       setExportedIsoPath(data.path);
+
+      // If texture pack mode, start listening
+      if (data.texturePackMode && data.buildId) {
+        setBuildId(data.buildId);
+        setTextureProgress({ matched: 0, total: data.totalCostumes, percentage: 0 });
+
+        try {
+          const response = await fetch(`${API_URL}/api/mex/texture-pack/start-listening`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              buildId: data.buildId,
+              slippiPath: localStorage.getItem('slippi_dolphin_path')
+            })
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            setListeningMode(true);
+            setTextureProgress({ matched: 0, total: result.totalCostumes, percentage: 0 });
+            setCharacters(result.characters || []);
+            setCurrentCharIndex(0);
+            setConfirmedChars(new Set());
+          }
+        } catch (err) {
+          console.error('Failed to start texture listening:', err);
+        }
+      }
+    });
+
+    // Texture pack events
+    newSocket.on('texture_matched', (data) => {
+      setMatchedTextures(prev => [...prev.slice(-9), data]); // Keep last 10
+
+      // Update character progress
+      setCharacters(prev => prev.map(char => {
+        if (char.name === data.character) {
+          return {
+            ...char,
+            matched: char.matched + 1,
+            costumes: char.costumes.map(c =>
+              c.index === data.costumeIndex ? { ...c, matched: true } : c
+            )
+          };
+        }
+        return char;
+      }));
+
+      // Auto-advance: jump to the character that just got a match
+      setCharacters(prev => {
+        const matchedCharIdx = prev.findIndex(c => c.name === data.character);
+        if (matchedCharIdx !== -1) {
+          setCurrentCharIndex(matchedCharIdx);
+        }
+        return prev;
+      });
+    });
+
+    newSocket.on('texture_progress', (data) => {
+      setTextureProgress(data);
     });
 
     newSocket.on('export_error', (data) => {
@@ -91,6 +169,8 @@ const IsoBuilder = ({ onClose }) => {
     setMessage('Starting export...');
     setError(null);
     setComplete(false);
+    setListeningMode(false);
+    setMatchedTextures([]);
 
     try {
       const response = await fetch(`${API_URL}/api/mex/export/start`, {
@@ -101,7 +181,9 @@ const IsoBuilder = ({ onClose }) => {
         body: JSON.stringify({
           filename,
           cspCompression,
-          useColorSmash
+          useColorSmash,
+          texturePackMode,
+          slippiDolphinPath: texturePackMode ? slippiDolphinPath : null
         })
       });
 
@@ -110,10 +192,29 @@ const IsoBuilder = ({ onClose }) => {
       if (!data.success) {
         setError(data.error);
         setExporting(false);
+      } else if (data.buildId) {
+        setBuildId(data.buildId);
       }
     } catch (err) {
       setError(`Failed to start export: ${err.message}`);
       setExporting(false);
+    }
+  };
+
+  const handleStopListening = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/mex/texture-pack/stop-listening`, {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setListeningMode(false);
+        // Show success message with path
+        setMessage(`Texture pack created! ${data.matchedCount}/${data.totalCount} textures matched.`);
+      }
+    } catch (err) {
+      console.error('Failed to stop listening:', err);
     }
   };
 
@@ -253,6 +354,28 @@ const IsoBuilder = ({ onClose }) => {
                 </p>
               </div>
 
+              <div className="form-group texture-pack-group">
+                <label className="texture-pack-label">
+                  <input
+                    type="checkbox"
+                    checked={texturePackMode}
+                    onChange={(e) => setTexturePackMode(e.target.checked)}
+                    disabled={!slippiDolphinPath}
+                    className="texture-pack-checkbox"
+                  />
+                  <span>Texture Pack Mode</span>
+                </label>
+                {!slippiDolphinPath ? (
+                  <p className="texture-pack-info warning">
+                    Set your Slippi Dolphin path in Settings first.
+                  </p>
+                ) : (
+                  <p className="texture-pack-info">
+                    Creates low-res placeholders in ISO, then generates a texture pack via Dolphin dumping.
+                  </p>
+                )}
+              </div>
+
               <div className="warning-box">
                 <p><strong>Note:</strong> This can take a few minutes.</p>
               </div>
@@ -288,7 +411,7 @@ const IsoBuilder = ({ onClose }) => {
             </div>
           )}
 
-          {complete && !creatingPatch && !patchComplete && !patchError && (
+          {complete && !creatingPatch && !patchComplete && !patchError && !listeningMode && (
             <div className="export-complete">
               <div className="success-icon">✓</div>
               <h3>Export Complete!</h3>
@@ -430,6 +553,84 @@ const IsoBuilder = ({ onClose }) => {
                 </button>
                 <button className="btn-secondary" onClick={onClose}>
                   Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {listeningMode && (
+            <div className="listening-mode">
+              <div className="listening-header">
+                <div className="pulse-icon"></div>
+                <h3>Texture Pack Mode</h3>
+              </div>
+
+              <div className="texture-progress">
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${textureProgress.percentage}%` }}
+                  ></div>
+                </div>
+                <span className="progress-text">
+                  {textureProgress.matched} / {textureProgress.total} textures matched
+                </span>
+              </div>
+
+              {/* Current Character Focus */}
+              {characters.length > 0 && currentCharIndex < characters.length && (
+                <div className="current-character-section">
+                  <div className="current-char-header">
+                    <span className="current-label">Currently matching:</span>
+                    <span className="current-char-name">{characters[currentCharIndex]?.name}</span>
+                  </div>
+                  <div className="costume-dots">
+                    {characters[currentCharIndex]?.costumes.map((costume, i) => (
+                      <div
+                        key={i}
+                        className={`costume-dot ${costume.matched ? 'matched' : ''}`}
+                        title={`Costume ${costume.index + 1}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="current-char-progress">
+                    {characters[currentCharIndex]?.matched} / {characters[currentCharIndex]?.total} costumes
+                    {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total && ' ✓ Complete!'}
+                  </p>
+                </div>
+              )}
+
+              {/* Character List */}
+              <div className="character-list">
+                <div className="char-list-header">All Characters</div>
+                <div className="char-list-scroll">
+                  {characters.map((char, idx) => (
+                    <div
+                      key={char.name}
+                      className={`char-list-item ${idx === currentCharIndex ? 'current' : ''} ${char.matched === char.total ? 'complete' : ''} ${char.matched > 0 && char.matched < char.total ? 'partial' : ''}`}
+                      onClick={() => setCurrentCharIndex(idx)}
+                    >
+                      <span className="char-name">{char.name}</span>
+                      <span className="char-progress">
+                        {char.matched}/{char.total}
+                        {char.matched === char.total && ' ✓'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <p className="listening-instructions">
+                Open the ISO in Dolphin and scroll through each character's costumes on the CSS.
+                The view will auto-update as textures are matched.
+              </p>
+
+              <div className="listening-actions">
+                <button className="btn-download" onClick={handleDownload}>
+                  Download ISO
+                </button>
+                <button className="btn-done" onClick={handleStopListening}>
+                  Done - Finish Texture Pack
                 </button>
               </div>
             </div>

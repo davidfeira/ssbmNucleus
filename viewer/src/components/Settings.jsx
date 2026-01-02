@@ -22,6 +22,12 @@ export default function Settings({ metadata }) {
   const [isoVerified, setIsoVerified] = useState(null) // null = not checked, true = valid, false = invalid
   const [verifyingIso, setVerifyingIso] = useState(false)
 
+  // Slippi Dolphin path state
+  const [slippiDolphinPath, setSlippiDolphinPath] = useState('')
+  const [slippiMessage, setSlippiMessage] = useState({ text: '', type: '' })
+  const [slippiVerified, setSlippiVerified] = useState(null)
+  const [verifyingSlippi, setVerifyingSlippi] = useState(false)
+
   // Load vanilla ISO path from localStorage on mount and verify it
   useEffect(() => {
     const savedPath = localStorage.getItem('vanilla_iso_path')
@@ -29,6 +35,16 @@ export default function Settings({ metadata }) {
       setVanillaIsoPath(savedPath)
       // Verify on load
       verifyIso(savedPath)
+    }
+  }, [])
+
+  // Load Slippi Dolphin path from localStorage on mount and verify it
+  useEffect(() => {
+    const savedPath = localStorage.getItem('slippi_dolphin_path')
+    if (savedPath) {
+      setSlippiDolphinPath(savedPath)
+      // Verify on load
+      verifySlippiPath(savedPath)
     }
   }, [])
 
@@ -115,6 +131,91 @@ export default function Settings({ metadata }) {
     setIsoVerified(null)
     setIsoMessage({ text: 'Vanilla ISO path cleared', type: 'success' })
     setTimeout(() => setIsoMessage({ text: '', type: '' }), 3000)
+  }
+
+  const verifySlippiPath = async (slippiPath) => {
+    setVerifyingSlippi(true)
+    setSlippiVerified(null)
+
+    try {
+      const response = await fetch(`${API_URL}/settings/slippi-path/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slippiPath })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSlippiVerified(data.valid)
+        if (!data.valid) {
+          setSlippiMessage({
+            text: data.error || 'Invalid Slippi Dolphin path',
+            type: 'error'
+          })
+        }
+      } else {
+        setSlippiVerified(false)
+        setSlippiMessage({ text: data.error, type: 'error' })
+      }
+    } catch (err) {
+      setSlippiVerified(false)
+      setSlippiMessage({ text: `Verification failed: ${err.message}`, type: 'error' })
+    } finally {
+      setVerifyingSlippi(false)
+    }
+  }
+
+  const handleBrowseSlippi = async () => {
+    if (!window.electron) {
+      setSlippiMessage({ text: 'Electron API not available', type: 'error' })
+      return
+    }
+
+    try {
+      const selectedPath = await window.electron.selectDirectory()
+      if (selectedPath) {
+        setSlippiDolphinPath(selectedPath)
+        setSlippiMessage({ text: 'Verifying path...', type: '' })
+
+        // Verify the path
+        setVerifyingSlippi(true)
+        const response = await fetch(`${API_URL}/settings/slippi-path/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slippiPath: selectedPath })
+        })
+
+        const data = await response.json()
+
+        if (data.success && data.valid) {
+          localStorage.setItem('slippi_dolphin_path', selectedPath)
+          setSlippiVerified(true)
+          setSlippiMessage({ text: 'Valid Slippi Dolphin path!', type: 'success' })
+          setTimeout(() => setSlippiMessage({ text: '', type: '' }), 3000)
+        } else {
+          setSlippiVerified(false)
+          setSlippiMessage({
+            text: data.error || 'Invalid path. Please select the Slippi netplay folder.',
+            type: 'error'
+          })
+          // Don't save invalid path
+          setSlippiDolphinPath('')
+        }
+        setVerifyingSlippi(false)
+      }
+    } catch (err) {
+      setSlippiMessage({ text: `Error: ${err.message}`, type: 'error' })
+      setVerifyingSlippi(false)
+    }
+  }
+
+  const handleClearSlippiPath = () => {
+    localStorage.removeItem('slippi_dolphin_path')
+    setSlippiDolphinPath('')
+    setSlippiVerified(null)
+    setSlippiMessage({ text: 'Slippi Dolphin path cleared', type: 'success' })
+    setTimeout(() => setSlippiMessage({ text: '', type: '' }), 3000)
   }
 
   // Calculate storage statistics
@@ -308,6 +409,62 @@ export default function Settings({ metadata }) {
           {isoMessage.text && (
             <div className={`message ${isoMessage.type}`}>
               {isoMessage.text}
+            </div>
+          )}
+        </section>
+
+        {/* Slippi Dolphin Path */}
+        <section className="settings-section">
+          <h3>Slippi Dolphin</h3>
+          <p className="section-description">
+            Set the path to your Slippi Dolphin netplay folder for texture pack generation.
+            <br />
+            <span className="path-hint">Example: C:\Users\[you]\AppData\Roaming\Slippi Launcher\netplay</span>
+          </p>
+
+          <div className="iso-path-container">
+            {slippiDolphinPath ? (
+              <div className={`iso-path-display ${slippiVerified === true ? 'verified' : slippiVerified === false ? 'invalid' : ''}`}>
+                <span className="iso-status-icon">
+                  {verifyingSlippi ? '...' : slippiVerified === true ? '✓' : slippiVerified === false ? '✕' : '?'}
+                </span>
+                <span className="iso-path-text" title={slippiDolphinPath}>{slippiDolphinPath}</span>
+                <button
+                  className="iso-clear-button"
+                  onClick={handleClearSlippiPath}
+                  title="Clear Slippi path"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="iso-path-empty">No Slippi Dolphin path set</div>
+            )}
+            <button
+              className="iso-browse-button"
+              onClick={handleBrowseSlippi}
+              disabled={verifyingSlippi}
+            >
+              {verifyingSlippi ? 'Verifying...' : slippiDolphinPath ? 'Change' : 'Browse'}
+            </button>
+          </div>
+
+          {slippiVerified && slippiDolphinPath && (
+            <div className="derived-paths">
+              <div className="derived-path">
+                <span className="derived-label">Dump:</span>
+                <span className="derived-value">{slippiDolphinPath}/User/Dump/Textures/GALE01</span>
+              </div>
+              <div className="derived-path">
+                <span className="derived-label">Load:</span>
+                <span className="derived-value">{slippiDolphinPath}/User/Load/Textures/GALE01</span>
+              </div>
+            </div>
+          )}
+
+          {slippiMessage.text && (
+            <div className={`message ${slippiMessage.type}`}>
+              {slippiMessage.text}
             </div>
           )}
         </section>

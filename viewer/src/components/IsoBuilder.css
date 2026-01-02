@@ -392,3 +392,356 @@
   color: #999;
   line-height: 1.4;
 }
+
+/* Texture Pack Mode Checkbox Styling */
+.texture-pack-group {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+
+.texture-pack-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 500;
+}
+
+.texture-pack-label input:disabled + span {
+  color: #666;
+}
+
+.texture-pack-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #9c27b0;
+}
+
+.texture-pack-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.texture-pack-info {
+  margin-top: 0.5rem;
+  margin-left: 1.5rem;
+  font-size: 0.85rem;
+  color: #999;
+  line-height: 1.4;
+}
+
+.texture-pack-info.warning {
+  color: #ff9800;
+}
+
+/* Listening Mode Styles */
+.listening-mode {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.listening-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.listening-header h3 {
+  margin: 0;
+  color: #fff;
+}
+
+.pulse-icon {
+  width: 16px;
+  height: 16px;
+  background: #9c27b0;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+.listening-instructions {
+  color: #999;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+  padding: 0 1rem;
+}
+
+.texture-progress {
+  margin-bottom: 1.5rem;
+}
+
+.texture-progress .progress-bar {
+  height: 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.texture-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9c27b0, #e040fb);
+  transition: width 0.3s ease;
+  border-radius: 6px;
+}
+
+.progress-text {
+  color: #9c27b0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.matched-list {
+  background: #252525;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  text-align: left;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.matched-list-header {
+  color: #999;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.matched-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #333;
+  animation: fadeIn 0.3s ease;
+}
+
+.matched-item:last-child {
+  border-bottom: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.matched-character {
+  color: #fff;
+  font-weight: 500;
+}
+
+.matched-costume {
+  color: #9c27b0;
+  font-size: 0.85rem;
+}
+
+.listening-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.btn-done {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-done:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(156, 39, 176, 0.4);
+}
+
+/* Current Character Section */
+.current-character-section {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border: 2px solid #9c27b0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.current-char-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.current-label {
+  color: #9c27b0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.current-char-name {
+  color: #fff;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.costume-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}
+
+.costume-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #333;
+  border: 2px solid #555;
+  transition: all 0.3s ease;
+}
+
+.costume-dot.matched {
+  background: #9c27b0;
+  border-color: #e040fb;
+  box-shadow: 0 0 8px rgba(156, 39, 176, 0.5);
+}
+
+.current-char-progress {
+  color: #aaa;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.btn-confirm-char {
+  padding: 0.6rem 1.2rem;
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-top: 0.5rem;
+}
+
+.btn-confirm-char:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(156, 39, 176, 0.4);
+}
+
+/* Character List */
+.character-list {
+  background: #1e1e1e;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.char-list-header {
+  background: #252525;
+  padding: 0.6rem 1rem;
+  color: #888;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #333;
+}
+
+.char-list-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.char-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #2a2a2a;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.char-list-item:hover {
+  background: #2a2a2a;
+}
+
+.char-list-item:last-child {
+  border-bottom: none;
+}
+
+.char-list-item.current {
+  background: rgba(156, 39, 176, 0.2);
+  border-left: 3px solid #9c27b0;
+}
+
+.char-list-item.partial {
+  background: rgba(255, 193, 7, 0.1);
+}
+
+.char-list-item.partial .char-progress {
+  color: #ffc107;
+}
+
+.char-list-item.complete {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.char-list-item.complete .char-progress {
+  color: #4caf50;
+}
+
+.char-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.char-progress {
+  color: #888;
+  font-size: 0.85rem;
+  font-family: 'Courier New', monospace;
+}
+
+.btn-download,
+.btn-secondary,
+.btn-done {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}

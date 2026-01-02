@@ -893,7 +893,9 @@ def start_export():
     {
         "filename": "modded_game.iso",  // optional
         "cspCompression": 1.0,  // optional, 0.1-1.0, default 1.0
-        "useColorSmash": false  // optional, boolean, default false
+        "useColorSmash": false,  // optional, boolean, default false
+        "texturePackMode": false,  // optional, boolean, default false
+        "slippiDolphinPath": "..."  // required if texturePackMode is true
     }
     """
     try:
@@ -901,6 +903,8 @@ def start_export():
         filename = data.get('filename', f'game_{datetime.now().strftime("%Y%m%d_%H%M%S")}.iso')
         csp_compression = data.get('cspCompression', 1.0)
         use_color_smash = data.get('useColorSmash', False)
+        texture_pack_mode = data.get('texturePackMode', False)
+        slippi_dolphin_path = data.get('slippiDolphinPath')
 
         # Validate compression range
         if not isinstance(csp_compression, (int, float)) or csp_compression < 0.1 or csp_compression > 1.0:
@@ -916,15 +920,28 @@ def start_export():
                 'error': 'useColorSmash must be a boolean'
             }), 400
 
+        # Validate texture pack mode requirements
+        if texture_pack_mode:
+            if not slippi_dolphin_path:
+                return jsonify({
+                    'success': False,
+                    'error': 'slippiDolphinPath is required when texturePackMode is enabled'
+                }), 400
+
         output_file = OUTPUT_PATH / filename
+        build_id = f"build_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         logger.info(f"=== ISO EXPORT START ===")
         logger.info(f"Filename: {filename}")
         logger.info(f"CSP Compression: {csp_compression}")
         logger.info(f"Use Color Smash: {use_color_smash}")
+        logger.info(f"Texture Pack Mode: {texture_pack_mode}")
 
         def export_with_progress():
             """Export ISO in background thread with WebSocket progress updates"""
+            backup_dir = None
+            mapping = None
+
             try:
                 def progress_callback(percentage, message):
                     socketio.emit('export_progress', {
@@ -933,14 +950,116 @@ def start_export():
                     })
 
                 mex = get_mex_manager()
+
+                # If texture pack mode, replace CSPs with placeholders
+                if texture_pack_mode:
+                    from texture_pack import (
+                        save_encoded_placeholder,
+                        TexturePackMapping,
+                        CostumeMapping
+                    )
+
+                    project_dir = current_project_path.parent
+                    csp_dir = project_dir / "assets" / "csp"
+                    backup_dir = project_dir / "assets" / "csp_backup"
+
+                    # Backup original CSPs
+                    if backup_dir.exists():
+                        shutil.rmtree(backup_dir)
+                    if csp_dir.exists():
+                        shutil.copytree(csp_dir, backup_dir)
+                        logger.info(f"Backed up CSPs to {backup_dir}")
+
+                    # Create mapping
+                    build_name = filename.replace('.iso', '')
+                    mapping = TexturePackMapping(
+                        build_id=build_id,
+                        build_name=build_name,
+                        created_at=datetime.now().isoformat()
+                    )
+
+                    # Get all fighters and their costumes
+                    fighters = mex.list_fighters()
+                    global_index = 0
+
+                    for fighter in fighters:
+                        try:
+                            result = mex._run_command("get-costumes", str(mex.project_path), fighter['name'])
+                            costumes = result.get('costumes', [])
+
+                            for costume_idx, costume in enumerate(costumes):
+                                if costume.get('csp'):
+                                    csp_ref = costume['csp'].replace('\\', '/')
+                                    csp_path = csp_dir / f"{csp_ref.split('/')[-1]}.png"
+
+                                    if csp_path.exists():
+                                        # Store original CSP path (from backup for restoration)
+                                        backup_csp_path = backup_dir / f"{csp_ref.split('/')[-1]}.png"
+
+                                        # Add to mapping
+                                        mapping.add_costume(CostumeMapping(
+                                            index=global_index,
+                                            character=fighter['name'],
+                                            costume_index=costume_idx,
+                                            skin_id=costume.get('name', f"costume_{costume_idx}"),
+                                            real_csp_path=str(backup_csp_path)
+                                        ))
+
+                                        # Replace CSP with base-4 encoded placeholder (16x16)
+                                        save_encoded_placeholder(global_index, csp_path)
+                                        logger.debug(f"Replaced CSP {csp_path.name} with encoded placeholder index={global_index}")
+
+                                        global_index += 1
+
+                        except Exception as e:
+                            logger.warning(f"Error processing {fighter['name']}: {e}")
+                            continue
+
+                    logger.info(f"Created {global_index} placeholder CSPs")
+
+                    # Save a debug sample so user can verify the placeholder format
+                    debug_placeholder = OUTPUT_PATH / "debug_placeholder_sample.png"
+                    save_encoded_placeholder(12345, debug_placeholder)  # Test index to verify encoding
+                    logger.info(f"Saved debug placeholder sample to {debug_placeholder}")
+
+                    # Save mapping
+                    mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
+                    mapping.save(mapping_file)
+                    logger.info(f"Saved texture mapping to {mapping_file}")
+
+                # Run the actual export
                 result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash)
+
+                # Restore original CSPs if texture pack mode
+                if texture_pack_mode and backup_dir and backup_dir.exists():
+                    if csp_dir.exists():
+                        shutil.rmtree(csp_dir)
+                    # Copy back (not move) - keep backup for texture pack listening
+                    shutil.copytree(backup_dir, csp_dir)
+                    logger.info("Restored original CSPs (kept backup for texture pack)")
 
                 socketio.emit('export_complete', {
                     'success': True,
                     'filename': filename,
-                    'path': str(output_file)
+                    'path': str(output_file),
+                    'texturePackMode': texture_pack_mode,
+                    'buildId': build_id if texture_pack_mode else None,
+                    'totalCostumes': len(mapping.costumes) if mapping else 0
                 })
+
             except Exception as e:
+                # Restore CSPs on error
+                if texture_pack_mode and backup_dir and backup_dir.exists():
+                    try:
+                        project_dir = current_project_path.parent
+                        csp_dir = project_dir / "assets" / "csp"
+                        if csp_dir.exists():
+                            shutil.rmtree(csp_dir)
+                        shutil.move(str(backup_dir), str(csp_dir))
+                        logger.info("Restored original CSPs after error")
+                    except Exception as restore_error:
+                        logger.error(f"Failed to restore CSPs: {restore_error}")
+
                 socketio.emit('export_error', {
                     'success': False,
                     'error': str(e)
@@ -953,7 +1072,8 @@ def start_export():
         return jsonify({
             'success': True,
             'message': 'Export started',
-            'filename': filename
+            'filename': filename,
+            'buildId': build_id if texture_pack_mode else None
         })
     except Exception as e:
         return jsonify({
@@ -4718,6 +4838,313 @@ def verify_vanilla_iso():
         })
     except Exception as e:
         logger.error(f"Verify ISO error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ============= Slippi Dolphin Path Verification =============
+
+@app.route('/api/mex/settings/slippi-path/verify', methods=['POST'])
+def verify_slippi_path():
+    """Verify that a path is a valid Slippi Dolphin netplay folder.
+
+    Checks that the User folder structure exists and can derive Dump/Load paths.
+    """
+    try:
+        data = request.json or {}
+        slippi_path = data.get('slippiPath')
+
+        if not slippi_path:
+            return jsonify({
+                'success': False,
+                'error': 'No Slippi Dolphin path provided'
+            }), 400
+
+        # Convert Windows path to WSL path if needed
+        if os.name != 'nt' and slippi_path and len(slippi_path) >= 2 and slippi_path[1] == ':':
+            drive_letter = slippi_path[0].lower()
+            rest_of_path = slippi_path[2:].replace('\\', '/')
+            slippi_path = f'/mnt/{drive_letter}{rest_of_path}'
+            logger.info(f"Converted Slippi path to WSL: {slippi_path}")
+
+        slippi_dir = Path(slippi_path)
+        if not slippi_dir.exists():
+            return jsonify({
+                'success': True,
+                'valid': False,
+                'error': 'Path does not exist'
+            })
+
+        if not slippi_dir.is_dir():
+            return jsonify({
+                'success': True,
+                'valid': False,
+                'error': 'Path is not a directory'
+            })
+
+        # Check for User folder (Dolphin creates this)
+        user_dir = slippi_dir / 'User'
+        if not user_dir.exists():
+            return jsonify({
+                'success': True,
+                'valid': False,
+                'error': 'No User folder found. This may not be a Dolphin installation folder.'
+            })
+
+        # Derive texture paths
+        dump_path = user_dir / 'Dump' / 'Textures' / 'GALE01'
+        load_path = user_dir / 'Load' / 'Textures' / 'GALE01'
+
+        # Create the directories if they don't exist (Dolphin may not have created them yet)
+        dump_path.mkdir(parents=True, exist_ok=True)
+        load_path.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Verified Slippi Dolphin path: {slippi_path}")
+        logger.info(f"  Dump path: {dump_path}")
+        logger.info(f"  Load path: {load_path}")
+
+        return jsonify({
+            'success': True,
+            'valid': True,
+            'dumpPath': str(dump_path),
+            'loadPath': str(load_path)
+        })
+
+    except Exception as e:
+        logger.error(f"Verify Slippi path error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ============= Texture Pack Listening =============
+
+# Global watcher instance
+_active_texture_watcher = None
+_active_texture_mapping = None
+
+
+def convert_windows_to_wsl_path(windows_path: str) -> str:
+    """Convert a Windows path to WSL path if running in WSL."""
+    if os.name != 'nt' and windows_path and len(windows_path) >= 2:
+        # Check if it looks like a Windows path (C:\... or C:/...)
+        if windows_path[1] == ':':
+            drive_letter = windows_path[0].lower()
+            rest_of_path = windows_path[2:].replace('\\', '/')
+            return f'/mnt/{drive_letter}{rest_of_path}'
+    return windows_path
+
+
+@app.route('/api/mex/texture-pack/start-listening', methods=['POST'])
+def start_texture_listening():
+    """
+    Start watching for dumped textures after a texture pack mode export.
+
+    Body:
+    {
+        "buildId": "build_20240115_103000",
+        "slippiPath": "C:\\Users\\...\\Slippi Launcher\\netplay"
+    }
+    """
+    global _active_texture_watcher, _active_texture_mapping
+
+    try:
+        data = request.json or {}
+        build_id = data.get('buildId')
+        slippi_path = data.get('slippiPath')
+
+        if not build_id:
+            return jsonify({
+                'success': False,
+                'error': 'buildId is required'
+            }), 400
+
+        if not slippi_path:
+            return jsonify({
+                'success': False,
+                'error': 'slippiPath is required'
+            }), 400
+
+        # Convert Windows path to WSL path if needed
+        slippi_path = convert_windows_to_wsl_path(slippi_path)
+        logger.info(f"Slippi path (converted): {slippi_path}")
+
+        # Load the mapping file
+        mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
+        if not mapping_file.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Mapping file not found for build: {build_id}'
+            }), 404
+
+        from texture_pack import TexturePackMapping, TexturePackWatcher
+
+        mapping = TexturePackMapping.load(mapping_file)
+        _active_texture_mapping = mapping
+
+        # Derive paths
+        slippi_dir = Path(slippi_path)
+        dump_path = slippi_dir / 'User' / 'Dump' / 'Textures' / 'GALE01'
+        load_path = slippi_dir / 'User' / 'Load' / 'Textures' / 'GALE01'
+
+        # Ensure directories exist
+        dump_path.mkdir(parents=True, exist_ok=True)
+        load_path.mkdir(parents=True, exist_ok=True)
+
+        # Stop any existing watcher
+        if _active_texture_watcher:
+            _active_texture_watcher.stop()
+
+        # Create callbacks
+        def on_match(costume):
+            logger.info(f"[CALLBACK] on_match called: {costume['character']} costume {costume['costume_index']}")
+            try:
+                socketio.emit('texture_matched', {
+                    'character': costume['character'],
+                    'costumeIndex': costume['costume_index'],
+                    'skinId': costume['skin_id'],
+                    'filename': costume['dumped_filename']
+                })
+                logger.info(f"[CALLBACK] emitted texture_matched event")
+            except Exception as e:
+                logger.error(f"[CALLBACK] emit error: {e}", exc_info=True)
+
+        def on_progress(matched, total):
+            logger.info(f"[CALLBACK] on_progress called: {matched}/{total}")
+            try:
+                socketio.emit('texture_progress', {
+                    'matched': matched,
+                    'total': total,
+                    'percentage': int(matched / total * 100) if total > 0 else 0
+                })
+                logger.info(f"[CALLBACK] emitted texture_progress event")
+            except Exception as e:
+                logger.error(f"[CALLBACK] emit error: {e}", exc_info=True)
+
+        # Start watcher
+        _active_texture_watcher = TexturePackWatcher(
+            dump_path=dump_path,
+            load_path=load_path,
+            mapping=mapping,
+            on_match=on_match,
+            on_progress=on_progress
+        )
+        _active_texture_watcher.start()
+
+        logger.info(f"Started texture pack watcher for build {build_id}")
+        logger.info(f"  Watching: {dump_path}")
+        logger.info(f"  Output to: {load_path}")
+
+        # Build character breakdown for UI
+        characters = {}
+        for costume in mapping.costumes:
+            char_name = costume['character']
+            if char_name not in characters:
+                characters[char_name] = {'total': 0, 'matched': 0, 'costumes': []}
+            characters[char_name]['total'] += 1
+            if costume['matched']:
+                characters[char_name]['matched'] += 1
+            characters[char_name]['costumes'].append({
+                'index': costume['costume_index'],
+                'matched': costume['matched']
+            })
+
+        # Convert to list sorted by character name
+        character_list = [
+            {'name': name, **data}
+            for name, data in sorted(characters.items())
+        ]
+
+        return jsonify({
+            'success': True,
+            'totalCostumes': len(mapping.costumes),
+            'characters': character_list,
+            'dumpPath': str(dump_path),
+            'loadPath': str(load_path)
+        })
+
+    except Exception as e:
+        logger.error(f"Start texture listening error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/texture-pack/stop-listening', methods=['POST'])
+def stop_texture_listening():
+    """Stop watching and finalize the texture pack."""
+    global _active_texture_watcher, _active_texture_mapping
+
+    try:
+        if not _active_texture_watcher:
+            return jsonify({
+                'success': False,
+                'error': 'No active texture watcher'
+            }), 400
+
+        # Get status before stopping
+        status = _active_texture_watcher.get_status()
+        mapping = _active_texture_mapping
+
+        # Stop the watcher
+        _active_texture_watcher.stop()
+
+        # Save updated mapping with matched filenames
+        if mapping:
+            mapping_file = OUTPUT_PATH / f"{mapping.build_id}_texture_mapping.json"
+            mapping.save(mapping_file)
+            logger.info(f"Saved final texture mapping to {mapping_file}")
+
+        # Build texture pack path
+        texture_pack_path = _active_texture_watcher.load_path / mapping.build_name if mapping else None
+
+        result = {
+            'success': True,
+            'matchedCount': status['matched_count'],
+            'totalCount': status['total_count'],
+            'texturePackPath': str(texture_pack_path) if texture_pack_path else None
+        }
+
+        _active_texture_watcher = None
+        _active_texture_mapping = None
+
+        logger.info(f"Stopped texture pack watcher. Matched {result['matchedCount']}/{result['totalCount']} textures")
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Stop texture listening error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/texture-pack/status', methods=['GET'])
+def get_texture_listening_status():
+    """Get the current status of the texture watcher."""
+    global _active_texture_watcher
+
+    try:
+        if not _active_texture_watcher:
+            return jsonify({
+                'success': True,
+                'active': False
+            })
+
+        status = _active_texture_watcher.get_status()
+        return jsonify({
+            'success': True,
+            'active': True,
+            **status
+        })
+
+    except Exception as e:
+        logger.error(f"Texture status error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
