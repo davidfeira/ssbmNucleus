@@ -268,6 +268,7 @@ class TexturePackWatcher:
         dump_path: Path,
         load_path: Path,
         mapping: TexturePackMapping,
+        storage_path: Optional[Path] = None,
         on_match: Optional[Callable[[Dict], None]] = None,
         on_progress: Optional[Callable[[int, int], None]] = None,
         poll_interval: float = 0.5
@@ -279,6 +280,7 @@ class TexturePackWatcher:
             dump_path: Dolphin's texture dump directory
             load_path: Dolphin's texture load directory
             mapping: TexturePackMapping with color-to-costume mappings
+            storage_path: Path to storage folder for HD CSPs
             on_match: Callback when a texture is matched (receives costume dict)
             on_progress: Callback for progress updates (matched_count, total_count)
             poll_interval: Seconds between directory polls
@@ -286,6 +288,7 @@ class TexturePackWatcher:
         self.dump_path = dump_path
         self.load_path = load_path
         self.mapping = mapping
+        self.storage_path = storage_path
         self.on_match = on_match
         self.on_progress = on_progress
         self.poll_interval = poll_interval
@@ -388,15 +391,21 @@ class TexturePackWatcher:
             # Copy real CSP with dumped texture's filename
             dest_file = load_subdir / dumped_file.name
             real_csp_path = costume['real_csp_path']
-            original_path = real_csp_path
 
-            # Convert Windows path to WSL path if needed
+            # Convert Windows path to WSL path if needed (must do before hash lookup)
             import os
             if os.name != 'nt' and real_csp_path and len(real_csp_path) >= 2 and real_csp_path[1] == ':':
                 drive_letter = real_csp_path[0].lower()
                 rest_of_path = real_csp_path[2:].replace('\\', '/')
                 real_csp_path = f'/mnt/{drive_letter}{rest_of_path}'
-                logger.info(f"Converted path: {original_path} -> {real_csp_path}")
+                logger.debug(f"Converted backup CSP path: {costume['real_csp_path']} -> {real_csp_path}")
+
+            # Check for HD CSP in storage using perceptual hash matching
+            if self.storage_path:
+                hd_csp = self._find_hd_csp_by_hash(real_csp_path, costume['character'])
+                if hd_csp:
+                    real_csp_path = str(hd_csp)
+                    logger.info(f"Using HD CSP for {costume['character']}: {hd_csp.name}")
 
             real_csp = Path(real_csp_path)
 
@@ -423,6 +432,54 @@ class TexturePackWatcher:
 
         except Exception as e:
             logger.error(f"Failed to process match for {costume['character']}: {e}", exc_info=True)
+
+    def _find_hd_csp_by_hash(self, backup_csp_path: str, character: str) -> Optional[Path]:
+        """
+        Find HD CSP by matching perceptual hash of the backup CSP.
+
+        Args:
+            backup_csp_path: Path to the backup CSP from the project
+            character: Character name to search within
+
+        Returns:
+            Path to HD CSP if found, None otherwise
+        """
+        try:
+            import imagehash
+
+            # Hash the backup CSP
+            backup_img = Image.open(backup_csp_path)
+            backup_hash = imagehash.phash(backup_img)
+
+            # Load metadata to find skins with HD CSPs
+            metadata_file = self.storage_path / 'metadata.json'
+            if not metadata_file.exists():
+                logger.debug("No metadata.json found in storage")
+                return None
+
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            char_skins = metadata.get('characters', {}).get(character, {}).get('skins', [])
+
+            for skin in char_skins:
+                if skin.get('has_hd_csp') and skin.get('csp_hash'):
+                    stored_hash = imagehash.hex_to_hash(skin['csp_hash'])
+                    distance = backup_hash - stored_hash
+                    if distance < 10:  # Hamming distance threshold
+                        hd_csp = self.storage_path / character / f"{skin['id']}_csp_hd.png"
+                        if hd_csp.exists():
+                            logger.info(f"Hash match found: {skin['id']} (distance={distance})")
+                            return hd_csp
+                        else:
+                            logger.warning(f"Hash matched but HD CSP missing: {hd_csp}")
+
+            logger.debug(f"No hash match found for {character} CSP")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding HD CSP by hash: {e}", exc_info=True)
+            return None
 
     def get_status(self) -> Dict:
         """Get current watcher status."""

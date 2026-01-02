@@ -1528,6 +1528,16 @@ def capture_hd_csp(character, skin_id):
                             skin['has_hd_csp'] = True
                             skin['hd_csp_resolution'] = f"{scale}x"
                             skin['hd_csp_size'] = f"{width}x{height}"
+                            # Compute perceptual hash of regular CSP for texture pack matching
+                            regular_csp = char_folder / f"{skin_id}_csp.png"
+                            if regular_csp.exists():
+                                try:
+                                    import imagehash
+                                    with Image.open(regular_csp) as csp_img:
+                                        skin['csp_hash'] = str(imagehash.phash(csp_img))
+                                    logger.debug(f"Computed CSP hash: {skin['csp_hash']}")
+                                except Exception as hash_err:
+                                    logger.warning(f"Failed to compute CSP hash: {hash_err}")
                             break
 
                     with open(metadata_file, 'w') as f:
@@ -5132,6 +5142,7 @@ def start_texture_listening():
             dump_path=dump_path,
             load_path=load_path,
             mapping=mapping,
+            storage_path=STORAGE_PATH,
             on_match=on_match,
             on_progress=on_progress
         )
