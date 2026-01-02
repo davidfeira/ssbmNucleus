@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './SkinCreator.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -105,6 +105,7 @@ export default function SkinCreator({
 
   // Handle viewer messages (Electron IPC)
   const handleViewerMessage = (msg) => {
+    console.log('[SkinCreator] Received viewer message:', msg.type, msg)
     lastMessageTimeRef.current = Date.now()
 
     if (msg.type === 'textureList') {
@@ -138,6 +139,8 @@ export default function SkinCreator({
       setSkinCreatorLoading(false)
       setSkinCreatorStep('edit')
       setConnectionFailed(false)
+      // Position the viewer window after a brief delay to ensure DOM is ready
+      setTimeout(() => updateViewerPosition(), 100)
       // Request textures
       window.electron.viewerSend({ type: 'getTextures' })
     } else if (msg.type === 'exportDat') {
@@ -214,6 +217,7 @@ export default function SkinCreator({
 
   // Start from vault costume (for editing existing costumes) - Electron IPC
   const startSkinCreatorFromVault = async (costume) => {
+    console.log('[SkinCreator] startSkinCreatorFromVault called with:', costume)
     try {
       const character = costume.character || selectedCharacter
       if (!character) {
@@ -244,16 +248,19 @@ export default function SkinCreator({
       }
 
       // Set up message listener
+      console.log('[SkinCreator] Setting up message listener for vault...')
       const cleanup = window.electron.onViewerMessage(handleViewerMessage)
       setViewerWs({ cleanup }) // Store cleanup function
 
       // Start embedded viewer via Electron IPC
-      await window.electron.viewerStart({
+      console.log('[SkinCreator] Calling viewerStart with paths:', data)
+      const result = await window.electron.viewerStart({
         datFile: data.datFile,
         sceneFile: data.sceneFile,
         ajFile: data.ajFile,
         logsPath: data.logsPath
       })
+      console.log('[SkinCreator] viewerStart returned:', result)
 
       // Start auto-refresh interval (every 5 seconds, pauses while drawing)
       lastMessageTimeRef.current = Date.now()
@@ -271,6 +278,7 @@ export default function SkinCreator({
       }, 5000)
 
     } catch (err) {
+      console.error('[SkinCreator] Error in startSkinCreatorFromVault:', err)
       setSkinCreatorError(err.message)
       setSkinCreatorLoading(false)
     }
@@ -416,6 +424,47 @@ export default function SkinCreator({
       pingIntervalRef.current = null
     }
   }
+
+  // Update embedded viewer window position to match the 3D preview container
+  const updateViewerPosition = useCallback(() => {
+    if (!skinCreatorCanvasRef.current || !hasElectron) return
+
+    const rect = skinCreatorCanvasRef.current.getBoundingClientRect()
+
+    // Screen position = window position + element offset within window
+    // On Windows, screenX/Y may have negative values for window chrome, so we use screenLeft/Top
+    const screenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX
+    const screenTop = window.screenTop !== undefined ? window.screenTop : window.screenY
+
+    // Account for Electron window chrome (title bar height)
+    const chromeHeight = window.outerHeight - window.innerHeight
+
+    const x = Math.round(screenLeft + rect.left)
+    const y = Math.round(screenTop + chromeHeight + rect.top)
+    const width = Math.round(rect.width)
+    const height = Math.round(rect.height)
+
+    window.electron.viewerResize(x, y, width, height)
+  }, [hasElectron])
+
+  // Keep viewer positioned when window moves/resizes
+  useEffect(() => {
+    if (!viewerWs || !hasElectron || skinCreatorStep !== 'edit') return
+
+    const handleResize = () => updateViewerPosition()
+
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('scroll', handleResize)
+
+    // Also update periodically in case window moves (no good event for this)
+    const intervalId = setInterval(updateViewerPosition, 500)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('scroll', handleResize)
+      clearInterval(intervalId)
+    }
+  }, [viewerWs, hasElectron, skinCreatorStep, updateViewerPosition])
 
   // Load texture onto paint canvas when selected
   useEffect(() => {
@@ -1217,6 +1266,7 @@ export default function SkinCreator({
                       </button>
                     </div>
                     <div
+                      ref={skinCreatorCanvasRef}
                       className="skin-creator-3d"
                       onMouseDown={handleViewerMouseDown}
                       onMouseMove={handleViewerMouseMove}
@@ -1242,7 +1292,9 @@ export default function SkinCreator({
                           <p>Attempt {skinCreatorReconnectAttempts}/{skinCreatorMaxReconnectAttempts}</p>
                         </div>
                       ) : (
-                        <canvas ref={skinCreatorCanvasRef} className="viewer-canvas" />
+                        <div className="viewer-hint">
+                          Drag to rotate | Scroll to zoom | Right-drag to pan
+                        </div>
                       )}
                     </div>
                   </div>

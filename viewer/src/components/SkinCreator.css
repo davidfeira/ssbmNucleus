@@ -379,6 +379,7 @@
   cursor: grab;
   user-select: none;
   overflow: hidden;
+  position: relative;
 }
 
 .skin-creator-3d:active {
@@ -441,6 +442,19 @@
 .viewer-placeholder p {
   font-size: 0.875rem;
   margin: 0;
+}
+
+.viewer-hint {
+  position: absolute;
+  bottom: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  opacity: 0.6;
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* Skin Creator - Costume Selection */

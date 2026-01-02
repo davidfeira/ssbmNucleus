@@ -199,15 +199,19 @@ let viewerManager = null;
 ipcMain.handle('viewer:start', async (event, options) => {
   console.log('[Electron] Starting embedded viewer...');
   try {
-    if (!viewerManager) {
-      viewerManager = new ViewerManager();
+    // Stop existing viewer and create fresh instance to avoid handler accumulation
+    if (viewerManager) {
+      console.log('[Electron] Stopping existing viewer before starting new one...');
+      await viewerManager.stop();
     }
+    viewerManager = new ViewerManager();
 
     // Add isDev flag
     options.isDev = isDev;
 
     // Set up message forwarding to renderer
     viewerManager.onMessage('all', (message) => {
+      console.log('[Electron] Forwarding viewer message to renderer:', message.type);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('viewer:message', message);
       }

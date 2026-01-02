@@ -352,8 +352,10 @@ namespace HSDRawViewer
                     await _pipeServer.WaitForConnectionAsync(_cts.Token);
                     Log("Pipe client connected!");
 
-                    _pipeReader = new StreamReader(_pipeServer, Encoding.UTF8);
-                    _pipeWriter = new StreamWriter(_pipeServer, Encoding.UTF8) { AutoFlush = true };
+                    // Use UTF8 without BOM - BOM breaks JSON parsing in Node.js
+                    var utf8NoBom = new UTF8Encoding(false);
+                    _pipeReader = new StreamReader(_pipeServer, utf8NoBom);
+                    _pipeWriter = new StreamWriter(_pipeServer, utf8NoBom) { AutoFlush = true };
 
                     // Send ready message with HWND
                     var hwnd = _hostForm.Handle.ToInt64();

@@ -111,9 +111,16 @@ contextBridge.exposeInMainWorld('electron', {
    * @returns {function} Cleanup function to remove listener
    */
   onViewerMessage: (callback) => {
-    const listener = (event, data) => callback(data);
+    console.log('[Preload] Setting up viewer message listener');
+    const listener = (event, data) => {
+      console.log('[Preload] Received viewer message:', data?.type);
+      callback(data);
+    };
     ipcRenderer.on('viewer:message', listener);
-    return () => ipcRenderer.removeListener('viewer:message', listener);
+    return () => {
+      console.log('[Preload] Removing viewer message listener');
+      ipcRenderer.removeListener('viewer:message', listener);
+    };
   }
 });
 
