@@ -108,6 +108,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [pendingMainCspPreview, setPendingMainCspPreview] = useState(null) // Preview URL
   const [hdResolution, setHdResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
   const [hdCspInfo, setHdCspInfo] = useState(null) // { exists: bool, resolution: '4x', size: '1024x1365' }
+  const [compareSliderPosition, setCompareSliderPosition] = useState(50) // 0-100% for before/after slider
 
   // Drag and drop state
   const [draggedItem, setDraggedItem] = useState(null) // { index, id }
@@ -759,6 +760,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setPendingMainCsp(null)
     setPendingMainCspPreview(null)
     setHdResolution('4x')
+    setCompareSliderPosition(50) // Reset slider to middle
     if (skinData.has_hd_csp) {
       setHdCspInfo({
         exists: true,
@@ -777,6 +779,31 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setAlternativeCsps([])
     setPendingMainCsp(null)
     setPendingMainCspPreview(null)
+    setCompareSliderPosition(50) // Reset slider position
+  }
+
+  const handleCompareSliderStart = (e) => {
+    e.preventDefault()
+    const handleMove = (moveEvent) => {
+      const container = e.target.closest('.csp-manager-main-container')
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const x = (moveEvent.clientX || moveEvent.touches?.[0]?.clientX) - rect.left
+      const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+      setCompareSliderPosition(percentage)
+    }
+
+    const handleEnd = () => {
+      document.removeEventListener('mousemove', handleMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleMove)
+      document.removeEventListener('touchend', handleEnd)
+    }
+
+    document.addEventListener('mousemove', handleMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleMove)
+    document.addEventListener('touchend', handleEnd)
   }
 
   const handleCspManagerMainChange = (e) => {
@@ -2239,7 +2266,60 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
                 <div className="csp-manager-main-container">
                   {pendingMainCspPreview ? (
                     <img src={pendingMainCspPreview} alt="New CSP" className="csp-manager-main-image" />
+                  ) : hdCspInfo?.exists && cspManagerSkin.has_csp ? (
+                    // Before/After Comparison Mode
+                    <div className="csp-manager-compare-wrapper">
+                      {/* Left side: Normal CSP with clip-path */}
+                      <div
+                        className="csp-manager-compare-before-container"
+                        style={{ clipPath: `inset(0 0 0 ${compareSliderPosition}%)` }}
+                      >
+                        <img
+                          src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
+                          alt="Normal CSP"
+                          className="csp-manager-main-image csp-manager-compare-before"
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      </div>
+
+                      {/* Right side: HD CSP with clip-path */}
+                      <div
+                        className="csp-manager-compare-after-container"
+                        style={{ clipPath: `inset(0 ${100 - compareSliderPosition}% 0 0)` }}
+                      >
+                        <img
+                          src={`${API_URL.replace('/api/mex', '')}/storage/${cspManagerSkin.character}/${cspManagerSkin.id}_csp_hd.png?t=${lastImageUpdate}`}
+                          alt="HD CSP"
+                          className="csp-manager-main-image csp-manager-compare-after"
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      </div>
+
+                      {/* Slider handle */}
+                      <div
+                        className="csp-manager-compare-slider"
+                        style={{ left: `${compareSliderPosition}%` }}
+                        onMouseDown={(e) => handleCompareSliderStart(e)}
+                        onTouchStart={(e) => handleCompareSliderStart(e)}
+                      >
+                        <div className="csp-manager-compare-handle">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Labels */}
+                      <div className="csp-manager-compare-label csp-manager-compare-label-left">
+                        Normal
+                      </div>
+                      <div className="csp-manager-compare-label csp-manager-compare-label-right">
+                        HD {hdCspInfo.resolution || hdCspInfo.size}
+                      </div>
+                    </div>
                   ) : cspManagerSkin.has_csp ? (
+                    // Normal single-image mode
                     <img
                       src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
                       alt="Current CSP"
