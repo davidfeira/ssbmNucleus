@@ -8,6 +8,8 @@ import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
 import EditModal from './storage/EditModal'
 import CspManagerModal from './storage/CspManagerModal'
+import FolderCard from './storage/FolderCard'
+import SkinCard from './storage/SkinCard'
 import ContextMenu from './storage/ContextMenu'
 import XdeltaImportModal from './storage/XdeltaImportModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
@@ -1987,75 +1989,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
 
     // Render a folder card
-    const renderFolderCard = (folder, isExpanded, displayIdx, arrayIdx) => {
-      const isEditing = editingFolderId === folder.id
-      const folderSkinCount = countSkinsInFolder(folder.id, allSkins)
-      const isDragging = draggedItem && draggedItem.id === folder.id
-
-      return (
-        <div
-          key={folder.id}
-          className={`folder-card ${isExpanded ? 'expanded' : ''} ${isDragging ? 'dragging' : ''}`}
-          draggable={!reordering && !isEditing}
-          onDragStart={(e) => handleDragStart(e, arrayIdx, allSkins)}
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, displayIdx, displayList)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleItemDrop(e, displayIdx)}
-          onDragEnd={handleDragEnd}
-          onClick={() => !isEditing && !justDraggedRef.current && toggleFolder(folder.id)}
-        >
-          <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
-            {isExpanded ? (
-              <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.17l2 2H20v10z"/>
-            ) : (
-              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-            )}
-          </svg>
-          <div className="folder-header">
-            {isEditing ? (
-              <input
-                className="folder-name-input"
-                value={editingFolderName}
-                onChange={(e) => setEditingFolderName(e.target.value)}
-                onBlur={() => saveFolderName(folder.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveFolderName(folder.id)
-                  if (e.key === 'Escape') setEditingFolderId(null)
-                }}
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <span className="folder-name">{folder.name}</span>
-            )}
-            <span className="folder-count">{folderSkinCount} skin{folderSkinCount !== 1 ? 's' : ''}</span>
-            <span className="folder-chevron">▼</span>
-          </div>
-          <div className="folder-actions">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                startEditingFolder(folder)
-              }}
-              title="Rename folder"
-            >
-              ✎
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleDeleteFolder(folder.id)
-              }}
-              title="Delete folder"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )
-    }
-
     // Custom drop handler that converts display index to allSkins index
     const handleItemDrop = async (e, displayIdx) => {
       e.preventDefault()
@@ -2106,81 +2039,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
 
     // Render a skin card
-    const renderSkinCard = (skin, folderId, displayIdx, arrayIdx) => {
-      const isDragging = draggedItem && skin.id === draggedItem.id
-
-      return (
-        <div
-          key={skin.id}
-          className={`skin-card ${isDragging ? 'dragging' : ''} ${folderId ? 'in-folder' : ''}`}
-          draggable={!reordering}
-          onDragStart={(e) => handleDragStart(e, arrayIdx, allSkins)}
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => handleDragEnter(e, displayIdx, displayList)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleItemDrop(e, displayIdx)}
-          onDragEnd={handleDragEnd}
-          onContextMenu={(e) => handleSkinContextMenu(e, skin, arrayIdx)}
-          style={{ opacity: isDragging ? 0.5 : 1 }}
-        >
-          <div className="skin-image-container">
-            {skin.has_csp ? (
-              <img
-                src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png?t=${lastImageUpdate}`}
-                alt={`${selectedCharacter} - ${skin.color}`}
-                className="skin-csp"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                  e.target.nextSibling.style.display = 'flex'
-                }}
-              />
-            ) : null}
-            <div className="skin-placeholder" style={{ display: skin.has_csp ? 'none' : 'flex' }}>
-              <span className="skin-initial">{skin.color[0]}</span>
-            </div>
-            {skin.has_stock && (
-              <div className="stock-overlay">
-                <img
-                  src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png?t=${lastImageUpdate}`}
-                  alt={`${selectedCharacter} stock`}
-                  className="stock-overlay-img"
-                />
-              </div>
-            )}
-            <button
-              className="btn-edit"
-              onClick={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                handleEditClick('costume', {
-                  id: skin.id,
-                  character: selectedCharacter,
-                  color: skin.color,
-                  has_csp: skin.has_csp,
-                  has_stock: skin.has_stock,
-                  cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`,
-                  stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
-                  slippi_safe: skin.slippi_safe,
-                  slippi_tested: skin.slippi_tested,
-                  slippi_manual_override: skin.slippi_manual_override,
-                  has_hd_csp: skin.has_hd_csp,
-                  hd_csp_resolution: skin.hd_csp_resolution,
-                  hd_csp_size: skin.hd_csp_size
-                })
-              }}
-              title="Edit costume"
-            >
-              ✎
-            </button>
-          </div>
-
-          <div className="skin-info">
-            <div className="skin-color">{skin.color}</div>
-          </div>
-        </div>
-      )
-    }
-
     return (
       <div className="storage-viewer">
         <div className="character-detail">
@@ -2211,9 +2069,56 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             <div className="skins-grid">
               {displayList.map((item, idx) => {
                 if (item.type === 'folder') {
-                  return renderFolderCard(item.folder, item.isExpanded, idx, item.arrayIndex)
+                  return (
+                    <FolderCard
+                      key={item.folder.id}
+                      folder={item.folder}
+                      isExpanded={item.isExpanded}
+                      displayIdx={idx}
+                      arrayIdx={item.arrayIndex}
+                      isDragging={draggedItem && draggedItem.id === item.folder.id}
+                      isEditing={editingFolderId === item.folder.id}
+                      editingFolderName={editingFolderName}
+                      folderSkinCount={countSkinsInFolder(item.folder.id, allSkins)}
+                      reordering={reordering}
+                      onToggle={toggleFolder}
+                      onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
+                      onDragOver={handleDragOver}
+                      onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleItemDrop}
+                      onDragEnd={handleDragEnd}
+                      onEditingFolderNameChange={setEditingFolderName}
+                      onSaveFolderName={saveFolderName}
+                      onCancelEdit={() => setEditingFolderId(null)}
+                      onStartEditing={startEditingFolder}
+                      onDelete={handleDeleteFolder}
+                      justDraggedRef={justDraggedRef}
+                    />
+                  )
                 } else {
-                  return renderSkinCard(item.skin, item.folderId, idx, item.arrayIndex)
+                  return (
+                    <SkinCard
+                      key={item.skin.id}
+                      skin={item.skin}
+                      selectedCharacter={selectedCharacter}
+                      folderId={item.folderId}
+                      displayIdx={idx}
+                      arrayIdx={item.arrayIndex}
+                      isDragging={draggedItem && item.skin.id === draggedItem.id}
+                      reordering={reordering}
+                      lastImageUpdate={lastImageUpdate}
+                      onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
+                      onDragOver={handleDragOver}
+                      onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleItemDrop}
+                      onDragEnd={handleDragEnd}
+                      onContextMenu={handleSkinContextMenu}
+                      onEditClick={handleEditClick}
+                      API_URL={API_URL}
+                    />
+                  )
                 }
               })}
               <div
