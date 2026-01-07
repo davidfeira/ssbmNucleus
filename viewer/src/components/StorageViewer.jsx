@@ -7,6 +7,7 @@ import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
 import EditModal from './storage/EditModal'
+import CspManagerModal from './storage/CspManagerModal'
 import ContextMenu from './storage/ContextMenu'
 import XdeltaImportModal from './storage/XdeltaImportModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
@@ -1915,6 +1916,27 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             onClose={() => setShow3DViewer(false)}
           />
         )}
+        <CspManagerModal
+          show={showCspManager}
+          cspManagerSkin={cspManagerSkin}
+          pendingMainCspPreview={pendingMainCspPreview}
+          hdCspInfo={hdCspInfo}
+          compareSliderPosition={compareSliderPosition}
+          lastImageUpdate={lastImageUpdate}
+          alternativeCsps={alternativeCsps}
+          hdResolution={hdResolution}
+          capturingHdCsp={capturingHdCsp}
+          onClose={closeCspManager}
+          onCspManagerMainChange={handleCspManagerMainChange}
+          onCompareSliderStart={handleCompareSliderStart}
+          onSwapCsp={handleSwapCsp}
+          onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
+          onAddAlternativeCsp={handleAddAlternativeCsp}
+          onHdResolutionChange={setHdResolution}
+          onCaptureHdCsp={handleCaptureHdCsp}
+          onSave={handleSaveCspManager}
+          API_URL={API_URL}
+        />
         <SlippiSafetyDialog
           show={showSlippiDialog}
           data={slippiDialogData}
@@ -2243,6 +2265,27 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             onClose={() => setShow3DViewer(false)}
           />
         )}
+        <CspManagerModal
+          show={showCspManager}
+          cspManagerSkin={cspManagerSkin}
+          pendingMainCspPreview={pendingMainCspPreview}
+          hdCspInfo={hdCspInfo}
+          compareSliderPosition={compareSliderPosition}
+          lastImageUpdate={lastImageUpdate}
+          alternativeCsps={alternativeCsps}
+          hdResolution={hdResolution}
+          capturingHdCsp={capturingHdCsp}
+          onClose={closeCspManager}
+          onCspManagerMainChange={handleCspManagerMainChange}
+          onCompareSliderStart={handleCompareSliderStart}
+          onSwapCsp={handleSwapCsp}
+          onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
+          onAddAlternativeCsp={handleAddAlternativeCsp}
+          onHdResolutionChange={setHdResolution}
+          onCaptureHdCsp={handleCaptureHdCsp}
+          onSave={handleSaveCspManager}
+          API_URL={API_URL}
+        />
         <SlippiSafetyDialog
           show={showSlippiDialog}
           data={slippiDialogData}
