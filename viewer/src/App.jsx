@@ -3,6 +3,7 @@ import StorageViewer from './components/StorageViewer'
 import MexPanel from './components/MexPanel'
 import Settings from './components/Settings'
 import FirstRunSetup from './components/FirstRunSetup'
+import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
 import './App.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -184,55 +185,6 @@ function App() {
     }
   };
 
-  // Render slippi safety dialog for nucleus imports
-  const renderSlippiDialog = () => {
-    return (
-      <>
-        {showSlippiDialog && slippiDialogData && (
-          <div className="edit-modal-overlay" onClick={() => handleSlippiChoice('cancel')}>
-            <div className="edit-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-              <h2>Slippi Safety Warning</h2>
-
-              <div style={{ padding: '1rem 0' }}>
-                <p style={{ marginBottom: '1rem' }}>
-                  This costume is not Slippi safe. Choose an action:
-                </p>
-
-                {slippiDialogData.unsafe_costumes && (
-                  <div style={{
-                    background: '#2a2a2a',
-                    border: '1px solid #444',
-                    borderRadius: '4px',
-                    padding: '0.75rem',
-                    marginBottom: '1rem'
-                  }}>
-                    <strong>Affected costumes:</strong>
-                    <ul style={{ marginTop: '0.5rem', marginBottom: 0 }}>
-                      {slippiDialogData.unsafe_costumes.map((costume, idx) => (
-                        <li key={idx}>{costume.character} - {costume.color}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <button className="btn-save" onClick={() => handleSlippiChoice('fix')} style={{ width: '100%' }}>
-                  Fix & Import
-                </button>
-                <button className="btn-secondary" onClick={() => handleSlippiChoice('import_as_is')} style={{ width: '100%' }}>
-                  Import As-Is
-                </button>
-                <button className="btn-cancel" onClick={() => handleSlippiChoice('cancel')} style={{ width: '100%' }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    );
-  };
 
   // Handle setup completion
   const handleSetupComplete = () => {
@@ -317,7 +269,11 @@ function App() {
       </main>
 
       {/* Slippi safety dialog for nucleus:// imports */}
-      {renderSlippiDialog()}
+      <SlippiSafetyDialog
+        show={showSlippiDialog}
+        data={slippiDialogData}
+        onChoice={handleSlippiChoice}
+      />
     </div>
   )
 }

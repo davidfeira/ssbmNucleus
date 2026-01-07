@@ -5,6 +5,7 @@ import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
+import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -2463,69 +2464,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     </>
   )
 
-  const renderSlippiDialog = () => {
-    const isRetest = retestingItem !== null
-    const handleChoice = isRetest ? handleRetestFixChoice : handleSlippiChoice
-
-    return (
-      <>
-        {showSlippiDialog && slippiDialogData && (
-          <div className="edit-modal-overlay" onClick={() => handleChoice('cancel')}>
-            <div className="edit-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-              <h2>Slippi Safety Warning</h2>
-
-              <div style={{ padding: '1rem 0' }}>
-                <p style={{ marginBottom: '1rem' }}>
-                  This costume is not Slippi safe. Choose an action:
-                </p>
-
-                {slippiDialogData.unsafe_costumes && (
-                  <div style={{
-                    backgroundColor: '#fff3cd',
-                    border: '1px solid #ffc107',
-                    borderRadius: '4px',
-                    padding: '0.75rem',
-                    marginBottom: '1rem'
-                  }}>
-                    <strong>Affected costumes:</strong>
-                    <ul style={{ marginTop: '0.5rem', marginBottom: 0 }}>
-                      {slippiDialogData.unsafe_costumes.map((costume, idx) => (
-                        <li key={idx}>{costume.character} - {costume.color}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <button
-                  className="btn-save"
-                  onClick={() => handleChoice('fix')}
-                  style={{ width: '100%' }}
-                >
-                  {isRetest ? 'Fix' : 'Fix & Import'}
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => handleChoice('import_as_is')}
-                  style={{ width: '100%' }}
-                >
-                  {isRetest ? 'Keep As-Is' : 'Import As-Is'}
-                </button>
-                <button
-                  className="btn-cancel"
-                  onClick={() => handleChoice('cancel')}
-                  style={{ width: '100%' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
 
   // Context menu component
   const renderContextMenu = () => {
@@ -2634,7 +2572,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           )}
         </div>
         {renderEditModal()}
-        {renderSlippiDialog()}
+        <SlippiSafetyDialog
+          show={showSlippiDialog}
+          data={slippiDialogData}
+          onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
+          isRetest={retestingItem !== null}
+        />
         {renderContextMenu()}
       </div>
     )
@@ -2917,7 +2860,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           )}
         </div>
         {renderEditModal()}
-        {renderSlippiDialog()}
+        <SlippiSafetyDialog
+          show={showSlippiDialog}
+          data={slippiDialogData}
+          onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
+          isRetest={retestingItem !== null}
+        />
         {renderContextMenu()}
         <SkinCreator
           isOpen={showSkinCreator}
@@ -3465,7 +3413,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       )}
 
       {renderEditModal()}
-      {renderSlippiDialog()}
+      <SlippiSafetyDialog
+        show={showSlippiDialog}
+        data={slippiDialogData}
+        onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
+        isRetest={retestingItem !== null}
+      />
 
       {/* XDelta Build Modal */}
       {showXdeltaBuildModal && (
