@@ -759,7 +759,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setPendingMainCsp(null)
     setPendingMainCspPreview(null)
     setHdResolution('4x')
-    setHdCspInfo(null) // TODO: Check if HD CSP exists and get its info
+    if (skinData.has_hd_csp) {
+      setHdCspInfo({
+        exists: true,
+        resolution: skinData.hd_csp_resolution,
+        size: skinData.hd_csp_size
+      })
+    } else {
+      setHdCspInfo(null)
+    }
     setShowCspManager(true)
   }
 
@@ -2762,7 +2770,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
                   stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
                   slippi_safe: skin.slippi_safe,
                   slippi_tested: skin.slippi_tested,
-                  slippi_manual_override: skin.slippi_manual_override
+                  slippi_manual_override: skin.slippi_manual_override,
+                  has_hd_csp: skin.has_hd_csp,
+                  hd_csp_resolution: skin.hd_csp_resolution,
+                  hd_csp_size: skin.hd_csp_size
                 })
               }}
               title="Edit costume"
