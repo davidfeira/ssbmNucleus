@@ -1785,688 +1785,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setSkinCreatorInitialCostume(null)
   }
 
-  // Edit Modal Component (reusable)
-  const renderEditModal = () => (
-    <>
-      {showEditModal && editingItem && (
-        <div className="edit-modal-fullscreen-overlay" onClick={handleCancel}>
-          <div className="edit-modal-fullscreen" onClick={(e) => e.stopPropagation()}>
-            {/* Close Button */}
-            <button
-              className="edit-modal-close"
-              onClick={handleCancel}
-              title="Close"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-
-            {/* Modal Header */}
-            <div className="edit-modal-header">
-              <h2>Edit {editingItem.type === 'costume' ? 'Costume' : 'Stage Variant'}</h2>
-            </div>
-
-            {/* Main Content - Horizontal Layout */}
-            <div className="edit-modal-body">
-              {editingItem.type === 'costume' ? (
-                <>
-                  {/* LEFT: CSP Hero Image */}
-                  <div className="edit-modal-csp-section">
-                    <div className="edit-modal-csp-container">
-                      {cspPreview ? (
-                        <img
-                          src={cspPreview}
-                          alt="New CSP preview"
-                          className="edit-modal-csp-image"
-                        />
-                      ) : editingItem.data.has_csp ? (
-                        <img
-                          src={`${editingItem.data.cspUrl}?t=${lastImageUpdate}`}
-                          alt="CSP"
-                          className="edit-modal-csp-image"
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      ) : (
-                        <div className="edit-modal-csp-placeholder">
-                          <span>{editingItem.data.color[0]}</span>
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleCspChange}
-                        style={{ display: 'none' }}
-                        id="csp-file-input"
-                      />
-                      <button
-                        className="edit-modal-image-edit-btn"
-                        onClick={() => openCspManager(editingItem.data)}
-                        title="Manage CSPs"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        <span>Manage CSPs</span>
-                      </button>
-                    </div>
-                    <div className="edit-modal-csp-label">Character Select Portrait</div>
-                  </div>
-
-                  {/* MIDDLE: Stock Icon + 3D Viewer */}
-                  <div className="edit-modal-stock-section">
-                    <div className="edit-modal-stock-container">
-                      {stockPreview ? (
-                        <img
-                          src={stockPreview}
-                          alt="New stock preview"
-                          className="edit-modal-stock-image"
-                        />
-                      ) : editingItem.data.has_stock ? (
-                        <img
-                          src={`${editingItem.data.stockUrl}?t=${lastImageUpdate}`}
-                          alt="Stock"
-                          className="edit-modal-stock-image"
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      ) : (
-                        <div className="edit-modal-stock-placeholder">
-                          <span>{editingItem.data.color[0]}</span>
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleStockChange}
-                        style={{ display: 'none' }}
-                        id="stock-file-input"
-                      />
-                      <button
-                        className="edit-modal-image-edit-btn edit-modal-image-edit-btn--small"
-                        onClick={() => document.getElementById('stock-file-input').click()}
-                        title="Replace stock icon"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="edit-modal-stock-label">Stock Icon</div>
-
-                    {/* View 3D Button */}
-                    <button
-                      className="edit-modal-view3d-btn"
-                      onClick={() => setShow3DViewer(true)}
-                      disabled={saving || deleting || exporting}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                        <path d="M2 17l10 5 10-5"></path>
-                        <path d="M2 12l10 5 10-5"></path>
-                      </svg>
-                      <span>View 3D Model</span>
-                    </button>
-
-                    {/* Edit in Skin Creator Button */}
-                    <button
-                      className="edit-modal-skincreator-btn"
-                      onClick={() => startSkinCreatorFromVault(editingItem.data)}
-                      disabled={saving || deleting || exporting}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                      </svg>
-                      <span>Edit Textures</span>
-                    </button>
-                  </div>
-
-                  {/* RIGHT: Controls Panel */}
-                  <div className="edit-modal-controls-section">
-                    {/* Color Name */}
-                    <div className="edit-modal-field">
-                      <label>Color Name</label>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Enter name..."
-                        disabled={saving || deleting}
-                        autoFocus
-                      />
-                    </div>
-
-                    {/* Slippi Status Badge */}
-                    <div className="edit-modal-slippi-section">
-                      <div className={`edit-modal-slippi-badge ${editingItem.data.slippi_safe ? 'edit-modal-slippi-badge--safe' : 'edit-modal-slippi-badge--unsafe'}`}>
-                        <div className="edit-modal-slippi-indicator"></div>
-                        <span>{editingItem.data.slippi_safe ? 'Slippi Safe' : 'Not Slippi Safe'}</span>
-                        {editingItem.data.slippi_manual_override && (
-                          <span className="edit-modal-slippi-override">(Override)</span>
-                        )}
-                      </div>
-
-                      {/* Collapsible Advanced Controls */}
-                      <button
-                        className="edit-modal-slippi-toggle"
-                        onClick={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
-                      >
-                        <span>Advanced</span>
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          style={{ transform: slippiAdvancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}
-                        >
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </button>
-
-                      <div className={`edit-modal-slippi-advanced ${slippiAdvancedOpen ? 'edit-modal-slippi-advanced--open' : ''}`}>
-                        <div className="edit-modal-slippi-advanced-inner">
-                          {/* Character Info */}
-                          <div className="edit-modal-info-card">
-                            <div className="edit-modal-info-row">
-                              <span className="edit-modal-info-label">Character</span>
-                              <span className="edit-modal-info-value">{editingItem.data.character}</span>
-                            </div>
-                            <div className="edit-modal-info-row">
-                              <span className="edit-modal-info-label">Slot ID</span>
-                              <span className="edit-modal-info-value edit-modal-info-value--mono">{editingItem.data.id}</span>
-                            </div>
-                          </div>
-
-                          <button
-                            className="edit-modal-slippi-retest-btn"
-                            onClick={() => handleSlippiRetest(false)}
-                            disabled={saving || deleting}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="23 4 23 10 17 10"></polyline>
-                              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                            </svg>
-                            Retest Safety
-                          </button>
-
-                          <div className="edit-modal-slippi-override-select">
-                            <label>Manual Override</label>
-                            <select
-                              value={editingItem.data.slippi_safe ? 'safe' : 'unsafe'}
-                              onChange={(e) => {
-                                const newStatus = e.target.value === 'safe'
-                                if (newStatus !== editingItem.data.slippi_safe) {
-                                  handleSlippiOverride()
-                                }
-                              }}
-                              disabled={saving || deleting}
-                            >
-                              <option value="safe">Slippi Safe</option>
-                              <option value="unsafe">Not Slippi Safe</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                /* Stage Variant Layout - Simplified 2-column */
-                <>
-                  {/* LEFT: Stage Screenshot */}
-                  <div className="edit-modal-csp-section">
-                    <div className="edit-modal-csp-container">
-                      {screenshotPreview ? (
-                        <img
-                          src={screenshotPreview}
-                          alt="New screenshot preview"
-                          className="edit-modal-csp-image"
-                        />
-                      ) : editingItem.data.hasScreenshot ? (
-                        <img
-                          src={editingItem.data.screenshotUrl}
-                          alt="Preview"
-                          className="edit-modal-csp-image"
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      ) : (
-                        <div className="edit-modal-csp-placeholder">
-                          <span>{editingItem.data.name[0]}</span>
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleScreenshotChange}
-                        style={{ display: 'none' }}
-                        id="screenshot-file-input"
-                      />
-                      <button
-                        className="edit-modal-image-edit-btn"
-                        onClick={() => document.getElementById('screenshot-file-input').click()}
-                        title="Replace screenshot"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        <span>Edit Screenshot</span>
-                      </button>
-                    </div>
-                    <div className="edit-modal-csp-label">Stage Preview</div>
-                  </div>
-
-                  {/* RIGHT: Controls Panel for Stages */}
-                  <div className="edit-modal-controls-section edit-modal-controls-section--wide">
-                    {/* Variant Name */}
-                    <div className="edit-modal-field">
-                      <label>Variant Name</label>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Enter name..."
-                        disabled={saving || deleting}
-                        autoFocus
-                      />
-                    </div>
-
-                    {/* Slippi Status Badge for Stages */}
-                    <div className="edit-modal-slippi-section">
-                      <div className={`edit-modal-slippi-badge ${
-                        editSlippiSafe === null ? 'edit-modal-slippi-badge--unknown' :
-                        editSlippiSafe ? 'edit-modal-slippi-badge--safe' : 'edit-modal-slippi-badge--unsafe'
-                      }`}>
-                        <div className="edit-modal-slippi-indicator"></div>
-                        <span>
-                          {editSlippiSafe === null ? 'Unknown' : editSlippiSafe ? 'Slippi Safe' : 'Not Slippi Safe'}
-                        </span>
-                      </div>
-
-                      {/* Collapsible Advanced Controls */}
-                      <button
-                        className="edit-modal-slippi-toggle"
-                        onClick={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
-                      >
-                        <span>Advanced</span>
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          style={{ transform: slippiAdvancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}
-                        >
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </button>
-
-                      <div className={`edit-modal-slippi-advanced ${slippiAdvancedOpen ? 'edit-modal-slippi-advanced--open' : ''}`}>
-                        <div className="edit-modal-slippi-advanced-inner">
-                          {/* Stage Info */}
-                          <div className="edit-modal-info-card">
-                            <div className="edit-modal-info-row">
-                              <span className="edit-modal-info-label">Stage</span>
-                              <span className="edit-modal-info-value">{editingItem.data.stageName}</span>
-                            </div>
-                            <div className="edit-modal-info-row">
-                              <span className="edit-modal-info-label">Slot ID</span>
-                              <span className="edit-modal-info-value edit-modal-info-value--mono">{editingItem.data.id}</span>
-                            </div>
-                          </div>
-
-                          <p className="edit-modal-slippi-note">Stages cannot be auto-tested. Set manually.</p>
-                          <div className="edit-modal-slippi-override-select">
-                            <label>Safety Status</label>
-                            <select
-                              value={editSlippiSafe === null ? 'unknown' : (editSlippiSafe ? 'safe' : 'unsafe')}
-                              onChange={(e) => {
-                                const newValue = e.target.value
-                                if (newValue === 'unknown') {
-                                  setEditSlippiSafe(null)
-                                } else {
-                                  setEditSlippiSafe(newValue === 'safe')
-                                }
-                              }}
-                              disabled={saving || deleting}
-                            >
-                              <option value="unknown">Unknown</option>
-                              <option value="safe">Slippi Safe</option>
-                              <option value="unsafe">Not Slippi Safe</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Bottom Action Bar */}
-            <div className="edit-modal-actions">
-              <button
-                className="edit-modal-action-btn edit-modal-action-btn--save"
-                onClick={handleSave}
-                disabled={saving || deleting || exporting}
-              >
-                {saving ? (
-                  <>
-                    <span className="edit-modal-action-spinner"></span>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                      <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                      <polyline points="7 3 7 8 15 8"></polyline>
-                    </svg>
-                    Save
-                  </>
-                )}
-              </button>
-              <button
-                className="edit-modal-action-btn edit-modal-action-btn--export"
-                onClick={handleExport}
-                disabled={saving || deleting || exporting}
-              >
-                {exporting ? (
-                  <>
-                    <span className="edit-modal-action-spinner"></span>
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="17 8 12 3 7 8"></polyline>
-                      <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    Export
-                  </>
-                )}
-              </button>
-              <button
-                className="edit-modal-action-btn edit-modal-action-btn--delete"
-                onClick={handleDelete}
-                disabled={saving || deleting || exporting}
-              >
-                {deleting ? (
-                  <>
-                    <span className="edit-modal-action-spinner"></span>
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Delete
-                  </>
-                )}
-              </button>
-              <button
-                className="edit-modal-action-btn edit-modal-action-btn--cancel"
-                onClick={handleCancel}
-                disabled={saving || deleting || exporting}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3D Model Viewer */}
-      {show3DViewer && editingItem && editingItem.type === 'costume' && (
-        <EmbeddedModelViewer
-          character={editingItem.data.character}
-          skinId={editingItem.data.id}
-          onClose={() => setShow3DViewer(false)}
-        />
-      )}
-
-      {/* CSP Manager Modal */}
-      {showCspManager && cspManagerSkin && (
-        <div className="csp-manager-overlay" onClick={closeCspManager}>
-          <div className="csp-manager-modal" onClick={(e) => e.stopPropagation()}>
-            {/* Close Button */}
-            <button className="csp-manager-close" onClick={closeCspManager} title="Close">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-
-            {/* Header */}
-            <div className="csp-manager-header">
-              <h2>CSP Manager</h2>
-              <span className="csp-manager-skin-name">{cspManagerSkin.color}</span>
-            </div>
-
-            {/* Body - Two Column Layout */}
-            <div className="csp-manager-body">
-              {/* Left: Main CSP */}
-              <div className="csp-manager-main">
-                <div className="csp-manager-main-label">
-                  Active Portrait
-                  {hdCspInfo?.exists && (
-                    <span className="csp-manager-main-hd-badge">
-                      HD {hdCspInfo.resolution || hdCspInfo.size}
-                    </span>
-                  )}
-                </div>
-                <div className="csp-manager-main-container">
-                  {pendingMainCspPreview ? (
-                    <img src={pendingMainCspPreview} alt="New CSP" className="csp-manager-main-image" />
-                  ) : hdCspInfo?.exists && cspManagerSkin.has_csp ? (
-                    // Before/After Comparison Mode
-                    <div className="csp-manager-compare-wrapper">
-                      {/* Left side: Normal CSP with clip-path */}
-                      <div
-                        className="csp-manager-compare-before-container"
-                        style={{ clipPath: `inset(0 0 0 ${compareSliderPosition}%)` }}
-                      >
-                        <img
-                          src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
-                          alt="Normal CSP"
-                          className="csp-manager-main-image csp-manager-compare-before"
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      </div>
-
-                      {/* Right side: HD CSP with clip-path */}
-                      <div
-                        className="csp-manager-compare-after-container"
-                        style={{ clipPath: `inset(0 ${100 - compareSliderPosition}% 0 0)` }}
-                      >
-                        <img
-                          src={`${API_URL.replace('/api/mex', '')}/storage/${cspManagerSkin.character}/${cspManagerSkin.id}_csp_hd.png?t=${lastImageUpdate}`}
-                          alt="HD CSP"
-                          className="csp-manager-main-image csp-manager-compare-after"
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      </div>
-
-                      {/* Slider handle */}
-                      <div
-                        className="csp-manager-compare-slider"
-                        style={{ left: `${compareSliderPosition}%` }}
-                        onMouseDown={(e) => handleCompareSliderStart(e)}
-                        onTouchStart={(e) => handleCompareSliderStart(e)}
-                      >
-                        <div className="csp-manager-compare-handle">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="15 18 9 12 15 6"></polyline>
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                          </svg>
-                        </div>
-                      </div>
-
-                      {/* Labels */}
-                      <div className="csp-manager-compare-label csp-manager-compare-label-left">
-                        Normal
-                      </div>
-                      <div className="csp-manager-compare-label csp-manager-compare-label-right">
-                        HD {hdCspInfo.resolution || hdCspInfo.size}
-                      </div>
-                    </div>
-                  ) : cspManagerSkin.has_csp ? (
-                    // Normal single-image mode
-                    <img
-                      src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
-                      alt="Current CSP"
-                      className="csp-manager-main-image"
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
-                  ) : (
-                    <div className="csp-manager-main-placeholder">
-                      <span>{cspManagerSkin.color[0]}</span>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCspManagerMainChange}
-                    style={{ display: 'none' }}
-                    id="csp-manager-main-input"
-                  />
-                  <button
-                    className="csp-manager-main-replace-btn"
-                    onClick={() => document.getElementById('csp-manager-main-input').click()}
-                    title="Replace main CSP"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="17 8 12 3 7 8"></polyline>
-                      <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    Replace
-                  </button>
-                </div>
-              </div>
-
-              {/* Right: Alternatives Grid */}
-              <div className="csp-manager-alternatives">
-                <div className="csp-manager-alternatives-header">
-                  <span>Alternative CSPs</span>
-                  <span className="csp-manager-alternatives-count">({alternativeCsps.length})</span>
-                </div>
-                <div className="csp-manager-alternatives-grid">
-                  {alternativeCsps.map((alt, index) => (
-                    <div key={alt.id} className="csp-manager-alt-card" onClick={() => handleSwapCsp(index)}>
-                      <img src={alt.url} alt={`Alternative ${index + 1}`} className="csp-manager-alt-image" />
-                      <div className="csp-manager-alt-overlay">
-                        <span>Click to swap</span>
-                      </div>
-                      <button
-                        className="csp-manager-alt-remove"
-                        onClick={(e) => { e.stopPropagation(); handleRemoveAlternativeCsp(index); }}
-                        title="Remove"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                  {/* Add New CSP Card */}
-                  <div className="csp-manager-add-card" onClick={() => document.getElementById('csp-manager-alt-input').click()}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    <span>Add CSP</span>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAddAlternativeCsp}
-                    style={{ display: 'none' }}
-                    id="csp-manager-alt-input"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* HD Capture Section */}
-            <div className="csp-manager-hd-section">
-              <div className="csp-manager-hd-label">
-                <span>HD Capture</span>
-                {hdCspInfo?.exists && (
-                  <span className="csp-manager-hd-badge">
-                    {hdCspInfo.size || hdCspInfo.resolution}
-                  </span>
-                )}
-              </div>
-              <div className="csp-manager-hd-controls">
-                <div className="csp-manager-hd-options">
-                  {['2x', '4x', '8x', '16x'].map(res => (
-                    <button
-                      key={res}
-                      className={`csp-manager-hd-option ${hdResolution === res ? 'csp-manager-hd-option--active' : ''}`}
-                      onClick={() => setHdResolution(res)}
-                    >
-                      {res}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  className="csp-manager-hd-capture-btn"
-                  onClick={handleCaptureHdCsp}
-                  disabled={capturingHdCsp}
-                  title={`Capture CSP at ${hdResolution} resolution`}
-                >
-                  {capturingHdCsp ? (
-                    <>
-                      <span className="csp-manager-spinner"></span>
-                      Capturing...
-                    </>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                        <circle cx="12" cy="13" r="4"></circle>
-                      </svg>
-                      Capture HD CSP
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="csp-manager-actions">
-              <button className="csp-manager-btn csp-manager-btn--cancel" onClick={closeCspManager}>
-                Cancel
-              </button>
-              <button className="csp-manager-btn csp-manager-btn--save" onClick={handleSaveCspManager}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                  <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
 
 
 
@@ -2560,7 +1878,43 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             </div>
           )}
         </div>
-        {renderEditModal()}
+        <EditModal
+          show={showEditModal}
+          editingItem={editingItem}
+          editName={editName}
+          onNameChange={setEditName}
+          saving={saving}
+          deleting={deleting}
+          exporting={exporting}
+          cspPreview={cspPreview}
+          stockPreview={stockPreview}
+          screenshotPreview={screenshotPreview}
+          lastImageUpdate={lastImageUpdate}
+          editSlippiSafe={editSlippiSafe}
+          onSlippiSafeChange={setEditSlippiSafe}
+          slippiAdvancedOpen={slippiAdvancedOpen}
+          onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          onDelete={handleDelete}
+          onExport={handleExport}
+          onCspChange={handleCspChange}
+          onStockChange={handleStockChange}
+          onScreenshotChange={handleScreenshotChange}
+          onSlippiRetest={handleSlippiRetest}
+          onSlippiOverride={handleSlippiOverride}
+          onOpenCspManager={openCspManager}
+          onStartSkinCreator={startSkinCreatorFromVault}
+          onView3D={() => setShow3DViewer(true)}
+          API_URL={API_URL}
+        />
+        {show3DViewer && editingItem && editingItem.type === 'costume' && (
+          <EmbeddedModelViewer
+            character={editingItem.data.character}
+            skinId={editingItem.data.id}
+            onClose={() => setShow3DViewer(false)}
+          />
+        )}
         <SlippiSafetyDialog
           show={showSlippiDialog}
           data={slippiDialogData}
@@ -2852,7 +2206,43 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             </div>
           )}
         </div>
-        {renderEditModal()}
+        <EditModal
+          show={showEditModal}
+          editingItem={editingItem}
+          editName={editName}
+          onNameChange={setEditName}
+          saving={saving}
+          deleting={deleting}
+          exporting={exporting}
+          cspPreview={cspPreview}
+          stockPreview={stockPreview}
+          screenshotPreview={screenshotPreview}
+          lastImageUpdate={lastImageUpdate}
+          editSlippiSafe={editSlippiSafe}
+          onSlippiSafeChange={setEditSlippiSafe}
+          slippiAdvancedOpen={slippiAdvancedOpen}
+          onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          onDelete={handleDelete}
+          onExport={handleExport}
+          onCspChange={handleCspChange}
+          onStockChange={handleStockChange}
+          onScreenshotChange={handleScreenshotChange}
+          onSlippiRetest={handleSlippiRetest}
+          onSlippiOverride={handleSlippiOverride}
+          onOpenCspManager={openCspManager}
+          onStartSkinCreator={startSkinCreatorFromVault}
+          onView3D={() => setShow3DViewer(true)}
+          API_URL={API_URL}
+        />
+        {show3DViewer && editingItem && editingItem.type === 'costume' && (
+          <EmbeddedModelViewer
+            character={editingItem.data.character}
+            skinId={editingItem.data.id}
+            onClose={() => setShow3DViewer(false)}
+          />
+        )}
         <SlippiSafetyDialog
           show={showSlippiDialog}
           data={slippiDialogData}
@@ -3285,7 +2675,43 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         </div>
       )}
 
-      {renderEditModal()}
+      <EditModal
+        show={showEditModal}
+        editingItem={editingItem}
+        editName={editName}
+        onNameChange={setEditName}
+        saving={saving}
+        deleting={deleting}
+        exporting={exporting}
+        cspPreview={cspPreview}
+        stockPreview={stockPreview}
+        screenshotPreview={screenshotPreview}
+        lastImageUpdate={lastImageUpdate}
+        editSlippiSafe={editSlippiSafe}
+        onSlippiSafeChange={setEditSlippiSafe}
+        slippiAdvancedOpen={slippiAdvancedOpen}
+        onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
+        onSave={handleSave}
+        onCancel={handleCancel}
+        onDelete={handleDelete}
+        onExport={handleExport}
+        onCspChange={handleCspChange}
+        onStockChange={handleStockChange}
+        onScreenshotChange={handleScreenshotChange}
+        onSlippiRetest={handleSlippiRetest}
+        onSlippiOverride={handleSlippiOverride}
+        onOpenCspManager={openCspManager}
+        onStartSkinCreator={startSkinCreatorFromVault}
+        onView3D={() => setShow3DViewer(true)}
+        API_URL={API_URL}
+      />
+      {show3DViewer && editingItem && editingItem.type === 'costume' && (
+        <EmbeddedModelViewer
+          character={editingItem.data.character}
+          skinId={editingItem.data.id}
+          onClose={() => setShow3DViewer(false)}
+        />
+      )}
       <SlippiSafetyDialog
         show={showSlippiDialog}
         data={slippiDialogData}
