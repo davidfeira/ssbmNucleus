@@ -6,6 +6,7 @@ import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
+import EditModal from './storage/EditModal'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
