@@ -7,6 +7,9 @@ import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
 import EditModal from './storage/EditModal'
+import ContextMenu from './storage/ContextMenu'
+import XdeltaImportModal from './storage/XdeltaImportModal'
+import XdeltaEditModal from './storage/XdeltaEditModal'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -2466,21 +2469,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   )
 
 
-  // Context menu component
-  const renderContextMenu = () => {
-    if (!contextMenu) return null
-
-    return (
-      <div
-        className="context-menu"
-        style={{ top: contextMenu.y, left: contextMenu.x }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button onClick={handleMoveToTop}>Move to Top</button>
-        <button onClick={handleMoveToBottom}>Move to Bottom</button>
-      </div>
-    )
-  }
 
   // If a stage is selected, show its variants
   if (selectedStage) {
@@ -2579,7 +2567,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
           isRetest={retestingItem !== null}
         />
-        {renderContextMenu()}
+        <ContextMenu
+          contextMenu={contextMenu}
+          onMoveToTop={handleMoveToTop}
+          onMoveToBottom={handleMoveToBottom}
+        />
       </div>
     )
   }
@@ -2867,7 +2859,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
           isRetest={retestingItem !== null}
         />
-        {renderContextMenu()}
+        <ContextMenu
+          contextMenu={contextMenu}
+          onMoveToTop={handleMoveToTop}
+          onMoveToBottom={handleMoveToBottom}
+        />
         <SkinCreator
           isOpen={showSkinCreator}
           onClose={closeSkinCreator}
@@ -3129,156 +3125,32 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           </div>
 
           {/* XDelta Import Modal */}
-          {showXdeltaImportModal && (
-            <div className="edit-modal-overlay" onClick={() => setShowXdeltaImportModal(false)}>
-              <div className="edit-modal-content" onClick={(e) => e.stopPropagation()}>
-                <h2>Import XDelta Patch</h2>
-
-                <div className="edit-field">
-                  <label>XDelta File:</label>
-                  <input
-                    type="file"
-                    accept=".xdelta"
-                    onChange={(e) => setXdeltaImportData({
-                      ...xdeltaImportData,
-                      file: e.target.files[0],
-                      name: xdeltaImportData.name || (e.target.files[0]?.name.replace('.xdelta', '') || '')
-                    })}
-                  />
-                </div>
-
-                <div className="edit-field">
-                  <label>Name:</label>
-                  <input
-                    type="text"
-                    value={xdeltaImportData.name}
-                    onChange={(e) => setXdeltaImportData({ ...xdeltaImportData, name: e.target.value })}
-                    placeholder="Patch name..."
-                  />
-                </div>
-
-                <div className="edit-field">
-                  <label>Description (optional):</label>
-                  <textarea
-                    value={xdeltaImportData.description}
-                    onChange={(e) => setXdeltaImportData({ ...xdeltaImportData, description: e.target.value })}
-                    placeholder="Description..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="edit-field">
-                  <label>Image (optional):</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setXdeltaImportData({ ...xdeltaImportData, image: e.target.files[0] })}
-                  />
-                </div>
-
-                <div className="edit-buttons">
-                  <button
-                    className="btn-save"
-                    onClick={handleImportXdelta}
-                    disabled={importingXdelta || !xdeltaImportData.file}
-                  >
-                    {importingXdelta ? 'Importing...' : 'Import'}
-                  </button>
-                  <button
-                    className="btn-cancel"
-                    onClick={() => {
-                      setShowXdeltaImportModal(false)
-                      setXdeltaImportData({ name: '', description: '', file: null, image: null })
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <XdeltaImportModal
+            show={showXdeltaImportModal}
+            importData={xdeltaImportData}
+            onImportDataChange={setXdeltaImportData}
+            importing={importingXdelta}
+            onImport={handleImportXdelta}
+            onCancel={() => {
+              setShowXdeltaImportModal(false)
+              setXdeltaImportData({ name: '', description: '', file: null, image: null })
+            }}
+          />
 
           {/* XDelta Edit Modal */}
-          {showXdeltaEditModal && editingXdelta && (
-            <div className="edit-modal-overlay" onClick={() => {
+          <XdeltaEditModal
+            show={showXdeltaEditModal}
+            patch={editingXdelta}
+            onPatchChange={setEditingXdelta}
+            onSave={handleSaveXdeltaEdit}
+            onCancel={() => {
               setShowXdeltaEditModal(false)
               setEditingXdelta(null)
-            }}>
-              <div className="edit-modal-content" onClick={(e) => e.stopPropagation()}>
-                <h2>Edit Patch</h2>
-
-                <div className="edit-preview">
-                  {editingXdelta.imageUrl ? (
-                    <img
-                      src={`${BACKEND_URL}${editingXdelta.imageUrl}?t=${Date.now()}`}
-                      alt={editingXdelta.name}
-                    />
-                  ) : (
-                    <div className="edit-placeholder">
-                      <span>{editingXdelta.name[0]}</span>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleUpdateXdeltaImage}
-                    style={{ display: 'none' }}
-                    id="xdelta-image-input"
-                  />
-                  <button
-                    className="btn-edit-screenshot"
-                    onClick={() => document.getElementById('xdelta-image-input').click()}
-                    title="Replace image"
-                  >
-                    ✎
-                  </button>
-                </div>
-
-                <div className="edit-field">
-                  <label>Name:</label>
-                  <input
-                    type="text"
-                    value={editingXdelta.name}
-                    onChange={(e) => setEditingXdelta({ ...editingXdelta, name: e.target.value })}
-                  />
-                </div>
-
-                <div className="edit-field">
-                  <label>Description:</label>
-                  <textarea
-                    value={editingXdelta.description || ''}
-                    onChange={(e) => setEditingXdelta({ ...editingXdelta, description: e.target.value })}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="edit-buttons">
-                  <button className="btn-save" onClick={handleSaveXdeltaEdit}>
-                    Save
-                  </button>
-                  <button
-                    className="btn-cancel"
-                    onClick={() => {
-                      setShowXdeltaEditModal(false)
-                      setEditingXdelta(null)
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="btn-delete-modal"
-                    onClick={() => {
-                      handleDeleteXdelta(editingXdelta.id)
-                      setShowXdeltaEditModal(false)
-                      setEditingXdelta(null)
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+            }}
+            onDelete={handleDeleteXdelta}
+            onUpdateImage={handleUpdateXdeltaImage}
+            BACKEND_URL={BACKEND_URL}
+          />
 
           {/* XDelta Create Patch Modal */}
           {showXdeltaCreateModal && (
