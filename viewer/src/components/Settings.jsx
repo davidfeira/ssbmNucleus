@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import './Settings.css'
 import BackupRestore from './settings/BackupRestore'
+import StorageStatsSection, { getStorageStats } from './settings/StorageStatsSection'
+import IsoPathSection from './settings/IsoPathSection'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 
@@ -15,27 +17,11 @@ export default function Settings({ metadata }) {
   const [hdCspMessage, setHdCspMessage] = useState({ text: '', type: '' })
   const [hdCspResolution, setHdCspResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
 
-  // Vanilla ISO path state
-  const [vanillaIsoPath, setVanillaIsoPath] = useState('')
-  const [isoMessage, setIsoMessage] = useState({ text: '', type: '' })
-  const [isoVerified, setIsoVerified] = useState(null) // null = not checked, true = valid, false = invalid
-  const [verifyingIso, setVerifyingIso] = useState(false)
-
   // Slippi Dolphin path state
   const [slippiDolphinPath, setSlippiDolphinPath] = useState('')
   const [slippiMessage, setSlippiMessage] = useState({ text: '', type: '' })
   const [slippiVerified, setSlippiVerified] = useState(null)
   const [verifyingSlippi, setVerifyingSlippi] = useState(false)
-
-  // Load vanilla ISO path from localStorage on mount and verify it
-  useEffect(() => {
-    const savedPath = localStorage.getItem('vanilla_iso_path')
-    if (savedPath) {
-      setVanillaIsoPath(savedPath)
-      // Verify on load
-      verifyIso(savedPath)
-    }
-  }, [])
 
   // Load Slippi Dolphin path from localStorage on mount and verify it
   useEffect(() => {
@@ -46,91 +32,6 @@ export default function Settings({ metadata }) {
       verifySlippiPath(savedPath)
     }
   }, [])
-
-  const verifyIso = async (isoPath) => {
-    setVerifyingIso(true)
-    setIsoVerified(null)
-
-    try {
-      const response = await fetch(`${API_URL}/verify-iso`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isoPath })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setIsoVerified(data.valid)
-        if (!data.valid) {
-          setIsoMessage({
-            text: `Invalid ISO (MD5: ${data.md5.substring(0, 8)}...). Need vanilla Melee 1.02`,
-            type: 'error'
-          })
-        }
-      } else {
-        setIsoVerified(false)
-        setIsoMessage({ text: data.error, type: 'error' })
-      }
-    } catch (err) {
-      setIsoVerified(false)
-      setIsoMessage({ text: `Verification failed: ${err.message}`, type: 'error' })
-    } finally {
-      setVerifyingIso(false)
-    }
-  }
-
-  const handleBrowseIso = async () => {
-    if (!window.electron) {
-      setIsoMessage({ text: 'Electron API not available', type: 'error' })
-      return
-    }
-
-    try {
-      const isoPath = await window.electron.openIsoDialog()
-      if (isoPath) {
-        setVanillaIsoPath(isoPath)
-        setIsoMessage({ text: 'Verifying ISO...', type: '' })
-
-        // Verify the ISO
-        setVerifyingIso(true)
-        const response = await fetch(`${API_URL}/verify-iso`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isoPath })
-        })
-
-        const data = await response.json()
-
-        if (data.success && data.valid) {
-          localStorage.setItem('vanilla_iso_path', isoPath)
-          setIsoVerified(true)
-          setIsoMessage({ text: 'Valid vanilla Melee 1.02 ISO!', type: 'success' })
-          setTimeout(() => setIsoMessage({ text: '', type: '' }), 3000)
-        } else {
-          setIsoVerified(false)
-          setIsoMessage({
-            text: `Invalid ISO. This is not a vanilla Melee 1.02 ISO.`,
-            type: 'error'
-          })
-          // Don't save invalid ISO
-          setVanillaIsoPath('')
-        }
-        setVerifyingIso(false)
-      }
-    } catch (err) {
-      setIsoMessage({ text: `Error: ${err.message}`, type: 'error' })
-      setVerifyingIso(false)
-    }
-  }
-
-  const handleClearIsoPath = () => {
-    localStorage.removeItem('vanilla_iso_path')
-    setVanillaIsoPath('')
-    setIsoVerified(null)
-    setIsoMessage({ text: 'Vanilla ISO path cleared', type: 'success' })
-    setTimeout(() => setIsoMessage({ text: '', type: '' }), 3000)
-  }
 
   const verifySlippiPath = async (slippiPath) => {
     setVerifyingSlippi(true)
@@ -217,26 +118,7 @@ export default function Settings({ metadata }) {
     setTimeout(() => setSlippiMessage({ text: '', type: '' }), 3000)
   }
 
-  // Calculate storage statistics
-  const getStorageStats = () => {
-    if (!metadata) return { characterCount: 0, stageCount: 0, costumeCount: 0 }
-
-    const characterCount = Object.keys(metadata.characters || {}).length
-    let costumeCount = 0
-
-    Object.values(metadata.characters || {}).forEach(char => {
-      costumeCount += (char.skins || []).length
-    })
-
-    let stageCount = 0
-    Object.values(metadata.stages || {}).forEach(stage => {
-      stageCount += (stage.variants || []).length
-    })
-
-    return { characterCount, stageCount, costumeCount }
-  }
-
-  const stats = getStorageStats()
+  const stats = getStorageStats(metadata)
 
   // Count skins missing HD CSPs
   const getHdCspStats = () => {
@@ -374,45 +256,7 @@ export default function Settings({ metadata }) {
         <h2>Settings</h2>
 
         {/* Vanilla ISO Path */}
-        <section className="settings-section">
-          <h3>Vanilla ISO</h3>
-          <p className="section-description">
-            Set the path to your vanilla Melee ISO. This is required for applying xdelta patches.
-          </p>
-
-          <div className="iso-path-container">
-            {vanillaIsoPath ? (
-              <div className={`iso-path-display ${isoVerified === true ? 'verified' : isoVerified === false ? 'invalid' : ''}`}>
-                <span className="iso-status-icon">
-                  {verifyingIso ? '...' : isoVerified === true ? '✓' : isoVerified === false ? '✕' : '?'}
-                </span>
-                <span className="iso-path-text" title={vanillaIsoPath}>{vanillaIsoPath}</span>
-                <button
-                  className="iso-clear-button"
-                  onClick={handleClearIsoPath}
-                  title="Clear ISO path"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <div className="iso-path-empty">No ISO path set</div>
-            )}
-            <button
-              className="iso-browse-button"
-              onClick={handleBrowseIso}
-              disabled={verifyingIso}
-            >
-              {verifyingIso ? 'Verifying...' : vanillaIsoPath ? 'Change' : 'Browse'}
-            </button>
-          </div>
-
-          {isoMessage.text && (
-            <div className={`message ${isoMessage.type}`}>
-              {isoMessage.text}
-            </div>
-          )}
-        </section>
+        <IsoPathSection API_URL={API_URL} />
 
         {/* Slippi Dolphin Path */}
         <section className="settings-section">
@@ -471,19 +315,7 @@ export default function Settings({ metadata }) {
         </section>
 
         {/* Storage Statistics */}
-        <section className="settings-section">
-          <h3>Storage Statistics</h3>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <div className="stat-value">{stats.costumeCount}</div>
-              <div className="stat-label">Costumes</div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-value">{stats.stageCount}</div>
-              <div className="stat-label">Stage Variants</div>
-            </div>
-          </div>
-        </section>
+        <StorageStatsSection metadata={metadata} />
 
         {/* Vault Backup & Restore Section */}
         <BackupRestore API_URL={API_URL} />
