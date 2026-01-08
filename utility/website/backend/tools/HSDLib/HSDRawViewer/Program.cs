@@ -11,6 +11,8 @@ using HSDRawViewer.Rendering.Models;
 using HSDRawViewer.Tools.Animation;
 using HSDRawViewer.Converters.Animation;
 using HSDRawViewer.GUI.Controls.JObjEditor;
+using HSDRaw.Tools.Melee;
+using HSDRaw.Common.Animation;
 namespace HSDRawViewer
 {
     static class Program
@@ -367,27 +369,98 @@ namespace HSDRawViewer
                     }
                     else if (!string.IsNullOrEmpty(animFile) && System.IO.File.Exists(animFile))
                     {
-                        // OLD PATH: Load animation from separate .anim file
-                        Console.WriteLine($"Loading animation file: {animFile}");
-                        try
-                        {
-                            // Use the same animation loader as the GUI
-                            var jointMap = new JointMap(); // Use empty joint map for basic animation loading
-                            var animManager = JointAnimationLoader.LoadJointAnimFromFile(jointMap, animFile);
+                        // Check if this is a YML file with animSymbol + AJ file path in cameraFile
+                        string animSymbol = null;
+                        bool isYmlWithSymbol = animFile.EndsWith(".yml", StringComparison.OrdinalIgnoreCase);
 
-                            if (animManager != null)
+                        if (isYmlWithSymbol)
+                        {
+                            // Parse YML to look for animSymbol
+                            try
                             {
-                                Console.WriteLine("Animation loaded successfully");
-                                renderJObj.LoadAnimation(animManager, null, null);
+                                var ymlLines = System.IO.File.ReadAllLines(animFile);
+                                foreach (var line in ymlLines)
+                                {
+                                    var trimmed = line.Trim();
+                                    if (trimmed.StartsWith("animSymbol:"))
+                                    {
+                                        animSymbol = trimmed.Substring(11).Trim();
+                                        Console.WriteLine($"Found animSymbol in YML: {animSymbol}");
+                                        break;
+                                    }
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                Console.WriteLine("Failed to load animation - loader returned null");
+                                Console.WriteLine($"Error parsing YML for animSymbol: {ex.Message}");
                             }
                         }
-                        catch (Exception ex)
+
+                        // NEW PATH: Load animation from AJ file using symbol
+                        if (!string.IsNullOrEmpty(animSymbol) &&
+                            !string.IsNullOrEmpty(cameraFile) &&
+                            cameraFile.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
+                            System.IO.File.Exists(cameraFile))
                         {
-                            Console.WriteLine($"Failed to load animation: {ex.Message}");
+                            Console.WriteLine($"=== LOADING ANIMATION FROM AJ FILE BY SYMBOL ===");
+                            Console.WriteLine($"AJ File: {cameraFile}");
+                            Console.WriteLine($"Symbol: {animSymbol}");
+                            try
+                            {
+                                var ajManager = new FighterAJManager(System.IO.File.ReadAllBytes(cameraFile));
+                                var animData = ajManager.GetAnimationData(animSymbol);
+
+                                if (animData != null)
+                                {
+                                    Console.WriteLine($"Found animation data for symbol, length: {animData.Length} bytes");
+                                    var animRawFile = new HSDRaw.HSDRawFile(animData);
+
+                                    if (animRawFile.Roots.Count > 0 && animRawFile.Roots[0].Data is HSD_FigaTree tree)
+                                    {
+                                        var jointAnim = new JointAnimManager(tree);
+                                        renderJObj.LoadAnimation(jointAnim, null, null);
+                                        Console.WriteLine($"Animation loaded from AJ file (FrameCount: {jointAnim.FrameCount})");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Animation data did not contain HSD_FigaTree");
+                                    }
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Symbol '{animSymbol}' not found in AJ file");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Failed to load animation from AJ: {ex.Message}");
+                                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                            }
+                        }
+                        else if (!isYmlWithSymbol)
+                        {
+                            // OLD PATH: Load animation from separate .anim file
+                            Console.WriteLine($"Loading animation file: {animFile}");
+                            try
+                            {
+                                // Use the same animation loader as the GUI
+                                var jointMap = new JointMap(); // Use empty joint map for basic animation loading
+                                var animManager = JointAnimationLoader.LoadJointAnimFromFile(jointMap, animFile);
+
+                                if (animManager != null)
+                                {
+                                    Console.WriteLine("Animation loaded successfully");
+                                    renderJObj.LoadAnimation(animManager, null, null);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Failed to load animation - loader returned null");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Failed to load animation: {ex.Message}");
+                            }
                         }
                     }
 
@@ -475,7 +548,8 @@ namespace HSDRawViewer
                             throw; // Re-throw since this is required for Ganondorf
                         }
                     }
-                    else if (!useSceneFile && !string.IsNullOrEmpty(cameraFile) && System.IO.File.Exists(cameraFile))
+                    else if (!useSceneFile && !string.IsNullOrEmpty(cameraFile) && System.IO.File.Exists(cameraFile) &&
+                             !cameraFile.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
                     {
                         Console.WriteLine($"Loading camera settings from: {cameraFile}");
                         try
@@ -685,6 +759,116 @@ namespace HSDRawViewer
 
                         // Note: Hidden nodes will be applied after first render when DOBJs are loaded
                     }
+                    // NEW: Load camera settings from animFile when it's a pose YML and cameraFile is AJ DAT
+                    else if (!useSceneFile &&
+                             !string.IsNullOrEmpty(animFile) &&
+                             animFile.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) &&
+                             System.IO.File.Exists(animFile) &&
+                             (string.IsNullOrEmpty(cameraFile) || cameraFile.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        Console.WriteLine($"=== LOADING CAMERA SETTINGS FROM POSE YML: {animFile} ===");
+                        try
+                        {
+                            var lines = System.IO.File.ReadAllLines(animFile);
+                            bool parsingCamera = false;
+                            bool parsingHiddenNodes = false;
+
+                            foreach (var line in lines)
+                            {
+                                var trimmedLine = line.Trim();
+
+                                // Track when we enter camera section
+                                if (trimmedLine == "camera:")
+                                {
+                                    parsingCamera = true;
+                                    continue;
+                                }
+                                // Exit camera section when we hit another top-level key
+                                if (parsingCamera && !line.StartsWith(" ") && !line.StartsWith("\t") && trimmedLine.EndsWith(":"))
+                                {
+                                    parsingCamera = false;
+                                }
+
+                                if (trimmedLine.StartsWith("frame:"))
+                                {
+                                    if (float.TryParse(trimmedLine.Substring(6).Trim(), out float frame))
+                                    {
+                                        animFrame = frame;
+                                        Console.WriteLine($"Found animation frame: {animFrame}");
+                                    }
+                                }
+                                else if (parsingCamera || trimmedLine.StartsWith("x:"))
+                                {
+                                    if (trimmedLine.StartsWith("x:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(2).Trim(), out float x))
+                                            viewport.Camera.X = x;
+                                    }
+                                    else if (trimmedLine.StartsWith("y:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(2).Trim(), out float y))
+                                            viewport.Camera.Y = y;
+                                    }
+                                    else if (trimmedLine.StartsWith("z:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(2).Trim(), out float z))
+                                            viewport.Camera.Z = z;
+                                    }
+                                    else if (trimmedLine.StartsWith("scale:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(6).Trim(), out float scale))
+                                            viewport.Camera.Scale = scale;
+                                    }
+                                    else if (trimmedLine.StartsWith("fovRadians:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(11).Trim(), out float fov))
+                                            viewport.Camera.FovRadians = fov;
+                                    }
+                                    else if (trimmedLine.StartsWith("rotationXRadians:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(17).Trim(), out float rotX))
+                                            viewport.Camera.RotationXRadians = rotX;
+                                    }
+                                    else if (trimmedLine.StartsWith("rotationYRadians:"))
+                                    {
+                                        if (float.TryParse(trimmedLine.Substring(17).Trim(), out float rotY))
+                                            viewport.Camera.RotationYRadians = rotY;
+                                    }
+                                }
+                                else if (trimmedLine.StartsWith("hiddenNodes:"))
+                                {
+                                    parsingHiddenNodes = true;
+                                }
+                                else if (parsingHiddenNodes && trimmedLine.StartsWith("- "))
+                                {
+                                    if (int.TryParse(trimmedLine.Substring(2).Trim(), out int nodeIndex))
+                                        hiddenNodes.Add(nodeIndex);
+                                }
+                                else if (parsingHiddenNodes && !string.IsNullOrWhiteSpace(trimmedLine) && !trimmedLine.StartsWith(" "))
+                                {
+                                    parsingHiddenNodes = false;
+                                }
+                            }
+                            Console.WriteLine("Camera settings loaded from pose YML");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Failed to load camera settings from pose YML: {ex.Message}");
+                        }
+
+                        // Apply settings
+                        if (renderJObj != null)
+                        {
+                            renderJObj._settings.RenderBones = false;
+                            renderJObj._settings.RenderObjects = HSDRawViewer.Rendering.Models.ObjectRenderMode.Visible;
+
+                            if (animFrame >= 0)
+                            {
+                                Console.WriteLine($"Setting animation to frame: {animFrame}");
+                                renderJObj.RequestAnimationUpdate(HSDRawViewer.Rendering.Models.FrameFlags.All, animFrame);
+                            }
+                        }
+                    }
 
                     // Check if the viewport has any drawables loaded
                     Console.WriteLine("Checking viewport drawable count...");
@@ -697,6 +881,14 @@ namespace HSDRawViewer
                     if (renderJObj != null)
                     {
                         Console.WriteLine($"After first render - DOBJs loaded: {renderJObj.DObjCount}");
+
+                        // Apply animation frame AFTER DOBJs are loaded (needed for pose thumbnails)
+                        if (animFrame >= 0)
+                        {
+                            Console.WriteLine($"Applying animation frame after DOBJs loaded: {animFrame}");
+                            renderJObj.RequestAnimationUpdate(HSDRawViewer.Rendering.Models.FrameFlags.All, animFrame);
+                            viewport.Render();
+                        }
 
                         // Apply hidden nodes if any were specified (moved here after render)
                         if (hiddenNodes.Count > 0)

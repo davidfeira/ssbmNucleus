@@ -4817,8 +4817,20 @@ def list_poses(character):
 @app.route('/storage/poses/<character>/<filename>')
 def serve_pose_thumbnail(character, filename):
     """Serve pose thumbnail images."""
-    poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
-    return send_from_directory(poses_dir, filename)
+    try:
+        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        full_path = poses_dir / filename
+        logger.info(f"Serving pose thumbnail: {full_path}")
+        logger.info(f"Directory exists: {poses_dir.exists()}, File exists: {full_path.exists()}")
+
+        if not full_path.exists():
+            logger.error(f"Thumbnail not found: {full_path}")
+            return jsonify({'error': 'File not found'}), 404
+
+        return send_file(str(full_path), mimetype='image/png')
+    except Exception as e:
+        logger.error(f"Error serving thumbnail: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/mex/storage/poses/delete', methods=['POST'])
