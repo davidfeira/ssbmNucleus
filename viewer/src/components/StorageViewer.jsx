@@ -12,11 +12,15 @@ import SkinCard from './storage/SkinCard'
 import ContextMenu from './storage/ContextMenu'
 import XdeltaImportModal from './storage/XdeltaImportModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
+import XdeltaCreateModal from './storage/XdeltaCreateModal'
+import XdeltaBuildModal from './storage/XdeltaBuildModal'
 import ModeToolbar from './storage/ModeToolbar'
 import ImportToolbar from './storage/ImportToolbar'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
 import PatchesGrid from './storage/PatchesGrid'
+import CharacterDetailView from './storage/CharacterDetailView'
+import StageDetailView from './storage/StageDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
 import { useFolderManagement } from '../hooks/useFolderManagement'
 import { useFileImport } from '../hooks/useFileImport'
@@ -282,6 +286,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       fetchXdeltaPatches()
     }
   }, [mode])
+
+  // Set loading to false when metadata is available
+  useEffect(() => {
+    if (metadata) {
+      setIsLoading(false)
+    }
+  }, [metadata])
 
   const handleSlippiRetest = async (autoFix = false) => {
     if (!editingItem || editingItem.type !== 'costume') return
@@ -1047,424 +1058,183 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
   // If a stage is selected, show its variants
   if (selectedStage) {
-    const stageInfo = selectedStage
-    const variants = stageVariants[selectedStage.code] || []
-
     return (
-      <div className="storage-viewer">
-        <div className="character-detail">
-          <button
-            onClick={() => setSelectedStage(null)}
-            className="back-button"
-          >
-            ← Back to Stages
-          </button>
-
-          <h2>{stageInfo?.name}</h2>
-          <p className="skin-count">{variants.length} variant{variants.length !== 1 ? 's' : ''}</p>
-
-          {variants.length === 0 ? (
-            <div className="no-skins-message">
-              <p>No stage variants yet. Add some to your storage!</p>
-            </div>
-          ) : (
-            <div className="skins-grid">
-              {(previewOrder || variants).map((variant, idx) => {
-                const isDragging = draggedItem && variant.id === draggedItem.id
-                return (
-                  <div
-                    key={variant.id}
-                    className={`skin-card ${isDragging ? 'dragging' : ''}`}
-                    draggable={!reordering}
-                    onDragStart={(e) => handleDragStart(e, variants.findIndex(v => v.id === variant.id), variants)}
-                    onDragOver={handleDragOver}
-                    onDragEnter={(e) => handleDragEnter(e, idx, variants)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleVariantDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    onContextMenu={(e) => handleVariantContextMenu(e, variant, idx)}
-                    style={{ opacity: isDragging ? 0.5 : 1 }}
-                  >
-                  <div className="skin-images">
-                    <div className="skin-image-container">
-                      {variant.hasScreenshot ? (
-                        <img
-                          src={`${API_URL.replace('/api/mex', '')}${variant.screenshotUrl}`}
-                          alt={variant.name}
-                          className="skin-csp"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                            e.target.nextSibling.style.display = 'flex'
-                          }}
-                        />
-                      ) : (
-                        <div className="skin-placeholder" style={{ display: 'flex' }}>
-                          <span className="skin-initial">{variant.name[0]}</span>
-                        </div>
-                      )}
-                      <button
-                        className="btn-edit"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          e.preventDefault()
-                          handleEditClick('stage', {
-                            id: variant.id,  // ← Use the immutable ID for API calls
-                            name: variant.name,  // ← Use the editable name for display
-                            stageCode: stageInfo?.code,
-                            stageFolder: stageInfo?.folder,
-                            stageName: stageInfo?.name,
-                            screenshotUrl: variant.screenshotUrl,
-                            hasScreenshot: variant.hasScreenshot,
-                            slippi_safe: variant.slippi_safe,
-                            slippi_tested: variant.slippi_tested
-                          })
-                        }}
-                        title="Edit variant"
-                      >
-                        ✎
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="skin-info">
-                    <div className="skin-color">{variant.name}</div>
-                  </div>
-                </div>
-              )
-            })}
-            </div>
-          )}
-        </div>
-        <EditModal
-          show={showEditModal}
-          editingItem={editingItem}
-          editName={editName}
-          onNameChange={setEditName}
-          saving={saving}
-          deleting={deleting}
-          exporting={exporting}
-          cspPreview={cspPreview}
-          stockPreview={stockPreview}
-          screenshotPreview={screenshotPreview}
-          lastImageUpdate={lastImageUpdate}
-          editSlippiSafe={editSlippiSafe}
-          onSlippiSafeChange={setEditSlippiSafe}
-          slippiAdvancedOpen={slippiAdvancedOpen}
-          onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
-          onSave={handleSave}
-          onCancel={handleCancel}
-          onDelete={handleDelete}
-          onExport={handleExport}
-          onCspChange={handleCspChange}
-          onStockChange={handleStockChange}
-          onScreenshotChange={handleScreenshotChange}
-          onSlippiRetest={handleSlippiRetest}
-          onSlippiOverride={handleSlippiOverride}
-          onOpenCspManager={openCspManager}
-          onStartSkinCreator={startSkinCreatorFromVault}
-          onView3D={() => setShow3DViewer(true)}
-          API_URL={API_URL}
-        />
-        {show3DViewer && editingItem && editingItem.type === 'costume' && (
-          <EmbeddedModelViewer
-            character={editingItem.data.character}
-            skinId={editingItem.data.id}
-            onClose={() => setShow3DViewer(false)}
-          />
-        )}
-        <CspManagerModal
-          show={showCspManager}
-          cspManagerSkin={cspManagerSkin}
-          pendingMainCspPreview={pendingMainCspPreview}
-          hdCspInfo={hdCspInfo}
-          compareSliderPosition={compareSliderPosition}
-          lastImageUpdate={lastImageUpdate}
-          alternativeCsps={alternativeCsps}
-          hdResolution={hdResolution}
-          capturingHdCsp={capturingHdCsp}
-          onClose={closeCspManager}
-          onCspManagerMainChange={handleCspManagerMainChange}
-          onCompareSliderStart={handleCompareSliderStart}
-          onSwapCsp={handleSwapCsp}
-          onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
-          onAddAlternativeCsp={handleAddAlternativeCsp}
-          onHdResolutionChange={setHdResolution}
-          onCaptureHdCsp={handleCaptureHdCsp}
-          onSave={handleSaveCspManager}
-          API_URL={API_URL}
-        />
-        <SlippiSafetyDialog
-          show={showSlippiDialog}
-          data={slippiDialogData}
-          onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
-          isRetest={retestingItem !== null}
-        />
-        <ContextMenu
-          contextMenu={contextMenu}
-          onMoveToTop={handleMoveToTop}
-          onMoveToBottom={handleMoveToBottom}
-        />
-      </div>
+      <StageDetailView
+        selectedStage={selectedStage}
+        stageVariants={stageVariants}
+        onBack={() => setSelectedStage(null)}
+        // Drag and drop
+        draggedItem={draggedItem}
+        previewOrder={previewOrder}
+        reordering={reordering}
+        handleDragStart={handleDragStart}
+        handleDragOver={handleDragOver}
+        handleDragEnter={handleDragEnter}
+        handleDragLeave={handleDragLeave}
+        handleVariantDrop={handleVariantDrop}
+        handleDragEnd={handleDragEnd}
+        // Context menu
+        handleVariantContextMenu={handleVariantContextMenu}
+        contextMenu={contextMenu}
+        handleMoveToTop={handleMoveToTop}
+        handleMoveToBottom={handleMoveToBottom}
+        // Edit modal
+        showEditModal={showEditModal}
+        editingItem={editingItem}
+        editName={editName}
+        setEditName={setEditName}
+        saving={saving}
+        deleting={deleting}
+        exporting={exporting}
+        cspPreview={cspPreview}
+        stockPreview={stockPreview}
+        screenshotPreview={screenshotPreview}
+        lastImageUpdate={lastImageUpdate}
+        editSlippiSafe={editSlippiSafe}
+        setEditSlippiSafe={setEditSlippiSafe}
+        slippiAdvancedOpen={slippiAdvancedOpen}
+        setSlippiAdvancedOpen={setSlippiAdvancedOpen}
+        handleSave={handleSave}
+        handleCancel={handleCancel}
+        handleDelete={handleDelete}
+        handleExport={handleExport}
+        handleCspChange={handleCspChange}
+        handleStockChange={handleStockChange}
+        handleScreenshotChange={handleScreenshotChange}
+        handleSlippiRetest={handleSlippiRetest}
+        handleSlippiOverride={handleSlippiOverride}
+        openCspManager={openCspManager}
+        startSkinCreatorFromVault={startSkinCreatorFromVault}
+        show3DViewer={show3DViewer}
+        setShow3DViewer={setShow3DViewer}
+        handleEditClick={handleEditClick}
+        // CSP Manager
+        showCspManager={showCspManager}
+        cspManagerSkin={cspManagerSkin}
+        pendingMainCspPreview={pendingMainCspPreview}
+        hdCspInfo={hdCspInfo}
+        compareSliderPosition={compareSliderPosition}
+        alternativeCsps={alternativeCsps}
+        hdResolution={hdResolution}
+        capturingHdCsp={capturingHdCsp}
+        closeCspManager={closeCspManager}
+        handleCspManagerMainChange={handleCspManagerMainChange}
+        handleCompareSliderStart={handleCompareSliderStart}
+        handleSwapCsp={handleSwapCsp}
+        handleRemoveAlternativeCsp={handleRemoveAlternativeCsp}
+        handleAddAlternativeCsp={handleAddAlternativeCsp}
+        setHdResolution={setHdResolution}
+        handleCaptureHdCsp={handleCaptureHdCsp}
+        handleSaveCspManager={handleSaveCspManager}
+        // Slippi dialog
+        showSlippiDialog={showSlippiDialog}
+        slippiDialogData={slippiDialogData}
+        retestingItem={retestingItem}
+        handleRetestFixChoice={handleRetestFixChoice}
+        handleSlippiChoice={handleSlippiChoice}
+        // API
+        API_URL={API_URL}
+      />
     )
   }
 
   // If a character is selected, show their skins
   if (selectedCharacter) {
-    const charData = allCharacters[selectedCharacter]
-    // Get all skins (including folders) from character data
-    const allSkins = charData?.skins || []
-    // Filter to just actual skins (not folders) for the count
-    const skinCount = allSkins.filter(s => s.type !== 'folder' && s.visible !== false).length
-    // Build display list (handles folder collapse/expand)
-    const displayList = buildDisplayList(allSkins)
-
-    // Helper to delete a folder
-    const handleDeleteFolder = async (folderId) => {
-      try {
-        const response = await fetch(`${API_URL}/storage/folders/delete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            character: selectedCharacter,
-            folderId
-          })
-        })
-
-        const data = await response.json()
-        if (data.success) {
-          await onRefresh()
-        } else {
-          alert(`Failed to delete folder: ${data.error}`)
-        }
-      } catch (err) {
-        console.error('Delete folder error:', err)
-        alert(`Error deleting folder: ${err.message}`)
-      }
-    }
-
-    // Render a folder card
-    // Custom drop handler that converts display index to allSkins index
-    const handleItemDrop = async (e, displayIdx) => {
-      e.preventDefault()
-      if (!draggedItem) return
-
-      const fromIndex = dragStartIndex
-      const targetItem = displayList[displayIdx]
-      const toIndex = targetItem?.arrayIndex ?? allSkins.length - 1
-
-      if (fromIndex === toIndex || !selectedCharacter) {
-        setDraggedItem(null)
-        setDragStartIndex(null)
-        setDragOverIndex(null)
-        setPreviewOrder(null)
-        return
-      }
-
-      setReordering(true)
-
-      try {
-        const response = await fetch(`${API_URL}/storage/costumes/reorder`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            character: selectedCharacter,
-            fromIndex,
-            toIndex
-          })
-        })
-
-        const data = await response.json()
-
-        if (data.success) {
-          await onRefresh()
-        } else {
-          alert(`Reorder failed: ${data.error}`)
-        }
-      } catch (err) {
-        console.error('Reorder error:', err)
-        alert(`Reorder error: ${err.message}`)
-      } finally {
-        setReordering(false)
-        setDraggedItem(null)
-        setDragStartIndex(null)
-        setDragOverIndex(null)
-        setPreviewOrder(null)
-      }
-    }
-
-    // Render a skin card
     return (
-      <div className="storage-viewer">
-        <div className="character-detail">
-          <div className="character-header">
-            <button
-              onClick={() => setSelectedCharacter(null)}
-              className="back-button"
-            >
-              ← Back to Characters
-            </button>
-            <button
-              onClick={handleCreateFolder}
-              className="create-folder-button"
-              title="Create new folder"
-            >
-              + New Folder
-            </button>
-          </div>
-
-          <h2>{selectedCharacter}</h2>
-          <p className="skin-count">{skinCount} skin{skinCount !== 1 ? 's' : ''}</p>
-
-          {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
-            <div className="no-skins-message">
-              <p>No custom skins yet. Add some using the intake system!</p>
-            </div>
-          ) : (
-            <div className="skins-grid">
-              {displayList.map((item, idx) => {
-                if (item.type === 'folder') {
-                  return (
-                    <FolderCard
-                      key={item.folder.id}
-                      folder={item.folder}
-                      isExpanded={item.isExpanded}
-                      displayIdx={idx}
-                      arrayIdx={item.arrayIndex}
-                      isDragging={draggedItem && draggedItem.id === item.folder.id}
-                      isEditing={editingFolderId === item.folder.id}
-                      editingFolderName={editingFolderName}
-                      folderSkinCount={countSkinsInFolder(item.folder.id, allSkins)}
-                      reordering={reordering}
-                      onToggle={toggleFolder}
-                      onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
-                      onDragOver={handleDragOver}
-                      onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleItemDrop}
-                      onDragEnd={handleDragEnd}
-                      onEditingFolderNameChange={setEditingFolderName}
-                      onSaveFolderName={saveFolderName}
-                      onCancelEdit={() => setEditingFolderId(null)}
-                      onStartEditing={startEditingFolder}
-                      onDelete={handleDeleteFolder}
-                      justDraggedRef={justDraggedRef}
-                    />
-                  )
-                } else {
-                  return (
-                    <SkinCard
-                      key={item.skin.id}
-                      skin={item.skin}
-                      selectedCharacter={selectedCharacter}
-                      folderId={item.folderId}
-                      displayIdx={idx}
-                      arrayIdx={item.arrayIndex}
-                      isDragging={draggedItem && item.skin.id === draggedItem.id}
-                      reordering={reordering}
-                      lastImageUpdate={lastImageUpdate}
-                      onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
-                      onDragOver={handleDragOver}
-                      onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleItemDrop}
-                      onDragEnd={handleDragEnd}
-                      onContextMenu={handleSkinContextMenu}
-                      onEditClick={handleEditClick}
-                      API_URL={API_URL}
-                    />
-                  )
-                }
-              })}
-              <div
-                className="create-mod-card"
-                onClick={openSkinCreator}
-              >
-                <div className="create-mod-content">
-                  <span className="create-mod-icon">+</span>
-                  <span className="create-mod-label">Create New Mod</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <EditModal
-          show={showEditModal}
-          editingItem={editingItem}
-          editName={editName}
-          onNameChange={setEditName}
-          saving={saving}
-          deleting={deleting}
-          exporting={exporting}
-          cspPreview={cspPreview}
-          stockPreview={stockPreview}
-          screenshotPreview={screenshotPreview}
-          lastImageUpdate={lastImageUpdate}
-          editSlippiSafe={editSlippiSafe}
-          onSlippiSafeChange={setEditSlippiSafe}
-          slippiAdvancedOpen={slippiAdvancedOpen}
-          onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
-          onSave={handleSave}
-          onCancel={handleCancel}
-          onDelete={handleDelete}
-          onExport={handleExport}
-          onCspChange={handleCspChange}
-          onStockChange={handleStockChange}
-          onScreenshotChange={handleScreenshotChange}
-          onSlippiRetest={handleSlippiRetest}
-          onSlippiOverride={handleSlippiOverride}
-          onOpenCspManager={openCspManager}
-          onStartSkinCreator={startSkinCreatorFromVault}
-          onView3D={() => setShow3DViewer(true)}
-          API_URL={API_URL}
-        />
-        {show3DViewer && editingItem && editingItem.type === 'costume' && (
-          <EmbeddedModelViewer
-            character={editingItem.data.character}
-            skinId={editingItem.data.id}
-            onClose={() => setShow3DViewer(false)}
-          />
-        )}
-        <CspManagerModal
-          show={showCspManager}
-          cspManagerSkin={cspManagerSkin}
-          pendingMainCspPreview={pendingMainCspPreview}
-          hdCspInfo={hdCspInfo}
-          compareSliderPosition={compareSliderPosition}
-          lastImageUpdate={lastImageUpdate}
-          alternativeCsps={alternativeCsps}
-          hdResolution={hdResolution}
-          capturingHdCsp={capturingHdCsp}
-          onClose={closeCspManager}
-          onCspManagerMainChange={handleCspManagerMainChange}
-          onCompareSliderStart={handleCompareSliderStart}
-          onSwapCsp={handleSwapCsp}
-          onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
-          onAddAlternativeCsp={handleAddAlternativeCsp}
-          onHdResolutionChange={setHdResolution}
-          onCaptureHdCsp={handleCaptureHdCsp}
-          onSave={handleSaveCspManager}
-          API_URL={API_URL}
-        />
-        <SlippiSafetyDialog
-          show={showSlippiDialog}
-          data={slippiDialogData}
-          onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
-          isRetest={retestingItem !== null}
-        />
-        <ContextMenu
-          contextMenu={contextMenu}
-          onMoveToTop={handleMoveToTop}
-          onMoveToBottom={handleMoveToBottom}
-        />
-        <SkinCreator
-          isOpen={showSkinCreator}
-          onClose={closeSkinCreator}
-          selectedCharacter={selectedCharacter}
-          onSkinCreatorChange={onSkinCreatorChange}
-          onRefresh={onRefresh}
-          initialCostume={skinCreatorInitialCostume}
-        />
-      </div>
+      <CharacterDetailView
+        selectedCharacter={selectedCharacter}
+        allCharacters={allCharacters}
+        onBack={() => setSelectedCharacter(null)}
+        // Drag and drop
+        draggedItem={draggedItem}
+        dragStartIndex={dragStartIndex}
+        reordering={reordering}
+        handleDragStart={handleDragStart}
+        handleDragOver={handleDragOver}
+        handleDragEnter={handleDragEnter}
+        handleDragLeave={handleDragLeave}
+        handleDragEnd={handleDragEnd}
+        justDraggedRef={justDraggedRef}
+        // Folder management
+        handleCreateFolder={handleCreateFolder}
+        expandedFolders={expandedFolders}
+        toggleFolder={toggleFolder}
+        editingFolderId={editingFolderId}
+        setEditingFolderId={setEditingFolderId}
+        editingFolderName={editingFolderName}
+        setEditingFolderName={setEditingFolderName}
+        saveFolderName={saveFolderName}
+        startEditingFolder={startEditingFolder}
+        deleteFolder={deleteFolder}
+        // Edit modal
+        showEditModal={showEditModal}
+        editingItem={editingItem}
+        editName={editName}
+        setEditName={setEditName}
+        saving={saving}
+        deleting={deleting}
+        exporting={exporting}
+        cspPreview={cspPreview}
+        stockPreview={stockPreview}
+        screenshotPreview={screenshotPreview}
+        lastImageUpdate={lastImageUpdate}
+        editSlippiSafe={editSlippiSafe}
+        setEditSlippiSafe={setEditSlippiSafe}
+        slippiAdvancedOpen={slippiAdvancedOpen}
+        setSlippiAdvancedOpen={setSlippiAdvancedOpen}
+        handleSave={handleSave}
+        handleCancel={handleCancel}
+        handleDelete={handleDelete}
+        handleExport={handleExport}
+        handleCspChange={handleCspChange}
+        handleStockChange={handleStockChange}
+        handleScreenshotChange={handleScreenshotChange}
+        handleSlippiRetest={handleSlippiRetest}
+        handleSlippiOverride={handleSlippiOverride}
+        openCspManager={openCspManager}
+        startSkinCreatorFromVault={startSkinCreatorFromVault}
+        show3DViewer={show3DViewer}
+        setShow3DViewer={setShow3DViewer}
+        // CSP Manager
+        showCspManager={showCspManager}
+        cspManagerSkin={cspManagerSkin}
+        pendingMainCspPreview={pendingMainCspPreview}
+        hdCspInfo={hdCspInfo}
+        compareSliderPosition={compareSliderPosition}
+        alternativeCsps={alternativeCsps}
+        hdResolution={hdResolution}
+        capturingHdCsp={capturingHdCsp}
+        closeCspManager={closeCspManager}
+        handleCspManagerMainChange={handleCspManagerMainChange}
+        handleCompareSliderStart={handleCompareSliderStart}
+        handleSwapCsp={handleSwapCsp}
+        handleRemoveAlternativeCsp={handleRemoveAlternativeCsp}
+        handleAddAlternativeCsp={handleAddAlternativeCsp}
+        setHdResolution={setHdResolution}
+        handleCaptureHdCsp={handleCaptureHdCsp}
+        handleSaveCspManager={handleSaveCspManager}
+        // Slippi dialog
+        showSlippiDialog={showSlippiDialog}
+        slippiDialogData={slippiDialogData}
+        retestingItem={retestingItem}
+        handleRetestFixChoice={handleRetestFixChoice}
+        handleSlippiChoice={handleSlippiChoice}
+        // Context menu
+        contextMenu={contextMenu}
+        handleMoveToTop={handleMoveToTop}
+        handleMoveToBottom={handleMoveToBottom}
+        handleSkinContextMenu={handleSkinContextMenu}
+        handleEditClick={handleEditClick}
+        // Skin creator
+        showSkinCreator={showSkinCreator}
+        closeSkinCreator={closeSkinCreator}
+        openSkinCreator={openSkinCreator}
+        onSkinCreatorChange={onSkinCreatorChange}
+        onRefresh={onRefresh}
+        skinCreatorInitialCostume={skinCreatorInitialCostume}
+        // API
+        API_URL={API_URL}
+      />
     )
   }
 
@@ -1546,137 +1316,19 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       />
 
       {/* XDelta Create Patch Modal */}
-      {showXdeltaCreateModal && (
-        <div className="iso-builder-overlay">
-          <div className="iso-builder-modal">
-            <div className="modal-header">
-              <h2>Create New Patch</h2>
-              {xdeltaCreateState !== 'creating' && (
-                <button className="close-btn" onClick={closeXdeltaCreateModal}>×</button>
-              )}
-            </div>
-
-            <div className="modal-body">
-              {xdeltaCreateState === 'idle' && (
-                <div className="create-patch-form">
-                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
-                    Create a patch by comparing a modded ISO against your vanilla ISO.
-                    The patch can then be shared and applied to recreate the modded ISO.
-                  </p>
-
-                  <div className="edit-field">
-                    <label>Patch Name:</label>
-                    <input
-                      type="text"
-                      value={xdeltaCreateData.name}
-                      onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, name: e.target.value })}
-                      placeholder="My Awesome Mod Pack"
-                    />
-                  </div>
-
-                  <div className="edit-field">
-                    <label>Description (optional):</label>
-                    <textarea
-                      value={xdeltaCreateData.description}
-                      onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, description: e.target.value })}
-                      placeholder="Describe what's in this patch..."
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="edit-field">
-                    <label>Modded ISO:</label>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        value={xdeltaCreateData.moddedIsoPath}
-                        onChange={(e) => setXdeltaCreateData({ ...xdeltaCreateData, moddedIsoPath: e.target.value })}
-                        placeholder="Select a modded ISO file..."
-                        readOnly
-                        style={{ flex: 1 }}
-                      />
-                      <button
-                        className="btn-secondary"
-                        onClick={handleSelectModdedIso}
-                        style={{ whiteSpace: 'nowrap' }}
-                      >
-                        Browse...
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="edit-buttons" style={{ marginTop: '1.5rem' }}>
-                    <button
-                      className="btn-save"
-                      onClick={handleStartCreateXdelta}
-                      disabled={!xdeltaCreateData.moddedIsoPath || !xdeltaCreateData.name.trim()}
-                    >
-                      Create Patch
-                    </button>
-                    <button className="btn-cancel" onClick={closeXdeltaCreateModal}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {xdeltaCreateState === 'creating' && (
-                <div className="export-progress" style={{ textAlign: 'center' }}>
-                  <div className="export-spinner">
-                    <div className="spinner"></div>
-                  </div>
-
-                  <h3 style={{ marginTop: '1rem' }}>Creating Patch...</h3>
-
-                  <p className="progress-message">
-                    {xdeltaCreateMessage || 'Comparing ISOs...'}
-                  </p>
-                </div>
-              )}
-
-              {xdeltaCreateState === 'complete' && xdeltaCreateResult && (
-                <div className="export-complete">
-                  <div className="success-icon">✓</div>
-                  <h3>Patch Created!</h3>
-                  <p>Your patch "{xdeltaCreateResult.name}" has been created.</p>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
-                    Size: {xdeltaCreateResult.size_mb} MB
-                    {xdeltaCreateResult.size_mb < 25 && (
-                      <span style={{ color: 'var(--color-success)', marginLeft: '0.5rem' }}>
-                        (Discord-friendly!)
-                      </span>
-                    )}
-                  </p>
-                  <div className="complete-actions">
-                    <button
-                      className="btn-download"
-                      onClick={() => handleDownloadPatch(xdeltaCreateResult.patch_id)}
-                    >
-                      Download Patch
-                    </button>
-                    <button className="btn-secondary" onClick={closeXdeltaCreateModal}>
-                      Close
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {xdeltaCreateState === 'error' && (
-                <div className="export-error">
-                  <div className="error-icon">✕</div>
-                  <h3>Creation Failed</h3>
-                  <p className="error-message">{xdeltaCreateError}</p>
-                  <button className="btn-secondary" onClick={closeXdeltaCreateModal}>
-                    Close
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-        </div>
-      )}
+      <XdeltaCreateModal
+        show={showXdeltaCreateModal}
+        xdeltaCreateState={xdeltaCreateState}
+        xdeltaCreateData={xdeltaCreateData}
+        setXdeltaCreateData={setXdeltaCreateData}
+        xdeltaCreateMessage={xdeltaCreateMessage}
+        xdeltaCreateError={xdeltaCreateError}
+        xdeltaCreateResult={xdeltaCreateResult}
+        onClose={closeXdeltaCreateModal}
+        onSelectModdedIso={handleSelectModdedIso}
+        onStartCreate={handleStartCreateXdelta}
+        onDownloadPatch={handleDownloadPatch}
+      />
 
       <EditModal
         show={showEditModal}
@@ -1723,70 +1375,17 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       />
 
       {/* XDelta Build Modal */}
-      {showXdeltaBuildModal && (
-        <div className="iso-builder-overlay">
-      <div className="iso-builder-modal">
-        <div className="modal-header">
-          <h2>Build ISO</h2>
-          {xdeltaBuildState !== 'building' && (
-            <button className="close-btn" onClick={closeXdeltaBuildModal}>×</button>
-          )}
-        </div>
-
-        <div className="modal-body">
-          {xdeltaBuildState === 'building' && (
-            <div className="export-progress">
-              <div className="progress-header">
-                <h3>Building ISO...</h3>
-                <span className="progress-percentage">{xdeltaBuildProgress}%</span>
-              </div>
-
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${xdeltaBuildProgress}%` }}
-                ></div>
-              </div>
-
-              <p className="progress-message">
-                {xdeltaBuildMessage || `Applying patch: ${xdeltaBuildPatch?.name}`}
-              </p>
-
-              <div className="export-spinner">
-                <div className="spinner"></div>
-              </div>
-            </div>
-          )}
-
-          {xdeltaBuildState === 'complete' && (
-            <div className="export-complete">
-              <div className="success-icon">✓</div>
-              <h3>Build Complete!</h3>
-              <p>Your patched ISO is ready to download.</p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownloadXdeltaIso}>
-                  Download {xdeltaBuildFilename}
-                </button>
-                <button className="btn-secondary" onClick={closeXdeltaBuildModal}>
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
-
-          {xdeltaBuildState === 'error' && (
-            <div className="export-error">
-              <div className="error-icon">✕</div>
-              <h3>Build Failed</h3>
-              <p className="error-message">{xdeltaBuildError}</p>
-              <button className="btn-secondary" onClick={closeXdeltaBuildModal}>
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      )}
+      <XdeltaBuildModal
+        show={showXdeltaBuildModal}
+        xdeltaBuildState={xdeltaBuildState}
+        xdeltaBuildPatch={xdeltaBuildPatch}
+        xdeltaBuildProgress={xdeltaBuildProgress}
+        xdeltaBuildMessage={xdeltaBuildMessage}
+        xdeltaBuildFilename={xdeltaBuildFilename}
+        xdeltaBuildError={xdeltaBuildError}
+        onClose={closeXdeltaBuildModal}
+        onDownload={handleDownloadXdeltaIso}
+      />
     </div>
   )
 }
