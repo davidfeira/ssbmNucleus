@@ -159,6 +159,14 @@ export default function CspManagerModal({
               {alternativeCsps.map((alt, index) => (
                 <div key={alt.id} className="csp-manager-alt-card" onClick={() => onSwapCsp(index)}>
                   <img src={alt.url} alt={`Alternative ${index + 1}`} className="csp-manager-alt-image" />
+                  {/* Pose name label */}
+                  {alt.poseName && (
+                    <div className="csp-manager-alt-pose-label">{alt.poseName}</div>
+                  )}
+                  {/* HD badge */}
+                  {alt.isHd && (
+                    <div className="csp-manager-alt-hd-badge">HD</div>
+                  )}
                   <div className="csp-manager-alt-overlay">
                     <span>Click to swap</span>
                   </div>

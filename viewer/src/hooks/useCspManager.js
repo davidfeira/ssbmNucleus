@@ -27,7 +27,16 @@ export function useCspManager({ API_URL, onRefresh }) {
   // Open CSP manager
   const openCspManager = (skinData) => {
     setCspManagerSkin(skinData)
-    setAlternativeCsps([])
+    // Load alternate CSPs from skin data if available
+    const alts = (skinData.alternateCsps || []).map(alt => ({
+      id: alt.id,
+      url: alt.url,
+      poseName: alt.pose_name,
+      isHd: alt.is_hd,
+      timestamp: alt.timestamp,
+      file: null // Not a new file, loaded from server
+    }))
+    setAlternativeCsps(alts)
     setPendingMainCsp(null)
     setPendingMainCspPreview(null)
     setHdResolution('4x')

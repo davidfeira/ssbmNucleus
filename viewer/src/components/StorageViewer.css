@@ -3421,6 +3421,43 @@
   color: white;
 }
 
+/* Pose name label on alt cards */
+.csp-manager-alt-pose-label {
+  position: absolute;
+  bottom: var(--space-1);
+  left: var(--space-1);
+  right: var(--space-1);
+  padding: 2px 6px;
+  background: rgba(6, 12, 20, 0.85);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 2;
+}
+
+/* HD badge on alt cards */
+.csp-manager-alt-hd-badge {
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-1);
+  padding: 2px 6px;
+  background: linear-gradient(135deg, var(--color-cyan), var(--color-accent));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: var(--font-bold);
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 3;
+}
+
 /* Add CSP Card */
 .csp-manager-add-card {
   aspect-ratio: 3 / 4;

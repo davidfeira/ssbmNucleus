@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
+import PoseSkinSelectorModal from './PoseSkinSelectorModal'
 
 /**
  * Pose Manager Modal
@@ -50,7 +51,7 @@ const TrashIcon = () => (
 )
 
 // Pose Card Component
-function PoseCard({ pose, character, onDelete, API_URL }) {
+function PoseCard({ pose, character, onDelete, onClick, API_URL }) {
   const [deleting, setDeleting] = useState(false)
 
   const handleDelete = async (e) => {
@@ -76,7 +77,7 @@ function PoseCard({ pose, character, onDelete, API_URL }) {
   }
 
   return (
-    <div className="pm-pose-card">
+    <div className="pm-pose-card" onClick={onClick} style={{ cursor: 'pointer' }}>
       <div className="pm-pose-image">
         {pose.hasThumbnail ? (
           <img
@@ -115,6 +116,7 @@ export default function PoseManagerModal({
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [poses, setPoses] = useState([])
   const [loadingPoses, setLoadingPoses] = useState(true)
+  const [selectedPose, setSelectedPose] = useState(null) // For skin selector modal
   const viewerRef = useRef(null)
 
   // Fetch saved poses
@@ -215,18 +217,20 @@ export default function PoseManagerModal({
 
         {/* Body with viewer and poses grid */}
         <div className="pm-body">
-          {/* Left: 3D Viewer */}
-          <div className="pm-viewer-section">
-            <EmbeddedModelViewer
-              ref={viewerRef}
-              character={character}
-              costumeCode={getDefaultCostumeCode(character)}
-              onClose={onClose}
-              cspMode={true}
-              showGrid={false}
-              showBackground={false}
-            />
-          </div>
+          {/* Left: 3D Viewer (hidden when skin selector is open) */}
+          {!selectedPose && (
+            <div className="pm-viewer-section">
+              <EmbeddedModelViewer
+                ref={viewerRef}
+                character={character}
+                costumeCode={getDefaultCostumeCode(character)}
+                onClose={onClose}
+                cspMode={true}
+                showGrid={false}
+                showBackground={false}
+              />
+            </div>
+          )}
 
           {/* Right: Saved Poses Grid */}
           <div className="pm-poses-section">
@@ -249,6 +253,7 @@ export default function PoseManagerModal({
                     pose={pose}
                     character={character}
                     onDelete={handleDeletePose}
+                    onClick={() => setSelectedPose(pose)}
                     API_URL={API_URL}
                   />
                 ))
@@ -290,6 +295,16 @@ export default function PoseManagerModal({
           </div>
         )}
       </div>
+
+      {/* Skin Selector Modal for batch CSP generation */}
+      <PoseSkinSelectorModal
+        show={selectedPose !== null}
+        character={character}
+        poseName={selectedPose?.name}
+        poseThumbnail={selectedPose?.hasThumbnail ? `${API_URL.replace('/api/mex', '')}${selectedPose.thumbnailUrl}` : null}
+        onClose={() => setSelectedPose(null)}
+        API_URL={API_URL}
+      />
 
       <style>{`
         .pm-overlay {

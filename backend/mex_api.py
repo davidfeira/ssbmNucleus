@@ -1174,6 +1174,17 @@ def list_storage_costumes():
                 zip_path = STORAGE_PATH / char_name / skin.get('filename', '')
 
                 if zip_path.exists():
+                    # Build alternate CSPs list with full URLs
+                    alternate_csps = []
+                    for alt in skin.get('alternate_csps', []):
+                        alternate_csps.append({
+                            'id': alt.get('id'),
+                            'url': f"/storage/{char_name}/{alt.get('filename')}",
+                            'pose_name': alt.get('pose_name'),
+                            'is_hd': alt.get('is_hd', False),
+                            'timestamp': alt.get('timestamp')
+                        })
+
                     costume_data = {
                         'character': char_name,
                         'name': f"{char_name} - {skin.get('color', 'Custom')}",
@@ -1183,6 +1194,8 @@ def list_storage_costumes():
                         # These paths are relative to viewer/public/ which Vite serves at root
                         'cspUrl': f"/storage/{char_name}/{skin['id']}_csp.png" if skin.get('has_csp') else None,
                         'stockUrl': f"/storage/{char_name}/{skin['id']}_stc.png" if skin.get('has_stock') else None,
+                        # Alternate CSPs from batch generation
+                        'alternateCsps': alternate_csps,
                         # Ice Climbers pairing metadata
                         'isPopo': skin.get('is_popo', False),
                         'isNana': skin.get('is_nana', False),
@@ -4869,6 +4882,227 @@ def delete_pose():
         })
     except Exception as e:
         logger.error(f"Delete pose error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/poses/batch-generate-csp', methods=['POST'])
+def batch_generate_pose_csps():
+    """Generate CSPs for multiple skins using a saved pose.
+
+    Request body:
+    {
+        "character": "Fox",
+        "poseName": "jump",
+        "skinIds": ["skin-id-1", "skin-id-2"],
+        "hdMode": true  // Optional, generates 4x resolution if true
+    }
+
+    Returns:
+    {
+        "success": true,
+        "generated": 2,
+        "failed": 0,
+        "results": [
+            {"skinId": "skin-id-1", "success": true, "altCspPath": "..."},
+            {"skinId": "skin-id-2", "success": true, "altCspPath": "..."}
+        ]
+    }
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        pose_name = data.get('poseName')
+        skin_ids = data.get('skinIds', [])
+        hd_mode = data.get('hdMode', False)
+
+        if not character or not pose_name or not skin_ids:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, poseName, or skinIds parameter'
+            }), 400
+
+        # Get pose file path
+        pose_path = VANILLA_ASSETS_DIR / "custom_poses" / character / f"{pose_name}.yml"
+        if not pose_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Pose {pose_name} not found'
+            }), 404
+
+        # Get AJ file path
+        char_prefix = CHAR_PREFIXES.get(character)
+        if not char_prefix:
+            return jsonify({
+                'success': False,
+                'error': f'Unknown character: {character}'
+            }), 400
+
+        aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+
+        # Load metadata to find skin ZIPs
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        char_data = metadata.get('characters', {}).get(character, {})
+        skins = char_data.get('skins', [])
+
+        # Build skin lookup by ID
+        skin_lookup = {skin['id']: skin for skin in skins if skin.get('type') != 'folder'}
+
+        results = []
+        generated = 0
+        failed = 0
+        scale = 4 if hd_mode else 1
+
+        for skin_id in skin_ids:
+            skin = skin_lookup.get(skin_id)
+            if not skin:
+                results.append({
+                    'skinId': skin_id,
+                    'success': False,
+                    'error': 'Skin not found'
+                })
+                failed += 1
+                continue
+
+            zip_path = STORAGE_PATH / character / skin.get('filename', '')
+            if not zip_path.exists():
+                results.append({
+                    'skinId': skin_id,
+                    'success': False,
+                    'error': 'ZIP file not found'
+                })
+                failed += 1
+                continue
+
+            # Extract DAT from ZIP to temp directory
+            temp_dir = None
+            try:
+                import tempfile
+                import zipfile
+
+                temp_dir = tempfile.mkdtemp(prefix='csp_batch_')
+                logger.info(f"Extracting {zip_path} to {temp_dir}")
+
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(temp_dir)
+
+                # Find DAT file in extraction
+                dat_file = None
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        if file.endswith('.dat') and file.startswith('Pl'):
+                            dat_file = Path(root) / file
+                            break
+                    if dat_file:
+                        break
+
+                if not dat_file or not dat_file.exists():
+                    results.append({
+                        'skinId': skin_id,
+                        'success': False,
+                        'error': 'No DAT file found in ZIP'
+                    })
+                    failed += 1
+                    continue
+
+                logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={scale}x)")
+
+                # Generate CSP
+                csp_path = generate_single_csp_internal(
+                    str(dat_file),
+                    character,
+                    str(pose_path),
+                    str(aj_file) if aj_file.exists() else None,
+                    scale
+                )
+
+                if csp_path and Path(csp_path).exists():
+                    # Determine alternate CSP filename
+                    existing_alts = skin.get('alternate_csps', [])
+                    alt_num = len(existing_alts) + 1
+                    suffix = '_hd' if hd_mode else ''
+                    alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"
+                    alt_path = STORAGE_PATH / character / alt_filename
+
+                    # Move generated CSP to storage
+                    shutil.move(csp_path, alt_path)
+                    logger.info(f"[OK] Saved alternate CSP: {alt_path}")
+
+                    # Update skin metadata with alternate CSP info
+                    alt_entry = {
+                        'id': f"alt_{int(time.time())}_{alt_num}",
+                        'filename': alt_filename,
+                        'pose_name': pose_name,
+                        'is_hd': hd_mode,
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    # Find and update skin in metadata
+                    for s in skins:
+                        if s.get('id') == skin_id:
+                            if 'alternate_csps' not in s:
+                                s['alternate_csps'] = []
+                            s['alternate_csps'].append(alt_entry)
+                            break
+
+                    results.append({
+                        'skinId': skin_id,
+                        'success': True,
+                        'altCspPath': f"/storage/{character}/{alt_filename}",
+                        'altId': alt_entry['id']
+                    })
+                    generated += 1
+                else:
+                    results.append({
+                        'skinId': skin_id,
+                        'success': False,
+                        'error': 'CSP generation failed'
+                    })
+                    failed += 1
+
+            except Exception as skin_err:
+                logger.error(f"Error generating CSP for {skin_id}: {skin_err}", exc_info=True)
+                results.append({
+                    'skinId': skin_id,
+                    'success': False,
+                    'error': str(skin_err)
+                })
+                failed += 1
+            finally:
+                # Cleanup temp directory
+                if temp_dir and os.path.exists(temp_dir):
+                    try:
+                        shutil.rmtree(temp_dir)
+                        logger.info(f"Cleaned up temp dir: {temp_dir}")
+                    except Exception as cleanup_err:
+                        logger.warning(f"Failed to cleanup temp dir: {cleanup_err}")
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Batch CSP generation complete: {generated} generated, {failed} failed")
+
+        return jsonify({
+            'success': True,
+            'generated': generated,
+            'failed': failed,
+            'results': results
+        })
+
+    except Exception as e:
+        logger.error(f"Batch generate CSP error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
