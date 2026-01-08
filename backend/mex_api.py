@@ -66,7 +66,20 @@ else:
     SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
 
 sys.path.insert(0, str(PROCESSOR_DIR))
-from generate_csp import generate_csp
+from generate_csp import generate_csp, generate_single_csp_internal
+
+# Character code mapping for vanilla costume lookup (pose thumbnails)
+CHAR_PREFIXES = {
+    "C. Falcon": "Ca", "Falco": "Fc", "Fox": "Fx",
+    "Marth": "Ms", "Roy": "Fe", "Bowser": "Kp",
+    "DK": "Dk", "Ganondorf": "Gn", "Jigglypuff": "Pr",
+    "Kirby": "Kb", "Link": "Lk", "Luigi": "Lg",
+    "Mario": "Mr", "Mewtwo": "Mt", "Ness": "Ns",
+    "Peach": "Pe", "Pichu": "Pc", "Pikachu": "Pk",
+    "Ice Climbers": "Pp", "Samus": "Ss", "Sheik": "Sk",
+    "Yoshi": "Ys", "Young Link": "Cl", "Zelda": "Zd",
+    "Dr. Mario": "Dr", "G&W": "Gw"
+}
 
 sys.path.insert(0, str(SERVICES_DIR))
 from dat_processor import validate_for_slippi
@@ -4719,10 +4732,45 @@ camera:
 
         logger.info(f"[OK] Saved pose '{safe_name}' for {character} at {pose_path}")
 
+        # Generate thumbnail using vanilla Nr costume
+        thumbnail_path = None
+        try:
+            char_prefix = CHAR_PREFIXES.get(character)
+            if char_prefix:
+                costume_code = f"Pl{char_prefix}Nr"
+                vanilla_dat = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
+                # AJ file contains animations - needed for loading animation by symbol
+                aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+
+                if vanilla_dat.exists():
+                    logger.info(f"Generating pose thumbnail using {vanilla_dat}")
+                    logger.info(f"AJ file: {aj_file} (exists: {aj_file.exists()})")
+
+                    # Generate CSP with the pose scene file and AJ file for animations
+                    csp_path = generate_single_csp_internal(
+                        str(vanilla_dat),
+                        character,
+                        str(pose_path),  # Use pose YAML as scene file
+                        str(aj_file) if aj_file.exists() else None,  # Pass AJ file for animation loading
+                        1  # 1x scale for thumbnails
+                    )
+
+                    if csp_path and Path(csp_path).exists():
+                        # Move CSP to thumbnail location
+                        thumbnail_path = poses_dir / f"{safe_name}_thumb.png"
+                        shutil.move(csp_path, thumbnail_path)
+                        logger.info(f"[OK] Generated pose thumbnail at {thumbnail_path}")
+                else:
+                    logger.warning(f"Vanilla DAT not found: {vanilla_dat}")
+        except Exception as thumb_err:
+            logger.error(f"Failed to generate pose thumbnail: {thumb_err}", exc_info=True)
+            # Continue without thumbnail - pose was still saved
+
         return jsonify({
             'success': True,
             'path': str(pose_path),
-            'poseName': safe_name
+            'poseName': safe_name,
+            'hasThumbnail': thumbnail_path is not None
         })
     except Exception as e:
         logger.error(f"Save pose error: {str(e)}", exc_info=True)
@@ -4746,9 +4794,12 @@ def list_poses(character):
 
         poses = []
         for pose_file in poses_dir.glob("*.yml"):
+            thumb_path = poses_dir / f"{pose_file.stem}_thumb.png"
             poses.append({
                 'name': pose_file.stem,
-                'path': str(pose_file)
+                'path': str(pose_file),
+                'hasThumbnail': thumb_path.exists(),
+                'thumbnailUrl': f"/storage/poses/{character}/{pose_file.stem}_thumb.png" if thumb_path.exists() else None
             })
 
         return jsonify({
@@ -4763,9 +4814,16 @@ def list_poses(character):
         }), 500
 
 
+@app.route('/storage/poses/<character>/<filename>')
+def serve_pose_thumbnail(character, filename):
+    """Serve pose thumbnail images."""
+    poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+    return send_from_directory(poses_dir, filename)
+
+
 @app.route('/api/mex/storage/poses/delete', methods=['POST'])
 def delete_pose():
-    """Delete a saved pose."""
+    """Delete a saved pose and its thumbnail."""
     try:
         data = request.json
         character = data.get('character')
@@ -4777,7 +4835,9 @@ def delete_pose():
                 'error': 'Missing character or poseName parameter'
             }), 400
 
-        pose_path = VANILLA_ASSETS_DIR / "custom_poses" / character / f"{pose_name}.yml"
+        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        pose_path = poses_dir / f"{pose_name}.yml"
+        thumb_path = poses_dir / f"{pose_name}_thumb.png"
 
         if not pose_path.exists():
             return jsonify({
@@ -4786,6 +4846,10 @@ def delete_pose():
             }), 404
 
         pose_path.unlink()
+        if thumb_path.exists():
+            thumb_path.unlink()
+            logger.info(f"[OK] Deleted pose thumbnail '{pose_name}_thumb.png'")
+
         logger.info(f"[OK] Deleted pose '{pose_name}' for {character}")
 
         return jsonify({

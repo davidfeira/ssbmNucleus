@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 
 /**
  * Pose Manager Modal
  * Allows users to pose characters and save poses for CSP generation
+ * Left side: 3D viewer for posing
+ * Right side: Grid of saved poses with thumbnails
  */
 
 // Character to costume code prefix mapping
@@ -40,6 +42,67 @@ const SaveIcon = () => (
   </svg>
 )
 
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+  </svg>
+)
+
+// Pose Card Component
+function PoseCard({ pose, character, onDelete, API_URL }) {
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async (e) => {
+    e.stopPropagation()
+    if (!confirm(`Delete pose "${pose.name}"?`)) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/poses/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character, poseName: pose.name })
+      })
+      const data = await response.json()
+      if (data.success) {
+        onDelete(pose.name)
+      }
+    } catch (err) {
+      console.error('[PoseCard] Delete error:', err)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="pm-pose-card">
+      <div className="pm-pose-image">
+        {pose.hasThumbnail ? (
+          <img
+            src={`${API_URL.replace('/api/mex', '')}${pose.thumbnailUrl}`}
+            alt={pose.name}
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        ) : (
+          <div className="pm-pose-placeholder">
+            {pose.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <button
+          className="pm-pose-delete"
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Delete pose"
+        >
+          <TrashIcon />
+        </button>
+      </div>
+      <div className="pm-pose-name">{pose.name}</div>
+    </div>
+  )
+}
+
 export default function PoseManagerModal({
   show,
   character,
@@ -50,7 +113,31 @@ export default function PoseManagerModal({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [poses, setPoses] = useState([])
+  const [loadingPoses, setLoadingPoses] = useState(true)
   const viewerRef = useRef(null)
+
+  // Fetch saved poses
+  const fetchPoses = useCallback(async () => {
+    if (!character) return
+    try {
+      const response = await fetch(`${API_URL}/storage/poses/list/${character}`)
+      const data = await response.json()
+      if (data.success) {
+        setPoses(data.poses)
+      }
+    } catch (err) {
+      console.error('[PoseManager] Fetch poses error:', err)
+    } finally {
+      setLoadingPoses(false)
+    }
+  }, [character, API_URL])
+
+  useEffect(() => {
+    if (show) {
+      fetchPoses()
+    }
+  }, [show, fetchPoses])
 
   if (!show) return null
 
@@ -95,6 +182,9 @@ export default function PoseManagerModal({
       setSaveSuccess(true)
       setPoseName('')
 
+      // Refresh poses list to show new thumbnail
+      await fetchPoses()
+
       // Clear success message after 3 seconds
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
@@ -103,6 +193,10 @@ export default function PoseManagerModal({
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDeletePose = (poseName) => {
+    setPoses(poses.filter(p => p.name !== poseName))
   }
 
   return (
@@ -119,17 +213,48 @@ export default function PoseManagerModal({
           </button>
         </div>
 
-        {/* Body with viewer */}
+        {/* Body with viewer and poses grid */}
         <div className="pm-body">
-          <EmbeddedModelViewer
-            ref={viewerRef}
-            character={character}
-            costumeCode={getDefaultCostumeCode(character)}
-            onClose={onClose}
-            cspMode={true}
-            showGrid={false}
-            showBackground={false}
-          />
+          {/* Left: 3D Viewer */}
+          <div className="pm-viewer-section">
+            <EmbeddedModelViewer
+              ref={viewerRef}
+              character={character}
+              costumeCode={getDefaultCostumeCode(character)}
+              onClose={onClose}
+              cspMode={true}
+              showGrid={false}
+              showBackground={false}
+            />
+          </div>
+
+          {/* Right: Saved Poses Grid */}
+          <div className="pm-poses-section">
+            <div className="pm-poses-header">
+              <span>Saved Poses</span>
+              <span className="pm-poses-count">{poses.length}</span>
+            </div>
+            <div className="pm-poses-grid">
+              {loadingPoses ? (
+                <div className="pm-poses-loading">Loading poses...</div>
+              ) : poses.length === 0 ? (
+                <div className="pm-poses-empty">
+                  No saved poses yet.<br/>
+                  Create a pose and save it!
+                </div>
+              ) : (
+                poses.map(pose => (
+                  <PoseCard
+                    key={pose.name}
+                    pose={pose}
+                    character={character}
+                    onDelete={handleDeletePose}
+                    API_URL={API_URL}
+                  />
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Save controls */}
@@ -184,7 +309,7 @@ export default function PoseManagerModal({
           background: #1a1a2e;
           border-radius: 12px;
           width: 95vw;
-          max-width: 1400px;
+          max-width: 1600px;
           height: 90vh;
           display: flex;
           flex-direction: column;
@@ -238,16 +363,24 @@ export default function PoseManagerModal({
 
         .pm-body {
           flex: 1;
-          position: relative;
+          display: flex;
           overflow: hidden;
         }
 
-        .pm-body .mv-overlay {
+        /* Left: Viewer Section */
+        .pm-viewer-section {
+          flex: 1;
+          position: relative;
+          overflow: hidden;
+          border-right: 1px solid #2a2a4a;
+        }
+
+        .pm-viewer-section .mv-overlay {
           position: absolute;
           background: transparent;
         }
 
-        .pm-body .mv-container {
+        .pm-viewer-section .mv-container {
           width: 100%;
           height: 100%;
           max-width: none;
@@ -255,8 +388,127 @@ export default function PoseManagerModal({
           border-radius: 0;
         }
 
-        .pm-body .mv-header {
+        .pm-viewer-section .mv-header {
           display: none;
+        }
+
+        /* Right: Poses Section */
+        .pm-poses-section {
+          width: 320px;
+          min-width: 280px;
+          display: flex;
+          flex-direction: column;
+          background: #16162a;
+        }
+
+        .pm-poses-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          border-bottom: 1px solid #2a2a4a;
+          font-size: 14px;
+          font-weight: 500;
+          color: #fff;
+        }
+
+        .pm-poses-count {
+          background: #2a2a4a;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 12px;
+          color: #888;
+        }
+
+        .pm-poses-grid {
+          flex: 1;
+          overflow-y: auto;
+          padding: 12px;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          align-content: start;
+        }
+
+        .pm-poses-loading,
+        .pm-poses-empty {
+          grid-column: 1 / -1;
+          text-align: center;
+          color: #666;
+          font-size: 13px;
+          padding: 40px 20px;
+          line-height: 1.6;
+        }
+
+        /* Pose Card */
+        .pm-pose-card {
+          background: #1a1a2e;
+          border: 1px solid #2a2a4a;
+          border-radius: 8px;
+          overflow: hidden;
+          transition: all 0.15s ease;
+        }
+
+        .pm-pose-card:hover {
+          border-color: #4a9eff;
+          transform: translateY(-2px);
+        }
+
+        .pm-pose-image {
+          position: relative;
+          aspect-ratio: 3 / 4;
+          background: #0d1929;
+          overflow: hidden;
+        }
+
+        .pm-pose-image img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .pm-pose-placeholder {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 32px;
+          font-weight: 600;
+          color: #2a2a4a;
+          background: linear-gradient(135deg, #1a1a2e 0%, #0d1929 100%);
+        }
+
+        .pm-pose-delete {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          background: rgba(220, 53, 69, 0.9);
+          border: none;
+          border-radius: 4px;
+          padding: 6px;
+          color: #fff;
+          cursor: pointer;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+
+        .pm-pose-card:hover .pm-pose-delete {
+          opacity: 1;
+        }
+
+        .pm-pose-delete:hover {
+          background: #dc3545;
+        }
+
+        .pm-pose-name {
+          padding: 8px;
+          font-size: 12px;
+          color: #ccc;
+          text-align: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .pm-save-controls {
