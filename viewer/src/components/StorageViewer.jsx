@@ -27,6 +27,8 @@ import { useFileImport } from '../hooks/useFileImport'
 import { useXdeltaPatches } from '../hooks/useXdeltaPatches'
 import { useXdeltaProgress } from '../hooks/useXdeltaProgress'
 import { useCspManager } from '../hooks/useCspManager'
+import { useEditModal } from '../hooks/useEditModal'
+import { buildDisplayList, countSkinsInFolder, getFolderIdAtPosition } from '../utils/storageViewerUtils'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -60,21 +62,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
 
-  // Edit modal state
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingItem, setEditingItem] = useState(null) // { type: 'costume'/'stage', data: {...} }
-  const [editName, setEditName] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [newScreenshot, setNewScreenshot] = useState(null) // File object for new screenshot
-  const [screenshotPreview, setScreenshotPreview] = useState(null) // Preview URL for new screenshot
-  const [newCsp, setNewCsp] = useState(null) // File object for new CSP
-  const [cspPreview, setCspPreview] = useState(null) // Preview URL for new CSP
-  const [newStock, setNewStock] = useState(null) // File object for new stock
-  const [stockPreview, setStockPreview] = useState(null) // Preview URL for new stock
-  const [editSlippiSafe, setEditSlippiSafe] = useState(null) // Track slippi changes for stages
-  const [show3DViewer, setShow3DViewer] = useState(false) // 3D model viewer
   const [slippiAdvancedOpen, setSlippiAdvancedOpen] = useState(false) // Collapsible Slippi controls
   const [showSkinCreator, setShowSkinCreator] = useState(false) // Skin creator modal
   const [skinCreatorInitialCostume, setSkinCreatorInitialCostume] = useState(null) // For "edit from vault" flow
@@ -273,6 +260,36 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleCaptureHdCsp
   } = useCspManager({ API_URL, onRefresh })
 
+  // Edit modal hook
+  const {
+    showEditModal,
+    setShowEditModal,
+    editingItem,
+    setEditingItem,
+    editName,
+    setEditName,
+    saving,
+    deleting,
+    exporting,
+    cspPreview,
+    stockPreview,
+    screenshotPreview,
+    editSlippiSafe,
+    setEditSlippiSafe,
+    slippiAdvancedOpen,
+    setSlippiAdvancedOpen,
+    show3DViewer,
+    setShow3DViewer,
+    handleEditClick,
+    handleScreenshotChange,
+    handleCspChange,
+    handleStockChange,
+    handleSave,
+    handleDelete,
+    handleExport,
+    handleCancel
+  } = useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastImageUpdate })
+
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
     if (mode === 'stages') {
@@ -379,442 +396,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }
 
-  const handleEditClick = (type, data) => {
-    const item = { type, data }
-    const name = type === 'costume' ? data.color : data.name
-    setEditingItem(item)
-    setEditName(name)
-    setSaving(false)
-    setDeleting(false)
-    setNewScreenshot(null)
-    setScreenshotPreview(null)
-    setNewCsp(null)
-    setCspPreview(null)
-    setNewStock(null)
-    setStockPreview(null)
-    setEditSlippiSafe(type === 'stage' ? data.slippi_safe : null)
-    setShowEditModal(true)
-  }
-
-  const handleScreenshotChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
-      return
-    }
-
-    setNewScreenshot(file)
-
-    // Create preview URL
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setScreenshotPreview(e.target.result)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handleCspChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
-      return
-    }
-
-    setNewCsp(file)
-
-    // Create preview URL
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setCspPreview(e.target.result)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handleStockChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
-      return
-    }
-
-    setNewStock(file)
-
-    // Create preview URL
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setStockPreview(e.target.result)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // CSP Manager handlers
-
-  const handleSave = async () => {
-    if (!editName.trim()) {
-      alert('Name cannot be empty')
-      return
-    }
-
-    setSaving(true)
-
-    try {
-      // Save name change
-      const endpoint = editingItem.type === 'costume'
-        ? `${API_URL}/storage/costumes/rename`
-        : `${API_URL}/storage/stages/rename`
-
-      const body = editingItem.type === 'costume'
-        ? {
-            character: editingItem.data.character,
-            skinId: editingItem.data.id,
-            newName: editName
-          }
-        : {
-            stageFolder: editingItem.data.stageFolder,
-            variantId: editingItem.data.id,
-            newName: editName
-          }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        alert(`Save failed: ${data.error}`)
-        setSaving(false)
-        return
-      }
-
-      // If this is a stage and there's a new screenshot, upload it
-      if (editingItem.type === 'stage' && newScreenshot) {
-        const formData = new FormData()
-        formData.append('stageFolder', editingItem.data.stageFolder)
-        formData.append('variantId', editingItem.data.id)
-        formData.append('screenshot', newScreenshot)
-
-        const screenshotResponse = await fetch(`${API_URL}/storage/stages/update-screenshot`, {
-          method: 'POST',
-          body: formData
-        })
-
-        const screenshotData = await screenshotResponse.json()
-
-        if (!screenshotData.success) {
-          alert(`Screenshot upload failed: ${screenshotData.error}`)
-          setSaving(false)
-          return
-        }
-      }
-
-      // If this is a stage and slippi status changed, save it
-      if (editingItem.type === 'stage' && editSlippiSafe !== editingItem.data.slippi_safe) {
-        const slippiResponse = await fetch(`${API_URL}/storage/stages/set-slippi`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stageName: editingItem.data.stageFolder,
-            variantId: editingItem.data.id,
-            slippiSafe: editSlippiSafe
-          })
-        })
-
-        const slippiData = await slippiResponse.json()
-
-        if (!slippiData.success) {
-          alert(`Slippi status update failed: ${slippiData.error}`)
-          setSaving(false)
-          return
-        }
-      }
-
-      // If this is a character costume and there's a new CSP, upload it
-      if (editingItem.type === 'costume' && newCsp) {
-        const formData = new FormData()
-        formData.append('character', editingItem.data.character)
-        formData.append('skinId', editingItem.data.id)
-        formData.append('csp', newCsp)
-
-        const cspResponse = await fetch(`${API_URL}/storage/costumes/update-csp`, {
-          method: 'POST',
-          body: formData
-        })
-
-        const cspData = await cspResponse.json()
-
-        if (!cspData.success) {
-          alert(`CSP upload failed: ${cspData.error}`)
-          setSaving(false)
-          return
-        }
-      }
-
-      // If this is a character costume and there's a new stock icon, upload it
-      if (editingItem.type === 'costume' && newStock) {
-        const formData = new FormData()
-        formData.append('character', editingItem.data.character)
-        formData.append('skinId', editingItem.data.id)
-        formData.append('stock', newStock)
-
-        const stockResponse = await fetch(`${API_URL}/storage/costumes/update-stock`, {
-          method: 'POST',
-          body: formData
-        })
-
-        const stockData = await stockResponse.json()
-
-        if (!stockData.success) {
-          alert(`Stock icon upload failed: ${stockData.error}`)
-          setSaving(false)
-          return
-        }
-      }
-
-      // Refetch data before closing modal
-      if (editingItem.type === 'stage') {
-        await fetchStageVariants()
-      }
-
-      // Always await metadata refresh for costumes (CSP/stock updates)
-      await onRefresh()
-
-      // If we uploaded a CSP or stock, update cache-busting timestamp to force image reload
-      if (newCsp || newStock) {
-        setLastImageUpdate(Date.now())
-      }
-
-      setShowEditModal(false)
-      setEditingItem(null)
-    } catch (err) {
-      alert(`Save error: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    const itemName = editingItem.type === 'costume'
-      ? `${editingItem.data.character} - ${editingItem.data.color}`
-      : editingItem.data.name
-
-    if (!confirm(`Are you sure you want to delete "${itemName}"? This cannot be undone.`)) {
-      return
-    }
-
-    setDeleting(true)
-
-    try {
-      const endpoint = editingItem.type === 'costume'
-        ? `${API_URL}/storage/costumes/delete`
-        : `${API_URL}/storage/stages/delete`
-
-      const body = editingItem.type === 'costume'
-        ? {
-            character: editingItem.data.character,
-            skinId: editingItem.data.id
-          }
-        : {
-            stageFolder: editingItem.data.stageFolder,
-            variantId: editingItem.data.id
-          }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Refetch data before closing modal
-        if (editingItem.type === 'stage') {
-          await fetchStageVariants()
-        }
-
-        // Always await metadata refresh for costumes
-        await onRefresh()
-
-        // Update cache-busting timestamp to force image reload after deletion
-        if (editingItem.type === 'costume') {
-          setLastImageUpdate(Date.now())
-        }
-
-        setShowEditModal(false)
-        setEditingItem(null)
-      } else {
-        alert(`Delete failed: ${data.error}`)
-      }
-    } catch (err) {
-      alert(`Delete error: ${err.message}`)
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const handleExport = async () => {
-    setExporting(true)
-
-    try {
-      const endpoint = editingItem.type === 'costume'
-        ? `${API_URL}/storage/costumes/export`
-        : `${API_URL}/storage/stages/export`
-
-      const body = editingItem.type === 'costume'
-        ? {
-            character: editingItem.data.character,
-            skinId: editingItem.data.id,
-            colorName: editingItem.data.color
-          }
-        : {
-            stageCode: editingItem.data.stageCode,
-            stageName: editingItem.data.stageName,
-            variantId: editingItem.data.id,
-            variantName: editingItem.data.name
-          }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Trigger download
-        const downloadUrl = `${API_URL}/export/mod/${data.filename}`
-        const link = document.createElement('a')
-        link.href = downloadUrl
-        link.download = data.filename
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      } else {
-        alert(`Export failed: ${data.error}`)
-      }
-    } catch (err) {
-      alert(`Export error: ${err.message}`)
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const handleCancel = () => {
-    setShowEditModal(false)
-    setEditingItem(null)
-    setEditName('')
-    setNewScreenshot(null)
-    setScreenshotPreview(null)
-    setNewCsp(null)
-    setCspPreview(null)
-    setNewStock(null)
-    setStockPreview(null)
-    setEditSlippiSafe(null)
-  }
-
-  // Folder helper functions
-  // Build display list from skins array (which now contains both skins and folders)
-  // Folder items are GROUPED right after their folder header when expanded
-  const buildDisplayList = (allSkins) => {
-    if (!allSkins?.length) return []
-
-    // Build folder info and collect folder items
-    const folderItems = {} // folderId -> [items with arrayIndex]
-    const folders = [] // folder objects with arrayIndex
-    const rootItems = [] // items not in any folder
-
-    for (let i = 0; i < allSkins.length; i++) {
-      const item = allSkins[i]
-
-      if (item.type === 'folder') {
-        folders.push({ folder: item, arrayIndex: i })
-        folderItems[item.id] = []
-      } else if (item.visible !== false) {
-        if (item.folder_id) {
-          if (!folderItems[item.folder_id]) {
-            folderItems[item.folder_id] = []
-          }
-          folderItems[item.folder_id].push({ skin: item, arrayIndex: i })
-        } else {
-          rootItems.push({ skin: item, arrayIndex: i })
-        }
-      }
-    }
-
-    // Build display list: root items first, then folders with their items
-    const result = []
-
-    // Add root items that come before all folders
-    // We need to maintain relative order, so track what we've added
-    const addedIndices = new Set()
-
-    // Go through array in order to maintain relative positioning
-    for (let i = 0; i < allSkins.length; i++) {
-      const item = allSkins[i]
-
-      if (item.type === 'folder') {
-        const isExpanded = expandedFolders[item.id] ?? item.expanded ?? true
-        result.push({ type: 'folder', folder: item, isExpanded, arrayIndex: i })
-        addedIndices.add(i)
-
-        // If expanded, add all items belonging to this folder right after it
-        if (isExpanded && folderItems[item.id]) {
-          for (const folderItem of folderItems[item.id]) {
-            result.push({ type: 'skin', skin: folderItem.skin, folderId: item.id, arrayIndex: folderItem.arrayIndex })
-            addedIndices.add(folderItem.arrayIndex)
-          }
-        }
-      } else if (item.visible !== false && !item.folder_id) {
-        // Root item - add it
-        result.push({ type: 'skin', skin: item, folderId: null, arrayIndex: i })
-        addedIndices.add(i)
-      }
-      // Skip folder items here - they're added after their folder
-    }
-
-    return result
-  }
-
-  // Count skins in a folder (by folder_id)
-  const countSkinsInFolder = (folderId, allSkins) => {
-    return allSkins.filter(s => s.folder_id === folderId && s.visible !== false).length
-  }
-
-  // Determine folder membership based on position after reorder
-  // Returns the folder_id the item should have at the given position
-  const getFolderIdAtPosition = (allSkins, position) => {
-    // Look backwards from position to find the context
-    // If we find a skin with folder_id before hitting a folder or start, we're in that folder
-    // If we find a folder, we're right after it (in that folder)
-    // If we hit start or a skin without folder_id, we're at root
-    for (let i = position - 1; i >= 0; i--) {
-      const item = allSkins[i]
-      if (item.type === 'folder') {
-        // We're right after a folder - in that folder
-        return item.id
-      }
-      if (item.folder_id) {
-        // Previous item is in a folder - we're in that folder too
-        return item.folder_id
-      }
-      // Previous item is at root level - we're at root
-      return null
-    }
-    return null // At the start, root level
-  }
 
   const handleDropOnFolder = async (e, folderId) => {
     e.preventDefault()
