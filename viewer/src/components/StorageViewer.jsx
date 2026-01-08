@@ -20,6 +20,7 @@ import StagesGrid from './storage/StagesGrid'
 import PatchesGrid from './storage/PatchesGrid'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
 import { useFolderManagement } from '../hooks/useFolderManagement'
+import { useFileImport } from '../hooks/useFileImport'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -49,8 +50,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [selectedCharacter, setSelectedCharacter] = useState(null)
   const [selectedStage, setSelectedStage] = useState(null)
   const [stageVariants, setStageVariants] = useState({})
-  const [importing, setImporting] = useState(false)
-  const [importMessage, setImportMessage] = useState('')
 
   // XDelta patches state
   const [xdeltaPatches, setXdeltaPatches] = useState([])
@@ -80,10 +79,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [xdeltaCreateError, setXdeltaCreateError] = useState(null)
   const [xdeltaCreateResult, setXdeltaCreateResult] = useState(null)
 
-  // Slippi dialog state
-  const [showSlippiDialog, setShowSlippiDialog] = useState(false)
-  const [slippiDialogData, setSlippiDialogData] = useState(null)
-  const [pendingFile, setPendingFile] = useState(null)
+  // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
 
   // Edit modal state
@@ -183,6 +179,25 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     selectedCharacter,
     API_URL,
     onRefresh
+  })
+
+  // File import hook
+  const {
+    importing,
+    importMessage,
+    showSlippiDialog,
+    setShowSlippiDialog,
+    slippiDialogData,
+    setSlippiDialogData,
+    pendingFile,
+    setPendingFile,
+    handleFileImport,
+    handleSlippiChoice
+  } = useFileImport({
+    mode,
+    API_URL,
+    onRefresh,
+    fetchStageVariants
   })
 
   // Fetch stage variants when in stages mode or when metadata changes
@@ -550,85 +565,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       return () => clearTimeout(timer)
     }
   }, [metadata])
-
-  const handleFileImport = async (event, slippiAction = null) => {
-    const file = slippiAction ? pendingFile : event.target.files[0]
-    if (!file) return
-
-    setImporting(true)
-    setImportMessage('Uploading and detecting mod type...')
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      if (slippiAction) {
-        formData.append('slippi_action', slippiAction)
-      }
-
-      const response = await fetch(`${API_URL}/import/file`, {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await response.json()
-
-      // Check if we need to show slippi dialog
-      if (data.type === 'slippi_dialog') {
-        setSlippiDialogData(data)
-        setPendingFile(file)
-        setShowSlippiDialog(true)
-        setImporting(false)
-        setImportMessage('')
-        if (event && event.target) event.target.value = null
-        return
-      }
-
-      if (data.success) {
-        const typeMsg = data.type === 'character'
-          ? `${data.imported_count} costume(s)`
-          : `${data.stage} stage`
-        setImportMessage(`✓ Imported ${typeMsg}! Refreshing...`)
-
-        // Refresh metadata
-        await onRefresh()
-
-        // If we imported a stage, also refresh stage variants
-        if (data.type === 'stage' && mode === 'stages') {
-          await fetchStageVariants()
-        }
-
-        setImportMessage(`✓ Successfully imported ${typeMsg}!`)
-        setTimeout(() => {
-          setImporting(false)
-          setImportMessage('')
-        }, 2000)
-      } else {
-        setImportMessage(`✗ Import failed: ${data.error}`)
-        setTimeout(() => {
-          setImporting(false)
-          setImportMessage('')
-        }, 5000)
-      }
-    } catch (err) {
-      setImportMessage(`✗ Error: ${err.message}`)
-      setTimeout(() => {
-        setImporting(false)
-        setImportMessage('')
-      }, 5000)
-    }
-
-    // Reset file input
-    if (event && event.target) event.target.value = null
-  }
-
-  const handleSlippiChoice = (choice) => {
-    setShowSlippiDialog(false)
-    if (choice === 'cancel') {
-      setPendingFile(null)
-      setSlippiDialogData(null)
-      return
-    }
-    handleFileImport(null, choice)
-  }
 
   const handleSlippiRetest = async (autoFix = false) => {
     if (!editingItem || editingItem.type !== 'costume') return
