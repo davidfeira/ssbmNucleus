@@ -62,7 +62,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
 
-  const [slippiAdvancedOpen, setSlippiAdvancedOpen] = useState(false) // Collapsible Slippi controls
   const [showSkinCreator, setShowSkinCreator] = useState(false) // Skin creator modal
   const [skinCreatorInitialCostume, setSkinCreatorInitialCostume] = useState(null) // For "edit from vault" flow
 
