@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { usePanelResize } from '../hooks/usePanelResize'
 import './SkinCreator.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -52,10 +53,23 @@ export default function SkinCreator({
   const [colorGroups, setColorGroups] = useState([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [maxColorGroups, setMaxColorGroups] = useState(8)
+  const [selectedColorGroup, setSelectedColorGroup] = useState(null)
   const [originalTextureData, setOriginalTextureData] = useState({}) // { [index]: ImageData }
   const pixelGroupMapRef = useRef({}) // Maps pixels to their color group index
   const colorDebounceRef = useRef(null)
   const exportDatResolverRef = useRef(null) // For promise-based exportDat with Electron IPC
+
+  // Panel resize hook
+  const {
+    sizes: panelSizes,
+    handleRightPanelResize,
+    handleTextureStripResize,
+    handlePreviewResize,
+  } = usePanelResize()
+
+  // Canvas container sizing for dynamic scaling
+  const canvasContainerRef = useRef(null)
+  const [canvasContainerSize, setCanvasContainerSize] = useState({ width: 600, height: 600 })
 
   // Keep editedTexturesRef in sync with state for interval callback access
   useEffect(() => {
@@ -66,6 +80,50 @@ export default function SkinCreator({
   useEffect(() => {
     onSkinCreatorChange?.(isOpen)
   }, [isOpen, onSkinCreatorChange])
+
+  // ResizeObserver for canvas container
+  useEffect(() => {
+    const container = canvasContainerRef.current
+    if (!container) return
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        setCanvasContainerSize({ width, height })
+      }
+    })
+
+    resizeObserver.observe(container)
+    return () => resizeObserver.disconnect()
+  }, [skinCreatorStep])
+
+  // Helper to update canvas scale based on container size
+  const updateCanvasScale = useCallback((canvas, textureWidth, textureHeight) => {
+    if (!canvas || !textureWidth || !textureHeight) return
+
+    const padding = 40
+    const availableWidth = canvasContainerSize.width - padding
+    const availableHeight = canvasContainerSize.height - padding
+
+    if (availableWidth <= 0 || availableHeight <= 0) return
+
+    const scaleX = availableWidth / textureWidth
+    const scaleY = availableHeight / textureHeight
+    const scale = Math.min(scaleX, scaleY, 10)
+
+    canvas.style.transform = `scale(${scale})`
+    canvas.style.transformOrigin = 'center center'
+  }, [canvasContainerSize])
+
+  // Re-scale canvas when container size changes
+  useEffect(() => {
+    if (selectedTextureIndex === null || !modelTextures[selectedTextureIndex]) return
+    const tex = modelTextures[selectedTextureIndex]
+    const canvas = paintCanvasRef.current
+    if (canvas && tex) {
+      updateCanvasScale(canvas, tex.width, tex.height)
+    }
+  }, [canvasContainerSize, selectedTextureIndex, modelTextures, updateCanvasScale])
 
   // Load costumes when opening
   useEffect(() => {
@@ -126,12 +184,7 @@ export default function SkinCreator({
           const ctx = canvas.getContext('2d')
           ctx.imageSmoothingEnabled = false
           ctx.drawImage(img, 0, 0)
-
-          const largerDim = Math.max(msg.width, msg.height)
-          const targetDisplaySize = 600
-          const scale = targetDisplaySize / largerDim
-          canvas.style.transform = `scale(${scale})`
-          canvas.style.transformOrigin = 'center center'
+          updateCanvasScale(canvas, msg.width, msg.height)
         }
         img.src = `data:image/png;base64,${msg.data}`
       }
@@ -466,6 +519,13 @@ export default function SkinCreator({
     }
   }, [viewerWs, hasElectron, skinCreatorStep, updateViewerPosition])
 
+  // Update viewer position when panel sizes change
+  useEffect(() => {
+    if (viewerWs && hasElectron && skinCreatorStep === 'edit') {
+      updateViewerPosition()
+    }
+  }, [panelSizes, viewerWs, hasElectron, skinCreatorStep, updateViewerPosition])
+
   // Load texture onto paint canvas when selected
   useEffect(() => {
     if (selectedTextureIndex === null || !modelTextures[selectedTextureIndex]) return
@@ -486,15 +546,10 @@ export default function SkinCreator({
       const ctx = canvas.getContext('2d')
       ctx.imageSmoothingEnabled = false
       ctx.drawImage(img, 0, 0, tex.width, tex.height)
-
-      const largerDim = Math.max(tex.width, tex.height)
-      const targetDisplaySize = 600
-      const scale = targetDisplaySize / largerDim
-      canvas.style.transform = `scale(${scale})`
-      canvas.style.transformOrigin = 'center center'
+      updateCanvasScale(canvas, tex.width, tex.height)
     }
     img.src = imgSrc
-  }, [selectedTextureIndex, modelTextures, editedTextures])
+  }, [selectedTextureIndex, modelTextures, editedTextures, updateCanvasScale])
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -989,6 +1044,7 @@ export default function SkinCreator({
   const resetColorPalette = () => {
     setColorPaletteEnabled(false)
     setColorGroups([])
+    setSelectedColorGroup(null)
     setOriginalTextureData({})
     pixelGroupMapRef.current = {}
   }
@@ -1235,6 +1291,7 @@ export default function SkinCreator({
                     <input type="range" className="brush-size" min="1" max="50" defaultValue="5" title="Brush Size" />
                   </div>
                   <div
+                    ref={canvasContainerRef}
                     className="skin-creator-canvas"
                     onMouseDown={handlePaintMouseDown}
                     onMouseMove={handlePaintMouseMove}
@@ -1252,10 +1309,16 @@ export default function SkinCreator({
                   </div>
                 </div>
 
+                {/* Vertical resize handle between canvas and right panel */}
+                <div
+                  className="resize-handle vertical"
+                  onMouseDown={handleRightPanelResize}
+                />
+
                 {/* Right Panel - 3D Preview + Tool Palette */}
-                <div className="skin-creator-right-panel">
-                  {/* 3D Preview (square) */}
-                  <div className="skin-creator-3d-container">
+                <div className="skin-creator-right-panel" style={{ width: panelSizes.rightPanelWidth }}>
+                  {/* 3D Preview */}
+                  <div className="skin-creator-3d-container" style={{ height: `calc(${panelSizes.previewHeightRatio * 100}% - 4px)` }}>
                     <div className="skin-creator-panel-header">
                       <span>3D Preview</span>
                       <button
@@ -1301,125 +1364,221 @@ export default function SkinCreator({
                     </div>
                   </div>
 
+                  {/* Horizontal resize handle between 3D preview and tool palette */}
+                  <div
+                    className="resize-handle horizontal"
+                    onMouseDown={handlePreviewResize}
+                  />
+
                   {/* Tool Palette */}
-                  <div className="skin-creator-tool-palette">
+                  <div className="skin-creator-tool-palette" style={{ height: `calc(${(1 - panelSizes.previewHeightRatio) * 100}% - 4px)` }}>
                     <div className="skin-creator-panel-header">Tools</div>
                     <div className="tool-palette-content">
-                      <div className="tool-palette-section">
-                        <div className="tool-palette-section-title">Drawing</div>
-                        <div className="tool-palette-tools">
-                          <button className="tool-btn active" title="Pencil">✏️</button>
+                      {/* Single Texture Tools */}
+                      <div className="tool-section">
+                        <div className="tool-section-header">
+                          <span className="tool-section-title">
+                            Single Texture
+                            <span className="tool-section-badge">Selected</span>
+                          </span>
+                        </div>
+                        <div className="tool-section-content">
+                          <div className="tool-palette-tools">
+                            <button className="tool-btn active" title="Pencil">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                                <path d="m15 5 4 4"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Color Palette Section */}
-                      <div className="tool-palette-section">
-                        <div className="tool-palette-section-header">
-                          <span className="tool-palette-section-title">Color Palette</span>
-                          <div className="palette-controls">
-                            {!colorPaletteEnabled && (
-                              <input
-                                type="number"
-                                className="max-groups-input"
-                                min="2"
-                                max="16"
-                                value={maxColorGroups}
-                                onChange={(e) => setMaxColorGroups(Math.min(16, Math.max(2, parseInt(e.target.value) || 8)))}
-                                title="Max color groups"
-                              />
-                            )}
-                            {!colorPaletteEnabled ? (
-                              <button
-                                className="palette-analyze-btn"
-                                onClick={analyzeColors}
-                                disabled={isAnalyzing || modelTextures.length === 0}
-                              >
-                                {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-                              </button>
-                            ) : (
-                              <button
-                                className="palette-reset-btn"
-                                onClick={resetColorPalette}
-                                title="Reset color adjustments"
-                            >
-                              Reset
-                            </button>
-                          )}
-                          </div>
+                      {/* Batch Tools */}
+                      <div className="tool-section batch-tools">
+                        <div className="tool-section-header">
+                          <span className="tool-section-title">
+                            Batch Operations
+                            <span className="tool-section-badge batch">All Textures</span>
+                          </span>
                         </div>
-
-                        {isAnalyzing && (
-                          <div className="palette-loading">
-                            Analyzing textures...
+                        <div className="tool-section-content">
+                          {/* Color Palette */}
+                          <div className="tool-palette-section-header">
+                            <span className="tool-palette-section-title">Color Palette</span>
+                            <div className="palette-controls">
+                              {!colorPaletteEnabled && (
+                                <input
+                                  type="number"
+                                  className="max-groups-input"
+                                  min="2"
+                                  max="16"
+                                  value={maxColorGroups}
+                                  onChange={(e) => setMaxColorGroups(Math.min(16, Math.max(2, parseInt(e.target.value) || 8)))}
+                                  title="Max color groups"
+                                />
+                              )}
+                              {!colorPaletteEnabled ? (
+                                <button
+                                  className="palette-analyze-btn"
+                                  onClick={analyzeColors}
+                                  disabled={isAnalyzing || modelTextures.length === 0}
+                                >
+                                  {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+                                </button>
+                              ) : (
+                                <button
+                                  className="palette-reset-btn"
+                                  onClick={resetColorPalette}
+                                  title="Reset color adjustments"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        )}
 
-                        {colorPaletteEnabled && colorGroups.length > 0 && (
-                          <div className="color-groups-list">
-                            {colorGroups.map(group => (
-                              <div key={group.id} className="color-group-item">
-                                <div className="color-group-header">
-                                  <div
-                                    className="color-swatch-original"
-                                    style={{ background: group.displayColor }}
-                                    onClick={() => handleColorAdjust(group.id, 'reset', 0)}
-                                    title="Click to reset to original"
-                                  />
-                                  <span className="color-arrow">→</span>
-                                  <div
-                                    className="color-swatch"
-                                    style={{
-                                      background: `hsl(${(group.centerHue + group.hueShift + 360) % 360}, ${Math.max(0, Math.min(100, group.avgSaturation + group.saturationShift))}%, ${group.avgLightness}%)`
-                                    }}
-                                  />
-                                  <span className="pixel-count">
-                                    {group.pixelCount > 1000 ? `${(group.pixelCount / 1000).toFixed(1)}k` : group.pixelCount}
-                                  </span>
-                                </div>
-                                <div className="color-group-sliders">
-                                  <div className="slider-row">
-                                    <label>H</label>
-                                    <input
-                                      type="range"
-                                      className="hue-slider"
-                                      min="-180"
-                                      max="180"
-                                      value={group.hueShift}
-                                      onChange={(e) => handleColorAdjust(group.id, 'hueShift', parseInt(e.target.value))}
-                                    />
-                                    <span className="slider-value">{group.hueShift > 0 ? '+' : ''}{group.hueShift}</span>
-                                  </div>
-                                  <div className="slider-row">
-                                    <label>S</label>
-                                    <input
-                                      type="range"
-                                      className="saturation-slider"
-                                      min="-100"
-                                      max="100"
-                                      value={group.saturationShift}
-                                      onChange={(e) => handleColorAdjust(group.id, 'saturationShift', parseInt(e.target.value))}
-                                    />
-                                    <span className="slider-value">{group.saturationShift > 0 ? '+' : ''}{group.saturationShift}</span>
-                                  </div>
-                                </div>
+                          {isAnalyzing && (
+                            <div className="palette-loading">
+                              Analyzing textures...
+                            </div>
+                          )}
+
+                          {colorPaletteEnabled && colorGroups.length > 0 && (
+                            <>
+                              {/* Color Grid */}
+                              <div className="color-grid">
+                                {colorGroups.map(group => {
+                                  const isSelected = selectedColorGroup === group.id
+                                  const hasChanges = group.hueShift !== 0 || group.saturationShift !== 0
+                                  const currentColor = `hsl(${(group.centerHue + group.hueShift + 360) % 360}, ${Math.max(0, Math.min(100, group.avgSaturation + group.saturationShift))}%, ${group.avgLightness}%)`
+                                  return (
+                                    <div
+                                      key={group.id}
+                                      className={`color-grid-item ${isSelected ? 'selected' : ''} ${hasChanges ? 'modified' : ''}`}
+                                      onClick={() => setSelectedColorGroup(isSelected ? null : group.id)}
+                                      title={`${group.pixelCount > 1000 ? `${(group.pixelCount / 1000).toFixed(1)}k` : group.pixelCount} pixels`}
+                                    >
+                                      <div className="color-grid-swatch" style={{ background: currentColor }} />
+                                      {hasChanges && <div className="color-grid-original" style={{ background: group.displayColor }} />}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            ))}
-                          </div>
-                        )}
 
-                        {colorPaletteEnabled && colorGroups.length === 0 && (
-                          <div className="no-colors-found">
-                            No color groups detected
-                          </div>
-                        )}
+                              {/* Expanded Controls for Selected Color */}
+                              {selectedColorGroup && colorGroups.find(g => g.id === selectedColorGroup) && (() => {
+                                const group = colorGroups.find(g => g.id === selectedColorGroup)
+                                return (
+                                  <div className="color-editor">
+                                    <div className="color-editor-header">
+                                      <div className="color-editor-swatches">
+                                        <div className="color-swatch-original" style={{ background: group.displayColor }} />
+                                        <span className="color-arrow">-></span>
+                                        <div
+                                          className="color-swatch"
+                                          style={{
+                                            background: `hsl(${(group.centerHue + group.hueShift + 360) % 360}, ${Math.max(0, Math.min(100, group.avgSaturation + group.saturationShift))}%, ${group.avgLightness}%)`
+                                          }}
+                                        />
+                                      </div>
+                                      <button
+                                        className="color-reset-btn"
+                                        onClick={() => handleColorAdjust(group.id, 'reset', 0)}
+                                        disabled={group.hueShift === 0 && group.saturationShift === 0}
+                                      >
+                                        Reset
+                                      </button>
+                                    </div>
+                                    <div className="color-editor-sliders">
+                                      <div className="slider-row">
+                                        <label>Hue</label>
+                                        <div
+                                          className="slider-track"
+                                          style={{
+                                            background: `linear-gradient(to right,
+                                              hsl(${(group.centerHue - 180 + 360) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue - 120 + 360) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue - 60 + 360) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${group.centerHue}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue + 60) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue + 120) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue + 180) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%))`
+                                          }}
+                                        >
+                                          <input
+                                            type="range"
+                                            className="color-slider"
+                                            min="-180"
+                                            max="180"
+                                            value={group.hueShift}
+                                            onChange={(e) => handleColorAdjust(group.id, 'hueShift', parseInt(e.target.value))}
+                                          />
+                                          <div
+                                            className="slider-thumb-indicator"
+                                            style={{
+                                              left: `${((group.hueShift + 180) / 360) * 100}%`,
+                                              background: `hsl(${(group.centerHue + group.hueShift + 360) % 360}, ${group.avgSaturation}%, ${group.avgLightness}%)`
+                                            }}
+                                          />
+                                        </div>
+                                        <span className="slider-value">{group.hueShift > 0 ? '+' : ''}{group.hueShift}</span>
+                                      </div>
+                                      <div className="slider-row">
+                                        <label>Sat</label>
+                                        <div
+                                          className="slider-track sat-track"
+                                          style={{
+                                            background: `linear-gradient(to right,
+                                              hsl(${(group.centerHue + group.hueShift + 360) % 360}, 0%, ${group.avgLightness}%),
+                                              hsl(${(group.centerHue + group.hueShift + 360) % 360}, 100%, ${group.avgLightness}%))`
+                                          }}
+                                        >
+                                          <input
+                                            type="range"
+                                            className="color-slider"
+                                            min="-100"
+                                            max="100"
+                                            value={group.saturationShift}
+                                            onChange={(e) => handleColorAdjust(group.id, 'saturationShift', parseInt(e.target.value))}
+                                          />
+                                          <div
+                                            className="slider-thumb-indicator"
+                                            style={{
+                                              left: `${((group.saturationShift + 100) / 200) * 100}%`,
+                                              background: `hsl(${(group.centerHue + group.hueShift + 360) % 360}, ${Math.max(0, Math.min(100, group.avgSaturation + group.saturationShift))}%, ${group.avgLightness}%)`
+                                            }}
+                                          />
+                                        </div>
+                                        <span className="slider-value">{group.saturationShift > 0 ? '+' : ''}{group.saturationShift}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </>
+                          )}
+
+                          {colorPaletteEnabled && colorGroups.length === 0 && (
+                            <div className="no-colors-found">
+                              No color groups detected
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* Horizontal resize handle above texture strip */}
+              <div
+                className="resize-handle horizontal"
+                onMouseDown={handleTextureStripResize}
+              />
+
               {/* Bottom - Texture Strip */}
-              <div className="skin-creator-texture-strip">
+              <div className="skin-creator-texture-strip" style={{ height: panelSizes.textureStripHeight }}>
                 <div className="skin-creator-panel-header">Textures ({modelTextures.length})</div>
                 <div className="skin-creator-texture-list">
                   {modelTextures.length === 0 ? (
