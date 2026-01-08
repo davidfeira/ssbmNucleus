@@ -250,7 +250,7 @@ namespace HSDRawViewer
 
             // Set up viewport
             _viewport.EnableBack = true;
-            _viewport.DisplayGrid = false;
+            _viewport.DisplayGrid = true;
 
             // Load scene settings if provided
             SceneSettings sceneSettings = null;
@@ -282,8 +282,9 @@ namespace HSDRawViewer
                         _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
                     }
 
-                    _viewport.DisplayGrid = sceneSettings.ShowGrid;
-                    _viewport.EnableBack = sceneSettings.ShowBackdrop;
+                    // Grid and background always on for skin creator
+                    // _viewport.DisplayGrid = sceneSettings.ShowGrid;
+                    // _viewport.EnableBack = sceneSettings.ShowBackdrop;
                 }
                 catch (Exception ex)
                 {

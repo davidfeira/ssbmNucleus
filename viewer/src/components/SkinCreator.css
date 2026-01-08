@@ -254,11 +254,47 @@
 .skin-creator-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-deep);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  border-color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+}
+
+.toolbar-btn.active {
+  border-color: var(--color-cyan);
+  background: rgba(0, 255, 255, 0.1);
+  color: var(--color-cyan);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .tool-btn {
@@ -288,17 +324,25 @@
   width: 1px;
   height: 24px;
   background: var(--color-border);
-  margin: 0 var(--space-2);
+  margin: 0 var(--space-1);
+}
+
+.color-picker-wrapper {
+  position: relative;
 }
 
 .color-picker {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   background: none;
+}
+
+.color-picker:hover {
+  border-color: var(--color-text-tertiary);
 }
 
 .color-picker::-webkit-color-swatch-wrapper {
@@ -306,13 +350,28 @@
 }
 
 .color-picker::-webkit-color-swatch {
-  border-radius: var(--radius-xs);
+  border-radius: 2px;
   border: none;
 }
 
-.brush-size {
-  width: 100px;
+.toolbar-label {
+  font-size: 0.7rem;
+  color: var(--color-text-tertiary);
+  margin-left: var(--space-1);
+}
+
+.brush-size-slider {
+  width: 80px;
+  height: 4px;
   accent-color: var(--color-cyan);
+}
+
+.brush-size-value {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  width: 20px;
+  text-align: center;
+  font-family: monospace;
 }
 
 .skin-creator-canvas {
@@ -324,6 +383,7 @@
   overflow: hidden;
   user-select: none;
   -webkit-user-drag: none;
+  position: relative;
 }
 
 .canvas-placeholder {
@@ -352,6 +412,56 @@
   -webkit-user-drag: none;
   touch-action: none;
   /* Display size is set dynamically via JS using CSS transform */
+}
+
+/* Tool-specific cursors */
+.skin-creator-canvas.tool-pencil { cursor: crosshair; }
+.skin-creator-canvas.tool-eraser { cursor: cell; }
+.skin-creator-canvas.tool-fill { cursor: cell; }
+.skin-creator-canvas.tool-eyedropper { cursor: crosshair; }
+
+/* Floating import/export buttons */
+.canvas-floating-actions {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+}
+
+button.canvas-float-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(26, 26, 26, 0.95);
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: all 0.15s ease;
+}
+
+button.canvas-float-btn:hover {
+  background: rgba(50, 50, 50, 0.95);
+  border-color: #777;
+  color: #fff;
+}
+
+button.canvas-float-btn:active {
+  transform: translateY(1px);
+}
+
+button.canvas-float-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* Right Panel - Stacked: 3D Preview + Tool Palette */

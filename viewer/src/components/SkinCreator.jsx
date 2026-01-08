@@ -27,6 +27,15 @@ export default function SkinCreator({
   const [isDrawing, setIsDrawing] = useState(false)
   const isDrawingRef = useRef(false) // Ref for interval callback access
   const lastDrawPos = useRef(null)
+
+  // Drawing tools state
+  const [activeTool, setActiveTool] = useState('pencil') // pencil, eraser, fill, eyedropper
+  const [drawColor, setDrawColor] = useState('#ff0000')
+  const [brushSize, setBrushSize] = useState(1)
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
+  const maxUndoSteps = 50
+  const textureImportRef = useRef(null)
   const [editedTextures, setEditedTextures] = useState({}) // { [index]: dataUrl }
   const editedTexturesRef = useRef({}) // Ref for interval callback access
   const [isDirty, setIsDirty] = useState(false)
@@ -563,6 +572,123 @@ export default function SkinCreator({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isDirty])
 
+  // Undo/Redo functions
+  const saveToUndoStack = () => {
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    setUndoStack(prev => {
+      const newStack = [...prev, imageData]
+      if (newStack.length > maxUndoSteps) newStack.shift()
+      return newStack
+    })
+    setRedoStack([]) // Clear redo stack on new action
+  }
+
+  const undo = () => {
+    if (undoStack.length === 0) return
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+
+    // Save current state to redo stack
+    const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    setRedoStack(prev => [...prev, currentState])
+
+    // Restore previous state
+    const previousState = undoStack[undoStack.length - 1]
+    setUndoStack(prev => prev.slice(0, -1))
+    ctx.putImageData(previousState, 0, 0)
+    sendTextureUpdate()
+  }
+
+  const redo = () => {
+    if (redoStack.length === 0) return
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+
+    // Save current state to undo stack
+    const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    setUndoStack(prev => [...prev, currentState])
+
+    // Restore next state
+    const nextState = redoStack[redoStack.length - 1]
+    setRedoStack(prev => prev.slice(0, -1))
+    ctx.putImageData(nextState, 0, 0)
+    sendTextureUpdate()
+  }
+
+  // Clear undo/redo when switching textures
+  useEffect(() => {
+    setUndoStack([])
+    setRedoStack([])
+  }, [selectedTextureIndex])
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!isOpen || skinCreatorStep !== 'edit') return
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault()
+          undo()
+        } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault()
+          redo()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, skinCreatorStep, undoStack, redoStack])
+
+  // Export texture as PNG
+  const exportTexture = () => {
+    if (selectedTextureIndex === null || !modelTextures[selectedTextureIndex]) return
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+
+    const tex = modelTextures[selectedTextureIndex]
+    const dataUrl = canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `${tex.name || `texture_${selectedTextureIndex}`}.png`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  // Import texture from PNG
+  const importTexture = (e) => {
+    const file = e.target.files?.[0]
+    if (!file || selectedTextureIndex === null) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = paintCanvasRef.current
+        if (!canvas) return
+
+        // Save to undo stack before importing
+        saveToUndoStack()
+
+        const ctx = canvas.getContext('2d')
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.imageSmoothingEnabled = false
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        sendTextureUpdate()
+      }
+      img.src = event.target.result
+    }
+    reader.readAsDataURL(file)
+
+    // Reset the input so the same file can be selected again
+    e.target.value = ''
+  }
+
   // Paint canvas mouse handlers
   const getCanvasCoords = (e) => {
     const canvas = paintCanvasRef.current
@@ -576,15 +702,47 @@ export default function SkinCreator({
     }
   }
 
-  const drawPixel = (x, y) => {
+  const drawBrush = (x, y, color, size = brushSize) => {
     const canvas = paintCanvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#ff0000'
-    ctx.fillRect(x, y, 1, 1)
+    ctx.fillStyle = color
+
+    if (size === 1) {
+      ctx.fillRect(x, y, 1, 1)
+    } else {
+      // Draw a square brush centered on the point
+      const offset = Math.floor(size / 2)
+      for (let dy = 0; dy < size; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          const px = x - offset + dx
+          const py = y - offset + dy
+          if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+            ctx.fillRect(px, py, 1, 1)
+          }
+        }
+      }
+    }
   }
 
-  const drawLine = (x0, y0, x1, y1) => {
+  const eraseBrush = (x, y, size = brushSize) => {
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+
+    const offset = Math.floor(size / 2)
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const px = x - offset + dx
+        const py = y - offset + dy
+        if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+          ctx.clearRect(px, py, 1, 1)
+        }
+      }
+    }
+  }
+
+  const drawLine = (x0, y0, x1, y1, toolFn) => {
     const dx = Math.abs(x1 - x0)
     const dy = Math.abs(y1 - y0)
     const sx = x0 < x1 ? 1 : -1
@@ -592,7 +750,7 @@ export default function SkinCreator({
     let err = dx - dy
 
     while (true) {
-      drawPixel(x0, y0)
+      toolFn(x0, y0)
       if (x0 === x1 && y0 === y1) break
       const e2 = 2 * err
       if (e2 > -dy) { err -= dy; x0 += sx }
@@ -600,30 +758,119 @@ export default function SkinCreator({
     }
   }
 
+  const floodFill = (startX, startY, fillColor) => {
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+
+    // Parse fill color
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = tempCanvas.height = 1
+    const tempCtx = tempCanvas.getContext('2d')
+    tempCtx.fillStyle = fillColor
+    tempCtx.fillRect(0, 0, 1, 1)
+    const fillRgba = tempCtx.getImageData(0, 0, 1, 1).data
+
+    // Get target color
+    const startIdx = (startY * width + startX) * 4
+    const targetR = data[startIdx]
+    const targetG = data[startIdx + 1]
+    const targetB = data[startIdx + 2]
+    const targetA = data[startIdx + 3]
+
+    // Don't fill if same color
+    if (targetR === fillRgba[0] && targetG === fillRgba[1] &&
+        targetB === fillRgba[2] && targetA === fillRgba[3]) return
+
+    const stack = [[startX, startY]]
+    const visited = new Set()
+
+    while (stack.length > 0) {
+      const [x, y] = stack.pop()
+      const key = `${x},${y}`
+
+      if (visited.has(key)) continue
+      if (x < 0 || x >= width || y < 0 || y >= height) continue
+
+      const idx = (y * width + x) * 4
+      if (data[idx] !== targetR || data[idx + 1] !== targetG ||
+          data[idx + 2] !== targetB || data[idx + 3] !== targetA) continue
+
+      visited.add(key)
+      data[idx] = fillRgba[0]
+      data[idx + 1] = fillRgba[1]
+      data[idx + 2] = fillRgba[2]
+      data[idx + 3] = fillRgba[3]
+
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1])
+    }
+
+    ctx.putImageData(imageData, 0, 0)
+  }
+
+  const eyedropperPick = (x, y) => {
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const pixel = ctx.getImageData(x, y, 1, 1).data
+    const hex = '#' + [pixel[0], pixel[1], pixel[2]]
+      .map(c => c.toString(16).padStart(2, '0')).join('')
+    setDrawColor(hex)
+    setActiveTool('pencil') // Switch back to pencil after picking
+  }
+
   const handlePaintMouseDown = (e) => {
     if (e.button !== 0) return
-    e.preventDefault() // Prevent browser drag behavior
+    e.preventDefault()
     e.stopPropagation()
+
+    const coords = getCanvasCoords(e)
+    if (!coords) return
+
+    if (activeTool === 'eyedropper') {
+      eyedropperPick(coords.x, coords.y)
+      return
+    }
+
+    if (activeTool === 'fill') {
+      saveToUndoStack()
+      floodFill(coords.x, coords.y, drawColor)
+      sendTextureUpdate()
+      return
+    }
+
+    // Pencil or eraser - start drawing
+    saveToUndoStack()
     setIsDrawing(true)
     isDrawingRef.current = true
-    const coords = getCanvasCoords(e)
-    if (coords) {
-      drawPixel(coords.x, coords.y)
-      lastDrawPos.current = coords
+
+    if (activeTool === 'pencil') {
+      drawBrush(coords.x, coords.y, drawColor)
+    } else if (activeTool === 'eraser') {
+      eraseBrush(coords.x, coords.y)
     }
+    lastDrawPos.current = coords
   }
 
   const handlePaintMouseMove = (e) => {
     if (!isDrawing) return
     const coords = getCanvasCoords(e)
-    if (coords) {
-      if (lastDrawPos.current) {
-        drawLine(lastDrawPos.current.x, lastDrawPos.current.y, coords.x, coords.y)
-      } else {
-        drawPixel(coords.x, coords.y)
-      }
-      lastDrawPos.current = coords
+    if (!coords) return
+
+    const toolFn = activeTool === 'eraser'
+      ? (x, y) => eraseBrush(x, y)
+      : (x, y) => drawBrush(x, y, drawColor)
+
+    if (lastDrawPos.current) {
+      drawLine(lastDrawPos.current.x, lastDrawPos.current.y, coords.x, coords.y, toolFn)
+    } else {
+      toolFn(coords.x, coords.y)
     }
+    lastDrawPos.current = coords
   }
 
   const handlePaintMouseUp = () => {
@@ -1286,13 +1533,102 @@ export default function SkinCreator({
                 {/* Center - Paint Canvas */}
                 <div className="skin-creator-canvas-area">
                   <div className="skin-creator-toolbar">
-                    <input type="color" className="color-picker" defaultValue="#ff0000" title="Color" />
+                    {/* Undo/Redo */}
+                    <button
+                      className="toolbar-btn"
+                      onClick={undo}
+                      disabled={undoStack.length === 0}
+                      title="Undo (Ctrl+Z)"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="toolbar-btn"
+                      onClick={redo}
+                      disabled={redoStack.length === 0}
+                      title="Redo (Ctrl+Y)"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+                      </svg>
+                    </button>
+
                     <div className="toolbar-separator"></div>
-                    <input type="range" className="brush-size" min="1" max="50" defaultValue="5" title="Brush Size" />
+
+                    {/* Color Picker */}
+                    <div className="color-picker-wrapper">
+                      <input
+                        type="color"
+                        className="color-picker"
+                        value={drawColor}
+                        onChange={(e) => setDrawColor(e.target.value)}
+                        title="Draw Color"
+                      />
+                    </div>
+
+                    <div className="toolbar-separator"></div>
+
+                    {/* Tools */}
+                    <button
+                      className={`toolbar-btn ${activeTool === 'pencil' ? 'active' : ''}`}
+                      onClick={() => setActiveTool('pencil')}
+                      title="Pencil (draw)"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                      </svg>
+                    </button>
+                    <button
+                      className={`toolbar-btn ${activeTool === 'eraser' ? 'active' : ''}`}
+                      onClick={() => setActiveTool('eraser')}
+                      title="Eraser"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/>
+                        <path d="M22 21H7"/><path d="m5 11 9 9"/>
+                      </svg>
+                    </button>
+                    <button
+                      className={`toolbar-btn ${activeTool === 'fill' ? 'active' : ''}`}
+                      onClick={() => setActiveTool('fill')}
+                      title="Fill Bucket"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/>
+                        <path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/>
+                      </svg>
+                    </button>
+                    <button
+                      className={`toolbar-btn ${activeTool === 'eyedropper' ? 'active' : ''}`}
+                      onClick={() => setActiveTool('eyedropper')}
+                      title="Eyedropper (pick color)"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/>
+                        <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>
+                      </svg>
+                    </button>
+
+                    <div className="toolbar-separator"></div>
+
+                    {/* Brush Size */}
+                    <span className="toolbar-label">Size:</span>
+                    <input
+                      type="range"
+                      className="brush-size-slider"
+                      min="1"
+                      max="20"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                      title="Brush Size"
+                    />
+                    <span className="brush-size-value">{brushSize}</span>
                   </div>
                   <div
                     ref={canvasContainerRef}
-                    className="skin-creator-canvas"
+                    className={`skin-creator-canvas tool-${activeTool}`}
                     onMouseDown={handlePaintMouseDown}
                     onMouseMove={handlePaintMouseMove}
                     onMouseUp={handlePaintMouseUp}
@@ -1304,10 +1640,46 @@ export default function SkinCreator({
                         <p>Select a texture to start editing</p>
                       </div>
                     ) : (
-                      <canvas ref={paintCanvasRef} className="paint-canvas" draggable="false" />
+                      <>
+                        <canvas ref={paintCanvasRef} className="paint-canvas" draggable="false" />
+                        {/* Floating Import/Export buttons */}
+                        <div className="canvas-floating-actions">
+                          <input
+                            ref={textureImportRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/gif"
+                            style={{ display: 'none' }}
+                            onChange={importTexture}
+                          />
+                          <button
+                            className="canvas-float-btn"
+                            onClick={() => textureImportRef.current?.click()}
+                            title="Import texture from file"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                              <polyline points="17 8 12 3 7 8"/>
+                              <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            Import
+                          </button>
+                          <button
+                            className="canvas-float-btn"
+                            onClick={exportTexture}
+                            title="Export texture as PNG"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                              <polyline points="7 10 12 15 17 10"/>
+                              <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Export
+                          </button>
+                        </div>
+                      </>
                     )}
-                  </div>
                 </div>
+              </div>
 
                 {/* Vertical resize handle between canvas and right panel */}
                 <div
@@ -1374,28 +1746,8 @@ export default function SkinCreator({
                   <div className="skin-creator-tool-palette" style={{ height: `calc(${(1 - panelSizes.previewHeightRatio) * 100}% - 4px)` }}>
                     <div className="skin-creator-panel-header">Tools</div>
                     <div className="tool-palette-content">
-                      {/* Single Texture Tools */}
+                      {/* Batch Tools (Color Palette) */}
                       <div className="tool-section">
-                        <div className="tool-section-header">
-                          <span className="tool-section-title">
-                            Single Texture
-                            <span className="tool-section-badge">Selected</span>
-                          </span>
-                        </div>
-                        <div className="tool-section-content">
-                          <div className="tool-palette-tools">
-                            <button className="tool-btn active" title="Pencil">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-                                <path d="m15 5 4 4"/>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Batch Tools */}
-                      <div className="tool-section batch-tools">
                         <div className="tool-section-header">
                           <span className="tool-section-title">
                             Batch Operations
