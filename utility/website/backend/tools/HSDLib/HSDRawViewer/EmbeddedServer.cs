@@ -71,6 +71,7 @@ namespace HSDRawViewer
         private float _animationFrame = 0;
         private float _animationFrameCount = 0;
         private float _animationSpeed = 1.0f;
+        private string _currentAnimSymbol = null;
 
         // Animation archive manager
         private FighterAJManager _ajManager;
@@ -282,9 +283,13 @@ namespace HSDRawViewer
                         _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
                     }
 
-                    // Grid and background always on for skin creator
-                    // _viewport.DisplayGrid = sceneSettings.ShowGrid;
-                    // _viewport.EnableBack = sceneSettings.ShowBackdrop;
+                    // Apply scene display settings
+                    Console.WriteLine($"[EmbeddedServer] Applying scene settings: CSPMode={sceneSettings.CSPMode}, ShowGrid={sceneSettings.ShowGrid}, ShowBackdrop={sceneSettings.ShowBackdrop}");
+                    Log($"Applying scene settings: CSPMode={sceneSettings.CSPMode}, ShowGrid={sceneSettings.ShowGrid}, ShowBackdrop={sceneSettings.ShowBackdrop}");
+                    _viewport.DisplayGrid = sceneSettings.ShowGrid;
+                    _viewport.EnableBack = sceneSettings.ShowBackdrop;
+                    _viewport.CSPMode = sceneSettings.CSPMode;
+                    Console.WriteLine($"[EmbeddedServer] After apply: DisplayGrid={_viewport.DisplayGrid}, EnableBack={_viewport.EnableBack}, CSPMode={_viewport.CSPMode}");
                 }
                 catch (Exception ex)
                 {
@@ -582,6 +587,7 @@ namespace HSDRawViewer
                                             _animationFrameCount = newFrameCount;
                                             _animationFrame = 0;
                                             _animationPlaying = true;
+                                            _currentAnimSymbol = symbol;
                                             _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
                                         }));
 
@@ -670,6 +676,97 @@ namespace HSDRawViewer
                         {
                             LogError("Export error", ex);
                             await SendJsonAsync(new { type = "exportDat", success = false, error = ex.Message });
+                        }
+                        break;
+
+                    case "setCspMode":
+                        Console.WriteLine($"[EmbeddedServer] Received setCspMode command");
+                        Log($"setCspMode command received");
+                        if (root.TryGetProperty("enabled", out var cspEnabledProp))
+                        {
+                            bool enabled = cspEnabledProp.GetBoolean();
+                            Console.WriteLine($"[EmbeddedServer] Setting CSPMode to: {enabled}");
+                            Log($"Setting CSPMode to: {enabled}");
+                            _hostForm.Invoke((Action)(() =>
+                            {
+                                Console.WriteLine($"[EmbeddedServer] CSPMode before: {_viewport.CSPMode}");
+                                _viewport.CSPMode = enabled;
+                                Console.WriteLine($"[EmbeddedServer] CSPMode after: {_viewport.CSPMode}");
+                            }));
+                            await SendJsonAsync(new { type = "cspModeSet", enabled });
+                        }
+                        else
+                        {
+                            Console.WriteLine("[EmbeddedServer] setCspMode: 'enabled' property not found");
+                        }
+                        break;
+
+                    case "setGrid":
+                        Console.WriteLine($"[EmbeddedServer] Received setGrid command");
+                        if (root.TryGetProperty("enabled", out var gridEnabledProp))
+                        {
+                            bool enabled = gridEnabledProp.GetBoolean();
+                            Console.WriteLine($"[EmbeddedServer] Setting DisplayGrid to: {enabled}");
+                            _hostForm.Invoke((Action)(() =>
+                            {
+                                Console.WriteLine($"[EmbeddedServer] DisplayGrid before: {_viewport.DisplayGrid}");
+                                _viewport.DisplayGrid = enabled;
+                                Console.WriteLine($"[EmbeddedServer] DisplayGrid after: {_viewport.DisplayGrid}");
+                            }));
+                            await SendJsonAsync(new { type = "gridSet", enabled });
+                        }
+                        break;
+
+                    case "setBackground":
+                        Console.WriteLine($"[EmbeddedServer] Received setBackground command");
+                        if (root.TryGetProperty("enabled", out var bgEnabledProp))
+                        {
+                            bool enabled = bgEnabledProp.GetBoolean();
+                            Console.WriteLine($"[EmbeddedServer] Setting EnableBack to: {enabled}");
+                            _hostForm.Invoke((Action)(() =>
+                            {
+                                Console.WriteLine($"[EmbeddedServer] EnableBack before: {_viewport.EnableBack}");
+                                _viewport.EnableBack = enabled;
+                                Console.WriteLine($"[EmbeddedServer] EnableBack after: {_viewport.EnableBack}");
+                            }));
+                            await SendJsonAsync(new { type = "backgroundSet", enabled });
+                        }
+                        break;
+
+                    case "exportScene":
+                        try
+                        {
+                            var camera = _viewport.Camera;
+                            var sceneData = new
+                            {
+                                type = "sceneExported",
+                                success = true,
+                                scene = new
+                                {
+                                    frame = _animationFrame,
+                                    cspMode = _viewport.CSPMode,
+                                    showGrid = _viewport.DisplayGrid,
+                                    showBackdrop = _viewport.EnableBack,
+                                    animSymbol = _currentAnimSymbol,
+                                    camera = new
+                                    {
+                                        x = camera.X,
+                                        y = camera.Y,
+                                        z = camera.Z,
+                                        scale = camera.Scale,
+                                        fovRadians = camera.FovRadians,
+                                        rotationXRadians = camera.RotationXRadians,
+                                        rotationYRadians = camera.RotationYRadians
+                                    }
+                                }
+                            };
+                            await SendJsonAsync(sceneData);
+                            Log("Scene exported");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogError("Scene export error", ex);
+                            await SendJsonAsync(new { type = "sceneExported", success = false, error = ex.Message });
                         }
                         break;
 

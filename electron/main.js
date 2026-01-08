@@ -307,6 +307,37 @@ ipcMain.handle('viewer:hide', async () => {
   return false;
 });
 
+ipcMain.handle('viewer:setCspMode', async (event, enabled) => {
+  console.log('[Electron] setCspMode called with:', enabled);
+  if (viewerManager) {
+    return viewerManager.setCspMode(enabled);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:setGrid', async (event, enabled) => {
+  console.log('[Electron] setGrid called with:', enabled);
+  if (viewerManager) {
+    return viewerManager.setGrid(enabled);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:setBackground', async (event, enabled) => {
+  console.log('[Electron] setBackground called with:', enabled);
+  if (viewerManager) {
+    return viewerManager.setBackground(enabled);
+  }
+  return false;
+});
+
+ipcMain.handle('viewer:exportScene', async () => {
+  if (viewerManager) {
+    return viewerManager.exportScene();
+  }
+  throw new Error('Viewer not running');
+});
+
 // Register nucleus:// protocol handler
 if (process.defaultApp) {
   if (process.argv.length >= 2) {

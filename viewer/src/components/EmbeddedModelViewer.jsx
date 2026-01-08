@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import './StorageViewer.css'
 
 /**
@@ -123,7 +123,22 @@ const API_URL = 'http://127.0.0.1:5000'
 
 let viewerStarting = false
 
-const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, logsPath, onClose }) => {
+const EmbeddedModelViewer = forwardRef(({
+  character,
+  skinId,
+  costumeCode, // For loading vanilla characters (e.g., "PlFxNr")
+  datFile,
+  sceneFile,
+  ajFile,
+  logsPath,
+  onClose,
+  // CSP preset props
+  cspMode = false,
+  showGrid = true,
+  showBackground = true,
+  // Callback when scene is exported (for pose manager)
+  onSceneExported = null
+}, ref) => {
   const placeholderRef = useRef(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -170,6 +185,7 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
       let viewerPaths = { datFile, sceneFile, ajFile, logsPath }
 
       if (character && skinId && !datFile) {
+        // Load custom skin from storage
         console.log('[EmbeddedViewer] Fetching paths for:', character, skinId)
         const response = await fetch(`${API_URL}/api/viewer/paths`, {
           method: 'POST',
@@ -189,6 +205,27 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
           logsPath: data.logsPath
         }
         console.log('[EmbeddedViewer] Got paths:', viewerPaths)
+      } else if (character && costumeCode && !datFile) {
+        // Load vanilla costume
+        console.log('[EmbeddedViewer] Fetching vanilla paths for:', character, costumeCode)
+        const response = await fetch(`${API_URL}/api/mex/viewer/paths-vanilla`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ character, costumeCode })
+        })
+
+        const data = await response.json()
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to get vanilla viewer paths')
+        }
+
+        viewerPaths = {
+          datFile: data.datFile,
+          sceneFile: data.sceneFile,
+          ajFile: data.ajFile,
+          logsPath: data.logsPath
+        }
+        console.log('[EmbeddedViewer] Got vanilla paths:', viewerPaths)
       }
 
       console.log('[EmbeddedViewer] Starting viewer...')
@@ -208,7 +245,7 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
     } finally {
       viewerStarting = false
     }
-  }, [datFile, sceneFile, ajFile, logsPath, character, skinId, hasElectron])
+  }, [datFile, sceneFile, ajFile, logsPath, character, skinId, costumeCode, hasElectron])
 
   // Stop the viewer
   const stopViewer = useCallback(async () => {
@@ -254,8 +291,16 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
         case 'ready':
           setIsConnected(true)
           setIsLoading(false)
+          console.log('[EmbeddedViewer] Ready! CSP preset values:', { cspMode, showGrid, showBackground })
           // Position the viewer window after a brief delay to ensure DOM is ready
           setTimeout(() => updateViewerPosition(), 100)
+          // Always apply display settings - each viewer instance controls its own config
+          setTimeout(() => {
+            console.log('[EmbeddedViewer] Applying display settings:', { cspMode, showGrid, showBackground })
+            window.electron.viewerSetCspMode(cspMode)
+            window.electron.viewerSetGrid(showGrid)
+            window.electron.viewerSetBackground(showBackground)
+          }, 200)
           break
         case 'animList':
           setAnimList(message.symbols || [])
@@ -271,7 +316,7 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
 
     const cleanup = window.electron.onViewerMessage(handleMessage)
     return cleanup
-  }, [hasElectron, updateViewerPosition])
+  }, [hasElectron, updateViewerPosition, cspMode, showGrid, showBackground])
 
   // Keep viewer positioned when window moves/resizes
   useEffect(() => {
@@ -358,6 +403,27 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
       window.electron.viewerLoadAnim(symbol)
     }
   }
+
+  // Export current scene settings
+  const exportScene = useCallback(async () => {
+    if (!hasElectron) return null
+    try {
+      const sceneData = await window.electron.viewerExportScene()
+      if (onSceneExported) {
+        onSceneExported(sceneData)
+      }
+      return sceneData
+    } catch (err) {
+      console.error('[EmbeddedViewer] Export scene failed:', err)
+      return null
+    }
+  }, [hasElectron, onSceneExported])
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    exportScene,
+    isConnected
+  }), [exportScene, isConnected])
 
   // Prevent context menu on right-click
   const handleContextMenu = (e) => e.preventDefault()
@@ -538,6 +604,6 @@ const EmbeddedModelViewer = ({ character, skinId, datFile, sceneFile, ajFile, lo
       </div>
     </div>
   )
-}
+})
 
 export default EmbeddedModelViewer

@@ -106,6 +106,26 @@ contextBridge.exposeInMainWorld('electron', {
   viewerHide: () => ipcRenderer.invoke('viewer:hide'),
 
   /**
+   * Set CSP mode (enables special camera for character select portraits)
+   */
+  viewerSetCspMode: (enabled) => ipcRenderer.invoke('viewer:setCspMode', enabled),
+
+  /**
+   * Set grid visibility
+   */
+  viewerSetGrid: (enabled) => ipcRenderer.invoke('viewer:setGrid', enabled),
+
+  /**
+   * Set background visibility
+   */
+  viewerSetBackground: (enabled) => ipcRenderer.invoke('viewer:setBackground', enabled),
+
+  /**
+   * Export current scene settings (camera, frame, animation)
+   */
+  viewerExportScene: () => ipcRenderer.invoke('viewer:exportScene'),
+
+  /**
    * Listen for messages from the viewer
    * @param {function} callback Function called with message data
    * @returns {function} Cleanup function to remove listener

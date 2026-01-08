@@ -320,6 +320,53 @@ class ViewerManager {
   }
 
   /**
+   * Set CSP mode (enables special camera for character select portraits)
+   */
+  setCspMode(enabled) {
+    return this.send({ type: 'setCspMode', enabled });
+  }
+
+  /**
+   * Set grid visibility
+   */
+  setGrid(enabled) {
+    return this.send({ type: 'setGrid', enabled });
+  }
+
+  /**
+   * Set background visibility
+   */
+  setBackground(enabled) {
+    return this.send({ type: 'setBackground', enabled });
+  }
+
+  /**
+   * Export current scene settings (camera, frame, animation)
+   * Returns promise that resolves with scene data
+   */
+  exportScene() {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.offMessage('sceneExported', handler);
+        reject(new Error('Scene export timed out'));
+      }, 5000);
+
+      const handler = (message) => {
+        clearTimeout(timeout);
+        this.offMessage('sceneExported', handler);
+        if (message.success) {
+          resolve(message.scene);
+        } else {
+          reject(new Error(message.error || 'Scene export failed'));
+        }
+      };
+
+      this.onMessage('sceneExported', handler);
+      this.send({ type: 'exportScene' });
+    });
+  }
+
+  /**
    * Stop the viewer
    */
   async stop() {

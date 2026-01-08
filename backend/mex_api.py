@@ -4664,6 +4664,141 @@ def set_skin_folder():
         }), 500
 
 
+@app.route('/api/mex/storage/poses/save', methods=['POST'])
+def save_pose():
+    """Save a pose scene YAML file for CSP generation.
+
+    Saves to: vanilla_assets/custom_poses/{character}/{pose_name}.yml
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        pose_name = data.get('poseName')
+        scene_data = data.get('sceneData')
+
+        if not character or not pose_name or not scene_data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, poseName, or sceneData parameter'
+            }), 400
+
+        # Sanitize pose name for filesystem
+        import re
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', pose_name)
+        safe_name = safe_name.strip()
+        if not safe_name:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid pose name'
+            }), 400
+
+        # Create poses directory if needed
+        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        poses_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build YAML content
+        yaml_content = f"""frame: {scene_data.get('frame', 0)}
+cSPMode: {str(scene_data.get('cspMode', True)).lower()}
+showGrid: {str(scene_data.get('showGrid', False)).lower()}
+showBackdrop: {str(scene_data.get('showBackdrop', False)).lower()}
+animSymbol: {scene_data.get('animSymbol', '')}
+camera:
+  x: {scene_data.get('camera', {}).get('x', 0)}
+  y: {scene_data.get('camera', {}).get('y', 10)}
+  z: {scene_data.get('camera', {}).get('z', -80)}
+  scale: {scene_data.get('camera', {}).get('scale', 1)}
+  fovRadians: {scene_data.get('camera', {}).get('fovRadians', 0.5236)}
+  rotationXRadians: {scene_data.get('camera', {}).get('rotationXRadians', 0)}
+  rotationYRadians: {scene_data.get('camera', {}).get('rotationYRadians', 0)}
+"""
+
+        # Save pose file
+        pose_path = poses_dir / f"{safe_name}.yml"
+        with open(pose_path, 'w') as f:
+            f.write(yaml_content)
+
+        logger.info(f"[OK] Saved pose '{safe_name}' for {character} at {pose_path}")
+
+        return jsonify({
+            'success': True,
+            'path': str(pose_path),
+            'poseName': safe_name
+        })
+    except Exception as e:
+        logger.error(f"Save pose error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/poses/list/<character>', methods=['GET'])
+def list_poses(character):
+    """List all saved poses for a character."""
+    try:
+        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+
+        if not poses_dir.exists():
+            return jsonify({
+                'success': True,
+                'poses': []
+            })
+
+        poses = []
+        for pose_file in poses_dir.glob("*.yml"):
+            poses.append({
+                'name': pose_file.stem,
+                'path': str(pose_file)
+            })
+
+        return jsonify({
+            'success': True,
+            'poses': sorted(poses, key=lambda p: p['name'])
+        })
+    except Exception as e:
+        logger.error(f"List poses error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/poses/delete', methods=['POST'])
+def delete_pose():
+    """Delete a saved pose."""
+    try:
+        data = request.json
+        character = data.get('character')
+        pose_name = data.get('poseName')
+
+        if not character or not pose_name:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or poseName parameter'
+            }), 400
+
+        pose_path = VANILLA_ASSETS_DIR / "custom_poses" / character / f"{pose_name}.yml"
+
+        if not pose_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Pose {pose_name} not found'
+            }), 404
+
+        pose_path.unlink()
+        logger.info(f"[OK] Deleted pose '{pose_name}' for {character}")
+
+        return jsonify({
+            'success': True
+        })
+    except Exception as e:
+        logger.error(f"Delete pose error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/storage/stages/reorder', methods=['POST'])
 def reorder_stages():
     """Reorder stage variants in storage"""
