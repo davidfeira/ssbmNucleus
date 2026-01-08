@@ -18,6 +18,7 @@ import ImportToolbar from './storage/ImportToolbar'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
 import PatchesGrid from './storage/PatchesGrid'
+import { useDragAndDrop } from '../hooks/useDragAndDrop'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -114,20 +115,60 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [hdCspInfo, setHdCspInfo] = useState(null) // { exists: bool, resolution: '4x', size: '1024x1365' }
   const [compareSliderPosition, setCompareSliderPosition] = useState(50) // 0-100% for before/after slider
 
-  // Drag and drop state
-  const [draggedItem, setDraggedItem] = useState(null) // { index, id }
-  const [dragStartIndex, setDragStartIndex] = useState(null) // Original position when drag started
-  const [dragOverIndex, setDragOverIndex] = useState(null)
-  const [reordering, setReordering] = useState(false)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, type: 'skin'/'variant', item, index }
-  const [previewOrder, setPreviewOrder] = useState(null) // Live preview of reordered items during drag
 
   // Folder state
   const [expandedFolders, setExpandedFolders] = useState({}) // { folderId: true/false }
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
-  const [dragTargetFolder, setDragTargetFolder] = useState(null) // Folder being hovered over during drag
-  const justDraggedRef = useRef(false) // Prevent click from firing right after drag
+
+  // Fetch stage variants function (defined early for use in drag/drop hook)
+  const fetchStageVariants = async () => {
+    try {
+      const response = await fetch(`${API_URL}/das/storage/variants`)
+      const data = await response.json()
+
+      if (data.success) {
+        // Group variants by stage
+        const grouped = {}
+        data.variants.forEach(variant => {
+          if (!grouped[variant.stageCode]) {
+            grouped[variant.stageCode] = []
+          }
+          grouped[variant.stageCode].push(variant)
+        })
+        setStageVariants(grouped)
+      }
+    } catch (err) {
+      console.error('Failed to fetch stage variants:', err)
+    }
+  }
+
+  // Drag and drop hook
+  const {
+    draggedItem,
+    dragStartIndex,
+    dragOverIndex,
+    previewOrder,
+    reordering,
+    dragTargetFolder,
+    setDragTargetFolder,
+    justDraggedRef,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnter,
+    handleDragLeave,
+    handleSkinDrop,
+    handleVariantDrop,
+    handleDragEnd
+  } = useDragAndDrop({
+    mode,
+    selectedCharacter,
+    selectedStage,
+    API_URL,
+    onRefresh,
+    fetchStageVariants
+  })
 
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
@@ -494,27 +535,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       return () => clearTimeout(timer)
     }
   }, [metadata])
-
-  const fetchStageVariants = async () => {
-    try {
-      const response = await fetch(`${API_URL}/das/storage/variants`)
-      const data = await response.json()
-
-      if (data.success) {
-        // Group variants by stage
-        const grouped = {}
-        data.variants.forEach(variant => {
-          if (!grouped[variant.stageCode]) {
-            grouped[variant.stageCode] = []
-          }
-          grouped[variant.stageCode].push(variant)
-        })
-        setStageVariants(grouped)
-      }
-    } catch (err) {
-      console.error('Failed to fetch stage variants:', err)
-    }
-  }
 
   const handleFileImport = async (event, slippiAction = null) => {
     const file = slippiAction ? pendingFile : event.target.files[0]
@@ -1187,158 +1207,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setNewStock(null)
     setStockPreview(null)
     setEditSlippiSafe(null)
-  }
-
-  // Drag and drop handlers
-  const handleDragStart = (e, index, items) => {
-    setDraggedItem({ index, id: items[index].id })
-    setDragStartIndex(index) // Track original position for returning to same spot
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  const handleDragEnter = (e, index, items) => {
-    e.preventDefault()
-    if (!draggedItem) return
-
-    // Only update if we've moved to a different position
-    if (dragOverIndex !== index) {
-      setDragOverIndex(index)
-
-      // Calculate new preview order
-      const currentOrder = previewOrder || [...items]
-
-      // Find current position of dragged item in preview
-      const draggedCurrentPos = currentOrder.findIndex(item => item.id === draggedItem.id)
-      if (draggedCurrentPos === -1) return
-
-      // Skip if already at target position in preview
-      if (draggedCurrentPos === index) return
-
-      // Create new order with item moved to target position
-      const newOrder = [...currentOrder]
-      const [removed] = newOrder.splice(draggedCurrentPos, 1)
-      newOrder.splice(index, 0, removed)
-
-      setPreviewOrder(newOrder)
-    }
-  }
-
-  const handleDragLeave = (e) => {
-    // Only clear if leaving the container entirely
-    if (e.currentTarget === e.target) {
-      setDragOverIndex(null)
-    }
-  }
-
-  const handleSkinDrop = async (e, toIndex) => {
-    e.preventDefault()
-    if (!draggedItem) return
-
-    const fromIndex = dragStartIndex
-
-    if (fromIndex === toIndex || !selectedCharacter) {
-      setDraggedItem(null)
-      setDragStartIndex(null)
-      setDragOverIndex(null)
-      setPreviewOrder(null)
-      return
-    }
-
-    setReordering(true)
-
-    try {
-      const response = await fetch(`${API_URL}/storage/costumes/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character: selectedCharacter,
-          fromIndex,
-          toIndex
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Refresh metadata to get updated order
-        await onRefresh()
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
-    } finally {
-      setReordering(false)
-      setDraggedItem(null)
-      setDragStartIndex(null)
-      setDragOverIndex(null)
-      setPreviewOrder(null)
-    }
-  }
-
-  const handleVariantDrop = async (e, toIndex) => {
-    e.preventDefault()
-    if (!draggedItem) return
-
-    const fromIndex = dragStartIndex
-
-    if (fromIndex === toIndex || !selectedStage) {
-      setDraggedItem(null)
-      setDragStartIndex(null)
-      setDragOverIndex(null)
-      setPreviewOrder(null)
-      return
-    }
-
-    setReordering(true)
-
-    try {
-      const response = await fetch(`${API_URL}/storage/stages/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stageFolder: selectedStage.folder,
-          fromIndex,
-          toIndex
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Refresh stage variants and metadata
-        await fetchStageVariants()
-        await onRefresh()
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
-    } finally {
-      setReordering(false)
-      setDraggedItem(null)
-      setDragStartIndex(null)
-      setDragOverIndex(null)
-      setPreviewOrder(null)
-    }
-  }
-
-  const handleDragEnd = () => {
-    setDraggedItem(null)
-    setDragStartIndex(null)
-    setDragOverIndex(null)
-    setPreviewOrder(null)
-    setDragTargetFolder(null)
-    // Prevent click from firing right after drag
-    justDraggedRef.current = true
-    setTimeout(() => { justDraggedRef.current = false }, 100)
   }
 
   // Folder helper functions
