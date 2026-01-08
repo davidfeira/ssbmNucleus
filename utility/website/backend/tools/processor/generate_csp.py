@@ -145,7 +145,7 @@ def find_character_assets(character_name, dat_filepath=None):
 
     return anim_file, camera_file
 
-def apply_character_specific_layers(csp_path, character_name):
+def apply_character_specific_layers(csp_path, character_name, scale=1):
     """
     Apply character-specific overlay layers to CSPs.
     Currently supports Fox gun layer and Ness horizontal flip.
@@ -153,6 +153,7 @@ def apply_character_specific_layers(csp_path, character_name):
     Args:
         csp_path: Path to the generated CSP
         character_name: Name of the character
+        scale: Resolution multiplier (1, 2, 4, 8, 16) - gun layer will be scaled to match
 
     Returns:
         True if a layer was applied, False otherwise
@@ -178,24 +179,44 @@ def apply_character_specific_layers(csp_path, character_name):
         if os.path.exists(gun_layer_path) and os.path.exists(csp_path):
             try:
                 # Open the base CSP and the gun layer
-                with Image.open(csp_path) as base_csp:
-                    with Image.open(gun_layer_path) as gun_layer:
-                        # Ensure both images are in RGBA mode
-                        if base_csp.mode != 'RGBA':
-                            base_csp = base_csp.convert('RGBA')
-                        if gun_layer.mode != 'RGBA':
-                            gun_layer = gun_layer.convert('RGBA')
+                base_csp = Image.open(csp_path)
+                gun_layer = Image.open(gun_layer_path)
 
-                        # Composite the gun layer on top of the CSP
-                        # The gun layer should have transparency where Fox's body should show through
-                        result = Image.alpha_composite(base_csp, gun_layer)
+                logger.info(f"Base CSP size: {base_csp.size}, Gun layer size: {gun_layer.size}")
 
-                        # Save the result back to the same path
-                        result.save(csp_path)
-                        return True
+                # Ensure both images are in RGBA mode
+                if base_csp.mode != 'RGBA':
+                    base_csp = base_csp.convert('RGBA')
+                if gun_layer.mode != 'RGBA':
+                    gun_layer = gun_layer.convert('RGBA')
+
+                # Scale the gun layer to match HD CSP if needed
+                if scale > 1:
+                    new_size = (gun_layer.width * scale, gun_layer.height * scale)
+                    gun_layer = gun_layer.resize(new_size, Image.NEAREST)
+                    logger.info(f"Scaled Fox gun layer to {new_size[0]}x{new_size[1]} for {scale}x CSP")
+
+                logger.info(f"After scaling - Base CSP: {base_csp.size}, Gun layer: {gun_layer.size}")
+
+                # Check if sizes match
+                if base_csp.size != gun_layer.size:
+                    logger.warning(f"Size mismatch! Resizing gun layer from {gun_layer.size} to {base_csp.size}")
+                    gun_layer = gun_layer.resize(base_csp.size, Image.NEAREST)
+
+                # Composite the gun layer on top of the CSP
+                # The gun layer should have transparency where Fox's body should show through
+                result = Image.alpha_composite(base_csp, gun_layer)
+
+                # Save the result back to the same path
+                result.save(csp_path)
+                logger.info(f"Saved composited CSP to {csp_path}")
+
+                base_csp.close()
+                gun_layer.close()
+                return True
             except Exception as e:
                 # If compositing fails, just continue without the layer
-                # print(f"Failed to apply Fox gun layer: {e}")
+                logger.error(f"Failed to apply Fox gun layer: {e}")
                 return False
 
     return False
@@ -596,7 +617,7 @@ def generate_csp(dat_filepath, scale=1):
 
     if output_csp:
         # Apply character-specific layers (e.g., Fox gun layer)
-        layer_applied = apply_character_specific_layers(output_csp, character)
+        layer_applied = apply_character_specific_layers(output_csp, character, scale)
         if layer_applied:
             logger.info(f"Applied character-specific layer for {character}")
 

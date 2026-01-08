@@ -90,7 +90,11 @@ export default function EditModal({
                     />
                   ) : editingItem.data.has_csp ? (
                     <img
-                      src={`${editingItem.data.cspUrl}?t=${lastImageUpdate}`}
+                      src={`${
+                        editingItem.data.has_hd_csp
+                          ? editingItem.data.cspUrl.replace('_csp.png', '_csp_hd.png')
+                          : editingItem.data.cspUrl
+                      }?t=${lastImageUpdate}`}
                       alt="CSP"
                       className="edit-modal-csp-image"
                       onError={(e) => e.target.style.display = 'none'}

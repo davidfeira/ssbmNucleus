@@ -181,6 +181,8 @@ export function useCspManager({ API_URL, onRefresh }) {
           resolution: data.resolution,
           size: data.size
         })
+        // Bust image cache so the new HD CSP shows immediately
+        setLastImageUpdate(Date.now())
         // Refresh metadata to get updated has_hd_csp flag
         if (onRefresh) {
           onRefresh()
