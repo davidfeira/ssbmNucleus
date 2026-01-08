@@ -46,3 +46,7 @@ utility/assets/vanilla/
 !utility/assets/vanilla/Sheik/*/stock.png
 !utility/assets/vanilla/Sheik/css_icon.png
 utility/assets/stages/
+
+# Vanilla DAT files in csp_data (copied from user's ISO during first-run setup)
+# Keep animation files (.anim), scene files (.yml), and images - only exclude vanilla Pl*.dat
+utility/website/backend/tools/processor/csp_data/**/Pl*.dat

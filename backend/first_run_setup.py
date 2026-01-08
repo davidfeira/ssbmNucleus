@@ -57,6 +57,38 @@ class FirstRunSetup:
     # Expected size of extracted ISO in bytes (~1.4GB for vanilla Melee)
     EXPECTED_EXTRACTION_SIZE = 1_400_000_000
 
+    # Mapping: csp_data folder -> list of (vanilla_char, costume_code) tuples
+    # Used to copy vanilla DATs to csp_data directory for CSP generation tooling
+    CSP_DATA_DAT_MAPPING = {
+        "Bowser": [("Bowser", "PlKpNr")],
+        "C. Falcon": [("C. Falcon", "PlCaNr")],
+        "DK": [("DK", "PlDkBp")],
+        "Dr. Mario": [("Dr. Mario", "PlDrNr")],
+        "Falco": [("Falco", "PlFcNr")],
+        "G&W": [("Mr. Game & Watch", "PlGwNr")],
+        "Ganondorf": [("Ganondorf", "PlGnNr")],
+        "Ice Climbers": [("Ice Climbers", "PlPpNr"), ("Nana", "PlNnNr")],
+        "Ice Climbers (Nana)": [("Nana", "PlNnNr")],
+        "Ice Climbers (Popo)": [("Ice Climbers", "PlPpNr")],
+        "Jigglypuff": [("Jigglypuff", "PlPrNr")],
+        "Kirby": [("Kirby", "PlKbNr")],
+        "Link": [("Link", "PlLkNr")],
+        "Luigi": [("Luigi", "PlLgNr")],
+        "Mario": [("Mario", "PlMrNr")],
+        "Marth": [("Marth", "PlMsNr")],
+        "Mewtwo": [("Mewtwo", "PlMtNr")],
+        "Ness": [("Ness", "PlNsNr")],
+        "Peach": [("Peach", "PlPeNr")],
+        "Pichu": [("Pichu", "PlPcNr")],
+        "Pikachu": [("Pikachu", "PlPkNr")],
+        "Roy": [("Roy", "PlFeNr")],
+        "Samus": [("Samus", "PlSsNr")],
+        "Sheik": [("Sheik", "PlSkNr")],
+        "Yoshi": [("Yoshi", "PlYsNr")],
+        "Young Link": [("Young Link", "PlClNr")],
+        "Zelda": [("Zelda", "PlZdNr")],
+    }
+
     def __init__(self, project_root: Path, mexcli_path: Path):
         """
         Initialize the first-run setup handler.
@@ -69,6 +101,7 @@ class FirstRunSetup:
         self.mexcli_path = mexcli_path
         self.vanilla_dir = project_root / "utility" / "assets" / "vanilla"
         self.stages_dir = project_root / "utility" / "assets" / "stages"
+        self.csp_data_dir = project_root / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
 
     def check_setup_needed(self) -> dict:
         """
@@ -180,6 +213,15 @@ class FirstRunSetup:
             result = self._copy_stage_images(temp_dir, progress_callback)
             if not result['success']:
                 return result
+
+            # Phase 4: Copy DAT files to csp_data for CSP generation tooling
+            if progress_callback:
+                progress_callback('copying_csp_data', 0, 'Copying CSP data files...', 0, 100)
+
+            result = self._copy_csp_data_dats(progress_callback)
+            if not result['success']:
+                logger.warning(f"csp_data DAT copy had issues: {result.get('error')}")
+                # Don't fail setup, just warn - these files are supplementary
 
             # Success
             if progress_callback:
@@ -488,3 +530,45 @@ class FirstRunSetup:
                 'success': False,
                 'error': f'Failed to copy stage images: {e}'
             }
+
+    def _copy_csp_data_dats(
+        self,
+        progress_callback: Optional[Callable] = None
+    ) -> dict:
+        """Copy vanilla DAT files to csp_data directory for CSP generation tooling."""
+        try:
+            if not self.csp_data_dir.exists():
+                logger.warning("csp_data directory does not exist, skipping DAT copy")
+                return {'success': True}
+
+            copied = 0
+            total = sum(len(v) for v in self.CSP_DATA_DAT_MAPPING.values())
+
+            for csp_folder, mappings in self.CSP_DATA_DAT_MAPPING.items():
+                dest_folder = self.csp_data_dir / csp_folder
+                if not dest_folder.exists():
+                    logger.debug(f"Skipping {csp_folder} - folder doesn't exist")
+                    continue
+
+                for mapping in mappings:
+                    vanilla_char, costume_code = mapping
+                    src_path = self.vanilla_dir / vanilla_char / costume_code / f"{costume_code}.dat"
+                    dest_path = dest_folder / f"{costume_code}.dat"
+
+                    if src_path.exists():
+                        shutil.copy2(src_path, dest_path)
+                        logger.debug(f"Copied {costume_code}.dat to csp_data/{csp_folder}/")
+                    else:
+                        logger.warning(f"Source not found: {src_path}")
+
+                    copied += 1
+                    if progress_callback:
+                        pct = int((copied / total) * 100)
+                        progress_callback('copying_csp_data', pct, f'Copying {costume_code}.dat', copied, total)
+
+            logger.info(f"Copied {copied} DAT files to csp_data")
+            return {'success': True}
+
+        except Exception as e:
+            logger.error(f"Failed to copy csp_data DATs: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
