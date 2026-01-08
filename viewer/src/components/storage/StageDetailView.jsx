@@ -79,6 +79,7 @@ export default function StageDetailView({
   handleAddAlternativeCsp,
   setHdResolution,
   handleCaptureHdCsp,
+  handleRegenerateAltHd,
   handleSaveCspManager,
   // Slippi dialog
   showSlippiDialog,
@@ -232,6 +233,7 @@ export default function StageDetailView({
         onAddAlternativeCsp={handleAddAlternativeCsp}
         onHdResolutionChange={setHdResolution}
         onCaptureHdCsp={handleCaptureHdCsp}
+        onRegenerateAltHd={handleRegenerateAltHd}
         onSave={handleSaveCspManager}
         API_URL={API_URL}
       />

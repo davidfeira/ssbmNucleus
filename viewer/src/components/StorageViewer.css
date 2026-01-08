@@ -3458,6 +3458,36 @@
   z-index: 3;
 }
 
+/* HD regenerate button on alt cards */
+.csp-manager-alt-hd-btn {
+  position: absolute;
+  bottom: var(--space-1);
+  right: var(--space-1);
+  padding: 4px 8px;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-cyan));
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: var(--font-bold);
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  z-index: 4;
+}
+
+.csp-manager-alt-card:hover .csp-manager-alt-hd-btn {
+  opacity: 1;
+}
+
+.csp-manager-alt-hd-btn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--glow-cyan-sm);
+}
+
 /* Add CSP Card */
 .csp-manager-add-card {
   aspect-ratio: 3 / 4;

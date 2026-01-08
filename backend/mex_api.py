@@ -1586,6 +1586,292 @@ def capture_hd_csp(character, skin_id):
         }), 500
 
 
+@app.route('/api/mex/storage/costumes/<character>/<skin_id>/csp/manage', methods=['POST', 'OPTIONS'])
+def manage_csp(character, skin_id):
+    """Manage CSPs for a skin - swap, remove, add alternatives, regenerate HD"""
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        # Determine if this is a JSON or multipart request
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            action = request.form.get('action')
+            alt_id = request.form.get('altId')
+            scale = int(request.form.get('scale', 4))
+            file = request.files.get('file')
+        else:
+            data = request.get_json() or {}
+            action = data.get('action')
+            alt_id = data.get('altId')
+            scale = data.get('scale', 4)
+            target = data.get('target')  # 'main' for main CSP regeneration
+            file = None
+
+        logger.info(f"[CSP Manage] {character}/{skin_id} action={action} altId={alt_id}")
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({'success': False, 'error': 'Metadata not found'}), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        char_data = metadata.get('characters', {}).get(character, {})
+        skins = char_data.get('skins', [])
+        skin = next((s for s in skins if s.get('id') == skin_id), None)
+
+        if not skin:
+            return jsonify({'success': False, 'error': 'Skin not found'}), 404
+
+        # Handle different actions
+        if action == 'swap':
+            # Swap alternate CSP with main CSP
+            alt_csps = skin.get('alternate_csps', [])
+            alt = next((a for a in alt_csps if a.get('id') == alt_id), None)
+            if not alt:
+                return jsonify({'success': False, 'error': 'Alt CSP not found'}), 404
+
+            main_csp_path = STORAGE_PATH / character / f"{skin_id}_csp.png"
+            alt_csp_path = STORAGE_PATH / character / alt.get('filename')
+
+            if not alt_csp_path.exists():
+                return jsonify({'success': False, 'error': 'Alt CSP file not found'}), 404
+
+            # Create new alt entry for old main
+            new_alt_id = f"alt_{int(time.time())}"
+            new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
+            new_alt_path = STORAGE_PATH / character / new_alt_filename
+
+            # Swap files
+            if main_csp_path.exists():
+                # Move main → new alt
+                shutil.copy2(main_csp_path, new_alt_path)
+
+            # Move alt → main
+            shutil.copy2(alt_csp_path, main_csp_path)
+
+            # Delete old alt file
+            alt_csp_path.unlink()
+
+            # Update metadata
+            # Remove old alt
+            alt_csps = [a for a in alt_csps if a.get('id') != alt_id]
+
+            # Add new alt (from old main) if main existed
+            if main_csp_path.exists():
+                alt_csps.append({
+                    'id': new_alt_id,
+                    'filename': new_alt_filename,
+                    'pose_name': None,  # Original main has no pose info
+                    'is_hd': False,
+                    'timestamp': datetime.now().isoformat()
+                })
+
+            skin['alternate_csps'] = alt_csps
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Swapped CSP: {alt.get('filename')} → main, main → {new_alt_filename}")
+
+            return jsonify({
+                'success': True,
+                'message': 'CSP swapped',
+                'newAltId': new_alt_id if main_csp_path.exists() else None
+            })
+
+        elif action == 'remove':
+            # Remove alternate CSP
+            alt_csps = skin.get('alternate_csps', [])
+            alt = next((a for a in alt_csps if a.get('id') == alt_id), None)
+            if not alt:
+                return jsonify({'success': False, 'error': 'Alt CSP not found'}), 404
+
+            alt_csp_path = STORAGE_PATH / character / alt.get('filename')
+
+            # Delete file
+            if alt_csp_path.exists():
+                alt_csp_path.unlink()
+                logger.info(f"Deleted alt CSP file: {alt_csp_path}")
+
+            # Update metadata
+            skin['alternate_csps'] = [a for a in alt_csps if a.get('id') != alt_id]
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Removed alt CSP: {alt.get('filename')}")
+
+            return jsonify({'success': True, 'message': 'Alt CSP removed'})
+
+        elif action == 'add':
+            # Add new alternate CSP
+            if not file:
+                return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+            alt_csps = skin.get('alternate_csps', [])
+            new_alt_id = f"alt_{int(time.time())}"
+            new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
+            new_alt_path = STORAGE_PATH / character / new_alt_filename
+
+            # Save file
+            file.save(new_alt_path)
+            logger.info(f"Saved new alt CSP: {new_alt_path}")
+
+            # Update metadata
+            if 'alternate_csps' not in skin:
+                skin['alternate_csps'] = []
+
+            skin['alternate_csps'].append({
+                'id': new_alt_id,
+                'filename': new_alt_filename,
+                'pose_name': None,  # User uploaded, no pose
+                'is_hd': False,
+                'timestamp': datetime.now().isoformat()
+            })
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Added alt CSP: {new_alt_filename}")
+
+            return jsonify({
+                'success': True,
+                'message': 'Alt CSP added',
+                'altId': new_alt_id,
+                'url': f"/storage/{character}/{new_alt_filename}"
+            })
+
+        elif action == 'regenerate-hd':
+            # Regenerate CSP at HD resolution using pose
+            # Find the skin's ZIP to extract DAT
+            zip_path = STORAGE_PATH / character / skin.get('filename', '')
+            if not zip_path.exists():
+                return jsonify({'success': False, 'error': 'Skin ZIP not found'}), 404
+
+            # Determine pose to use
+            pose_name = None
+            is_main = target == 'main' or not alt_id
+
+            if not is_main:
+                alt_csps = skin.get('alternate_csps', [])
+                alt = next((a for a in alt_csps if a.get('id') == alt_id), None)
+                if not alt:
+                    return jsonify({'success': False, 'error': 'Alt CSP not found'}), 404
+                pose_name = alt.get('pose_name')
+
+            # Get pose path (or None for default)
+            pose_path = None
+            aj_file = None
+
+            if pose_name:
+                pose_path = STORAGE_PATH.parent / 'assets' / 'vanilla' / 'custom_poses' / character / f"{pose_name}.yml"
+                if not pose_path.exists():
+                    pose_path = None  # Fallback to default
+
+            # Get AJ file for this character
+            char_prefix = get_char_prefix(character)
+            if char_prefix:
+                aj_file = STORAGE_PATH.parent / 'assets' / 'vanilla' / character / f"{char_prefix}AJ.dat"
+                if not aj_file.exists():
+                    aj_file = None
+
+            # Extract DAT from ZIP
+            import tempfile
+            import zipfile
+
+            temp_dir = tempfile.mkdtemp(prefix='csp_regen_')
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(temp_dir)
+
+                # Find DAT file
+                dat_file = None
+                for root, dirs, files in os.walk(temp_dir):
+                    for file_name in files:
+                        if file_name.endswith('.dat') and file_name.startswith('Pl'):
+                            dat_file = Path(root) / file_name
+                            break
+                    if dat_file:
+                        break
+
+                if not dat_file:
+                    return jsonify({'success': False, 'error': 'No DAT file found in ZIP'}), 400
+
+                # Generate CSP
+                csp_output = generate_single_csp_internal(
+                    str(dat_file),
+                    character,
+                    str(pose_path) if pose_path else None,
+                    str(aj_file) if aj_file else None,
+                    scale
+                )
+
+                if not csp_output or not Path(csp_output).exists():
+                    return jsonify({'success': False, 'error': 'CSP generation failed'}), 500
+
+                # Determine output path
+                if is_main:
+                    output_path = STORAGE_PATH / character / f"{skin_id}_csp_hd.png"
+                    # Update skin metadata for HD main
+                    from PIL import Image
+                    with Image.open(csp_output) as img:
+                        width, height = img.size
+                    skin['has_hd_csp'] = True
+                    skin['hd_csp_resolution'] = f"{scale}x"
+                    skin['hd_csp_size'] = f"{width}x{height}"
+                else:
+                    # Replace alt CSP file with HD version
+                    output_path = STORAGE_PATH / character / alt.get('filename')
+                    alt['is_hd'] = True
+
+                shutil.move(csp_output, output_path)
+                logger.info(f"[OK] Regenerated HD CSP: {output_path}")
+
+                with open(metadata_file, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+
+                return jsonify({
+                    'success': True,
+                    'message': f'HD CSP regenerated at {scale}x',
+                    'isHd': True
+                })
+
+            finally:
+                # Cleanup temp dir
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+
+        else:
+            return jsonify({'success': False, 'error': f'Unknown action: {action}'}), 400
+
+    except Exception as e:
+        logger.error(f"CSP manage error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# Helper function to get character prefix
+def get_char_prefix(character):
+    """Get the Pl prefix for a character (e.g., Fox -> PlFx)"""
+    prefixes = {
+        "C. Falcon": "PlCa", "Falco": "PlFc", "Fox": "PlFx",
+        "Marth": "PlMs", "Roy": "PlFe", "Bowser": "PlKp",
+        "DK": "PlDk", "Ganondorf": "PlGn", "Jigglypuff": "PlPr",
+        "Kirby": "PlKb", "Link": "PlLk", "Luigi": "PlLg",
+        "Mario": "PlMr", "Mewtwo": "PlMt", "Ness": "PlNs",
+        "Peach": "PlPe", "Pichu": "PlPc", "Pikachu": "PlPk",
+        "Ice Climbers": "PlPp", "Samus": "PlSs", "Sheik": "PlSk",
+        "Yoshi": "PlYs", "Young Link": "PlCl", "Zelda": "PlZd",
+        "Dr. Mario": "PlDr", "G&W": "PlGw"
+    }
+    return prefixes.get(character)
+
+
 @app.route('/api/mex/storage/costumes/update-stock', methods=['POST'])
 def update_costume_stock():
     """Update stock icon for a character costume"""
@@ -5016,51 +5302,60 @@ def batch_generate_pose_csps():
                     failed += 1
                     continue
 
-                logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={scale}x)")
+                # When HD mode is on, generate BOTH normal and HD versions
+                scales_to_generate = [(4, True), (1, False)] if hd_mode else [(1, False)]
+                existing_alts = skin.get('alternate_csps', [])
+                alt_num = len(existing_alts) + 1
+                skin_generated = False
 
-                # Generate CSP
-                csp_path = generate_single_csp_internal(
-                    str(dat_file),
-                    character,
-                    str(pose_path),
-                    str(aj_file) if aj_file.exists() else None,
-                    scale
-                )
+                for gen_scale, is_hd in scales_to_generate:
+                    logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={gen_scale}x)")
 
-                if csp_path and Path(csp_path).exists():
-                    # Determine alternate CSP filename
-                    existing_alts = skin.get('alternate_csps', [])
-                    alt_num = len(existing_alts) + 1
-                    suffix = '_hd' if hd_mode else ''
-                    alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"
-                    alt_path = STORAGE_PATH / character / alt_filename
+                    # Generate CSP
+                    csp_path = generate_single_csp_internal(
+                        str(dat_file),
+                        character,
+                        str(pose_path),
+                        str(aj_file) if aj_file.exists() else None,
+                        gen_scale
+                    )
 
-                    # Move generated CSP to storage
-                    shutil.move(csp_path, alt_path)
-                    logger.info(f"[OK] Saved alternate CSP: {alt_path}")
+                    if csp_path and Path(csp_path).exists():
+                        # Determine alternate CSP filename
+                        suffix = '_hd' if is_hd else ''
+                        alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"
+                        alt_path = STORAGE_PATH / character / alt_filename
 
-                    # Update skin metadata with alternate CSP info
-                    alt_entry = {
-                        'id': f"alt_{int(time.time())}_{alt_num}",
-                        'filename': alt_filename,
-                        'pose_name': pose_name,
-                        'is_hd': hd_mode,
-                        'timestamp': datetime.now().isoformat()
-                    }
+                        # Move generated CSP to storage
+                        shutil.move(csp_path, alt_path)
+                        logger.info(f"[OK] Saved alternate CSP: {alt_path}")
 
-                    # Find and update skin in metadata
-                    for s in skins:
-                        if s.get('id') == skin_id:
-                            if 'alternate_csps' not in s:
-                                s['alternate_csps'] = []
-                            s['alternate_csps'].append(alt_entry)
-                            break
+                        # Update skin metadata with alternate CSP info
+                        alt_entry = {
+                            'id': f"alt_{int(time.time())}_{alt_num}{'_hd' if is_hd else ''}",
+                            'filename': alt_filename,
+                            'pose_name': pose_name,
+                            'is_hd': is_hd,
+                            'timestamp': datetime.now().isoformat()
+                        }
 
+                        # Find and update skin in metadata
+                        for s in skins:
+                            if s.get('id') == skin_id:
+                                if 'alternate_csps' not in s:
+                                    s['alternate_csps'] = []
+                                s['alternate_csps'].append(alt_entry)
+                                break
+
+                        skin_generated = True
+                    else:
+                        logger.warning(f"Failed to generate {gen_scale}x CSP for {skin_id}")
+
+                if skin_generated:
                     results.append({
                         'skinId': skin_id,
                         'success': True,
-                        'altCspPath': f"/storage/{character}/{alt_filename}",
-                        'altId': alt_entry['id']
+                        'altCspPath': f"/storage/{character}/{skin_id}_csp_alt_{alt_num}.png"
                     })
                     generated += 1
                 else:
@@ -5725,6 +6020,7 @@ def check_setup_status():
     try:
         setup = FirstRunSetup(PROJECT_ROOT, MEXCLI_PATH)
         status = setup.check_setup_needed()
+        logger.info(f"[Setup Status] complete={status.get('complete')}, reason={status.get('reason')}, details={status.get('details')}")
         return jsonify({
             'success': True,
             **status

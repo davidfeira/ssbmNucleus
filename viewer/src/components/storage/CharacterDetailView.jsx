@@ -92,6 +92,7 @@ export default function CharacterDetailView({
   handleAddAlternativeCsp,
   setHdResolution,
   handleCaptureHdCsp,
+  handleRegenerateAltHd,
   handleSaveCspManager,
   // Slippi dialog
   showSlippiDialog,
@@ -341,6 +342,7 @@ export default function CharacterDetailView({
         onAddAlternativeCsp={handleAddAlternativeCsp}
         onHdResolutionChange={setHdResolution}
         onCaptureHdCsp={handleCaptureHdCsp}
+        onRegenerateAltHd={handleRegenerateAltHd}
         onSave={handleSaveCspManager}
         API_URL={API_URL}
       />

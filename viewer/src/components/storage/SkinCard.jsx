@@ -84,12 +84,12 @@ export default function SkinCard({
               has_hd_csp: skin.has_hd_csp,
               hd_csp_resolution: skin.hd_csp_resolution,
               hd_csp_size: skin.hd_csp_size,
-              // Alternate CSPs from batch pose generation
+              // Alternate CSPs from batch pose generation (metadata uses snake_case)
               alternateCsps: (skin.alternate_csps || []).map(alt => ({
                 id: alt.id,
                 url: `/storage/${selectedCharacter}/${alt.filename}`,
-                pose_name: alt.pose_name,
-                is_hd: alt.is_hd,
+                poseName: alt.pose_name,
+                isHd: alt.is_hd,
                 timestamp: alt.timestamp
               }))
             })

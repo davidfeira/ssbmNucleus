@@ -118,7 +118,9 @@ class FirstRunSetup:
             }
 
         # Check for at least some character folders
-        char_folders = [d for d in self.vanilla_dir.iterdir() if d.is_dir()]
+        # Exclude non-character directories like custom_poses
+        excluded_dirs = {'custom_poses'}
+        char_folders = [d for d in self.vanilla_dir.iterdir() if d.is_dir() and d.name not in excluded_dirs]
         if len(char_folders) < self.VANILLA_FIGHTER_COUNT:
             return {
                 'complete': False,

@@ -25,6 +25,7 @@ export default function CspManagerModal({
   onAddAlternativeCsp,
   onHdResolutionChange,
   onCaptureHdCsp,
+  onRegenerateAltHd,
   onSave,
   API_URL
 }) {
@@ -166,6 +167,16 @@ export default function CspManagerModal({
                   {/* HD badge */}
                   {alt.isHd && (
                     <div className="csp-manager-alt-hd-badge">HD</div>
+                  )}
+                  {/* HD regenerate button - show on non-HD alts */}
+                  {!alt.isHd && onRegenerateAltHd && (
+                    <button
+                      className="csp-manager-alt-hd-btn"
+                      onClick={(e) => { e.stopPropagation(); onRegenerateAltHd(index); }}
+                      title={alt.poseName ? `Regenerate "${alt.poseName}" at HD` : "Regenerate at HD (default pose)"}
+                    >
+                      HD
+                    </button>
                   )}
                   <div className="csp-manager-alt-overlay">
                     <span>Click to swap</span>

@@ -256,7 +256,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleSwapCsp,
     handleRemoveAlternativeCsp,
     handleSaveCspManager,
-    handleCaptureHdCsp
+    handleCaptureHdCsp,
+    handleRegenerateAltHd
   } = useCspManager({ API_URL, onRefresh })
 
   // Edit modal hook
@@ -705,6 +706,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleAddAlternativeCsp={handleAddAlternativeCsp}
         setHdResolution={setHdResolution}
         handleCaptureHdCsp={handleCaptureHdCsp}
+        handleRegenerateAltHd={handleRegenerateAltHd}
         handleSaveCspManager={handleSaveCspManager}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}
@@ -792,6 +794,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleAddAlternativeCsp={handleAddAlternativeCsp}
         setHdResolution={setHdResolution}
         handleCaptureHdCsp={handleCaptureHdCsp}
+        handleRegenerateAltHd={handleRegenerateAltHd}
         handleSaveCspManager={handleSaveCspManager}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}

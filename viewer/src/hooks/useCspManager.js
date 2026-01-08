@@ -31,8 +31,8 @@ export function useCspManager({ API_URL, onRefresh }) {
     const alts = (skinData.alternateCsps || []).map(alt => ({
       id: alt.id,
       url: alt.url,
-      poseName: alt.pose_name,
-      isHd: alt.is_hd,
+      poseName: alt.poseName,
+      isHd: alt.isHd,
       timestamp: alt.timestamp,
       file: null // Not a new file, loaded from server
     }))
@@ -102,67 +102,188 @@ export function useCspManager({ API_URL, onRefresh }) {
     reader.readAsDataURL(file)
   }
 
-  // Add alternative CSP
-  const handleAddAlternativeCsp = (e) => {
+  // Add alternative CSP - upload to backend
+  const handleAddAlternativeCsp = async (e) => {
     const file = e.target.files[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file')
       return
     }
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const newAlt = {
-        id: `alt_${Date.now()}`,
-        url: ev.target.result,
-        file: file
+
+    try {
+      const formData = new FormData()
+      formData.append('action', 'add')
+      formData.append('file', file)
+
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        { method: 'POST', body: formData }
+      )
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Add to local state with URL from server
+        setAlternativeCsps(prev => [...prev, {
+          id: data.altId,
+          url: data.url,
+          poseName: null,
+          isHd: false,
+          file: null
+        }])
+        setLastImageUpdate(Date.now())
+      } else {
+        alert(`Failed to add CSP: ${data.error}`)
       }
-      setAlternativeCsps(prev => [...prev, newAlt])
+    } catch (err) {
+      alert(`Error adding CSP: ${err.message}`)
     }
-    reader.readAsDataURL(file)
   }
 
-  // Swap CSP with alternative
-  const handleSwapCsp = (altIndex) => {
+  // Swap CSP with alternative - call backend
+  const handleSwapCsp = async (altIndex) => {
     const altCsp = alternativeCsps[altIndex]
     if (!altCsp) return
 
-    // Get current main CSP info
-    const currentMainUrl = pendingMainCspPreview ||
-      (cspManagerSkin?.has_csp ? `${cspManagerSkin.cspUrl}?t=${lastImageUpdate}` : null)
-    const currentMainFile = pendingMainCsp
-
-    // Swap: alt becomes main, main becomes alt
-    setPendingMainCspPreview(altCsp.url)
-    setPendingMainCsp(altCsp.file)
-
-    // Update alternatives: replace swapped alt with old main
-    setAlternativeCsps(prev => {
-      const updated = [...prev]
-      if (currentMainUrl) {
-        updated[altIndex] = {
-          id: `alt_${Date.now()}`,
-          url: currentMainUrl,
-          file: currentMainFile
+    try {
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'swap', altId: altCsp.id })
         }
+      )
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Bust image cache and refresh
+        setLastImageUpdate(Date.now())
+        // Refresh metadata to get updated CSP data
+        if (onRefresh) {
+          onRefresh()
+        }
+        // Update local state: remove swapped alt, add new alt (old main) if provided
+        setAlternativeCsps(prev => {
+          const updated = prev.filter(a => a.id !== altCsp.id)
+          if (data.newAltId) {
+            updated.push({
+              id: data.newAltId,
+              url: `${cspManagerSkin.cspUrl}?t=${Date.now()}`, // Old main is now alt
+              poseName: null,
+              isHd: false,
+              file: null
+            })
+          }
+          return updated
+        })
       } else {
-        // No main CSP existed, just remove the alt
-        updated.splice(altIndex, 1)
+        alert(`Failed to swap CSP: ${data.error}`)
       }
-      return updated
-    })
+    } catch (err) {
+      alert(`Error swapping CSP: ${err.message}`)
+    }
   }
 
-  // Remove alternative CSP
-  const handleRemoveAlternativeCsp = (altIndex) => {
-    setAlternativeCsps(prev => prev.filter((_, i) => i !== altIndex))
+  // Remove alternative CSP - call backend
+  const handleRemoveAlternativeCsp = async (altIndex) => {
+    const altCsp = alternativeCsps[altIndex]
+    if (!altCsp) return
+
+    try {
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'remove', altId: altCsp.id })
+        }
+      )
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Remove from local state
+        setAlternativeCsps(prev => prev.filter((_, i) => i !== altIndex))
+      } else {
+        alert(`Failed to remove CSP: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error removing CSP: ${err.message}`)
+    }
   }
 
-  // Save CSP manager changes
-  const handleSaveCspManager = () => {
-    // TODO: Implement backend save
-    // For now, just close the modal
-    closeCspManager()
+  // Save CSP manager changes - upload pending main CSP if any
+  const handleSaveCspManager = async () => {
+    try {
+      if (pendingMainCsp) {
+        // Upload new main CSP using existing endpoint
+        const formData = new FormData()
+        formData.append('character', cspManagerSkin.character)
+        formData.append('skinId', cspManagerSkin.id)
+        formData.append('csp', pendingMainCsp)
+
+        const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const data = await response.json()
+
+        if (!data.success) {
+          alert(`Failed to save CSP: ${data.error}`)
+          return
+        }
+      }
+
+      // Refresh metadata
+      if (onRefresh) {
+        onRefresh()
+      }
+
+      closeCspManager()
+    } catch (err) {
+      alert(`Error saving CSP: ${err.message}`)
+    }
+  }
+
+  // Regenerate alt CSP at HD resolution using its pose (or default)
+  const handleRegenerateAltHd = async (altIndex) => {
+    const altCsp = alternativeCsps[altIndex]
+    if (!altCsp) return
+
+    const scaleNum = parseInt(hdResolution.replace('x', ''))
+
+    try {
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'regenerate-hd',
+            altId: altCsp.id,
+            scale: scaleNum
+          })
+        }
+      )
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update local state to show HD badge
+        setAlternativeCsps(prev => prev.map((alt, i) =>
+          i === altIndex ? { ...alt, isHd: true } : alt
+        ))
+        setLastImageUpdate(Date.now())
+      } else {
+        alert(`Failed to regenerate HD: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error regenerating HD: ${err.message}`)
+    }
   }
 
   // Capture HD CSP
@@ -237,6 +358,7 @@ export function useCspManager({ API_URL, onRefresh }) {
     handleSwapCsp,
     handleRemoveAlternativeCsp,
     handleSaveCspManager,
-    handleCaptureHdCsp
+    handleCaptureHdCsp,
+    handleRegenerateAltHd
   }
 }
