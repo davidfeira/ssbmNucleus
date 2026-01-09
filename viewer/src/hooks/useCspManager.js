@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 
-export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
+export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onUpdateEditingItemActiveCsp }) {
   // CSP Manager modal state
   const [showCspManager, setShowCspManager] = useState(false)
   const [cspManagerSkin, setCspManagerSkin] = useState(null) // Current skin being edited
@@ -178,6 +178,10 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
           ...prev,
           active_csp_id: data.activeCspId
         }))
+        // Update editingItem so Edit Modal shows new active CSP immediately
+        if (onUpdateEditingItemActiveCsp) {
+          onUpdateEditingItemActiveCsp(data.activeCspId)
+        }
       } else {
         alert(`Failed to set active CSP: ${data.error}`)
       }
@@ -297,7 +301,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
     }
   }
 
-  // Capture HD CSP
+  // Capture HD CSP - uses active alt's pose if one is selected
   const handleCaptureHdCsp = async () => {
     if (!cspManagerSkin) return
 
@@ -305,26 +309,58 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
     setCapturingHdCsp(true)
 
     try {
+      // Check if there's an active alt CSP - if so, regenerate HD for that alt using its pose
+      const activeAltId = cspManagerSkin.active_csp_id
+      const requestBody = {
+        action: 'regenerate-hd',
+        scale: scaleNum
+      }
+
+      if (activeAltId) {
+        // Regenerate HD for the active alt CSP (uses its pose if available)
+        requestBody.altId = activeAltId
+      } else {
+        // Regenerate HD for main CSP (uses default pose)
+        requestBody.target = 'main'
+      }
+
       const response = await fetch(
-        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/capture-hd`,
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scale: scaleNum })
+          body: JSON.stringify(requestBody)
         }
       )
 
       const data = await response.json()
 
       if (data.success) {
-        setHdCspInfo({
-          exists: true,
-          resolution: data.resolution,
-          size: data.size
-        })
+        if (!activeAltId) {
+          // Update main CSP HD info
+          setHdCspInfo({
+            exists: true,
+            resolution: `${scaleNum}x`,
+            size: data.size || 'HD'
+          })
+        } else if (data.newHdAlt) {
+          // New HD alt was created - add to local state
+          const newHdAlt = {
+            id: data.newHdAlt.id,
+            url: data.newHdAlt.url,
+            poseName: data.newHdAlt.poseName,
+            isHd: true,
+            file: null
+          }
+          setAlternativeCsps(prev => [...prev, newHdAlt])
+          // Also update editingItem
+          if (onUpdateEditingItemAlts) {
+            onUpdateEditingItemAlts(prev => [...prev, newHdAlt])
+          }
+        }
         // Bust image cache so the new HD CSP shows immediately
         setLastImageUpdate(Date.now())
-        // Refresh metadata to get updated has_hd_csp flag
+        // Refresh metadata to get updated data
         if (onRefresh) {
           onRefresh()
         }
@@ -363,6 +399,10 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
           ...prev,
           active_csp_id: null
         }))
+        // Update editingItem so Edit Modal shows original CSP immediately
+        if (onUpdateEditingItemActiveCsp) {
+          onUpdateEditingItemActiveCsp(null)
+        }
       } else {
         alert(`Failed to reset CSP: ${data.error}`)
       }

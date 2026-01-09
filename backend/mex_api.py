@@ -1760,8 +1760,10 @@ def manage_csp(character, skin_id):
             aj_file = None
 
             if pose_name:
-                pose_path = STORAGE_PATH.parent / 'assets' / 'vanilla' / 'custom_poses' / character / f"{pose_name}.yml"
+                # Poses are saved in VANILLA_ASSETS_DIR/custom_poses/{character}/
+                pose_path = VANILLA_ASSETS_DIR / 'custom_poses' / character / f"{pose_name}.yml"
                 if not pose_path.exists():
+                    logger.warning(f"Pose file not found: {pose_path}")
                     pose_path = None  # Fallback to default
 
             # Get AJ file for this character
@@ -1815,22 +1817,60 @@ def manage_csp(character, skin_id):
                     skin['has_hd_csp'] = True
                     skin['hd_csp_resolution'] = f"{scale}x"
                     skin['hd_csp_size'] = f"{width}x{height}"
+                    shutil.move(csp_output, output_path)
+                    logger.info(f"[OK] Regenerated HD main CSP: {output_path}")
                 else:
-                    # Replace alt CSP file with HD version
-                    output_path = STORAGE_PATH / character / alt.get('filename')
-                    alt['is_hd'] = True
+                    # Create a NEW HD alt CSP file (don't overwrite the non-HD version)
+                    # Check if this alt already has an HD pair
+                    alt_csps = skin.get('alternate_csps', [])
+                    existing_hd = next((a for a in alt_csps
+                        if a.get('pose_name') == pose_name and a.get('is_hd', False)), None)
 
-                shutil.move(csp_output, output_path)
-                logger.info(f"[OK] Regenerated HD CSP: {output_path}")
+                    if existing_hd:
+                        # Update existing HD alt
+                        output_path = STORAGE_PATH / character / existing_hd.get('filename')
+                        shutil.move(csp_output, output_path)
+                        logger.info(f"[OK] Updated existing HD alt CSP: {output_path}")
+                    else:
+                        # Create new HD alt entry
+                        new_hd_id = f"alt_{int(time.time())}_hd"
+                        new_hd_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd.png"
+                        output_path = STORAGE_PATH / character / new_hd_filename
+
+                        shutil.move(csp_output, output_path)
+
+                        # Add new HD alt to metadata
+                        alt_csps.append({
+                            'id': new_hd_id,
+                            'filename': new_hd_filename,
+                            'pose_name': pose_name,  # Same pose as the non-HD version
+                            'is_hd': True,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        skin['alternate_csps'] = alt_csps
+                        logger.info(f"[OK] Created new HD alt CSP: {output_path}")
 
                 with open(metadata_file, 'w') as f:
                     json.dump(metadata, f, indent=2)
 
-                return jsonify({
+                # Build response with new HD alt info if created
+                response_data = {
                     'success': True,
                     'message': f'HD CSP regenerated at {scale}x',
-                    'isHd': True
-                })
+                    'isHd': True,
+                    'isMain': is_main
+                }
+
+                if not is_main and not existing_hd:
+                    # Return new HD alt info so frontend can add to local state
+                    response_data['newHdAlt'] = {
+                        'id': new_hd_id,
+                        'url': f"/storage/{character}/{new_hd_filename}",
+                        'poseName': pose_name,
+                        'isHd': True
+                    }
+
+                return jsonify(response_data)
 
             finally:
                 # Cleanup temp dir

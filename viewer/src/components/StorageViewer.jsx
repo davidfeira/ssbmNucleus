@@ -277,6 +277,17 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           }
         } : prev)
       }
+    },
+    onUpdateEditingItemActiveCsp: (activeCspId) => {
+      if (setEditingItemRef.current) {
+        setEditingItemRef.current(prev => prev ? {
+          ...prev,
+          data: {
+            ...prev.data,
+            active_csp_id: activeCspId
+          }
+        } : prev)
+      }
     }
   })
 
