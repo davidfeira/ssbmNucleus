@@ -93,6 +93,7 @@ export default function CharacterDetailView({
   setHdResolution,
   handleCaptureHdCsp,
   handleRegenerateAltHd,
+  handleResetToOriginal,
   handleSaveCspManager,
   // Slippi dialog
   showSlippiDialog,
@@ -211,9 +212,6 @@ export default function CharacterDetailView({
             Poses
           </button>
         </div>
-
-        <h2>{selectedCharacter}</h2>
-        <p className="skin-count">{skinCount} skin{skinCount !== 1 ? 's' : ''}</p>
 
         {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
           <div className="no-skins-message">
@@ -343,6 +341,7 @@ export default function CharacterDetailView({
         onHdResolutionChange={setHdResolution}
         onCaptureHdCsp={handleCaptureHdCsp}
         onRegenerateAltHd={handleRegenerateAltHd}
+        onResetToOriginal={handleResetToOriginal}
         onSave={handleSaveCspManager}
         API_URL={API_URL}
       />
@@ -369,6 +368,7 @@ export default function CharacterDetailView({
         show={showPoseManager}
         character={selectedCharacter}
         onClose={() => setShowPoseManager(false)}
+        onRefresh={onRefresh}
         API_URL={API_URL}
       />
     </div>

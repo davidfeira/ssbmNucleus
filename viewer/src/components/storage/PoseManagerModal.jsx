@@ -108,6 +108,7 @@ export default function PoseManagerModal({
   show,
   character,
   onClose,
+  onRefresh,
   API_URL
 }) {
   const [poseName, setPoseName] = useState('')
@@ -303,6 +304,7 @@ export default function PoseManagerModal({
         poseName={selectedPose?.name}
         poseThumbnail={selectedPose?.hasThumbnail ? `${API_URL.replace('/api/mex', '')}${selectedPose.thumbnailUrl}` : null}
         onClose={() => setSelectedPose(null)}
+        onRefresh={onRefresh}
         API_URL={API_URL}
       />
 

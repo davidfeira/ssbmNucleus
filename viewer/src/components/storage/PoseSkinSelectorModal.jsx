@@ -59,6 +59,7 @@ export default function PoseSkinSelectorModal({
   poseName,
   poseThumbnail,
   onClose,
+  onRefresh,
   API_URL
 }) {
   const [skins, setSkins] = useState([])
@@ -145,6 +146,10 @@ export default function PoseSkinSelectorModal({
           failed: data.failed,
           details: data.results
         })
+        // Refresh parent metadata so new CSPs show up
+        if (onRefresh) {
+          onRefresh()
+        }
       } else {
         setResults({
           error: data.error || 'Generation failed'

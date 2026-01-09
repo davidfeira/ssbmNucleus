@@ -27,6 +27,20 @@ export default function SkinCard({
   onEditClick,
   API_URL
 }) {
+  // Get the CSP URL - use active alt CSP if one is selected
+  const getCspUrl = () => {
+    const baseUrl = API_URL.replace('/api/mex', '')
+    if (skin.active_csp_id && skin.alternate_csps) {
+      const activeAlt = skin.alternate_csps.find(alt => alt.id === skin.active_csp_id)
+      if (activeAlt) {
+        return `${baseUrl}/storage/${selectedCharacter}/${activeAlt.filename}`
+      }
+    }
+    return `${baseUrl}/storage/${selectedCharacter}/${skin.id}_csp.png`
+  }
+
+  const cspUrl = getCspUrl()
+
   return (
     <div
       key={skin.id}
@@ -44,7 +58,7 @@ export default function SkinCard({
       <div className="skin-image-container">
         {skin.has_csp ? (
           <img
-            src={`${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png?t=${lastImageUpdate}`}
+            src={`${cspUrl}?t=${lastImageUpdate}`}
             alt={`${selectedCharacter} - ${skin.color}`}
             className="skin-csp"
             onError={(e) => {
@@ -84,6 +98,8 @@ export default function SkinCard({
               has_hd_csp: skin.has_hd_csp,
               hd_csp_resolution: skin.hd_csp_resolution,
               hd_csp_size: skin.hd_csp_size,
+              // Active CSP ID (null = original, otherwise points to an alt CSP)
+              active_csp_id: skin.active_csp_id || null,
               // Alternate CSPs from batch pose generation (metadata uses snake_case)
               alternateCsps: (skin.alternate_csps || []).map(alt => ({
                 id: alt.id,

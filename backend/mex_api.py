@@ -1627,59 +1627,52 @@ def manage_csp(character, skin_id):
 
         # Handle different actions
         if action == 'swap':
-            # Swap alternate CSP with main CSP
+            # Simple swap: just update active_csp_id flag - no file moves needed
             alt_csps = skin.get('alternate_csps', [])
             alt = next((a for a in alt_csps if a.get('id') == alt_id), None)
             if not alt:
                 return jsonify({'success': False, 'error': 'Alt CSP not found'}), 404
 
-            main_csp_path = STORAGE_PATH / character / f"{skin_id}_csp.png"
-            alt_csp_path = STORAGE_PATH / character / alt.get('filename')
+            # Find the base ID (strip _hd suffix if present)
+            base_id = alt_id.rstrip('_hd') if alt_id.endswith('_hd') else alt_id
 
-            if not alt_csp_path.exists():
-                return jsonify({'success': False, 'error': 'Alt CSP file not found'}), 404
+            # Find the non-HD version of this alt (use its pose_name to find pair)
+            alt_pose = alt.get('pose_name')
+            non_hd_alt = next((a for a in alt_csps
+                              if a.get('pose_name') == alt_pose
+                              and not a.get('is_hd', False)), None)
 
-            # Create new alt entry for old main
-            new_alt_id = f"alt_{int(time.time())}"
-            new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
-            new_alt_path = STORAGE_PATH / character / new_alt_filename
-
-            # Swap files
-            if main_csp_path.exists():
-                # Move main → new alt
-                shutil.copy2(main_csp_path, new_alt_path)
-
-            # Move alt → main
-            shutil.copy2(alt_csp_path, main_csp_path)
-
-            # Delete old alt file
-            alt_csp_path.unlink()
-
-            # Update metadata
-            # Remove old alt
-            alt_csps = [a for a in alt_csps if a.get('id') != alt_id]
-
-            # Add new alt (from old main) if main existed
-            if main_csp_path.exists():
-                alt_csps.append({
-                    'id': new_alt_id,
-                    'filename': new_alt_filename,
-                    'pose_name': None,  # Original main has no pose info
-                    'is_hd': False,
-                    'timestamp': datetime.now().isoformat()
-                })
-
-            skin['alternate_csps'] = alt_csps
+            # Set the active CSP to the non-HD alt's ID (HD is implied by pairing)
+            if non_hd_alt:
+                skin['active_csp_id'] = non_hd_alt.get('id')
+            else:
+                # No non-HD version, just use this alt
+                skin['active_csp_id'] = alt_id
 
             with open(metadata_file, 'w') as f:
                 json.dump(metadata, f, indent=2)
 
-            logger.info(f"[OK] Swapped CSP: {alt.get('filename')} → main, main → {new_alt_filename}")
+            logger.info(f"[OK] Set active CSP to: {skin['active_csp_id']}")
 
             return jsonify({
                 'success': True,
-                'message': 'CSP swapped',
-                'newAltId': new_alt_id if main_csp_path.exists() else None
+                'message': 'Active CSP updated',
+                'activeCspId': skin['active_csp_id']
+            })
+
+        elif action == 'reset':
+            # Reset to original CSP (clear active_csp_id)
+            skin['active_csp_id'] = None
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Reset to original CSP")
+
+            return jsonify({
+                'success': True,
+                'message': 'Reset to original CSP',
+                'activeCspId': None
             })
 
         elif action == 'remove':

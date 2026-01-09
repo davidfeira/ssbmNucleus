@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './StorageViewer.css'
 import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
@@ -227,6 +227,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     fetchXdeltaPatches
   })
 
+  // Ref for setEditingItem - used by CSP manager callback (initialized after useEditModal)
+  const setEditingItemRef = useRef(null)
+
   // CSP manager hook
   const {
     showCspManager,
@@ -257,8 +260,25 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleRemoveAlternativeCsp,
     handleSaveCspManager,
     handleCaptureHdCsp,
-    handleRegenerateAltHd
-  } = useCspManager({ API_URL, onRefresh })
+    handleRegenerateAltHd,
+    handleResetToOriginal
+  } = useCspManager({
+    API_URL,
+    onRefresh,
+    onUpdateEditingItemAlts: (updater) => {
+      if (setEditingItemRef.current) {
+        setEditingItemRef.current(prev => prev ? {
+          ...prev,
+          data: {
+            ...prev.data,
+            alternateCsps: typeof updater === 'function'
+              ? updater(prev.data.alternateCsps || [])
+              : updater
+          }
+        } : prev)
+      }
+    }
+  })
 
   // Edit modal hook
   const {
@@ -289,6 +309,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleExport,
     handleCancel
   } = useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastImageUpdate })
+
+  // Store setEditingItem in ref for CSP manager callback
+  setEditingItemRef.current = setEditingItem
 
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
@@ -707,6 +730,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         setHdResolution={setHdResolution}
         handleCaptureHdCsp={handleCaptureHdCsp}
         handleRegenerateAltHd={handleRegenerateAltHd}
+        handleResetToOriginal={handleResetToOriginal}
         handleSaveCspManager={handleSaveCspManager}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}
@@ -795,6 +819,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         setHdResolution={setHdResolution}
         handleCaptureHdCsp={handleCaptureHdCsp}
         handleRegenerateAltHd={handleRegenerateAltHd}
+        handleResetToOriginal={handleResetToOriginal}
         handleSaveCspManager={handleSaveCspManager}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}

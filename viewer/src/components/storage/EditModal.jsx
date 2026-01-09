@@ -47,6 +47,39 @@ export default function EditModal({
 }) {
   if (!show || !editingItem) return null
 
+  // Get the CSP URL to display - prefer active alt CSP with HD
+  const getDisplayCspUrl = () => {
+    if (editingItem.type !== 'costume') return null
+    const data = editingItem.data
+    const baseUrl = API_URL.replace('/api/mex', '')
+
+    // If there's an active alt CSP, use it
+    if (data.active_csp_id && data.alternateCsps) {
+      // First try to find HD version of the active alt
+      const activeAltHd = data.alternateCsps.find(
+        alt => alt.poseName && alt.isHd &&
+        data.alternateCsps.some(other => other.id === data.active_csp_id && other.poseName === alt.poseName)
+      )
+      if (activeAltHd) {
+        return `${baseUrl}${activeAltHd.url}`
+      }
+
+      // Fall back to the active alt (non-HD)
+      const activeAlt = data.alternateCsps.find(alt => alt.id === data.active_csp_id)
+      if (activeAlt) {
+        return `${baseUrl}${activeAlt.url}`
+      }
+    }
+
+    // No active alt - use original CSP, prefer HD
+    if (data.has_hd_csp) {
+      return data.cspUrl.replace('_csp.png', '_csp_hd.png')
+    }
+    return data.cspUrl
+  }
+
+  const displayCspUrl = getDisplayCspUrl()
+
   const handleOverlayClick = () => {
     onCancel()
   }
@@ -88,13 +121,9 @@ export default function EditModal({
                       alt="New CSP preview"
                       className="edit-modal-csp-image"
                     />
-                  ) : editingItem.data.has_csp ? (
+                  ) : (editingItem.data.has_csp || editingItem.data.active_csp_id) ? (
                     <img
-                      src={`${
-                        editingItem.data.has_hd_csp
-                          ? editingItem.data.cspUrl.replace('_csp.png', '_csp_hd.png')
-                          : editingItem.data.cspUrl
-                      }?t=${lastImageUpdate}`}
+                      src={`${displayCspUrl}?t=${lastImageUpdate}`}
                       alt="CSP"
                       className="edit-modal-csp-image"
                       onError={(e) => e.target.style.display = 'none'}

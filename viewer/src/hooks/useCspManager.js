@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 
-export function useCspManager({ API_URL, onRefresh }) {
+export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts }) {
   // CSP Manager modal state
   const [showCspManager, setShowCspManager] = useState(false)
   const [cspManagerSkin, setCspManagerSkin] = useState(null) // Current skin being edited
@@ -124,15 +124,24 @@ export function useCspManager({ API_URL, onRefresh }) {
       const data = await response.json()
 
       if (data.success) {
-        // Add to local state with URL from server
-        setAlternativeCsps(prev => [...prev, {
+        const newAlt = {
           id: data.altId,
           url: data.url,
           poseName: null,
           isHd: false,
           file: null
-        }])
+        }
+        // Add to local state with URL from server
+        setAlternativeCsps(prev => [...prev, newAlt])
+        // Update editingItem so reopening CSP Manager shows fresh data
+        if (onUpdateEditingItemAlts) {
+          onUpdateEditingItemAlts(prev => [...prev, newAlt])
+        }
         setLastImageUpdate(Date.now())
+        // Refresh parent metadata so changes persist after modal close/reopen
+        if (onRefresh) {
+          onRefresh()
+        }
       } else {
         alert(`Failed to add CSP: ${data.error}`)
       }
@@ -141,7 +150,7 @@ export function useCspManager({ API_URL, onRefresh }) {
     }
   }
 
-  // Swap CSP with alternative - call backend
+  // Swap CSP - just updates active_csp_id flag, no file moves
   const handleSwapCsp = async (altIndex) => {
     const altCsp = alternativeCsps[altIndex]
     if (!altCsp) return
@@ -159,31 +168,21 @@ export function useCspManager({ API_URL, onRefresh }) {
       const data = await response.json()
 
       if (data.success) {
-        // Bust image cache and refresh
+        // Bust image cache and refresh metadata
         setLastImageUpdate(Date.now())
-        // Refresh metadata to get updated CSP data
         if (onRefresh) {
           onRefresh()
         }
-        // Update local state: remove swapped alt, add new alt (old main) if provided
-        setAlternativeCsps(prev => {
-          const updated = prev.filter(a => a.id !== altCsp.id)
-          if (data.newAltId) {
-            updated.push({
-              id: data.newAltId,
-              url: `${cspManagerSkin.cspUrl}?t=${Date.now()}`, // Old main is now alt
-              poseName: null,
-              isHd: false,
-              file: null
-            })
-          }
-          return updated
-        })
+        // Update local skin data with new active CSP
+        setCspManagerSkin(prev => ({
+          ...prev,
+          active_csp_id: data.activeCspId
+        }))
       } else {
-        alert(`Failed to swap CSP: ${data.error}`)
+        alert(`Failed to set active CSP: ${data.error}`)
       }
     } catch (err) {
-      alert(`Error swapping CSP: ${err.message}`)
+      alert(`Error setting active CSP: ${err.message}`)
     }
   }
 
@@ -205,8 +204,17 @@ export function useCspManager({ API_URL, onRefresh }) {
       const data = await response.json()
 
       if (data.success) {
+        const removedId = alternativeCsps[altIndex]?.id
         // Remove from local state
         setAlternativeCsps(prev => prev.filter((_, i) => i !== altIndex))
+        // Update editingItem so reopening CSP Manager shows fresh data
+        if (onUpdateEditingItemAlts && removedId) {
+          onUpdateEditingItemAlts(prev => prev.filter(a => a.id !== removedId))
+        }
+        // Refresh parent metadata so changes persist after modal close/reopen
+        if (onRefresh) {
+          onRefresh()
+        }
       } else {
         alert(`Failed to remove CSP: ${data.error}`)
       }
@@ -238,9 +246,12 @@ export function useCspManager({ API_URL, onRefresh }) {
         }
       }
 
+      // Bust image cache so new CSP shows immediately
+      setLastImageUpdate(Date.now())
+
       // Refresh metadata
       if (onRefresh) {
-        onRefresh()
+        await onRefresh()
       }
 
       closeCspManager()
@@ -327,6 +338,39 @@ export function useCspManager({ API_URL, onRefresh }) {
     }
   }
 
+  // Reset to original CSP (clear active_csp_id)
+  const handleResetToOriginal = async () => {
+    if (!cspManagerSkin) return
+
+    try {
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset' })
+        }
+      )
+
+      const data = await response.json()
+
+      if (data.success) {
+        setLastImageUpdate(Date.now())
+        if (onRefresh) {
+          onRefresh()
+        }
+        setCspManagerSkin(prev => ({
+          ...prev,
+          active_csp_id: null
+        }))
+      } else {
+        alert(`Failed to reset CSP: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error resetting CSP: ${err.message}`)
+    }
+  }
+
   return {
     // State
     showCspManager,
@@ -359,6 +403,7 @@ export function useCspManager({ API_URL, onRefresh }) {
     handleRemoveAlternativeCsp,
     handleSaveCspManager,
     handleCaptureHdCsp,
-    handleRegenerateAltHd
+    handleRegenerateAltHd,
+    handleResetToOriginal
   }
 }
