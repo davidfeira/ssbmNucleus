@@ -26,15 +26,87 @@
 
 .first-run-modal {
   background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-cyan);
   border-radius: 16px;
   width: 100%;
   max-width: 520px;
   box-shadow:
-    0 0 0 1px rgba(125, 211, 232, 0.1),
     0 24px 48px rgba(0, 0, 0, 0.5),
-    0 0 120px rgba(125, 211, 232, 0.1);
-  overflow: hidden;
+    0 0 24px rgba(125, 211, 232, 0.12);
+  overflow: visible;
+  position: relative;
+}
+
+/* Traveling LED border effect (runs constantly, slow) */
+.first-run-modal::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(16px + 2px);
+  padding: 2px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 0%,
+    transparent 25%,
+    rgba(255, 255, 255, 0.9) 30%,
+    var(--color-cyan) 35%,
+    rgba(255, 255, 255, 0.9) 40%,
+    transparent 45%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 1;
+  z-index: -1;
+  animation: rotateBorder 8s linear infinite;
+}
+
+/* Glow layer behind the LED */
+.first-run-modal::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(16px + 6px);
+  padding: 6px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 0%,
+    transparent 28%,
+    var(--color-cyan) 35%,
+    transparent 42%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: blur(6px);
+  opacity: 0.8;
+  z-index: -2;
+  animation: rotateBorder 8s linear infinite;
+}
+
+@keyframes rotateBorder {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+/* Register the custom property for animation */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
 
 .first-run-header {

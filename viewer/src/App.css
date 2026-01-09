@@ -381,9 +381,9 @@
   transform: translateY(0) scale(0.98);
 }
 
-/* Export Button (Teal) */
+/* Export Button (Cyan) */
 .btn-export {
-  background: var(--gradient-teal);
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep);
   border: none;
   padding: var(--space-3) var(--space-6);
@@ -396,12 +396,12 @@
     transform var(--transition-fast),
     box-shadow var(--transition-fast),
     filter var(--transition-fast);
-  box-shadow: var(--shadow-sm), var(--glow-teal-sm);
+  box-shadow: var(--shadow-sm), var(--glow-cyan-sm);
 }
 
 .btn-export:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--glow-teal);
+  box-shadow: var(--shadow-md), var(--glow-cyan);
   filter: brightness(1.1);
 }
 
@@ -581,16 +581,16 @@
     var(--color-bg-deep) 100%
   );
   border-radius: var(--radius-2xl);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-cyan);
   box-shadow:
     var(--shadow-xl),
-    0 0 0 1px rgba(125, 211, 232, 0.05),
     0 0 80px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(125, 211, 232, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
 }
 
@@ -627,24 +627,76 @@
   }
 }
 
-/* Decorative gradient accent line at top */
+/* Traveling glow border effect (runs constantly) */
 .edit-modal-fullscreen::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
+  inset: -2px;
+  border-radius: calc(var(--radius-2xl) + 2px);
+  padding: 2px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
     transparent 0%,
-    var(--color-cyan-muted) 15%,
+    transparent 25%,
+    rgba(255, 255, 255, 0.9) 30%,
     var(--color-cyan) 35%,
-    var(--color-gold) 65%,
-    var(--color-gold-muted) 85%,
+    rgba(255, 255, 255, 0.9) 40%,
+    transparent 45%,
     transparent 100%
   );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 1;
+  z-index: -1;
+  animation: rotateBorder 2s linear infinite;
+}
+
+/* Glow layer behind */
+.edit-modal-fullscreen::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--radius-2xl) + 6px);
+  padding: 6px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 0%,
+    transparent 28%,
+    var(--color-cyan) 35%,
+    transparent 42%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: blur(6px);
   opacity: 0.8;
+  z-index: -2;
+  animation: rotateBorder 2s linear infinite;
+}
+
+@keyframes rotateBorder {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+/* Register the custom property for animation */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
 
 /* Close Button */
@@ -1259,14 +1311,14 @@
 }
 
 .edit-modal-action-btn--export {
-  background: var(--gradient-teal);
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep);
-  box-shadow: var(--shadow-sm), var(--glow-teal-sm);
+  box-shadow: var(--shadow-sm), var(--glow-cyan-sm);
 }
 
 .edit-modal-action-btn--export:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--glow-teal);
+  box-shadow: var(--shadow-md), var(--glow-cyan);
   filter: brightness(1.1);
 }
 

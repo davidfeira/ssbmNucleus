@@ -111,18 +111,22 @@
 .btn-export {
   width: 100%;
   padding: 1rem;
-  background: #1976d2;
-  color: white;
+  background: var(--gradient-cyan);
+  color: var(--color-bg-deep);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
   font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: var(--font-bold);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast);
+  box-shadow: var(--shadow-sm), var(--glow-cyan-sm);
 }
 
 .btn-export:hover {
-  background: #1565c0;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), var(--glow-cyan);
+  filter: brightness(1.1);
 }
 
 .export-progress {

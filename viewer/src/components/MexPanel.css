@@ -121,14 +121,14 @@
 }
 
 .action-btn.export-btn {
-  background: var(--gradient-teal);
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep);
   border-color: transparent;
 }
 
 .action-btn.export-btn:hover {
   filter: brightness(1.1);
-  box-shadow: var(--glow-teal-sm);
+  box-shadow: var(--glow-cyan-sm);
 }
 
 /* ─────────────────────────────────────────
@@ -561,7 +561,7 @@
       var(--color-bg-base) 100%
     );
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--color-border-subtle);
   font-size: var(--text-sm);
   cursor: pointer;
@@ -575,6 +575,90 @@
     border-color var(--transition-fast);
 }
 
+/* Traveling LED border effect */
+.costume-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(var(--radius-md) + 2px);
+  padding: 2px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 0%,
+    transparent 25%,
+    rgba(255, 255, 255, 0.9) 30%,
+    var(--color-cyan) 35%,
+    rgba(255, 255, 255, 0.9) 40%,
+    transparent 45%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+  animation: rotateBorder 2s linear infinite paused;
+}
+
+.costume-card:hover::before {
+  opacity: 1;
+  animation-play-state: running;
+}
+
+/* Glow layer behind the LED */
+.costume-card::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--radius-md) + 6px);
+  padding: 6px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 0%,
+    transparent 28%,
+    var(--color-cyan) 35%,
+    transparent 42%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: blur(6px);
+  opacity: 0;
+  z-index: -2;
+  transition: opacity 0.3s ease;
+  animation: rotateBorder 2s linear infinite paused;
+}
+
+.costume-card:hover::after {
+  opacity: 0.8;
+  animation-play-state: running;
+}
+
+@keyframes rotateBorder {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+/* Register the custom property for animation */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
 .costume-card:nth-child(1) { animation-delay: 0.02s; }
 .costume-card:nth-child(2) { animation-delay: 0.04s; }
 .costume-card:nth-child(3) { animation-delay: 0.06s; }
@@ -584,8 +668,8 @@
 
 .costume-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md), 0 0 20px rgba(125, 211, 232, 0.1);
   border-color: var(--color-cyan);
+  box-shadow: var(--shadow-md), 0 0 24px rgba(125, 211, 232, 0.12);
 }
 
 .costume-card.selected {
