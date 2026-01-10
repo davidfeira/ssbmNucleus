@@ -393,20 +393,54 @@ export default function PoseManagerModal({
         }
 
         .pm-viewer-section .mv-overlay {
-          position: absolute;
-          background: transparent;
+          position: absolute !important;
+          inset: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          z-index: 1 !important;
         }
 
         .pm-viewer-section .mv-container {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
+          width: 100% !important;
+          height: 100% !important;
+          max-width: none !important;
+          max-height: none !important;
+          border-radius: 0 !important;
+          border: none !important;
+          box-shadow: none !important;
+          background:
+            radial-gradient(ellipse at 50% 30%, rgba(125, 211, 232, 0.03) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 80%, rgba(125, 211, 232, 0.02) 0%, transparent 40%),
+            linear-gradient(180deg, #0d1929 0%, #0a1420 100%) !important;
         }
 
         .pm-viewer-section .mv-header {
+          display: none !important;
+        }
+
+        .pm-viewer-section .mv-body {
+          flex: 1 !important;
+          min-height: 0 !important;
+        }
+
+        .pm-viewer-section .mv-viewport {
+          flex: 1 !important;
+          margin: 0 !important;
+          border: none !important;
+          border-radius: 0 !important;
+          min-height: 0 !important;
+          background: transparent !important;
+        }
+
+        .pm-viewer-section .mv-sidebar {
           display: none;
+        }
+
+        .pm-viewer-section .mv-controls {
+          background: rgba(0, 0, 0, 0.5);
+          border-top: 1px solid #2a2a4a;
         }
 
         /* Right: Poses Section */

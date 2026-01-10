@@ -311,6 +311,9 @@ const EmbeddedModelViewer = forwardRef(({
           setAnimFrame(0)
           setAnimPlaying(true)
           break
+        case 'animFrame':
+          setAnimFrame(message.frame)
+          break
       }
     }
 

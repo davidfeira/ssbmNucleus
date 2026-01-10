@@ -407,6 +407,12 @@ namespace HSDRawViewer
                             _animationFrame = _animationFrameCount - 1;
 
                         _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
+
+                        // Send frame update to UI (throttled to every 3 frames for performance)
+                        if ((int)_animationFrame % 3 == 0)
+                        {
+                            _ = SendJsonAsync(new { type = "animFrame", frame = _animationFrame });
+                        }
                     }
 
                     // Render (OpenGL handles display directly - no frame encoding)
