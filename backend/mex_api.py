@@ -54,6 +54,7 @@ BACKEND_DIR = Path(__file__).parent
 sys.path.insert(0, str(BACKEND_DIR))
 from character_detector import detect_character_from_zip, DATParser
 from stage_detector import detect_stage_from_zip, extract_stage_files
+from extra_types import EXTRA_TYPES, get_extra_types, get_extra_type, has_extras
 
 # Add processor tools to path for CSP generation and slippi validation
 if getattr(sys, 'frozen', False):
@@ -1039,6 +1040,15 @@ def start_export():
                     mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
                     mapping.save(mapping_file)
                     logger.info(f"Saved texture mapping to {mapping_file}")
+
+                # Apply extras patches before export
+                if current_project_path:
+                    project_dir = current_project_path.parent
+                    extras_result = apply_extras_patches(project_dir)
+                    if extras_result['patched']:
+                        logger.info(f"Applied extras: {', '.join(extras_result['patched'])}")
+                    if extras_result['errors']:
+                        logger.warning(f"Extras patching errors: {', '.join(extras_result['errors'])}")
 
                 # Run the actual export
                 result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash)
@@ -5431,6 +5441,402 @@ def batch_generate_pose_csps():
 
     except Exception as e:
         logger.error(f"Batch generate CSP error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# =============================================================================
+# EXTRAS PATCHING FUNCTIONS
+# =============================================================================
+
+def find_dat_file(files_dir, target_file):
+    """Find a .dat file in the MEX build files directory.
+
+    Args:
+        files_dir: Path to MEX build/files directory
+        target_file: Target filename (e.g., 'PlFc.dat')
+
+    Returns:
+        Path to the file if found, None otherwise
+    """
+    # Check common locations
+    possible_paths = [
+        files_dir / target_file,
+        files_dir / "PlCo" / target_file,  # Character data folder
+        files_dir / "fighter" / target_file,
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            return path
+
+    # Search recursively if not found in common locations
+    matches = list(files_dir.rglob(target_file))
+    return matches[0] if matches else None
+
+
+def patch_matrix_colors(data, new_color):
+    """Replace RGBY colors in 98 matrix format data.
+
+    The 98 matrix format for 3D objects (laser) has:
+    - Header: 98 00 NN NN (4 bytes) where NN NN is vertex count
+    - Then repeating: XX XX XX COLOR COLOR (5 bytes per vertex)
+    - Where COLOR COLOR is the 2-byte RGBY value
+
+    Args:
+        data: Bytes data from the offset range
+        new_color: 2-byte RGBY color value
+
+    Returns:
+        Patched bytes data
+    """
+    result = bytearray(data)
+
+    # Skip header (4 bytes), then replace color at every 5th position
+    # Color bytes are at positions 3-4 of each 5-byte group (0-indexed)
+    pos = 4  # Start after header
+    while pos + 4 < len(result):
+        # Color is at positions 3-4 of each 5-byte group
+        color_pos = pos + 3
+        if color_pos + 1 < len(result):
+            result[color_pos] = new_color[0]
+            result[color_pos + 1] = new_color[1]
+        pos += 5
+
+    return bytes(result)
+
+
+def apply_hex_patches(dat_path, offsets, modifications):
+    """Apply RGBY color patches to a .dat file.
+
+    Args:
+        dat_path: Path to the .dat file
+        offsets: Dict of layer_id -> {start, end} offset info
+        modifications: Dict of layer_id -> {color: "FC00"} modifications
+    """
+    with open(dat_path, 'r+b') as f:
+        for layer_id, layer_mods in modifications.items():
+            if layer_id not in offsets:
+                logger.warning(f"Unknown layer '{layer_id}' in modifications, skipping")
+                continue
+
+            offset_info = offsets[layer_id]
+            start = offset_info['start']
+            end = offset_info['end']
+            color_hex = layer_mods.get('color', 'FC00')
+
+            # Parse RGBY color (2 bytes)
+            try:
+                rgby_bytes = bytes.fromhex(color_hex)
+                if len(rgby_bytes) != 2:
+                    logger.warning(f"Invalid color length for {layer_id}: {color_hex}")
+                    continue
+            except ValueError:
+                logger.warning(f"Invalid hex color for {layer_id}: {color_hex}")
+                continue
+
+            # Read the section
+            f.seek(start)
+            data = f.read(end - start)
+
+            # Patch colors in the matrix format
+            modified = patch_matrix_colors(data, rgby_bytes)
+
+            # Write back
+            f.seek(start)
+            f.write(modified)
+
+            logger.debug(f"Patched {layer_id} at 0x{start:X}-0x{end:X} with color {color_hex}")
+
+
+def apply_extras_patches(project_path):
+    """Apply all selected extras to character .dat files before ISO export.
+
+    Args:
+        project_path: Path to MEX project directory
+
+    Returns:
+        Dict with patching results
+    """
+    results = {
+        'patched': [],
+        'skipped': [],
+        'errors': []
+    }
+
+    # Load metadata
+    metadata_file = STORAGE_PATH / 'metadata.json'
+    if not metadata_file.exists():
+        logger.info("No metadata.json found, skipping extras patching")
+        return results
+
+    try:
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load metadata for extras patching: {e}")
+        results['errors'].append(f"Failed to load metadata: {e}")
+        return results
+
+    # Get MEX build files directory
+    files_dir = project_path / "build" / "files"
+    if not files_dir.exists():
+        logger.warning(f"Build files directory not found: {files_dir}")
+        results['errors'].append(f"Build files directory not found: {files_dir}")
+        return results
+
+    # Iterate through all characters with extras
+    for character, char_data in metadata.get('characters', {}).items():
+        extras = char_data.get('extras', {})
+        if not extras:
+            continue
+
+        # Get extra type configs for this character
+        char_extra_types = get_extra_types(character)
+        if not char_extra_types:
+            continue
+
+        for extra_type_config in char_extra_types:
+            type_id = extra_type_config['id']
+            target_file = extra_type_config['target_file']
+            offsets = extra_type_config['offsets']
+
+            # Get mods for this type (use first/active one)
+            mods = extras.get(type_id, [])
+            if not mods:
+                continue
+
+            # Use first mod (TODO: add "active" selection later)
+            active_mod = mods[0]
+            modifications = active_mod.get('modifications', {})
+
+            if not modifications:
+                logger.debug(f"No modifications in {type_id} mod for {character}, skipping")
+                results['skipped'].append(f"{character}/{type_id}: no modifications")
+                continue
+
+            # Find the target .dat file in build/files
+            dat_path = find_dat_file(files_dir, target_file)
+            if not dat_path or not dat_path.exists():
+                logger.warning(f"Could not find {target_file} for {character}")
+                results['skipped'].append(f"{character}/{type_id}: {target_file} not found")
+                continue
+
+            try:
+                # Apply hex patches
+                apply_hex_patches(dat_path, offsets, modifications)
+                logger.info(f"[OK] Applied {type_id} extras to {character} ({target_file})")
+                results['patched'].append(f"{character}/{type_id}")
+            except Exception as e:
+                logger.error(f"Failed to patch {character}/{type_id}: {e}", exc_info=True)
+                results['errors'].append(f"{character}/{type_id}: {e}")
+
+    return results
+
+
+# =============================================================================
+# EXTRAS MANAGEMENT ENDPOINTS
+# =============================================================================
+
+@app.route('/api/mex/storage/extras/list/<character>', methods=['GET'])
+def list_extras(character):
+    """List all extras for a character from metadata.json"""
+    try:
+        # Check if character has extras defined
+        if not has_extras(character):
+            return jsonify({
+                'success': True,
+                'extras': {},
+                'message': f'No extras defined for {character}'
+            })
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': True,
+                'extras': {}
+            })
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Get extras for this character
+        char_data = metadata.get('characters', {}).get(character, {})
+        extras = char_data.get('extras', {})
+
+        return jsonify({
+            'success': True,
+            'extras': extras
+        })
+
+    except Exception as e:
+        logger.error(f"List extras error for {character}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/extras/create', methods=['POST'])
+def create_extra():
+    """Create a new extra mod from color picker values.
+
+    Request body:
+    {
+        "character": "Falco",
+        "extraType": "laser",
+        "name": "Red Laser",
+        "modifications": {
+            "wide": { "color": "FC00" },
+            "thin": { "color": "FC00" },
+            "outline": { "color": "FC00" }
+        }
+    }
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        extra_type = data.get('extraType')
+        name = data.get('name', 'New Extra')
+        modifications = data.get('modifications', {})
+
+        if not character or not extra_type:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or extraType parameter'
+            }), 400
+
+        # Verify this extra type exists for the character
+        type_config = get_extra_type(character, extra_type)
+        if not type_config:
+            return jsonify({
+                'success': False,
+                'error': f'Extra type "{extra_type}" not defined for {character}'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        else:
+            metadata = {'characters': {}}
+
+        # Ensure character exists in metadata
+        if character not in metadata.get('characters', {}):
+            metadata['characters'][character] = {'skins': [], 'extras': {}}
+
+        char_data = metadata['characters'][character]
+
+        # Ensure extras structure exists
+        if 'extras' not in char_data:
+            char_data['extras'] = {}
+
+        if extra_type not in char_data['extras']:
+            char_data['extras'][extra_type] = []
+
+        # Generate unique ID
+        import uuid
+        mod_id = f"{extra_type}_{uuid.uuid4().hex[:8]}"
+
+        # Create new mod entry
+        new_mod = {
+            'id': mod_id,
+            'name': name,
+            'date_added': datetime.now().isoformat(),
+            'source': 'created',
+            'modifications': modifications
+        }
+
+        # Add to list
+        char_data['extras'][extra_type].append(new_mod)
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Created extra mod '{name}' ({extra_type}) for {character}")
+
+        return jsonify({
+            'success': True,
+            'mod': new_mod
+        })
+
+    except Exception as e:
+        logger.error(f"Create extra error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/extras/delete', methods=['POST'])
+def delete_extra():
+    """Delete an extra mod.
+
+    Request body:
+    {
+        "character": "Falco",
+        "extraType": "laser",
+        "modId": "laser_abc12345"
+    }
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        extra_type = data.get('extraType')
+        mod_id = data.get('modId')
+
+        if not character or not extra_type or not mod_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, extraType, or modId parameter'
+            }), 400
+
+        # Load metadata
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Get character extras
+        char_data = metadata.get('characters', {}).get(character, {})
+        extras = char_data.get('extras', {})
+        mods = extras.get(extra_type, [])
+
+        # Find and remove the mod
+        original_count = len(mods)
+        mods = [m for m in mods if m.get('id') != mod_id]
+
+        if len(mods) == original_count:
+            return jsonify({
+                'success': False,
+                'error': f'Mod {mod_id} not found'
+            }), 404
+
+        # Update metadata
+        extras[extra_type] = mods
+
+        # Save metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"[OK] Deleted extra mod {mod_id} ({extra_type}) from {character}")
+
+        return jsonify({
+            'success': True
+        })
+
+    except Exception as e:
+        logger.error(f"Delete extra error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

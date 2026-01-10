@@ -1,0 +1,411 @@
+import { useState, useEffect, useCallback } from 'react'
+import { getExtraTypes, getExtraType } from '../../config/extraTypes'
+import { rgbyToHex } from '../../utils/rgbyColor'
+import LaserEditorModal from './LaserEditorModal'
+
+/**
+ * ExtrasPageView - Full-page view for managing character extras
+ * Follows the same pattern as CharacterDetailView
+ */
+
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+  </svg>
+)
+
+const EditIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+)
+
+const PlusIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="12" y1="5" x2="12" y2="19"/>
+    <line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
+
+const ImportIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+)
+
+// Icon for laser extra type
+const LaserIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="2" y1="12" x2="22" y2="12" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+    <path d="M4 8l2 4-2 4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 8l-2 4 2 4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const EffectIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6l4 2" />
+  </svg>
+)
+
+const ICONS = { laser: LaserIcon, effect: EffectIcon }
+
+/**
+ * ExtraTypeCard - Card for selecting an extra type category
+ */
+function ExtraTypeCard({ extraType, modCount, onClick }) {
+  const Icon = ICONS[extraType.icon] || EffectIcon
+
+  return (
+    <div className="extra-type-page-card" onClick={onClick}>
+      <div className="extra-type-page-icon">
+        <Icon />
+      </div>
+      <div className="extra-type-page-info">
+        <span className="extra-type-page-name">{extraType.name}</span>
+        <span className="extra-type-page-count">
+          {modCount} mod{modCount !== 1 ? 's' : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ExtraModCard - Individual extra mod card (same size as skin cards)
+ */
+function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) {
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async (e) => {
+    e.stopPropagation()
+    if (!confirm(`Delete "${mod.name}"?`)) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character,
+          extraType: extraType.id,
+          modId: mod.id
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        onDelete?.(mod.id)
+      } else {
+        alert(`Delete failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('[ExtraModCard] Delete error:', err)
+      alert(`Delete error: ${err.message}`)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Get preview colors from modifications
+  const getPreviewColors = () => {
+    if (!mod.modifications) return ['#888888']
+    const colors = []
+    for (const prop of extraType.properties) {
+      const modData = mod.modifications[prop.id]
+      if (modData?.color) {
+        colors.push(rgbyToHex(modData.color))
+      }
+    }
+    return colors.length > 0 ? colors : ['#888888']
+  }
+
+  const previewColors = getPreviewColors()
+
+  return (
+    <div className="extra-mod-card" onClick={() => onEdit?.(mod)}>
+      <div className="extra-mod-image-container">
+        {/* Layered color preview simulating laser effect */}
+        <div className="extra-mod-preview">
+          {previewColors.map((color, idx) => (
+            <div
+              key={idx}
+              className="extra-mod-color-layer"
+              style={{
+                backgroundColor: color,
+                opacity: 1 - (idx * 0.25),
+                height: `${100 - (idx * 20)}%`
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Edit button */}
+        <button
+          className="btn-edit"
+          onClick={(e) => { e.stopPropagation(); onEdit?.(mod) }}
+          title="Edit"
+        >
+          ✎
+        </button>
+
+        {/* Delete button */}
+        <button
+          className="extra-mod-delete"
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Delete"
+        >
+          <TrashIcon />
+        </button>
+      </div>
+
+      <div className="extra-mod-info">
+        <div className="extra-mod-name">{mod.name}</div>
+        {mod.source === 'imported' && (
+          <div className="extra-mod-badge">Imported</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * CreateExtraModCard - "Create New Mod" card matching skin card size
+ */
+function CreateExtraModCard({ onCreateNew, onImport, uploading }) {
+  const [showOptions, setShowOptions] = useState(false)
+
+  if (showOptions) {
+    return (
+      <div className="extra-mod-card create-extra-mod-card expanded">
+        <div className="create-extra-mod-options">
+          <button className="create-extra-mod-option" onClick={() => { setShowOptions(false); onCreateNew?.() }}>
+            <PlusIcon />
+            <span>Create New</span>
+          </button>
+          <button className="create-extra-mod-option" onClick={() => { setShowOptions(false); onImport?.() }}>
+            <ImportIcon />
+            <span>Import .dat</span>
+          </button>
+          <button className="create-extra-mod-cancel" onClick={() => setShowOptions(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="extra-mod-card create-extra-mod-card" onClick={() => setShowOptions(true)}>
+      <div className="extra-mod-image-container create-extra-mod-placeholder">
+        <div className="create-extra-mod-icon">
+          {uploading ? <span className="create-extra-spinner" /> : <PlusIcon />}
+        </div>
+      </div>
+      <div className="extra-mod-info">
+        <div className="extra-mod-name">{uploading ? 'Importing...' : 'Create New Mod'}</div>
+      </div>
+    </div>
+  )
+}
+
+export default function ExtrasPageView({
+  character,
+  onBack,
+  onRefresh,
+  API_URL
+}) {
+  const [selectedType, setSelectedType] = useState(null)
+  const [extras, setExtras] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [showEditor, setShowEditor] = useState(false)
+  const [editingMod, setEditingMod] = useState(null)
+  const [uploading, setUploading] = useState(false)
+
+  const extraTypes = getExtraTypes(character)
+
+  // Fetch extras for this character
+  const fetchExtras = useCallback(async () => {
+    if (!character) return
+    setLoading(true)
+
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/list/${character}`)
+      const data = await response.json()
+      if (data.success) {
+        setExtras(data.extras || {})
+      } else {
+        setExtras({})
+      }
+    } catch (err) {
+      console.error('[ExtrasPageView] Fetch error:', err)
+      setExtras({})
+    } finally {
+      setLoading(false)
+    }
+  }, [character, API_URL])
+
+  useEffect(() => {
+    fetchExtras()
+  }, [fetchExtras])
+
+  const handleRefresh = () => {
+    fetchExtras()
+    onRefresh?.()
+  }
+
+  const handleCreateNew = () => {
+    setEditingMod(null)
+    setShowEditor(true)
+  }
+
+  const handleEdit = (mod) => {
+    setEditingMod(mod)
+    setShowEditor(true)
+  }
+
+  const handleDelete = () => {
+    handleRefresh()
+  }
+
+  const handleImport = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.dat'
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      setUploading(true)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('character', character)
+        formData.append('extraType', selectedType.id)
+
+        const response = await fetch(`${API_URL}/storage/extras/import`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const data = await response.json()
+        if (data.success) {
+          handleRefresh()
+        } else {
+          alert(`Import failed: ${data.error}`)
+        }
+      } catch (err) {
+        console.error('[ExtrasPageView] Import error:', err)
+        alert(`Import error: ${err.message}`)
+      } finally {
+        setUploading(false)
+      }
+    }
+    input.click()
+  }
+
+  const handleEditorClose = () => {
+    setShowEditor(false)
+    setEditingMod(null)
+  }
+
+  const handleSave = () => {
+    handleRefresh()
+  }
+
+  // Currently viewing mods for a specific type
+  if (selectedType) {
+    const mods = extras[selectedType.id] || []
+
+    return (
+      <div className="storage-viewer">
+        <div className="character-detail extras-page">
+          <div className="character-header">
+            <button onClick={() => setSelectedType(null)} className="back-button">
+              ← Back to Extras
+            </button>
+            <div className="character-title-area">
+              <h2 className="character-name">{selectedType.name}</h2>
+              <span className="character-skin-count">{mods.length} mod{mods.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+
+          <div className="skins-grid">
+            {mods.map(mod => (
+              <ExtraModCard
+                key={mod.id}
+                mod={mod}
+                character={character}
+                extraType={selectedType}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                API_URL={API_URL}
+              />
+            ))}
+            <CreateExtraModCard
+              onCreateNew={handleCreateNew}
+              onImport={handleImport}
+              uploading={uploading}
+            />
+          </div>
+        </div>
+
+        {/* Laser Editor Modal */}
+        {selectedType.id === 'laser' && (
+          <LaserEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            API_URL={API_URL}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // Main extras view - show extra type categories
+  return (
+    <div className="storage-viewer">
+      <div className="character-detail extras-page">
+        <div className="character-header">
+          <button onClick={onBack} className="back-button">
+            ← Back to {character}
+          </button>
+          <div className="character-title-area">
+            <h2 className="character-name">Extras</h2>
+            <span className="character-skin-count">{character}</span>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="extras-page-loading">Loading extras...</div>
+        ) : extraTypes.length === 0 ? (
+          <div className="extras-page-empty">
+            <p>No extras available for {character}.</p>
+            <p>Extra types will be added in future updates.</p>
+          </div>
+        ) : (
+          <div className="skins-grid extras-type-grid">
+            {extraTypes.map(type => (
+              <ExtraTypeCard
+                key={type.id}
+                extraType={type}
+                modCount={(extras[type.id] || []).length}
+                onClick={() => setSelectedType(type)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

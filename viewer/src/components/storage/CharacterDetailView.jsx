@@ -20,6 +20,8 @@ import ContextMenu from './ContextMenu'
 import SkinCreator from '../SkinCreator'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseManagerModal from './PoseManagerModal'
+import ExtrasPageView from './ExtrasPageView'
+import { hasExtras } from '../../config/extraTypes'
 
 export default function CharacterDetailView({
   selectedCharacter,
@@ -125,6 +127,9 @@ export default function CharacterDetailView({
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
 
+  // Extras page state
+  const [showExtrasPage, setShowExtrasPage] = useState(false)
+
   // Helper to delete a folder
   const handleDeleteFolder = async (folderId) => {
     try {
@@ -187,6 +192,18 @@ export default function CharacterDetailView({
     }
   }
 
+  // Show extras page if selected
+  if (showExtrasPage) {
+    return (
+      <ExtrasPageView
+        character={selectedCharacter}
+        onBack={() => setShowExtrasPage(false)}
+        onRefresh={onRefresh}
+        API_URL={API_URL}
+      />
+    )
+  }
+
   return (
     <div className="storage-viewer">
       <div className="character-detail">
@@ -211,6 +228,15 @@ export default function CharacterDetailView({
           >
             Poses
           </button>
+          {hasExtras(selectedCharacter) && (
+            <button
+              onClick={() => setShowExtrasPage(true)}
+              className="extras-button"
+              title="Manage character extras (effects, projectiles, etc.)"
+            >
+              Extras
+            </button>
+          )}
         </div>
 
         {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
