@@ -118,7 +118,31 @@ export default function PoseManagerModal({
   const [poses, setPoses] = useState([])
   const [loadingPoses, setLoadingPoses] = useState(true)
   const [selectedPose, setSelectedPose] = useState(null) // For skin selector modal
+  const [animList, setAnimList] = useState([])
+  const [selectedAnim, setSelectedAnim] = useState('')
+  const [animFilter, setAnimFilter] = useState('')
   const viewerRef = useRef(null)
+
+  // Poll viewer for animation list
+  useEffect(() => {
+    if (!show) return
+    const interval = setInterval(() => {
+      if (viewerRef.current?.animList?.length > 0) {
+        setAnimList(viewerRef.current.animList)
+        if (viewerRef.current.selectedAnim) {
+          setSelectedAnim(viewerRef.current.selectedAnim)
+        }
+      }
+    }, 500)
+    return () => clearInterval(interval)
+  }, [show])
+
+  const handleLoadAnim = (symbol) => {
+    if (viewerRef.current?.loadAnimation) {
+      viewerRef.current.loadAnimation(symbol)
+      setSelectedAnim(symbol)
+    }
+  }
 
   // Fetch saved poses
   const fetchPoses = useCallback(async () => {
@@ -230,6 +254,36 @@ export default function PoseManagerModal({
                 showGrid={false}
                 showBackground={false}
               />
+            </div>
+          )}
+
+          {/* Middle: Animation List */}
+          {!selectedPose && animList.length > 0 && (
+            <div className="pm-anim-section">
+              <div className="pm-anim-header">
+                <span>Animations</span>
+                <span className="pm-anim-count">{animList.length}</span>
+              </div>
+              <input
+                type="text"
+                className="pm-anim-filter"
+                placeholder="Filter..."
+                value={animFilter}
+                onChange={(e) => setAnimFilter(e.target.value)}
+              />
+              <div className="pm-anim-list">
+                {animList
+                  .filter(a => a.toLowerCase().includes(animFilter.toLowerCase()))
+                  .map(anim => (
+                    <button
+                      key={anim}
+                      className={`pm-anim-item ${selectedAnim === anim ? 'active' : ''}`}
+                      onClick={() => handleLoadAnim(anim)}
+                    >
+                      {anim}
+                    </button>
+                  ))}
+              </div>
             </div>
           )}
 

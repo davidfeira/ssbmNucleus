@@ -203,6 +203,10 @@ export default function SkinCreator({
       setConnectionFailed(false)
       // Position the viewer window after a brief delay to ensure DOM is ready
       setTimeout(() => updateViewerPosition(), 100)
+      // Set viewer to animation mode (not CSP mode) - fill the viewport freely
+      window.electron.viewerSetCspMode(false)
+      window.electron.viewerSetGrid(true)
+      window.electron.viewerSetBackground(true)
       // Request textures
       window.electron.viewerSend({ type: 'getTextures' })
     } else if (msg.type === 'exportDat') {

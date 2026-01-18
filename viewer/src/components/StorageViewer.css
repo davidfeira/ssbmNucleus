@@ -2664,9 +2664,20 @@
    Pose Manager Viewer Overrides
    ───────────────────────────────────────── */
 
+.pm-viewer-section {
+  width: auto;
+  max-width: 500px;
+  height: 85%;
+  max-height: 700px;
+  aspect-ratio: 136 / 188;
+  flex-shrink: 0;
+}
+
 .pm-viewer-section .mv-overlay {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  width: fit-content;
+  height: 100%;
+  margin-left: auto;
   background: transparent;
   backdrop-filter: none;
   z-index: 1;
@@ -2674,13 +2685,13 @@
 }
 
 .pm-viewer-section .mv-container {
-  width: 100%;
   height: 100%;
-  max-width: none;
-  max-height: none;
+  aspect-ratio: 136 / 188;
+  width: auto;
   border-radius: 0;
   border: none;
   box-shadow: none;
+  overflow: hidden;
   background:
     radial-gradient(ellipse at 50% 30%, rgba(125, 211, 232, 0.03) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(125, 211, 232, 0.02) 0%, transparent 40%),
@@ -2697,11 +2708,13 @@
 }
 
 .pm-viewer-section .mv-viewport {
-  flex: 1;
-  margin: 0;
+  height: 100%;
+  aspect-ratio: 136 / 188;
+  width: auto;
+  flex: none;
+  margin: 0 0 0 auto;
   border: none;
   border-radius: 0;
-  min-height: 0;
   background: transparent;
 }
 
@@ -2712,6 +2725,136 @@
 .pm-viewer-section .mv-controls {
   background: rgba(0, 0, 0, 0.5);
   border-top: 1px solid #2a2a4a;
+}
+
+/* Pose Manager Body Layout */
+.pm-body {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  min-height: 0;
+  align-items: stretch;
+}
+
+.pm-poses-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.pm-poses-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.pm-poses-count {
+  background: var(--color-accent);
+  color: var(--color-bg-base);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: var(--text-xs);
+}
+
+.pm-poses-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-2);
+  align-content: start;
+}
+
+/* Pose Manager Animation Panel */
+.pm-anim-section {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pm-anim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.pm-anim-count {
+  background: var(--color-accent);
+  color: var(--color-bg-base);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: var(--text-xs);
+}
+
+.pm-anim-filter {
+  margin: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.pm-anim-filter:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.pm-anim-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.pm-anim-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pm-anim-item:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.pm-anim-item.active {
+  background: var(--color-accent);
+  color: var(--color-bg-base);
 }
 
 /* ─────────────────────────────────────────
@@ -3006,6 +3149,13 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  padding: 12px;
+}
+
+.extra-mod-image-container .laser-beam-preview {
+  width: 100%;
 }
 
 .extra-mod-preview {
@@ -3724,12 +3874,46 @@
 
 .laser-preview-display {
   position: relative;
-  height: 40px;
+  height: 60px;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #000;
+  background: linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* New laser beam styles - realistic layered effect */
+.laser-beam {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 100px;
+}
+
+.laser-beam-wide {
+  height: 36px;
+  opacity: 0.5;
+}
+
+.laser-beam-thin {
+  height: 20px;
+  opacity: 0.7;
+}
+
+.laser-beam-outline {
+  height: 10px;
+  opacity: 0.9;
+}
+
+.laser-beam-center {
+  height: 3px;
+  opacity: 1;
+}
+
+/* Legacy layer styles (keep for compatibility) */
 .laser-preview-layer {
   position: absolute;
   top: 50%;

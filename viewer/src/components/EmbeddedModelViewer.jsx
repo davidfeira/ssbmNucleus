@@ -425,8 +425,16 @@ const EmbeddedModelViewer = forwardRef(({
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     exportScene,
-    isConnected
-  }), [exportScene, isConnected])
+    isConnected,
+    animList,
+    loadAnimation,
+    selectedAnim,
+    animPlaying,
+    togglePlayback: () => hasElectron && window.electron.viewerAnimToggle(),
+    setFrame: (frame) => hasElectron && window.electron.viewerAnimSetFrame(frame),
+    animFrame,
+    animFrameCount
+  }), [exportScene, isConnected, animList, loadAnimation, selectedAnim, animPlaying, hasElectron, animFrame, animFrameCount])
 
   // Prevent context menu on right-click
   const handleContextMenu = (e) => e.preventDefault()
