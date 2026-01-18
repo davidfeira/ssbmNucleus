@@ -1041,14 +1041,7 @@ def start_export():
                     mapping.save(mapping_file)
                     logger.info(f"Saved texture mapping to {mapping_file}")
 
-                # Apply extras patches before export
-                if current_project_path:
-                    project_dir = current_project_path.parent
-                    extras_result = apply_extras_patches(project_dir)
-                    if extras_result['patched']:
-                        logger.info(f"Applied extras: {', '.join(extras_result['patched'])}")
-                    if extras_result['errors']:
-                        logger.warning(f"Extras patching errors: {', '.join(extras_result['errors'])}")
+                # Note: Extras are patched immediately on import, not at export time
 
                 # Run the actual export
                 result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash)
@@ -5477,35 +5470,69 @@ def find_dat_file(files_dir, target_file):
     return matches[0] if matches else None
 
 
-def patch_matrix_colors(data, new_color):
-    """Replace RGBY colors in 98 matrix format data.
+def patch_matrix_colors(data, new_color, color_format="RGBY"):
+    """Replace colors in 98 matrix format data.
 
-    The 98 matrix format for 3D objects (laser) has:
-    - Header: 98 00 NN NN (4 bytes) where NN NN is vertex count
-    - Then repeating: XX XX XX COLOR COLOR (5 bytes per vertex)
-    - Where COLOR COLOR is the 2-byte RGBY value
+    The 98 matrix format has:
+    - Header: 98 00 NN (3 bytes) where NN is index count
+    - Then repeating entries, each 4 bytes:
+      - 1 byte: vertex index
+      - 2 or 3 bytes: color (RGBY or RGB)
+      - 1 or 0 bytes: coordinate (if RGBY) or none (if RGB)
+
+    RGBY format (2-byte colors, 4-byte entries):
+    98 00 17 22 FC 00 03 23 FC 00 05 21 FC 00 ...
+              ^^ ^^^^    ^^ ^^^^    ^^^^
+              |  color   |  color   color
+
+    RGB format (3-byte colors, 4-byte entries):
+    98 00 12 05 FF FF FF 04 FF FF FF 03 FF FF FF ...
+              ^^ ^^^^^^    ^^^^^^    ^^^^^^
+              |  color     color     color
 
     Args:
         data: Bytes data from the offset range
-        new_color: 2-byte RGBY color value
+        new_color: 2-byte RGBY or 3-byte RGB color value
+        color_format: "RGBY" for 2-byte colors, "RGB" for 3-byte colors
 
     Returns:
         Patched bytes data
     """
     result = bytearray(data)
+    color_len = 3 if color_format == "RGB" else 2
 
-    # Skip header (4 bytes), then replace color at every 5th position
-    # Color bytes are at positions 3-4 of each 5-byte group (0-indexed)
-    pos = 4  # Start after header
-    while pos + 4 < len(result):
-        # Color is at positions 3-4 of each 5-byte group
-        color_pos = pos + 3
-        if color_pos + 1 < len(result):
-            result[color_pos] = new_color[0]
-            result[color_pos + 1] = new_color[1]
-        pos += 5
+    # Header is 3 bytes (98 00 NN), first entry starts at position 3
+    # Each entry: 1 byte vertex + color bytes + remaining bytes = 4 bytes total
+    # First color at position 4 (3 header + 1 vertex)
+    pos = 4  # First color position
+    while pos + color_len - 1 < len(result):
+        for i in range(color_len):
+            result[pos + i] = new_color[i]
+        pos += 4  # Move to next color (4 bytes per entry)
 
     return bytes(result)
+
+
+def read_current_colors(dat_path, offsets):
+    """Read current RGBY colors from a .dat file.
+
+    Args:
+        dat_path: Path to the .dat file
+        offsets: Dict of layer_id -> {start, end} offset info
+
+    Returns:
+        Dict of layer_id -> color hex string
+    """
+    colors = {}
+    with open(dat_path, 'rb') as f:
+        for layer_id, offset_info in offsets.items():
+            start = offset_info['start']
+            # Read first color in the matrix (at position 4 from start)
+            # Header is 3 bytes (98 00 NN), then 1 byte vertex, then 2 bytes color
+            f.seek(start + 4)
+            color_bytes = f.read(2)
+            colors[layer_id] = color_bytes.hex().upper()
+    return colors
 
 
 def apply_hex_patches(dat_path, offsets, modifications):
@@ -5603,13 +5630,23 @@ def apply_extras_patches(project_path):
             target_file = extra_type_config['target_file']
             offsets = extra_type_config['offsets']
 
-            # Get mods for this type (use first/active one)
+            # Get mods for this type
             mods = extras.get(type_id, [])
             if not mods:
                 continue
 
-            # Use first mod (TODO: add "active" selection later)
-            active_mod = mods[0]
+            # Find the active mod (one with active: True)
+            active_mod = None
+            for mod in mods:
+                if mod.get('active'):
+                    active_mod = mod
+                    break
+
+            # Skip if no active mod (vanilla)
+            if not active_mod:
+                logger.debug(f"No active {type_id} mod for {character}, using vanilla")
+                continue
+
             modifications = active_mod.get('modifications', {})
 
             if not modifications:
@@ -5674,6 +5711,65 @@ def list_extras(character):
 
     except Exception as e:
         logger.error(f"List extras error for {character}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/extras/current/<character>/<extra_type>', methods=['GET'])
+def get_current_extra(character, extra_type):
+    """Read current colors from the .dat file in MEX project.
+
+    Returns the actual colors currently in the build.
+    """
+    try:
+        # Get extra type config
+        type_config = get_extra_type(character, extra_type)
+        if not type_config:
+            return jsonify({
+                'success': False,
+                'error': f'Extra type "{extra_type}" not defined for {character}'
+            }), 400
+
+        # Find the .dat file in MEX project
+        try:
+            files_dir = get_project_files_dir()
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 400
+
+        target_file = type_config['target_file']
+        offsets = type_config['offsets']
+        vanilla = type_config.get('vanilla', {})
+        dat_path = find_dat_file(files_dir, target_file)
+
+        if not dat_path or not dat_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Could not find {target_file} in MEX project'
+            }), 404
+
+        # Read current colors from the .dat file
+        current_colors = read_current_colors(dat_path, offsets)
+
+        # Check if current colors match vanilla
+        is_vanilla = all(
+            current_colors.get(layer, '').upper() == vanilla.get(layer, '').upper()
+            for layer in vanilla.keys()
+        )
+
+        return jsonify({
+            'success': True,
+            'colors': current_colors,
+            'isVanilla': is_vanilla,
+            'vanilla': vanilla
+        })
+
+    except Exception as e:
+        logger.error(f"Get current extra error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -5837,6 +5933,174 @@ def delete_extra():
 
     except Exception as e:
         logger.error(f"Delete extra error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/extras/install', methods=['POST'])
+def install_extra():
+    """Install an extra mod by patching the .dat file.
+
+    Request body:
+    {
+        "character": "Falco",
+        "extraType": "laser",
+        "modId": "laser_abc123"
+    }
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        extra_type = data.get('extraType')
+        mod_id = data.get('modId')
+
+        if not character or not extra_type or not mod_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character, extraType, or modId parameter'
+            }), 400
+
+        # Get extra type config
+        type_config = get_extra_type(character, extra_type)
+        if not type_config:
+            return jsonify({
+                'success': False,
+                'error': f'Extra type "{extra_type}" not defined for {character}'
+            }), 400
+
+        # Find the .dat file in MEX project
+        try:
+            files_dir = get_project_files_dir()
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 400
+
+        target_file = type_config['target_file']
+        offsets = type_config['offsets']
+        dat_path = find_dat_file(files_dir, target_file)
+
+        if not dat_path or not dat_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Could not find {target_file} in MEX project'
+            }), 404
+
+        # Load metadata to find the mod
+        metadata_file = STORAGE_PATH / 'metadata.json'
+        if not metadata_file.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Metadata file not found'
+            }), 404
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Find the mod
+        char_data = metadata.get('characters', {}).get(character, {})
+        extras = char_data.get('extras', {})
+        mods = extras.get(extra_type, [])
+
+        found_mod = None
+        for mod in mods:
+            if mod.get('id') == mod_id:
+                found_mod = mod
+                break
+
+        if not found_mod:
+            return jsonify({
+                'success': False,
+                'error': f'Mod {mod_id} not found'
+            }), 404
+
+        # Apply the patch
+        modifications = found_mod.get('modifications', {})
+        if modifications:
+            apply_hex_patches(dat_path, offsets, modifications)
+            logger.info(f"[OK] Installed {found_mod['name']} to {target_file}")
+
+        return jsonify({
+            'success': True
+        })
+
+    except Exception as e:
+        logger.error(f"Install extra error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/extras/restore-vanilla', methods=['POST'])
+def restore_vanilla_extra():
+    """Restore vanilla colors from config.
+
+    Request body:
+    {
+        "character": "Falco",
+        "extraType": "laser"
+    }
+    """
+    try:
+        data = request.json
+        character = data.get('character')
+        extra_type = data.get('extraType')
+
+        if not character or not extra_type:
+            return jsonify({
+                'success': False,
+                'error': 'Missing character or extraType parameter'
+            }), 400
+
+        # Get extra type config
+        type_config = get_extra_type(character, extra_type)
+        if not type_config:
+            return jsonify({
+                'success': False,
+                'error': f'Extra type "{extra_type}" not defined for {character}'
+            }), 400
+
+        vanilla = type_config.get('vanilla', {})
+        if not vanilla:
+            return jsonify({
+                'success': False,
+                'error': f'No vanilla colors defined for {character}/{extra_type}'
+            }), 400
+
+        # Find the .dat file in MEX project
+        try:
+            files_dir = get_project_files_dir()
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 400
+
+        target_file = type_config['target_file']
+        offsets = type_config['offsets']
+        dat_path = find_dat_file(files_dir, target_file)
+
+        if not dat_path or not dat_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Could not find {target_file} in MEX project'
+            }), 404
+
+        # Apply vanilla colors
+        vanilla_mods = {layer: {'color': color} for layer, color in vanilla.items()}
+        apply_hex_patches(dat_path, offsets, vanilla_mods)
+        logger.info(f"[OK] Restored vanilla colors for {character}/{extra_type}")
+
+        return jsonify({
+            'success': True
+        })
+
+    except Exception as e:
+        logger.error(f"Restore vanilla error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

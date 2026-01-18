@@ -14,14 +14,16 @@ export const EXTRA_TYPES = {
       icon: 'laser',
       // Offset definitions for the 98 matrix format (Falco-specific)
       offsets: {
-        wide: { start: 0x13440, end: 0x13490 },
-        thin: { start: 0x134E0, end: 0x13530 },
-        outline: { start: 0x13580, end: 0x135D0 }
+        wide: { start: 0x13440, end: 0x134A0 },
+        thin: { start: 0x134E0, end: 0x13540 },
+        outline: { start: 0x13580, end: 0x135E0 },
+        center: { start: 0x13643, end: 0x13690 }
       },
       properties: [
         { id: 'wide', name: 'Wide Layer', description: 'Transparent outer glow' },
         { id: 'thin', name: 'Thin Layer', description: 'Semi-transparent middle' },
-        { id: 'outline', name: 'Outline', description: 'Opaque inner core' }
+        { id: 'outline', name: 'Outline', description: 'Opaque inner core' },
+        { id: 'center', name: 'Center Line', description: 'Very thin center line' }
       ]
     }
   ]
