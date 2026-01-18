@@ -3,7 +3,7 @@
  *
  * Features:
  * - Calculate missing HD CSPs
- * - Generate HD CSPs at 2x, 4x, 8x, or 16x resolution
+ * - Generate HD CSPs at 2x, 3x, or 4x resolution
  * - Progress tracking during batch generation
  * - Success/error messaging
  */
@@ -13,7 +13,7 @@ export default function HdCspSection({ metadata, API_URL }) {
   const [generatingHdCsps, setGeneratingHdCsps] = useState(false)
   const [hdCspProgress, setHdCspProgress] = useState({ current: 0, total: 0 })
   const [hdCspMessage, setHdCspMessage] = useState({ text: '', type: '' })
-  const [hdCspResolution, setHdCspResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
+  const [hdCspResolution, setHdCspResolution] = useState('2x') // '2x' | '3x' | '4x'
 
   // Count skins missing HD CSPs
   const getHdCspStats = () => {
@@ -123,7 +123,7 @@ export default function HdCspSection({ metadata, API_URL }) {
           <div className="hd-csp-resolution-select">
             <label>Resolution</label>
             <div className="hd-csp-resolution-options">
-              {['2x', '4x', '8x', '16x'].map(res => (
+              {['2x', '3x', '4x'].map(res => (
                 <button
                   key={res}
                   className={`hd-csp-resolution-btn ${hdCspResolution === res ? 'active' : ''}`}

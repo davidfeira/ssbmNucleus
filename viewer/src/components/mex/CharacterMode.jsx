@@ -7,8 +7,11 @@
  * - Available costumes panel with batch selection/import
  * - Ice Climbers special handling (auto-pair Popo/Nana)
  * - Single and batch costume import/removal
+ * - Extras mode for managing character extras (laser colors, etc.)
  */
 import { useState, useEffect } from 'react'
+import { getExtraTypes } from '../../config/extraTypes'
+import { rgbyToHex } from '../../utils/rgbyColor'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
@@ -34,11 +37,117 @@ export default function CharacterMode({
   const [dragOverIndex, setDragOverIndex] = useState(null)
   const [reordering, setReordering] = useState(false)
 
+  // Extras mode state
+  const [extrasMode, setExtrasMode] = useState(false)
+  const [selectedExtraType, setSelectedExtraType] = useState(null)
+  const [extraMods, setExtraMods] = useState({})
+  const [selectedExtraMod, setSelectedExtraMod] = useState(null)
+  const [importingExtra, setImportingExtra] = useState(false)
+
   useEffect(() => {
     if (selectedFighter) {
       fetchMexCostumes(selectedFighter.name, true)
     }
   }, [selectedFighter])
+
+  // Fetch extras when entering extras mode or selecting a type
+  useEffect(() => {
+    if (extrasMode) {
+      fetchExtrasMods()
+    }
+  }, [extrasMode])
+
+  useEffect(() => {
+    if (extrasMode && selectedExtraType) {
+      fetchCurrentColors()
+    }
+  }, [extrasMode, selectedExtraType])
+
+  const [currentColors, setCurrentColors] = useState(null)
+  const [isVanilla, setIsVanilla] = useState(true)
+
+  const fetchExtrasMods = async () => {
+    // Fetch all mods from vault
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/list/Falco`)
+      const data = await response.json()
+      if (data.success) {
+        setExtraMods(data.extras || {})
+      }
+    } catch (err) {
+      console.error('Failed to fetch extras:', err)
+      setExtraMods({})
+    }
+  }
+
+  const fetchCurrentColors = async () => {
+    // Read actual colors from .dat file
+    if (!selectedExtraType) return
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/current/Falco/${selectedExtraType.id}`)
+      const data = await response.json()
+      if (data.success) {
+        setCurrentColors(data.colors)
+        setIsVanilla(data.isVanilla)
+      }
+    } catch (err) {
+      console.error('Failed to fetch current colors:', err)
+      setCurrentColors(null)
+      setIsVanilla(true)
+    }
+  }
+
+  const getAllMods = (typeId) => {
+    return extraMods[typeId] || []
+  }
+
+  const handleImportExtra = async () => {
+    if (!selectedExtraMod || !selectedExtraType || importingExtra) return
+
+    setImportingExtra(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: 'Falco',
+          extraType: selectedExtraType.id,
+          modId: selectedExtraMod.id
+        })
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        await fetchCurrentColors()
+        setSelectedExtraMod(null)
+      }
+    } catch (err) {
+      console.error('Failed to import extra:', err)
+    } finally {
+      setImportingExtra(false)
+    }
+  }
+
+  const handleRestoreVanilla = async () => {
+    if (!selectedExtraType || importingExtra) return
+
+    setImportingExtra(true)
+    try {
+      await fetch(`${API_URL}/storage/extras/restore-vanilla`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: 'Falco',
+          extraType: selectedExtraType.id
+        })
+      })
+      await fetchCurrentColors()
+    } catch (err) {
+      console.error('Failed to restore vanilla:', err)
+    } finally {
+      setImportingExtra(false)
+    }
+  }
 
   const fetchMexCostumes = async (fighterName, showLoading = false) => {
     if (showLoading) {
@@ -528,6 +637,206 @@ export default function CharacterMode({
     setSelectedCostumes(new Set())
   }
 
+  // Laser beam preview component for extras
+  const LaserBeamPreview = ({ modifications, compact = false }) => {
+    const getColor = (layerId) => {
+      const mod = modifications?.[layerId]
+      if (!mod?.color) return null
+      // Center layer is RGB format, others are RGBY
+      if (layerId === 'center') {
+        return `#${mod.color}`
+      }
+      return rgbyToHex(mod.color)
+    }
+
+    const wide = getColor('wide') || '#ff0000'
+    const thin = getColor('thin') || '#ff0000'
+    const outline = getColor('outline') || '#ff0000'
+    const center = getColor('center') || '#ffffff'
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute', left: '8%', right: '8%',
+          height: compact ? '24px' : '30px', borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${wide} 5%, ${wide} 95%, transparent 100%)`,
+          boxShadow: `0 0 15px ${wide}50, 0 0 30px ${wide}30`, opacity: 0.5
+        }} />
+        <div style={{
+          position: 'absolute', left: '8%', right: '8%',
+          height: compact ? '14px' : '18px', borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${thin} 3%, ${thin} 97%, transparent 100%)`,
+          boxShadow: `0 0 8px ${thin}70`, opacity: 0.7
+        }} />
+        <div style={{
+          position: 'absolute', left: '8%', right: '8%',
+          height: compact ? '8px' : '10px', borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${outline} 2%, ${outline} 98%, transparent 100%)`,
+          boxShadow: `0 0 5px ${outline}90`, opacity: 0.9
+        }} />
+        <div style={{
+          position: 'absolute', left: '8%', right: '8%',
+          height: '3px', borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${center} 2%, ${center} 98%, transparent 100%)`,
+          boxShadow: `0 0 3px ${center}`
+        }} />
+      </div>
+    )
+  }
+
+  // Convert currentColors (object from API) to modifications format for LaserBeamPreview
+  const currentColorsToMods = (colors) => {
+    if (!colors) return null
+    const mods = {}
+    for (const [key, value] of Object.entries(colors)) {
+      mods[key] = { color: value }
+    }
+    return mods
+  }
+
+  // Extras mode UI
+  if (extrasMode) {
+    const extraTypes = getExtraTypes('Falco')
+
+    return (
+      <div className="mex-content">
+        <div className="fighters-list">
+          <h3>Extras</h3>
+          <div className="fighter-items">
+            {extraTypes.map(extraType => (
+              <div
+                key={extraType.id}
+                className={`fighter-item ${selectedExtraType?.id === extraType.id ? 'selected' : ''}`}
+                onClick={() => setSelectedExtraType(extraType)}
+              >
+                <div className="fighter-content">
+                  <div className="fighter-name">{extraType.name}</div>
+                  <div className="fighter-info">
+                    <span className="costume-count">
+                      {(extraMods[extraType.id] || []).length} in vault
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="costumes-panel">
+          {selectedExtraType ? (
+            <>
+              {/* Currently in MEX section - shows actual colors from .dat */}
+              <div className="costumes-section">
+                <h3>Currently in MEX</h3>
+                <div className="costume-list existing">
+                  <div className={`costume-card existing-costume ${isVanilla ? 'vanilla-extra' : ''}`}>
+                    <div className="costume-preview" style={{ padding: '8px' }}>
+                      {currentColors ? (
+                        <LaserBeamPreview modifications={currentColorsToMods(currentColors)} compact />
+                      ) : (
+                        <div className="vanilla-preview"><span>Loading...</span></div>
+                      )}
+                      {!isVanilla && (
+                        <button
+                          className="btn-remove"
+                          onClick={handleRestoreVanilla}
+                          disabled={importingExtra}
+                          title="Restore vanilla"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <div className="costume-info">
+                      <h4>{isVanilla ? 'Vanilla' : 'Custom'}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Available to Import section - shows ALL mods */}
+              <div className="costumes-section">
+                <div className="costumes-section-header">
+                  <h3>Available to Import</h3>
+                  <div className="batch-controls">
+                    {selectedExtraMod && (
+                      <button
+                        className="btn-batch-import"
+                        onClick={handleImportExtra}
+                        disabled={importingExtra}
+                      >
+                        {importingExtra ? 'Importing...' : 'Import Selected'}
+                      </button>
+                    )}
+                    <button
+                      className="btn-back"
+                      onClick={() => { setExtrasMode(false); setSelectedExtraType(null); setSelectedExtraMod(null); setCurrentColors(null) }}
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                </div>
+                <div className="costume-list">
+                  {getAllMods(selectedExtraType.id).map(mod => (
+                    <div
+                      key={mod.id}
+                      className={`costume-card ${selectedExtraMod?.id === mod.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedExtraMod(mod)}
+                    >
+                      <div className="costume-preview" style={{ padding: '8px' }}>
+                        <LaserBeamPreview modifications={mod.modifications} compact />
+                        <input
+                          type="checkbox"
+                          className="costume-checkbox"
+                          checked={selectedExtraMod?.id === mod.id}
+                          readOnly
+                        />
+                      </div>
+                      <div className="costume-info">
+                        <h4>{mod.name}</h4>
+                      </div>
+                    </div>
+                  ))}
+                  {getAllMods(selectedExtraType.id).length === 0 && (
+                    <div className="no-costumes">
+                      <p>No extras in vault. Create some in Storage → Falco → Extras.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="no-selection">
+              <p>Select an extra type</p>
+            </div>
+          )}
+        </div>
+
+        {/* Import Loading Overlay */}
+        {importingExtra && (
+          <div className="import-overlay">
+            <div className="import-modal">
+              <div className="import-spinner"></div>
+              <h3>Importing...</h3>
+              <p>Please wait...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Character mode UI (default)
   return (
     <div className="mex-content">
       <div className="fighters-list">
@@ -666,6 +975,12 @@ export default function CharacterMode({
                       </button>
                     </>
                   )}
+                  <button
+                    className="btn-extras-mode"
+                    onClick={() => setExtrasMode(true)}
+                  >
+                    Extras
+                  </button>
                 </div>
               </div>
               <div className={`costume-list ${loadingFighter ? 'processing' : ''}`}>

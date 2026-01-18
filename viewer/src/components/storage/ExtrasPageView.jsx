@@ -57,6 +57,98 @@ const EffectIcon = () => (
 const ICONS = { laser: LaserIcon, effect: EffectIcon }
 
 /**
+ * LaserBeamPreview - Reusable laser visualization component
+ * Renders layered beam effect matching actual in-game appearance
+ */
+function LaserBeamPreview({ modifications, compact = false }) {
+  // Get colors from modifications, handling both RGBY and RGB formats
+  const getColor = (layerId) => {
+    const mod = modifications?.[layerId]
+    if (!mod?.color) return null
+    // Center layer is RGB format, others are RGBY
+    if (layerId === 'center') {
+      return `#${mod.color}`
+    }
+    return rgbyToHex(mod.color)
+  }
+
+  const wide = getColor('wide') || '#ff0000'
+  const thin = getColor('thin') || '#ff0000'
+  const outline = getColor('outline') || '#ff0000'
+  const center = getColor('center') || '#ffffff'
+
+  const height = compact ? 40 : 50
+
+  return (
+    <div
+      className="laser-beam-preview"
+      style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Wide glow */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '8%',
+          right: '8%',
+          height: compact ? '24px' : '30px',
+          borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${wide} 5%, ${wide} 95%, transparent 100%)`,
+          boxShadow: `0 0 15px ${wide}50, 0 0 30px ${wide}30`,
+          opacity: 0.5
+        }}
+      />
+      {/* Thin layer */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '8%',
+          right: '8%',
+          height: compact ? '14px' : '18px',
+          borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${thin} 3%, ${thin} 97%, transparent 100%)`,
+          boxShadow: `0 0 8px ${thin}70`,
+          opacity: 0.7
+        }}
+      />
+      {/* Outline */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '8%',
+          right: '8%',
+          height: compact ? '8px' : '10px',
+          borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${outline} 2%, ${outline} 98%, transparent 100%)`,
+          boxShadow: `0 0 5px ${outline}90`,
+          opacity: 0.9
+        }}
+      />
+      {/* Center */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '8%',
+          right: '8%',
+          height: '3px',
+          borderRadius: '100px',
+          background: `linear-gradient(90deg, transparent 0%, ${center} 2%, ${center} 98%, transparent 100%)`,
+          boxShadow: `0 0 3px ${center}`
+        }}
+      />
+    </div>
+  )
+}
+
+/**
  * ExtraTypeCard - Card for selecting an extra type category
  */
 function ExtraTypeCard({ extraType, modCount, onClick }) {
@@ -112,38 +204,11 @@ function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) 
     }
   }
 
-  // Get preview colors from modifications
-  const getPreviewColors = () => {
-    if (!mod.modifications) return ['#888888']
-    const colors = []
-    for (const prop of extraType.properties) {
-      const modData = mod.modifications[prop.id]
-      if (modData?.color) {
-        colors.push(rgbyToHex(modData.color))
-      }
-    }
-    return colors.length > 0 ? colors : ['#888888']
-  }
-
-  const previewColors = getPreviewColors()
-
   return (
     <div className="extra-mod-card" onClick={() => onEdit?.(mod)}>
       <div className="extra-mod-image-container">
-        {/* Layered color preview simulating laser effect */}
-        <div className="extra-mod-preview">
-          {previewColors.map((color, idx) => (
-            <div
-              key={idx}
-              className="extra-mod-color-layer"
-              style={{
-                backgroundColor: color,
-                opacity: 1 - (idx * 0.25),
-                height: `${100 - (idx * 20)}%`
-              }}
-            />
-          ))}
-        </div>
+        {/* Laser beam preview */}
+        <LaserBeamPreview modifications={mod.modifications} compact />
 
         {/* Edit button */}
         <button

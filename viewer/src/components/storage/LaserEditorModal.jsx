@@ -35,17 +35,29 @@ const COLOR_PRESETS = [
   { name: 'Black', rgby: '0010', hex: '#000000' }
 ]
 
-function ColorPicker({ label, description, value, onChange }) {
-  const hexValue = rgbyToHex(value)
+function ColorPicker({ label, description, value, onChange, isRgb = false }) {
+  // Handle undefined or invalid values
+  const safeValue = value || (isRgb ? 'FFFFFF' : 'FC00')
+  const hexValue = isRgb ? `#${safeValue}` : rgbyToHex(safeValue)
 
   const handleHexChange = (e) => {
     const hex = e.target.value
-    const rgby = hexToRgby(hex)
-    onChange(rgby)
+    if (isRgb) {
+      // For RGB mode, store as 6-char hex without #
+      onChange(hex.replace('#', '').toUpperCase())
+    } else {
+      const rgby = hexToRgby(hex)
+      onChange(rgby)
+    }
   }
 
   const handlePresetClick = (preset) => {
-    onChange(preset.rgby)
+    if (isRgb) {
+      // Convert preset hex to RGB format
+      onChange(preset.hex.replace('#', '').toUpperCase())
+    } else {
+      onChange(preset.rgby)
+    }
   }
 
   return (
@@ -65,20 +77,25 @@ function ColorPicker({ label, description, value, onChange }) {
           />
           <div className="laser-color-values">
             <span className="laser-color-hex">{hexValue.toUpperCase()}</span>
-            <span className="laser-color-rgby">RGBY: {formatRgby(value)}</span>
+            <span className="laser-color-rgby">{isRgb ? `RGB: ${safeValue}` : `RGBY: ${formatRgby(safeValue)}`}</span>
           </div>
         </div>
 
         <div className="laser-color-presets">
-          {COLOR_PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              className={`laser-preset ${value === preset.rgby ? 'active' : ''}`}
-              style={{ backgroundColor: preset.hex }}
-              onClick={() => handlePresetClick(preset)}
-              title={preset.name}
-            />
-          ))}
+          {COLOR_PRESETS.map((preset) => {
+            const isActive = isRgb
+              ? safeValue === preset.hex.replace('#', '').toUpperCase()
+              : safeValue === preset.rgby
+            return (
+              <button
+                key={preset.name}
+                className={`laser-preset ${isActive ? 'active' : ''}`}
+                style={{ backgroundColor: preset.hex }}
+                onClick={() => handlePresetClick(preset)}
+                title={preset.name}
+              />
+            )
+          })}
         </div>
       </div>
     </div>
@@ -211,21 +228,41 @@ export default function LaserEditorModal({
             />
           </div>
 
-          {/* Preview */}
+          {/* Preview - realistic laser beam visualization */}
           <div className="laser-preview">
             <div className="laser-preview-label">Preview</div>
             <div className="laser-preview-display">
+              {/* Wide glow - outer layer */}
               <div
-                className="laser-preview-layer laser-preview-wide"
-                style={{ backgroundColor: rgbyToHex(colors.wide), opacity: 0.4 }}
+                className="laser-beam laser-beam-wide"
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, ${rgbyToHex(colors.wide)} 5%, ${rgbyToHex(colors.wide)} 95%, transparent 100%)`,
+                  boxShadow: `0 0 20px ${rgbyToHex(colors.wide)}40, 0 0 40px ${rgbyToHex(colors.wide)}20`
+                }}
               />
+              {/* Thin layer - middle */}
               <div
-                className="laser-preview-layer laser-preview-thin"
-                style={{ backgroundColor: rgbyToHex(colors.thin), opacity: 0.6 }}
+                className="laser-beam laser-beam-thin"
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, ${rgbyToHex(colors.thin)} 3%, ${rgbyToHex(colors.thin)} 97%, transparent 100%)`,
+                  boxShadow: `0 0 10px ${rgbyToHex(colors.thin)}60`
+                }}
               />
+              {/* Outline - inner core */}
               <div
-                className="laser-preview-layer laser-preview-outline"
-                style={{ backgroundColor: rgbyToHex(colors.outline) }}
+                className="laser-beam laser-beam-outline"
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, ${rgbyToHex(colors.outline)} 2%, ${rgbyToHex(colors.outline)} 98%, transparent 100%)`,
+                  boxShadow: `0 0 6px ${rgbyToHex(colors.outline)}80`
+                }}
+              />
+              {/* Center line - always white */}
+              <div
+                className="laser-beam laser-beam-center"
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, #FFFFFF 2%, #FFFFFF 98%, transparent 100%)`,
+                  boxShadow: `0 0 4px #FFFFFF`
+                }}
               />
             </div>
           </div>
@@ -237,7 +274,7 @@ export default function LaserEditorModal({
               label={prop.name}
               description={prop.description}
               value={colors[prop.id]}
-              onChange={(rgby) => handleColorChange(prop.id, rgby)}
+              onChange={(value) => handleColorChange(prop.id, value)}
             />
           ))}
 

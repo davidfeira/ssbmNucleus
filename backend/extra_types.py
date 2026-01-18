@@ -17,21 +17,18 @@ EXTRA_TYPES = {
             "offsets": {
                 "wide": {"start": 0x13440, "end": 0x134A0, "format": "RGBY"},
                 "thin": {"start": 0x134E0, "end": 0x13540, "format": "RGBY"},
-                "outline": {"start": 0x13580, "end": 0x135E0, "format": "RGBY"},
-                "center": {"start": 0x13643, "end": 0x13690, "format": "RGB"}
+                "outline": {"start": 0x13580, "end": 0x135E0, "format": "RGBY"}
             },
             # Vanilla/default colors (Falco's red laser)
             "vanilla": {
                 "wide": "FC00",
                 "thin": "FC00",
-                "outline": "FC00",
-                "center": "FFFFFF"
+                "outline": "FC00"
             },
             "properties": [
                 {"id": "wide", "name": "Wide Layer", "description": "Transparent outer glow"},
                 {"id": "thin", "name": "Thin Layer", "description": "Semi-transparent middle"},
-                {"id": "outline", "name": "Outline", "description": "Opaque inner core"},
-                {"id": "center", "name": "Center Line", "description": "Very thin center line"}
+                {"id": "outline", "name": "Outline", "description": "Opaque inner core"}
             ]
         }
     ]

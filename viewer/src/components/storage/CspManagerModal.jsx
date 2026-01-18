@@ -339,7 +339,7 @@ export default function CspManagerModal({
           </div>
           <div className="csp-manager-hd-controls">
             <div className="csp-manager-hd-options">
-              {['2x', '4x', '8x', '16x'].map(res => (
+              {['2x', '3x', '4x'].map(res => (
                 <button
                   key={res}
                   className={`csp-manager-hd-option ${hdResolution === res ? 'csp-manager-hd-option--active' : ''}`}

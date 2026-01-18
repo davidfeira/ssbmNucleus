@@ -5219,7 +5219,7 @@ def batch_generate_pose_csps():
         "character": "Fox",
         "poseName": "jump",
         "skinIds": ["skin-id-1", "skin-id-2"],
-        "hdMode": true  // Optional, generates 4x resolution if true
+        "hdResolution": "2x"  // Optional, e.g., "2x", "3x", "4x" - generates at specified resolution
     }
 
     Returns:
@@ -5238,7 +5238,15 @@ def batch_generate_pose_csps():
         character = data.get('character')
         pose_name = data.get('poseName')
         skin_ids = data.get('skinIds', [])
-        hd_mode = data.get('hdMode', False)
+        hd_resolution = data.get('hdResolution')  # e.g., "2x", "3x", "4x"
+
+        # Parse resolution to scale factor
+        hd_scale = 1
+        if hd_resolution:
+            try:
+                hd_scale = int(hd_resolution.replace('x', ''))
+            except (ValueError, AttributeError):
+                hd_scale = 1
 
         if not character or not pose_name or not skin_ids:
             return jsonify({
@@ -5284,7 +5292,6 @@ def batch_generate_pose_csps():
         results = []
         generated = 0
         failed = 0
-        scale = 4 if hd_mode else 1
 
         for skin_id in skin_ids:
             skin = skin_lookup.get(skin_id)
@@ -5338,8 +5345,8 @@ def batch_generate_pose_csps():
                     failed += 1
                     continue
 
-                # When HD mode is on, generate BOTH normal and HD versions
-                scales_to_generate = [(4, True), (1, False)] if hd_mode else [(1, False)]
+                # When HD resolution specified, generate BOTH normal and HD versions
+                scales_to_generate = [(hd_scale, True), (1, False)] if hd_scale > 1 else [(1, False)]
                 existing_alts = skin.get('alternate_csps', [])
                 alt_num = len(existing_alts) + 1
                 skin_generated = False
@@ -5514,11 +5521,11 @@ def patch_matrix_colors(data, new_color, color_format="RGBY"):
 
 
 def read_current_colors(dat_path, offsets):
-    """Read current RGBY colors from a .dat file.
+    """Read current colors from a .dat file.
 
     Args:
         dat_path: Path to the .dat file
-        offsets: Dict of layer_id -> {start, end} offset info
+        offsets: Dict of layer_id -> {start, end, format} offset info
 
     Returns:
         Dict of layer_id -> color hex string
@@ -5527,21 +5534,23 @@ def read_current_colors(dat_path, offsets):
     with open(dat_path, 'rb') as f:
         for layer_id, offset_info in offsets.items():
             start = offset_info['start']
+            color_format = offset_info.get('format', 'RGBY')
+            color_len = 3 if color_format == 'RGB' else 2
             # Read first color in the matrix (at position 4 from start)
-            # Header is 3 bytes (98 00 NN), then 1 byte vertex, then 2 bytes color
+            # Header is 3 bytes (98 00 NN), then 1 byte vertex, then color bytes
             f.seek(start + 4)
-            color_bytes = f.read(2)
+            color_bytes = f.read(color_len)
             colors[layer_id] = color_bytes.hex().upper()
     return colors
 
 
 def apply_hex_patches(dat_path, offsets, modifications):
-    """Apply RGBY color patches to a .dat file.
+    """Apply color patches to a .dat file.
 
     Args:
         dat_path: Path to the .dat file
-        offsets: Dict of layer_id -> {start, end} offset info
-        modifications: Dict of layer_id -> {color: "FC00"} modifications
+        offsets: Dict of layer_id -> {start, end, format} offset info
+        modifications: Dict of layer_id -> {color: "FC00" or "FFFFFF"} modifications
     """
     with open(dat_path, 'r+b') as f:
         for layer_id, layer_mods in modifications.items():
@@ -5552,13 +5561,17 @@ def apply_hex_patches(dat_path, offsets, modifications):
             offset_info = offsets[layer_id]
             start = offset_info['start']
             end = offset_info['end']
-            color_hex = layer_mods.get('color', 'FC00')
+            color_format = offset_info.get('format', 'RGBY')  # Default to RGBY for backwards compat
+            color_hex = layer_mods.get('color', 'FC00' if color_format == 'RGBY' else 'FFFFFF')
 
-            # Parse RGBY color (2 bytes)
+            # Determine expected color byte length based on format
+            expected_len = 3 if color_format == 'RGB' else 2
+
+            # Parse color bytes
             try:
-                rgby_bytes = bytes.fromhex(color_hex)
-                if len(rgby_bytes) != 2:
-                    logger.warning(f"Invalid color length for {layer_id}: {color_hex}")
+                color_bytes = bytes.fromhex(color_hex)
+                if len(color_bytes) != expected_len:
+                    logger.warning(f"Invalid color length for {layer_id} ({color_format}): {color_hex}, expected {expected_len} bytes")
                     continue
             except ValueError:
                 logger.warning(f"Invalid hex color for {layer_id}: {color_hex}")
@@ -5569,13 +5582,13 @@ def apply_hex_patches(dat_path, offsets, modifications):
             data = f.read(end - start)
 
             # Patch colors in the matrix format
-            modified = patch_matrix_colors(data, rgby_bytes)
+            modified = patch_matrix_colors(data, color_bytes, color_format)
 
             # Write back
             f.seek(start)
             f.write(modified)
 
-            logger.debug(f"Patched {layer_id} at 0x{start:X}-0x{end:X} with color {color_hex}")
+            logger.debug(f"Patched {layer_id} ({color_format}) at 0x{start:X}-0x{end:X} with color {color_hex}")
 
 
 def apply_extras_patches(project_path):

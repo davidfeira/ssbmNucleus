@@ -64,7 +64,7 @@ export default function PoseSkinSelectorModal({
 }) {
   const [skins, setSkins] = useState([])
   const [selectedSkins, setSelectedSkins] = useState(new Set())
-  const [hdMode, setHdMode] = useState(false)
+  const [hdResolution, setHdResolution] = useState('1x')
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, currentSkin: '' })
@@ -134,7 +134,7 @@ export default function PoseSkinSelectorModal({
           character,
           poseName,
           skinIds: Array.from(selectedSkins),
-          hdMode
+          hdResolution: hdResolution !== '1x' ? hdResolution : null
         })
       })
 
@@ -193,15 +193,21 @@ export default function PoseSkinSelectorModal({
             <button onClick={selectAll} disabled={generating}>Select All</button>
             <button onClick={deselectAll} disabled={generating}>Deselect All</button>
           </div>
-          <label className="pss-hd-toggle">
-            <input
-              type="checkbox"
-              checked={hdMode}
-              onChange={(e) => setHdMode(e.target.checked)}
-              disabled={generating}
-            />
-            <span>HD Mode (4x resolution)</span>
-          </label>
+          <div className="pss-resolution-picker">
+            <span>Resolution:</span>
+            <div className="pss-resolution-btns">
+              {['1x', '2x', '3x', '4x'].map(res => (
+                <button
+                  key={res}
+                  className={hdResolution === res ? 'active' : ''}
+                  onClick={() => setHdResolution(res)}
+                  disabled={generating}
+                >
+                  {res}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Skins Grid */}
@@ -251,7 +257,7 @@ export default function PoseSkinSelectorModal({
               disabled={selectedSkins.size === 0}
             >
               <GenerateIcon />
-              <span>Generate {selectedSkins.size} CSP{selectedSkins.size !== 1 ? 's' : ''}{hdMode ? ' (HD)' : ''}</span>
+              <span>Generate {selectedSkins.size} CSP{selectedSkins.size !== 1 ? 's' : ''}{hdResolution !== '1x' ? ` (${hdResolution})` : ''}</span>
             </button>
           )}
         </div>
@@ -388,19 +394,44 @@ export default function PoseSkinSelectorModal({
           cursor: not-allowed;
         }
 
-        .pss-hd-toggle {
+        .pss-resolution-picker {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           color: #ccc;
           font-size: 13px;
-          cursor: pointer;
         }
 
-        .pss-hd-toggle input {
-          width: 16px;
-          height: 16px;
+        .pss-resolution-btns {
+          display: flex;
+          gap: 4px;
+        }
+
+        .pss-resolution-btns button {
+          padding: 5px 10px;
+          background: #2a2a4a;
+          border: 1px solid #3a3a5a;
+          border-radius: 4px;
+          color: #888;
           cursor: pointer;
+          font-size: 12px;
+          transition: all 0.15s ease;
+        }
+
+        .pss-resolution-btns button:hover:not(:disabled) {
+          background: #3a3a5a;
+          color: #ccc;
+        }
+
+        .pss-resolution-btns button.active {
+          background: #6c8cff;
+          border-color: #6c8cff;
+          color: #fff;
+        }
+
+        .pss-resolution-btns button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
         .pss-skins-grid {
