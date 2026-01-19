@@ -743,6 +743,8 @@ namespace HSDRawViewer
                         try
                         {
                             var camera = _viewport.Camera;
+                            // Get hidden DObj indices from the render model
+                            var hiddenNodes = _renderJObj?.GetHiddenDObjIndices() ?? Array.Empty<int>();
                             var sceneData = new
                             {
                                 type = "sceneExported",
@@ -754,6 +756,7 @@ namespace HSDRawViewer
                                     showGrid = _viewport.DisplayGrid,
                                     showBackdrop = _viewport.EnableBack,
                                     animSymbol = _currentAnimSymbol,
+                                    hiddenNodes = hiddenNodes,
                                     camera = new
                                     {
                                         x = camera.X,
@@ -767,7 +770,7 @@ namespace HSDRawViewer
                                 }
                             };
                             await SendJsonAsync(sceneData);
-                            Log("Scene exported");
+                            Log($"Scene exported with {hiddenNodes.Length} hidden nodes");
                         }
                         catch (Exception ex)
                         {

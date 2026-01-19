@@ -1067,6 +1067,21 @@ namespace HSDRawViewer.Rendering.Models
         public int DObjCount => RenderDobjs.Count;
 
         /// <summary>
+        /// Gets a list of all hidden DObj indices
+        /// </summary>
+        /// <returns>Array of indices for DOBJs that are not visible</returns>
+        public int[] GetHiddenDObjIndices()
+        {
+            var hidden = new List<int>();
+            for (int i = 0; i < RenderDobjs.Count; i++)
+            {
+                if (!RenderDobjs[i].Visible)
+                    hidden.Add(i);
+            }
+            return hidden.ToArray();
+        }
+
+        /// <summary>
         /// Hides all DOBJs that belong to the specified JOBJ indices
         /// </summary>
         /// <param name="jobjIndices">List of JOBJ indices to hide</param>

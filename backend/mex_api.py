@@ -1821,7 +1821,7 @@ def manage_csp(character, skin_id):
                     # Custom poses also need the AJ file for animation data
                     char_prefix = get_char_prefix(character)
                     if char_prefix:
-                        aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+                        aj_file = VANILLA_ASSETS_DIR / character / f"{char_prefix}AJ.dat"
                         if aj_file.exists():
                             camera_file = str(aj_file)
                             logger.info(f"Using AJ file: {aj_file.name}")
@@ -5125,6 +5125,12 @@ camera:
   rotationXRadians: {scene_data.get('camera', {}).get('rotationXRadians', 0)}
   rotationYRadians: {scene_data.get('camera', {}).get('rotationYRadians', 0)}
 """
+        # Add hidden nodes if present (these hide low-poly models etc)
+        hidden_nodes = scene_data.get('hiddenNodes', [])
+        if hidden_nodes:
+            yaml_content += "hiddenNodes:\n"
+            for node in hidden_nodes:
+                yaml_content += f"- {node}\n"
 
         # Save pose file
         pose_path = poses_dir / f"{safe_name}.yml"
