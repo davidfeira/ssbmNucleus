@@ -15,6 +15,8 @@
   - Wrong objects not being hidden
 - [ ] Drag and drop improvements
 - [ ] Install UI redesign
+- [ ] Fix vertex bug with Up-B edits for Fox/Falco
+- [ ] Better icons/display/UI for extras page
 
 ### Extras: Effects (PlXx.dat mods)
 - [x] Fox/Falco effects
