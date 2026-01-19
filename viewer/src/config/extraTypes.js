@@ -23,36 +23,225 @@ export const EXTRA_TYPES = {
         { id: 'thin', name: 'Thin Layer', description: 'Semi-transparent middle' },
         { id: 'outline', name: 'Outline', description: 'Opaque inner core' }
       ]
+    },
+    {
+      id: 'sideb',
+      name: 'Side-B Color',
+      description: 'Phantasm afterimage colors',
+      targetFile: 'PlFc.dat',
+      icon: 'sideb',
+      format: '42_48',
+      // 42_48 format: 3 RGBA colors
+      offsets: {
+        primary: { start: 0x1EC48, size: 4 },
+        secondary: { start: 0x1EC4C, size: 4 },
+        tertiary: { start: 0x1EC50, size: 4 }
+      },
+      vanilla: {
+        primary: '0099FFFF',
+        secondary: 'CCE6FFFF',
+        tertiary: 'FFFFFFFF'
+      },
+      properties: [
+        { id: 'primary', name: 'Primary', description: 'Main afterimage color' },
+        { id: 'secondary', name: 'Secondary', description: 'Edge/gradient color' },
+        { id: 'tertiary', name: 'Glow', description: 'Outer glow color' }
+      ]
+    }
+  ],
+  Fox: [
+    {
+      id: 'laser',
+      name: 'Laser Color',
+      description: 'Change laser beam colors',
+      targetFile: 'PlFx.dat',
+      icon: 'laser',
+      // Offset definitions for the 98 matrix format (Fox-specific)
+      offsets: {
+        wide: { start: 0x13E20, end: 0x13E80 },
+        thin: { start: 0x13EC0, end: 0x13F20 },
+        outline: { start: 0x13F60, end: 0x13FC0 }
+      },
+      properties: [
+        { id: 'wide', name: 'Wide Layer', description: 'Transparent outer glow' },
+        { id: 'thin', name: 'Thin Layer', description: 'Semi-transparent middle' },
+        { id: 'outline', name: 'Outline', description: 'Opaque inner core' }
+      ]
+    },
+    {
+      id: 'sideb',
+      name: 'Side-B Color',
+      description: 'Illusion afterimage colors',
+      targetFile: 'PlFx.dat',
+      icon: 'sideb',
+      format: '42_48',
+      // 42_48 format: 3 RGBA colors
+      offsets: {
+        primary: { start: 0x2204C, size: 4 },
+        secondary: { start: 0x22050, size: 4 },
+        tertiary: { start: 0x22054, size: 4 }
+      },
+      vanilla: {
+        primary: '0099FFFF',
+        secondary: 'CCE6FFFF',
+        tertiary: 'FFFFFFFF'
+      },
+      properties: [
+        { id: 'primary', name: 'Primary', description: 'Main afterimage color' },
+        { id: 'secondary', name: 'Secondary', description: 'Edge/gradient color' },
+        { id: 'tertiary', name: 'Glow', description: 'Outer glow color' }
+      ]
+    },
+    {
+      id: 'upb',
+      name: 'Up-B Color',
+      description: 'Firefox/Firebird flame colors',
+      targetFile: 'EfFxData.dat',
+      icon: 'upb',
+      shared: true,  // Shared between Fox and Falco
+      sharedWith: ['Falco'],  // Characters that share this extra
+      owner: 'Fox',  // Which character owns the mods in storage
+      offsets: {
+        // 98 matrix format for flame tip
+        tip: { start: 0x1AC80, end: 0x1AD00, format: 'RGBY' },
+        // 98 matrix format for firefox body when not textured
+        body: { start: 0x1A880, end: 0x1AA50, format: 'RGB' },
+        // CF format - trailing fire (all sizes combined)
+        // CF XX RR GG BB - color at offset+2
+        trail: {
+          format: 'CF',
+          offsets: [
+            0x2EE, 0x2F4, 0x324, 0x32B,  // Large trailing fire
+            0x52E, 0x534  // Big trailing fire
+          ]
+        },
+        // 070707 format - fire rings
+        // 07 07 07 04 RR GG BB 00 RR GG BB - colors at +4 and +8
+        rings: {
+          format: '070707',
+          offsets: [0x1B454, 0x1B520]
+        }
+      },
+      vanilla: {
+        tip: 'FE60',      // Fire orange (RGBY)
+        body: 'FFFFFF',   // White (RGB)
+        trail: 'FFFFFF',  // White (RGB)
+        rings: 'FFFF00'   // Yellow (RGB)
+      },
+      properties: [
+        { id: 'tip', name: 'Flame Tip', description: 'Fire effect at the tip', format: 'RGBY' },
+        { id: 'body', name: 'Body Glow', description: 'Firefox body when charging', format: 'RGB' },
+        { id: 'trail', name: 'Trail Fire', description: 'Trailing fire particles', format: 'RGB' },
+        { id: 'rings', name: 'Fire Rings', description: 'Circular fire rings', format: 'RGB' }
+      ]
+    },
+    {
+      id: 'shine',
+      name: 'Shine Color',
+      description: 'Reflector shield colors',
+      targetFile: 'EfFxData.dat',
+      icon: 'shine',
+      shared: true,  // Shared between Fox and Falco
+      sharedWith: ['Falco'],  // Characters that share this extra
+      owner: 'Fox',  // Which character owns the mods in storage
+      offsets: {
+        // 98 matrix format for main hexagon shape
+        hex: { start: 0x1C2A0, end: 0x1C350, format: 'RGBY' },
+        // 98 matrix format for inner glow
+        inner: { start: 0x1C860, end: 0x1C8D0, format: 'RGBY' },
+        // 98 matrix format for outer glow (multiple matrices, same color)
+        outer: {
+          format: '98_multi',
+          ranges: [
+            { start: 0x1C8E0, end: 0x1C920 },
+            { start: 0x1C91F, end: 0x1C960 },
+            { start: 0x1C95E, end: 0x1C9A0 }
+          ]
+        },
+        // 42_48 format for transparent bubble
+        bubble: { start: 0x1B4C4, format: '42_48', size: 12 }
+      },
+      vanilla: {
+        hex: '621F',       // Blue-ish (RGBY)
+        inner: '63FF',     // Blue (RGBY)
+        outer: '63FF',     // Blue (RGBY)
+        bubble: '808080FFFFFFFFFFFFFFFFFF'  // Gray/white gradient (3x RGBA)
+      },
+      properties: [
+        { id: 'hex', name: 'Hexagon', description: 'Main shield shape', format: 'RGBY' },
+        { id: 'inner', name: 'Inner Glow', description: 'Inner glow effect', format: 'RGBY' },
+        { id: 'outer', name: 'Outer Glow', description: 'Outer flash effect', format: 'RGBY' },
+        { id: 'bubble', name: 'Bubble', description: 'Transparent bubble overlay', format: '42_48' }
+      ]
     }
   ]
-  // Fox laser offsets would be different - add when discovered
 }
 
 /**
- * Check if a character has any extras available
+ * Check if a character has any extras available (including shared)
  * @param {string} character - Character name
  * @returns {boolean}
  */
 export function hasExtras(character) {
-  return EXTRA_TYPES[character]?.length > 0
+  if (EXTRA_TYPES[character]?.length > 0) {
+    return true
+  }
+  // Check if any other character has shared extras for this character
+  for (const [otherChar, extras] of Object.entries(EXTRA_TYPES)) {
+    for (const extra of extras) {
+      if (extra.shared && extra.sharedWith?.includes(character)) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /**
- * Get all extra types for a character
+ * Get all extra types for a character, including shared extras from other characters
  * @param {string} character - Character name
  * @returns {Array}
  */
 export function getExtraTypes(character) {
-  return EXTRA_TYPES[character] || []
+  // Start with the character's own extras
+  const result = [...(EXTRA_TYPES[character] || [])]
+
+  // Add shared extras from other characters
+  for (const [otherChar, extras] of Object.entries(EXTRA_TYPES)) {
+    if (otherChar === character) continue
+    for (const extra of extras) {
+      if (extra.shared && extra.sharedWith?.includes(character)) {
+        // Include the shared extra (it's already configured with owner info)
+        result.push(extra)
+      }
+    }
+  }
+
+  return result
 }
 
 /**
- * Get a specific extra type by id
+ * Get a specific extra type by id (including shared extras)
  * @param {string} character - Character name
  * @param {string} typeId - Extra type id (e.g., 'laser')
  * @returns {Object|null}
  */
 export function getExtraType(character, typeId) {
-  const types = EXTRA_TYPES[character] || []
+  // Use getExtraTypes which includes shared extras
+  const types = getExtraTypes(character)
   return types.find(t => t.id === typeId) || null
+}
+
+/**
+ * Get the character to use for storage (owner for shared extras)
+ * @param {string} character - Character name
+ * @param {string} typeId - Extra type id
+ * @returns {string}
+ */
+export function getStorageCharacter(character, typeId) {
+  const typeConfig = getExtraType(character, typeId)
+  if (typeConfig?.shared) {
+    return typeConfig.owner || character
+  }
+  return character
 }

@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { getExtraTypes, getExtraType } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
 import LaserEditorModal from './LaserEditorModal'
+import SideBEditorModal from './SideBEditorModal'
+import UpBEditorModal from './UpBEditorModal'
+import ShineEditorModal from './ShineEditorModal'
 
 /**
  * ExtrasPageView - Full-page view for managing character extras
@@ -47,6 +50,30 @@ const LaserIcon = () => (
   </svg>
 )
 
+// Icon for side-B extra type (afterimage/dash effect)
+const SideBIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 12h4M9 12h4M14 12h4" strokeLinecap="round" opacity="0.3" />
+    <path d="M18 12h4" strokeLinecap="round" />
+    <path d="M20 8l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+// Icon for up-B extra type (Firefox/Firebird flame)
+const UpBIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 22c-4 0-7-3-7-7 0-2 1-4 2-5 0 2 1 3 2 3 0-3 2-6 3-8 1 2 3 5 3 8 1 0 2-1 2-3 1 1 2 3 2 5 0 4-3 7-7 7z" strokeLinejoin="round" />
+    <path d="M12 22v-5" strokeLinecap="round" />
+  </svg>
+)
+
+// Icon for shine (reflector/down-B)
+const ShineIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="12,2 15,9 22,9 17,14 19,22 12,17 5,22 7,14 2,9 9,9" strokeLinejoin="round" />
+  </svg>
+)
+
 const EffectIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
@@ -54,7 +81,7 @@ const EffectIcon = () => (
   </svg>
 )
 
-const ICONS = { laser: LaserIcon, effect: EffectIcon }
+const ICONS = { laser: LaserIcon, sideb: SideBIcon, upb: UpBIcon, shine: ShineIcon, effect: EffectIcon }
 
 /**
  * LaserBeamPreview - Reusable laser visualization component
@@ -149,6 +176,257 @@ function LaserBeamPreview({ modifications, compact = false }) {
 }
 
 /**
+ * SideBPreview - Preview component for side-B afterimage colors
+ * Shows the three RGBA colors as a gradient dash effect
+ */
+function SideBPreview({ modifications, compact = false }) {
+  // Get colors from modifications (RGBA format as hex string)
+  const getColor = (layerId) => {
+    const mod = modifications?.[layerId]
+    if (!mod?.color) return null
+    // RGBA format: first 6 chars are RGB
+    const hex = mod.color.substring(0, 6)
+    return `#${hex}`
+  }
+
+  const primary = getColor('primary') || '#0099FF'
+  const secondary = getColor('secondary') || '#CCE6FF'
+  const tertiary = getColor('tertiary') || '#FFFFFF'
+
+  const height = compact ? 40 : 50
+
+  return (
+    <div
+      className="sideb-preview"
+      style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        padding: '0 8px'
+      }}
+    >
+      {/* Afterimage trail - multiple fading copies */}
+      {[0.15, 0.3, 0.5, 0.7].map((opacity, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: `${10 + i * 18}%`,
+            width: compact ? '16px' : '20px',
+            height: compact ? '24px' : '30px',
+            borderRadius: '4px',
+            background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 50%, ${tertiary} 100%)`,
+            opacity: opacity,
+            boxShadow: `0 0 ${8 + i * 4}px ${primary}40`
+          }}
+        />
+      ))}
+      {/* Main character silhouette */}
+      <div
+        style={{
+          position: 'absolute',
+          right: '12%',
+          width: compact ? '20px' : '24px',
+          height: compact ? '28px' : '34px',
+          borderRadius: '4px',
+          background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 50%, ${tertiary} 100%)`,
+          boxShadow: `0 0 12px ${primary}60, 0 0 20px ${secondary}40`
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * UpBPreview - Preview component for up-B flame colors
+ * Shows tip, body, trail, and rings colors
+ */
+function UpBPreview({ modifications, compact = false }) {
+  // Get colors from modifications
+  const tipColor = modifications?.tip?.color ? rgbyToHex(modifications.tip.color) : '#FF6600'
+  const bodyColor = modifications?.body?.color ? `#${modifications.body.color}` : '#FFFFFF'
+  const trailColor = modifications?.trail?.color ? `#${modifications.trail.color}` : '#FFFFFF'
+  const ringsColor = modifications?.rings?.color ? `#${modifications.rings.color}` : '#FFFF00'
+
+  const height = compact ? 40 : 50
+
+  return (
+    <div
+      className="upb-preview"
+      style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Fire ring */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '50px' : '60px',
+          height: compact ? '16px' : '20px',
+          bottom: compact ? '8px' : '10px',
+          borderRadius: '50%',
+          border: `2px solid ${ringsColor}`,
+          boxShadow: `0 0 6px ${ringsColor}`,
+          opacity: 0.6
+        }}
+      />
+      {/* Body glow */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '24px' : '30px',
+          height: compact ? '40px' : '50px',
+          bottom: compact ? '5px' : '5px',
+          background: `radial-gradient(ellipse at center, ${bodyColor}30 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 8px ${bodyColor}40)`
+        }}
+      />
+      {/* Trail particles */}
+      {[0.3, 0.5].map((opacity, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            width: '6px',
+            height: '6px',
+            bottom: `${compact ? 20 : 25 + i * 10}px`,
+            left: `${45 + (i % 2 ? 5 : -5)}%`,
+            borderRadius: '50%',
+            background: trailColor,
+            opacity: opacity,
+            boxShadow: `0 0 3px ${trailColor}`
+          }}
+        />
+      ))}
+      {/* Main flame */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '18px' : '22px',
+          height: compact ? '28px' : '34px',
+          bottom: compact ? '2px' : '0',
+          borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+          background: `linear-gradient(to top, ${tipColor} 0%, ${tipColor}CC 40%, ${tipColor}66 70%, transparent 100%)`,
+          filter: `drop-shadow(0 0 5px ${tipColor})`
+        }}
+      />
+      {/* Inner core */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '8px' : '10px',
+          height: compact ? '14px' : '18px',
+          bottom: compact ? '4px' : '3px',
+          borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+          background: `linear-gradient(to top, #FFFFFF 0%, ${tipColor} 60%, transparent 100%)`
+        }}
+      />
+    </div>
+  )
+}
+
+function ShinePreview({ modifications, compact = false }) {
+  // Get colors from modifications
+  const hexColor = modifications?.hex?.color ? rgbyToHex(modifications.hex.color) : '#0066FF'
+  const innerColor = modifications?.inner?.color ? rgbyToHex(modifications.inner.color) : '#0066FF'
+  const outerColor = modifications?.outer?.color ? rgbyToHex(modifications.outer.color) : '#0066FF'
+
+  // Extract bubble tint from 42_48 data (first 6 hex chars are RGB)
+  const bubbleData = modifications?.bubble?.color || '808080FFFFFFFFFFFFFFFFFF'
+  const bubbleTint = `#${bubbleData.slice(0, 6)}`
+
+  const size = compact ? 36 : 50
+
+  return (
+    <div
+      className="shine-preview"
+      style={{
+        position: 'relative',
+        height: `${size}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Outer glow */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '45px' : '60px',
+          height: compact ? '45px' : '60px',
+          background: `radial-gradient(ellipse at center, ${outerColor}50 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 10px ${outerColor}60)`
+        }}
+      />
+      {/* Inner glow */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '35px' : '45px',
+          height: compact ? '35px' : '45px',
+          background: `radial-gradient(ellipse at center, ${innerColor}70 0%, transparent 60%)`
+        }}
+      />
+      {/* Hexagon */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '26px' : '34px',
+          height: compact ? '26px' : '34px',
+          background: hexColor,
+          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          opacity: 0.85,
+          boxShadow: `0 0 8px ${hexColor}`
+        }}
+      />
+      {/* Bubble overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '38px' : '48px',
+          height: compact ? '38px' : '48px',
+          borderRadius: '50%',
+          border: `1px solid ${bubbleTint}30`,
+          background: `radial-gradient(ellipse at 30% 30%, ${bubbleTint}15 0%, transparent 50%)`
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * ExtraPreview - Renders appropriate preview based on extra type
+ */
+function ExtraPreview({ extraType, modifications, compact = false }) {
+  if (extraType.id === 'sideb') {
+    return <SideBPreview modifications={modifications} compact={compact} />
+  }
+  if (extraType.id === 'upb') {
+    return <UpBPreview modifications={modifications} compact={compact} />
+  }
+  if (extraType.id === 'shine') {
+    return <ShinePreview modifications={modifications} compact={compact} />
+  }
+  // Default to laser preview
+  return <LaserBeamPreview modifications={modifications} compact={compact} />
+}
+
+/**
  * ExtraTypeCard - Card for selecting an extra type category
  */
 function ExtraTypeCard({ extraType, modCount, onClick }) {
@@ -164,6 +442,9 @@ function ExtraTypeCard({ extraType, modCount, onClick }) {
         <span className="extra-type-page-count">
           {modCount} mod{modCount !== 1 ? 's' : ''}
         </span>
+        {extraType.shared && (
+          <span className="extra-type-shared">Applies to both Fox and Falco</span>
+        )}
       </div>
     </div>
   )
@@ -207,8 +488,8 @@ function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) 
   return (
     <div className="extra-mod-card" onClick={() => onEdit?.(mod)}>
       <div className="extra-mod-image-container">
-        {/* Laser beam preview */}
-        <LaserBeamPreview modifications={mod.modifications} compact />
+        {/* Preview based on extra type */}
+        <ExtraPreview extraType={extraType} modifications={mod.modifications} compact />
 
         {/* Edit button */}
         <button
@@ -424,6 +705,45 @@ export default function ExtrasPageView({
         {/* Laser Editor Modal */}
         {selectedType.id === 'laser' && (
           <LaserEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Side-B Editor Modal */}
+        {selectedType.id === 'sideb' && (
+          <SideBEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Up-B Editor Modal */}
+        {selectedType.id === 'upb' && (
+          <UpBEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Shine Editor Modal */}
+        {selectedType.id === 'shine' && (
+          <ShineEditorModal
             show={showEditor}
             character={character}
             extraType={selectedType}

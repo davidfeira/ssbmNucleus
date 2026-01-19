@@ -52,24 +52,25 @@ export default function CharacterMode({
 
   // Fetch extras when entering extras mode or selecting a type
   useEffect(() => {
-    if (extrasMode) {
+    if (extrasMode && selectedFighter) {
       fetchExtrasMods()
     }
-  }, [extrasMode])
+  }, [extrasMode, selectedFighter])
 
   useEffect(() => {
-    if (extrasMode && selectedExtraType) {
+    if (extrasMode && selectedExtraType && selectedFighter) {
       fetchCurrentColors()
     }
-  }, [extrasMode, selectedExtraType])
+  }, [extrasMode, selectedExtraType, selectedFighter])
 
   const [currentColors, setCurrentColors] = useState(null)
   const [isVanilla, setIsVanilla] = useState(true)
 
   const fetchExtrasMods = async () => {
     // Fetch all mods from vault
+    if (!selectedFighter) return
     try {
-      const response = await fetch(`${API_URL}/storage/extras/list/Falco`)
+      const response = await fetch(`${API_URL}/storage/extras/list/${selectedFighter.name}`)
       const data = await response.json()
       if (data.success) {
         setExtraMods(data.extras || {})
@@ -82,9 +83,9 @@ export default function CharacterMode({
 
   const fetchCurrentColors = async () => {
     // Read actual colors from .dat file
-    if (!selectedExtraType) return
+    if (!selectedExtraType || !selectedFighter) return
     try {
-      const response = await fetch(`${API_URL}/storage/extras/current/Falco/${selectedExtraType.id}`)
+      const response = await fetch(`${API_URL}/storage/extras/current/${selectedFighter.name}/${selectedExtraType.id}`)
       const data = await response.json()
       if (data.success) {
         setCurrentColors(data.colors)
@@ -102,7 +103,7 @@ export default function CharacterMode({
   }
 
   const handleImportExtra = async () => {
-    if (!selectedExtraMod || !selectedExtraType || importingExtra) return
+    if (!selectedExtraMod || !selectedExtraType || importingExtra || !selectedFighter) return
 
     setImportingExtra(true)
     try {
@@ -110,7 +111,7 @@ export default function CharacterMode({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: 'Falco',
+          character: selectedFighter.name,
           extraType: selectedExtraType.id,
           modId: selectedExtraMod.id
         })
@@ -129,7 +130,7 @@ export default function CharacterMode({
   }
 
   const handleRestoreVanilla = async () => {
-    if (!selectedExtraType || importingExtra) return
+    if (!selectedExtraType || importingExtra || !selectedFighter) return
 
     setImportingExtra(true)
     try {
@@ -137,7 +138,7 @@ export default function CharacterMode({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: 'Falco',
+          character: selectedFighter.name,
           extraType: selectedExtraType.id
         })
       })
@@ -694,7 +695,213 @@ export default function CharacterMode({
     )
   }
 
-  // Convert currentColors (object from API) to modifications format for LaserBeamPreview
+  // Side-B preview component for extras
+  const SideBPreview = ({ modifications, compact = false }) => {
+    const getColor = (layerId) => {
+      const mod = modifications?.[layerId]
+      if (!mod?.color) return null
+      // RGBA format: first 6 chars are RGB
+      const hex = mod.color.substring(0, 6)
+      return `#${hex}`
+    }
+
+    const primary = getColor('primary') || '#0099FF'
+    const secondary = getColor('secondary') || '#CCE6FF'
+    const tertiary = getColor('tertiary') || '#FFFFFF'
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        overflow: 'hidden',
+        padding: '0 8px'
+      }}>
+        {[0.15, 0.3, 0.5, 0.7].map((opacity, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            left: `${10 + i * 18}%`,
+            width: compact ? '16px' : '20px',
+            height: compact ? '24px' : '30px',
+            borderRadius: '4px',
+            background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 50%, ${tertiary} 100%)`,
+            opacity: opacity,
+            boxShadow: `0 0 ${8 + i * 4}px ${primary}40`
+          }} />
+        ))}
+        <div style={{
+          position: 'absolute',
+          right: '12%',
+          width: compact ? '20px' : '24px',
+          height: compact ? '28px' : '34px',
+          borderRadius: '4px',
+          background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 50%, ${tertiary} 100%)`,
+          boxShadow: `0 0 12px ${primary}60, 0 0 20px ${secondary}40`
+        }} />
+      </div>
+    )
+  }
+
+  // Up-B preview component for Firefox/Firebird flame (all colors)
+  const UpBPreview = ({ modifications, compact = false }) => {
+    const tipColor = modifications?.tip?.color ? rgbyToHex(modifications.tip.color) : '#FF6600'
+    const bodyColor = modifications?.body?.color ? `#${modifications.body.color}` : '#FFFFFF'
+    const trailColor = modifications?.trail?.color ? `#${modifications.trail.color}` : '#FFFFFF'
+    const ringsColor = modifications?.rings?.color ? `#${modifications.rings.color}` : '#FFFF00'
+
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        {/* Fire ring */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '50px' : '60px',
+          height: compact ? '16px' : '20px',
+          bottom: compact ? '8px' : '10px',
+          borderRadius: '50%',
+          border: `2px solid ${ringsColor}`,
+          boxShadow: `0 0 6px ${ringsColor}`,
+          opacity: 0.6
+        }} />
+        {/* Body glow */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '24px' : '30px',
+          height: compact ? '40px' : '50px',
+          bottom: compact ? '5px' : '5px',
+          background: `radial-gradient(ellipse at center, ${bodyColor}30 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 8px ${bodyColor}40)`
+        }} />
+        {/* Trail particles */}
+        {[0.3, 0.5].map((opacity, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: '6px',
+            height: '6px',
+            bottom: `${compact ? 20 : 25 + i * 10}px`,
+            left: `${45 + (i % 2 ? 5 : -5)}%`,
+            borderRadius: '50%',
+            background: trailColor,
+            opacity: opacity,
+            boxShadow: `0 0 3px ${trailColor}`
+          }} />
+        ))}
+        {/* Main flame */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '18px' : '22px',
+          height: compact ? '28px' : '34px',
+          bottom: compact ? '2px' : '0',
+          borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+          background: `linear-gradient(to top, ${tipColor} 0%, ${tipColor}CC 40%, ${tipColor}66 70%, transparent 100%)`,
+          filter: `drop-shadow(0 0 5px ${tipColor})`
+        }} />
+        {/* Inner core */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '8px' : '10px',
+          height: compact ? '14px' : '18px',
+          bottom: compact ? '4px' : '3px',
+          borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+          background: `linear-gradient(to top, #FFFFFF 0%, ${tipColor} 60%, transparent 100%)`
+        }} />
+      </div>
+    )
+  }
+
+  // Shine preview component for reflector shield
+  const ShinePreview = ({ modifications, compact = false }) => {
+    const hexColor = modifications?.hex?.color ? rgbyToHex(modifications.hex.color) : '#0066FF'
+    const innerColor = modifications?.inner?.color ? rgbyToHex(modifications.inner.color) : '#0066FF'
+    const outerColor = modifications?.outer?.color ? rgbyToHex(modifications.outer.color) : '#0066FF'
+
+    // Extract bubble tint from 42_48 data (first 6 hex chars are RGB)
+    const bubbleData = modifications?.bubble?.color || '808080FFFFFFFFFFFFFFFFFF'
+    const bubbleTint = `#${bubbleData.slice(0, 6)}`
+
+    const size = compact ? 36 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${size}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        {/* Outer glow */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '45px' : '60px',
+          height: compact ? '45px' : '60px',
+          background: `radial-gradient(ellipse at center, ${outerColor}50 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 10px ${outerColor}60)`
+        }} />
+        {/* Inner glow */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '35px' : '45px',
+          height: compact ? '35px' : '45px',
+          background: `radial-gradient(ellipse at center, ${innerColor}70 0%, transparent 60%)`
+        }} />
+        {/* Hexagon */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '26px' : '34px',
+          height: compact ? '26px' : '34px',
+          background: hexColor,
+          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          opacity: 0.85,
+          boxShadow: `0 0 8px ${hexColor}`
+        }} />
+        {/* Bubble overlay */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '38px' : '48px',
+          height: compact ? '38px' : '48px',
+          borderRadius: '50%',
+          border: `1px solid ${bubbleTint}30`,
+          background: `radial-gradient(ellipse at 30% 30%, ${bubbleTint}15 0%, transparent 50%)`
+        }} />
+      </div>
+    )
+  }
+
+  // Generic extra preview that switches based on type
+  const ExtraPreview = ({ extraType, modifications, compact = false }) => {
+    if (extraType?.id === 'sideb') {
+      return <SideBPreview modifications={modifications} compact={compact} />
+    }
+    if (extraType?.id === 'upb') {
+      return <UpBPreview modifications={modifications} compact={compact} />
+    }
+    if (extraType?.id === 'shine') {
+      return <ShinePreview modifications={modifications} compact={compact} />
+    }
+    return <LaserBeamPreview modifications={modifications} compact={compact} />
+  }
+
+  // Convert currentColors (object from API) to modifications format for preview
   const currentColorsToMods = (colors) => {
     if (!colors) return null
     const mods = {}
@@ -705,8 +912,8 @@ export default function CharacterMode({
   }
 
   // Extras mode UI
-  if (extrasMode) {
-    const extraTypes = getExtraTypes('Falco')
+  if (extrasMode && selectedFighter) {
+    const extraTypes = getExtraTypes(selectedFighter.name)
 
     return (
       <div className="mex-content">
@@ -725,6 +932,9 @@ export default function CharacterMode({
                     <span className="costume-count">
                       {(extraMods[extraType.id] || []).length} in vault
                     </span>
+                    {extraType.shared && (
+                      <span className="shared-note">Applies to both Fox and Falco</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -742,7 +952,7 @@ export default function CharacterMode({
                   <div className={`costume-card existing-costume ${isVanilla ? 'vanilla-extra' : ''}`}>
                     <div className="costume-preview" style={{ padding: '8px' }}>
                       {currentColors ? (
-                        <LaserBeamPreview modifications={currentColorsToMods(currentColors)} compact />
+                        <ExtraPreview extraType={selectedExtraType} modifications={currentColorsToMods(currentColors)} compact />
                       ) : (
                         <div className="vanilla-preview"><span>Loading...</span></div>
                       )}
@@ -794,7 +1004,7 @@ export default function CharacterMode({
                       onClick={() => setSelectedExtraMod(mod)}
                     >
                       <div className="costume-preview" style={{ padding: '8px' }}>
-                        <LaserBeamPreview modifications={mod.modifications} compact />
+                        <ExtraPreview extraType={selectedExtraType} modifications={mod.modifications} compact />
                         <input
                           type="checkbox"
                           className="costume-checkbox"
@@ -809,7 +1019,7 @@ export default function CharacterMode({
                   ))}
                   {getAllMods(selectedExtraType.id).length === 0 && (
                     <div className="no-costumes">
-                      <p>No extras in vault. Create some in Storage → Falco → Extras.</p>
+                      <p>No extras in vault. Create some in Storage → {selectedFighter.name} → Extras.</p>
                     </div>
                   )}
                 </div>
