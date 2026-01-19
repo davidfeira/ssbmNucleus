@@ -374,6 +374,151 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
     }
   }
 
+  // Upload main CSP with optional HD version
+  const handleUploadMainCsp = async ({ normalFile, hdFile }) => {
+    if (!cspManagerSkin) return
+    if (!normalFile && !hdFile) return
+
+    try {
+      // Upload normal CSP if provided
+      if (normalFile) {
+        const formData = new FormData()
+        formData.append('character', cspManagerSkin.character)
+        formData.append('skinId', cspManagerSkin.id)
+        formData.append('csp', normalFile)
+
+        const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const data = await response.json()
+        if (!data.success) {
+          alert(`Failed to upload CSP: ${data.error}`)
+          return
+        }
+      }
+
+      // Upload HD CSP if provided
+      if (hdFile) {
+        const formData = new FormData()
+        formData.append('character', cspManagerSkin.character)
+        formData.append('skinId', cspManagerSkin.id)
+        formData.append('csp', hdFile)
+        formData.append('isHd', 'true')
+
+        const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
+          method: 'POST',
+          body: formData
+        })
+
+        const data = await response.json()
+        if (!data.success) {
+          alert(`Failed to upload HD CSP: ${data.error}`)
+          return
+        }
+
+        // Update HD info
+        setHdCspInfo({
+          exists: true,
+          resolution: 'Custom',
+          size: 'HD'
+        })
+      }
+
+      // Bust image cache and refresh
+      setLastImageUpdate(Date.now())
+      if (onRefresh) {
+        await onRefresh()
+      }
+    } catch (err) {
+      alert(`Error uploading CSP: ${err.message}`)
+    }
+  }
+
+  // Upload alternative CSP with optional HD version
+  const handleUploadAltCsp = async ({ normalFile, hdFile }) => {
+    if (!cspManagerSkin) return
+    if (!normalFile && !hdFile) return
+
+    try {
+      let newAltId = null
+
+      // Upload normal alt CSP if provided
+      if (normalFile) {
+        const formData = new FormData()
+        formData.append('action', 'add')
+        formData.append('file', normalFile)
+
+        const response = await fetch(
+          `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+          { method: 'POST', body: formData }
+        )
+
+        const data = await response.json()
+
+        if (data.success) {
+          newAltId = data.altId
+          const newAlt = {
+            id: data.altId,
+            url: data.url,
+            poseName: null,
+            isHd: false,
+            file: null
+          }
+          setAlternativeCsps(prev => [...prev, newAlt])
+          if (onUpdateEditingItemAlts) {
+            onUpdateEditingItemAlts(prev => [...prev, newAlt])
+          }
+        } else {
+          alert(`Failed to add CSP: ${data.error}`)
+          return
+        }
+      }
+
+      // Upload HD alt CSP if provided
+      if (hdFile) {
+        const formData = new FormData()
+        formData.append('action', 'add')
+        formData.append('file', hdFile)
+        formData.append('isHd', 'true')
+        if (newAltId) {
+          formData.append('pairWithAltId', newAltId)
+        }
+
+        const response = await fetch(
+          `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+          { method: 'POST', body: formData }
+        )
+
+        const data = await response.json()
+
+        if (data.success) {
+          const newHdAlt = {
+            id: data.altId,
+            url: data.url,
+            poseName: null,
+            isHd: true,
+            file: null
+          }
+          setAlternativeCsps(prev => [...prev, newHdAlt])
+          if (onUpdateEditingItemAlts) {
+            onUpdateEditingItemAlts(prev => [...prev, newHdAlt])
+          }
+        } else {
+          alert(`Failed to add HD CSP: ${data.error}`)
+        }
+      }
+
+      setLastImageUpdate(Date.now())
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (err) {
+      alert(`Error uploading CSP: ${err.message}`)
+    }
+  }
+
   // Reset to original CSP (clear active_csp_id)
   const handleResetToOriginal = async () => {
     if (!cspManagerSkin) return
@@ -444,6 +589,8 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
     handleSaveCspManager,
     handleCaptureHdCsp,
     handleRegenerateAltHd,
-    handleResetToOriginal
+    handleResetToOriginal,
+    handleUploadMainCsp,
+    handleUploadAltCsp
   }
 }

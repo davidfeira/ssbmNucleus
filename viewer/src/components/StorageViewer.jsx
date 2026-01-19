@@ -261,7 +261,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleSaveCspManager,
     handleCaptureHdCsp,
     handleRegenerateAltHd,
-    handleResetToOriginal
+    handleResetToOriginal,
+    handleUploadMainCsp,
+    handleUploadAltCsp
   } = useCspManager({
     API_URL,
     onRefresh,
@@ -743,6 +745,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleRegenerateAltHd={handleRegenerateAltHd}
         handleResetToOriginal={handleResetToOriginal}
         handleSaveCspManager={handleSaveCspManager}
+        handleUploadMainCsp={handleUploadMainCsp}
+        handleUploadAltCsp={handleUploadAltCsp}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}
         slippiDialogData={slippiDialogData}
@@ -832,6 +836,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleRegenerateAltHd={handleRegenerateAltHd}
         handleResetToOriginal={handleResetToOriginal}
         handleSaveCspManager={handleSaveCspManager}
+        handleUploadMainCsp={handleUploadMainCsp}
+        handleUploadAltCsp={handleUploadAltCsp}
         // Slippi dialog
         showSlippiDialog={showSlippiDialog}
         slippiDialogData={slippiDialogData}

@@ -67,7 +67,7 @@ else:
     SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
 
 sys.path.insert(0, str(PROCESSOR_DIR))
-from generate_csp import generate_csp, generate_single_csp_internal
+from generate_csp import generate_csp, generate_single_csp_internal, find_character_assets, apply_character_specific_layers
 
 # Character code mapping for vanilla costume lookup (pose thumbnails)
 CHAR_PREFIXES = {
@@ -1378,10 +1378,11 @@ def rename_storage_costume():
 
 @app.route('/api/mex/storage/costumes/update-csp', methods=['POST'])
 def update_costume_csp():
-    """Update CSP image for a character costume"""
+    """Update CSP image for a character costume (normal or HD)"""
     try:
         character = request.form.get('character')
         skin_id = request.form.get('skinId')
+        is_hd = request.form.get('isHd', '').lower() == 'true'
 
         if not character or not skin_id:
             return jsonify({
@@ -1416,7 +1417,6 @@ def update_costume_csp():
         # Paths
         char_folder = STORAGE_PATH / character
         zip_path = char_folder / f"{skin_id}.zip"
-        standalone_csp = char_folder / f"{skin_id}_csp.png"
 
         if not zip_path.exists():
             return jsonify({
@@ -1424,49 +1424,75 @@ def update_costume_csp():
                 'error': f'Costume zip not found: {skin_id}'
             }), 404
 
-        # Update standalone CSP file
-        with open(standalone_csp, 'wb') as f:
-            f.write(csp_data)
+        if is_hd:
+            # HD CSP - save only as standalone file (not in zip)
+            standalone_hd_csp = char_folder / f"{skin_id}_csp_hd.png"
+            with open(standalone_hd_csp, 'wb') as f:
+                f.write(csp_data)
 
-        # Update CSP inside the zip file
-        temp_zip = char_folder / f"{skin_id}_temp.zip"
+            # Update metadata to mark HD CSP exists
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
 
-        with zipfile.ZipFile(zip_path, 'r') as source_zip:
-            with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
-                # Copy all existing entries except csp.png
-                for item in source_zip.infolist():
-                    if item.filename.lower() not in ['csp.png', 'csp']:
-                        data = source_zip.read(item.filename)
-                        dest_zip.writestr(item, data)
+                if character in metadata.get('characters', {}):
+                    for skin in metadata['characters'][character].get('skins', []):
+                        if skin['id'] == skin_id:
+                            skin['has_hd_csp'] = True
+                            skin['hd_csp_source'] = 'custom'
+                            break
 
-                # Write new CSP
-                dest_zip.writestr('csp.png', csp_data)
+                    with open(metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
 
-        # Replace original zip with updated one
-        zip_path.unlink()
-        temp_zip.rename(zip_path)
+            logger.info(f"[OK] Updated HD CSP for {character} - {skin_id}")
+        else:
+            # Normal CSP - save as standalone and update zip
+            standalone_csp = char_folder / f"{skin_id}_csp.png"
+            with open(standalone_csp, 'wb') as f:
+                f.write(csp_data)
 
-        # Update metadata
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
+            # Update CSP inside the zip file
+            temp_zip = char_folder / f"{skin_id}_temp.zip"
 
-            if character in metadata.get('characters', {}):
-                for skin in metadata['characters'][character].get('skins', []):
-                    if skin['id'] == skin_id:
-                        skin['has_csp'] = True
-                        skin['csp_source'] = 'custom'
-                        break
+            with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                    # Copy all existing entries except csp.png
+                    for item in source_zip.infolist():
+                        if item.filename.lower() not in ['csp.png', 'csp']:
+                            data = source_zip.read(item.filename)
+                            dest_zip.writestr(item, data)
 
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
+                    # Write new CSP
+                    dest_zip.writestr('csp.png', csp_data)
 
-        logger.info(f"[OK] Updated CSP for {character} - {skin_id}")
+            # Replace original zip with updated one
+            zip_path.unlink()
+            temp_zip.rename(zip_path)
+
+            # Update metadata
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+
+                if character in metadata.get('characters', {}):
+                    for skin in metadata['characters'][character].get('skins', []):
+                        if skin['id'] == skin_id:
+                            skin['has_csp'] = True
+                            skin['csp_source'] = 'custom'
+                            break
+
+                    with open(metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Updated CSP for {character} - {skin_id}")
 
         return jsonify({
             'success': True,
-            'message': 'CSP updated successfully'
+            'message': 'CSP updated successfully',
+            'isHd': is_hd
         })
     except Exception as e:
         logger.error(f"Update CSP error: {str(e)}", exc_info=True)
@@ -1707,9 +1733,31 @@ def manage_csp(character, skin_id):
             if not file:
                 return jsonify({'success': False, 'error': 'No file provided'}), 400
 
+            # Check if this is an HD upload
+            is_hd_upload = request.form.get('isHd', '').lower() == 'true'
+            pair_with_alt_id = request.form.get('pairWithAltId')
+
             alt_csps = skin.get('alternate_csps', [])
-            new_alt_id = f"alt_{int(time.time())}"
-            new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
+            new_alt_id = f"alt_{int(time.time())}{'_hd' if is_hd_upload else ''}"
+
+            # If pairing with existing alt, find it and use same numbering
+            if pair_with_alt_id and is_hd_upload:
+                paired_alt = next((a for a in alt_csps if a.get('id') == pair_with_alt_id), None)
+                if paired_alt:
+                    # Extract the number from paired alt's filename
+                    paired_filename = paired_alt.get('filename', '')
+                    # e.g., "skin_id_csp_alt_3.png" -> use 3 for HD version
+                    import re
+                    match = re.search(r'_alt_(\d+)', paired_filename)
+                    alt_num = match.group(1) if match else str(len(alt_csps) + 1)
+                    new_alt_filename = f"{skin_id}_csp_alt_{alt_num}_hd.png"
+                else:
+                    new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd.png"
+            elif is_hd_upload:
+                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd.png"
+            else:
+                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
+
             new_alt_path = STORAGE_PATH / character / new_alt_filename
 
             # Save file
@@ -1724,20 +1772,21 @@ def manage_csp(character, skin_id):
                 'id': new_alt_id,
                 'filename': new_alt_filename,
                 'pose_name': None,  # User uploaded, no pose
-                'is_hd': False,
+                'is_hd': is_hd_upload,
                 'timestamp': datetime.now().isoformat()
             })
 
             with open(metadata_file, 'w') as f:
                 json.dump(metadata, f, indent=2)
 
-            logger.info(f"[OK] Added alt CSP: {new_alt_filename}")
+            logger.info(f"[OK] Added alt CSP: {new_alt_filename} (HD: {is_hd_upload})")
 
             return jsonify({
                 'success': True,
                 'message': 'Alt CSP added',
                 'altId': new_alt_id,
-                'url': f"/storage/{character}/{new_alt_filename}"
+                'url': f"/storage/{character}/{new_alt_filename}",
+                'isHd': is_hd_upload
             })
 
         elif action == 'regenerate-hd':
@@ -1758,23 +1807,37 @@ def manage_csp(character, skin_id):
                     return jsonify({'success': False, 'error': 'Alt CSP not found'}), 404
                 pose_name = alt.get('pose_name')
 
-            # Get pose path (or None for default)
-            pose_path = None
-            aj_file = None
+            # Get pose path - use custom pose if specified, otherwise use default assets
+            anim_file = None
+            camera_file = None
 
             if pose_name:
-                # Poses are saved in VANILLA_ASSETS_DIR/custom_poses/{character}/
+                # Custom pose - saved in VANILLA_ASSETS_DIR/custom_poses/{character}/
                 pose_path = VANILLA_ASSETS_DIR / 'custom_poses' / character / f"{pose_name}.yml"
-                if not pose_path.exists():
-                    logger.warning(f"Pose file not found: {pose_path}")
-                    pose_path = None  # Fallback to default
+                if pose_path.exists():
+                    anim_file = str(pose_path)
+                    logger.info(f"Using custom pose: {pose_name}")
 
-            # Get AJ file for this character
-            char_prefix = get_char_prefix(character)
-            if char_prefix:
-                aj_file = STORAGE_PATH.parent / 'assets' / 'vanilla' / character / f"{char_prefix}AJ.dat"
-                if not aj_file.exists():
-                    aj_file = None
+                    # Custom poses also need the AJ file for animation data
+                    char_prefix = get_char_prefix(character)
+                    if char_prefix:
+                        aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+                        if aj_file.exists():
+                            camera_file = str(aj_file)
+                            logger.info(f"Using AJ file: {aj_file.name}")
+                else:
+                    logger.warning(f"Custom pose file not found: {pose_path}, falling back to default")
+                    pose_name = None  # Fall through to default
+
+            if not pose_name:
+                # No custom pose - use default character CSP pose from csp_data
+                default_anim, default_camera = find_character_assets(character)
+                if default_anim:
+                    anim_file = default_anim
+                    logger.info(f"Using default pose: {Path(default_anim).name}")
+                if default_camera:
+                    camera_file = default_camera
+                    logger.info(f"Using default camera: {Path(default_camera).name}")
 
             # Extract DAT from ZIP
             import tempfile
@@ -1798,17 +1861,20 @@ def manage_csp(character, skin_id):
                 if not dat_file:
                     return jsonify({'success': False, 'error': 'No DAT file found in ZIP'}), 400
 
-                # Generate CSP
+                # Generate CSP with pose/animation
                 csp_output = generate_single_csp_internal(
                     str(dat_file),
                     character,
-                    str(pose_path) if pose_path else None,
-                    str(aj_file) if aj_file else None,
+                    anim_file,
+                    camera_file,
                     scale
                 )
 
                 if not csp_output or not Path(csp_output).exists():
                     return jsonify({'success': False, 'error': 'CSP generation failed'}), 500
+
+                # Apply character-specific layers (Fox gun, Ness flip, etc.)
+                apply_character_specific_layers(csp_output, character, scale)
 
                 # Determine output path
                 if is_main:
@@ -5364,6 +5430,9 @@ def batch_generate_pose_csps():
                     )
 
                     if csp_path and Path(csp_path).exists():
+                        # Apply character-specific layers (Fox gun, Ness flip, etc.)
+                        apply_character_specific_layers(csp_path, character, gen_scale)
+
                         # Determine alternate CSP filename
                         suffix = '_hd' if is_hd else ''
                         alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"

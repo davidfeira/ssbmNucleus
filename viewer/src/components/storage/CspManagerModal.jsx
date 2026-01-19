@@ -4,9 +4,206 @@
  * Features:
  * - Active portrait display with HD comparison slider
  * - Alternative CSPs grid (swap/remove)
- * - HD Capture section (2x, 4x, 8x, 16x options)
+ * - HD Capture section (2x, 3x, 4x options)
  * - Save/Cancel actions
+ * - Upload modal for Normal/HD slot selection
  */
+import { useState } from 'react'
+
+// Sub-modal for uploading CSPs with Normal/HD slot selection
+function CspUploadModal({
+  show,
+  uploadTarget, // 'main' or 'alt'
+  existingNormalUrl,
+  existingHdUrl,
+  onConfirm,
+  onCancel
+}) {
+  const [normalFile, setNormalFile] = useState(null)
+  const [normalPreview, setNormalPreview] = useState(null)
+  const [hdFile, setHdFile] = useState(null)
+  const [hdPreview, setHdPreview] = useState(null)
+
+  if (!show) return null
+
+  const handleFileSelect = (e, isHd) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      if (isHd) {
+        setHdFile(file)
+        setHdPreview(ev.target.result)
+      } else {
+        setNormalFile(file)
+        setNormalPreview(ev.target.result)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleConfirm = () => {
+    onConfirm({ normalFile, hdFile })
+    // Reset state
+    setNormalFile(null)
+    setNormalPreview(null)
+    setHdFile(null)
+    setHdPreview(null)
+  }
+
+  const handleCancel = () => {
+    setNormalFile(null)
+    setNormalPreview(null)
+    setHdFile(null)
+    setHdPreview(null)
+    onCancel()
+  }
+
+  const hasAnyFile = normalFile || hdFile
+
+  return (
+    <div className="csp-upload-overlay" onClick={handleCancel}>
+      <div className="csp-upload-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="csp-upload-header">
+          <h3>{uploadTarget === 'main' ? 'Replace Active CSP' : 'Add Alternative CSP'}</h3>
+          <button className="csp-upload-close" onClick={handleCancel}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div className="csp-upload-body">
+          {/* Normal CSP Slot */}
+          <div className="csp-upload-slot">
+            <div className="csp-upload-slot-label">Normal CSP</div>
+            <div
+              className={`csp-upload-slot-preview ${normalPreview ? 'has-image' : ''}`}
+              onClick={() => document.getElementById('csp-upload-normal-input').click()}
+            >
+              {normalPreview ? (
+                <img src={normalPreview} alt="Normal CSP preview" />
+              ) : existingNormalUrl ? (
+                <>
+                  <img src={existingNormalUrl} alt="Existing Normal CSP" className="csp-upload-existing" />
+                  <div className="csp-upload-slot-overlay">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>Click to replace</span>
+                  </div>
+                </>
+              ) : (
+                <div className="csp-upload-slot-empty">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>Click to upload</span>
+                </div>
+              )}
+              {normalPreview && (
+                <button
+                  className="csp-upload-slot-clear"
+                  onClick={(e) => { e.stopPropagation(); setNormalFile(null); setNormalPreview(null); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              )}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFileSelect(e, false)}
+              style={{ display: 'none' }}
+              id="csp-upload-normal-input"
+            />
+          </div>
+
+          {/* HD CSP Slot */}
+          <div className="csp-upload-slot">
+            <div className="csp-upload-slot-label">
+              HD CSP
+              <span className="csp-upload-slot-badge">High Resolution</span>
+            </div>
+            <div
+              className={`csp-upload-slot-preview ${hdPreview ? 'has-image' : ''}`}
+              onClick={() => document.getElementById('csp-upload-hd-input').click()}
+            >
+              {hdPreview ? (
+                <img src={hdPreview} alt="HD CSP preview" />
+              ) : existingHdUrl ? (
+                <>
+                  <img src={existingHdUrl} alt="Existing HD CSP" className="csp-upload-existing" />
+                  <div className="csp-upload-slot-overlay">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>Click to replace</span>
+                  </div>
+                </>
+              ) : (
+                <div className="csp-upload-slot-empty">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>Click to upload</span>
+                </div>
+              )}
+              {hdPreview && (
+                <button
+                  className="csp-upload-slot-clear"
+                  onClick={(e) => { e.stopPropagation(); setHdFile(null); setHdPreview(null); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              )}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFileSelect(e, true)}
+              style={{ display: 'none' }}
+              id="csp-upload-hd-input"
+            />
+          </div>
+        </div>
+
+        <div className="csp-upload-actions">
+          <button className="csp-upload-btn csp-upload-btn--cancel" onClick={handleCancel}>
+            Cancel
+          </button>
+          <button
+            className="csp-upload-btn csp-upload-btn--confirm"
+            onClick={handleConfirm}
+            disabled={!hasAnyFile}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            {uploadTarget === 'main' ? 'Replace' : 'Add'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CspManagerModal({
   show,
   cspManagerSkin,
@@ -28,9 +225,41 @@ export default function CspManagerModal({
   onRegenerateAltHd,
   onResetToOriginal,
   onSave,
+  onUploadMainCsp,    // ({ normalFile, hdFile }) => void
+  onUploadAltCsp,     // ({ normalFile, hdFile }) => void
   API_URL
 }) {
+  // Upload modal state
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [uploadTarget, setUploadTarget] = useState(null) // 'main' or 'alt'
+
   if (!show || !cspManagerSkin) return null
+
+  // Handlers for opening upload modal
+  const handleReplaceClick = () => {
+    setUploadTarget('main')
+    setUploadModalOpen(true)
+  }
+
+  const handleAddClick = () => {
+    setUploadTarget('alt')
+    setUploadModalOpen(true)
+  }
+
+  const handleUploadConfirm = ({ normalFile, hdFile }) => {
+    if (uploadTarget === 'main' && onUploadMainCsp) {
+      onUploadMainCsp({ normalFile, hdFile })
+    } else if (uploadTarget === 'alt' && onUploadAltCsp) {
+      onUploadAltCsp({ normalFile, hdFile })
+    }
+    setUploadModalOpen(false)
+    setUploadTarget(null)
+  }
+
+  const handleUploadCancel = () => {
+    setUploadModalOpen(false)
+    setUploadTarget(null)
+  }
 
   // Check if an alt CSP is currently active
   const activeCspId = cspManagerSkin.active_csp_id
@@ -202,16 +431,9 @@ export default function CspManagerModal({
                   <span>{cspManagerSkin.color[0]}</span>
                 </div>
               )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={onCspManagerMainChange}
-                style={{ display: 'none' }}
-                id="csp-manager-main-input"
-              />
               <button
                 className="csp-manager-main-replace-btn"
-                onClick={() => document.getElementById('csp-manager-main-input').click()}
+                onClick={handleReplaceClick}
                 title="Replace main CSP"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -251,7 +473,6 @@ export default function CspManagerModal({
                     alt="Original CSP"
                     className="csp-manager-alt-image"
                   />
-                  <div className="csp-manager-alt-original-badge">Original</div>
                   {hdCspInfo?.exists && (
                     <div className="csp-manager-alt-hd-badge">HD</div>
                   )}
@@ -282,16 +503,6 @@ export default function CspManagerModal({
                     {group.hd && (
                       <div className="csp-manager-alt-hd-badge">HD</div>
                     )}
-                    {/* HD regenerate button - show if no HD version yet */}
-                    {!group.hd && group.nonHd && onRegenerateAltHd && (
-                      <button
-                        className="csp-manager-alt-hd-btn"
-                        onClick={(e) => { e.stopPropagation(); onRegenerateAltHd(group.swapIndex); }}
-                        title={group.poseName ? `Regenerate "${group.poseName}" at HD` : "Regenerate at HD (default pose)"}
-                      >
-                        HD
-                      </button>
-                    )}
                     <div className="csp-manager-alt-overlay">
                       <span>Click to set active</span>
                     </div>
@@ -309,20 +520,13 @@ export default function CspManagerModal({
                 )
               })}
               {/* Add New CSP Card */}
-              <div className="csp-manager-add-card" onClick={() => document.getElementById('csp-manager-alt-input').click()}>
+              <div className="csp-manager-add-card" onClick={handleAddClick}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
                 <span>Add CSP</span>
               </div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={onAddAlternativeCsp}
-                style={{ display: 'none' }}
-                id="csp-manager-alt-input"
-              />
             </div>
           </div>
         </div>
@@ -387,6 +591,16 @@ export default function CspManagerModal({
             Save
           </button>
         </div>
+
+        {/* Upload Modal */}
+        <CspUploadModal
+          show={uploadModalOpen}
+          uploadTarget={uploadTarget}
+          existingNormalUrl={uploadTarget === 'main' ? activeDisplayUrl : null}
+          existingHdUrl={uploadTarget === 'main' && hasActiveHd ? activeHdUrl : null}
+          onConfirm={handleUploadConfirm}
+          onCancel={handleUploadCancel}
+        />
       </div>
     </div>
   )

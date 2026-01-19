@@ -97,6 +97,8 @@ export default function CharacterDetailView({
   handleRegenerateAltHd,
   handleResetToOriginal,
   handleSaveCspManager,
+  handleUploadMainCsp,
+  handleUploadAltCsp,
   // Slippi dialog
   showSlippiDialog,
   slippiDialogData,
@@ -369,6 +371,8 @@ export default function CharacterDetailView({
         onRegenerateAltHd={handleRegenerateAltHd}
         onResetToOriginal={handleResetToOriginal}
         onSave={handleSaveCspManager}
+        onUploadMainCsp={handleUploadMainCsp}
+        onUploadAltCsp={handleUploadAltCsp}
         API_URL={API_URL}
       />
       <SlippiSafetyDialog

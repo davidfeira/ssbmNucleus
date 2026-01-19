@@ -5371,6 +5371,245 @@
   transform: translateY(-1px);
 }
 
+/* ===========================================
+   CSP Upload Modal (sub-modal for Normal/HD)
+   =========================================== */
+.csp-upload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn var(--transition-base);
+}
+
+.csp-upload-modal {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-xl);
+  max-width: 600px;
+  width: 90vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideIn var(--transition-base);
+}
+
+.csp-upload-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.csp-upload-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.csp-upload-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.csp-upload-close:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.csp-upload-body {
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.csp-upload-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.csp-upload-slot-label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.csp-upload-slot-badge {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  padding: 2px 8px;
+  background: var(--gradient-cyan);
+  color: var(--color-bg-deep);
+  border-radius: var(--radius-full);
+}
+
+.csp-upload-slot-preview {
+  position: relative;
+  aspect-ratio: 136 / 188;
+  background: var(--color-bg-surface);
+  border: 2px dashed var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.csp-upload-slot-preview:hover {
+  border-color: var(--color-cyan);
+  background: var(--color-bg-base);
+}
+
+.csp-upload-slot-preview.has-image {
+  border-style: solid;
+  border-color: var(--color-cyan);
+}
+
+.csp-upload-slot-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.csp-upload-slot-preview .csp-upload-existing {
+  opacity: 0.5;
+}
+
+.csp-upload-slot-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.csp-upload-slot-preview:hover .csp-upload-slot-overlay {
+  opacity: 1;
+}
+
+.csp-upload-slot-overlay span {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
+.csp-upload-slot-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-text-tertiary);
+}
+
+.csp-upload-slot-empty span {
+  font-size: var(--text-sm);
+}
+
+.csp-upload-slot-preview:hover .csp-upload-slot-empty {
+  color: var(--color-cyan);
+}
+
+.csp-upload-slot-clear {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--color-text-primary);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.csp-upload-slot-preview:hover .csp-upload-slot-clear {
+  opacity: 1;
+}
+
+.csp-upload-slot-clear:hover {
+  background: var(--color-red);
+}
+
+.csp-upload-actions {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.csp-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.csp-upload-btn--cancel {
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.csp-upload-btn--cancel:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.csp-upload-btn--confirm {
+  background: var(--gradient-cyan);
+  color: var(--color-bg-deep);
+}
+
+.csp-upload-btn--confirm:hover:not(:disabled) {
+  box-shadow: var(--glow-cyan-sm);
+  transform: translateY(-1px);
+}
+
+.csp-upload-btn--confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .csp-manager-modal {
