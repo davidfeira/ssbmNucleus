@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 
 /**
- * SideBEditorModal - Color picker UI for creating/editing side-B mods
- * Allows setting colors for each afterimage layer (primary, secondary, tertiary)
- * Uses RGBA format (8 hex chars) instead of RGBY
+ * SwordEditorModal - Color picker UI for creating/editing sword trail mods
+ * Used for Marth, Roy, Link, Young Link sword swing colors
+ * 3x RGB colors: main, secondary, tertiary (edge)
  */
 
 const CloseIcon = () => (
@@ -21,44 +21,44 @@ const SaveIcon = () => (
   </svg>
 )
 
-// Color presets for quick selection (RGBA format with full alpha)
+// Color presets
 const COLOR_PRESETS = [
-  { name: 'Blue', rgba: '0099FFFF', hex: '#0099FF' },
-  { name: 'Red', rgba: 'FF0000FF', hex: '#FF0000' },
-  { name: 'Green', rgba: '00FF00FF', hex: '#00FF00' },
-  { name: 'Yellow', rgba: 'FFFF00FF', hex: '#FFFF00' },
-  { name: 'Magenta', rgba: 'FF00FFFF', hex: '#FF00FF' },
-  { name: 'Cyan', rgba: '00FFFFFF', hex: '#00FFFF' },
-  { name: 'Orange', rgba: 'FF6600FF', hex: '#FF6600' },
-  { name: 'Purple', rgba: '9900FFFF', hex: '#9900FF' },
-  { name: 'White', rgba: 'FFFFFFFF', hex: '#FFFFFF' },
-  { name: 'Pink', rgba: 'FF99CCFF', hex: '#FF99CC' }
+  { name: 'Red', hex: '#FF0000' },
+  { name: 'Blue', hex: '#0066FF' },
+  { name: 'Green', hex: '#00FF00' },
+  { name: 'Yellow', hex: '#FFFF00' },
+  { name: 'Magenta', hex: '#FF00FF' },
+  { name: 'Cyan', hex: '#00FFFF' },
+  { name: 'Orange', hex: '#FF6600' },
+  { name: 'Purple', hex: '#9900FF' },
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Pink', hex: '#FF66CC' }
 ]
 
-// Convert RGBA hex string to display hex (#RRGGBB)
-function rgbaToHex(rgba) {
-  if (!rgba || rgba.length < 6) return '#0099FF'
-  return `#${rgba.substring(0, 6)}`
+// Default colors (Marth vanilla)
+const DEFAULT_COLORS = {
+  main: 'FF0000',
+  secondary: 'FFFF00',
+  tertiary: 'FFFFFF'
 }
 
-// Convert hex color to RGBA (with full alpha)
-function hexToRgba(hex) {
-  const clean = hex.replace('#', '').toUpperCase()
-  return clean.length === 6 ? `${clean}FF` : clean
+// Convert hex to display format
+function toDisplayHex(rgb) {
+  if (!rgb || rgb.length < 6) return '#FF0000'
+  return `#${rgb.slice(0, 6)}`
 }
 
-function RgbaColorPicker({ label, description, value, onChange }) {
-  // Handle undefined or invalid values
-  const safeValue = value || '0099FFFF'
-  const hexValue = rgbaToHex(safeValue)
+// Convert display hex to RGB storage format
+function toStorageRgb(hex) {
+  return hex.replace('#', '').toUpperCase()
+}
 
-  const handleHexChange = (e) => {
-    const hex = e.target.value
-    onChange(hexToRgba(hex))
-  }
+// RGB color picker
+function ColorPicker({ label, description, value, onChange }) {
+  const displayHex = toDisplayHex(value)
 
-  const handlePresetClick = (preset) => {
-    onChange(preset.rgba)
+  const handleChange = (e) => {
+    onChange(toStorageRgb(e.target.value))
   }
 
   return (
@@ -72,13 +72,13 @@ function RgbaColorPicker({ label, description, value, onChange }) {
         <div className="laser-color-input-group">
           <input
             type="color"
-            value={hexValue}
-            onChange={handleHexChange}
+            value={displayHex}
+            onChange={handleChange}
             className="laser-color-input"
           />
           <div className="laser-color-values">
-            <span className="laser-color-hex">{hexValue.toUpperCase()}</span>
-            <span className="laser-color-rgby">RGBA: {safeValue}</span>
+            <span className="laser-color-hex">{displayHex.toUpperCase()}</span>
+            <span className="laser-color-rgby">RGB: {value || 'FF0000'}</span>
           </div>
         </div>
 
@@ -86,9 +86,9 @@ function RgbaColorPicker({ label, description, value, onChange }) {
           {COLOR_PRESETS.map((preset) => (
             <button
               key={preset.name}
-              className={`laser-preset ${safeValue === preset.rgba ? 'active' : ''}`}
+              className={`laser-preset ${displayHex.toUpperCase() === preset.hex.toUpperCase() ? 'active' : ''}`}
               style={{ backgroundColor: preset.hex }}
-              onClick={() => handlePresetClick(preset)}
+              onClick={() => onChange(toStorageRgb(preset.hex))}
               title={preset.name}
             />
           ))}
@@ -98,7 +98,7 @@ function RgbaColorPicker({ label, description, value, onChange }) {
   )
 }
 
-export default function SideBEditorModal({
+export default function SwordEditorModal({
   show,
   character,
   extraType,
@@ -109,38 +109,39 @@ export default function SideBEditorModal({
   API_URL
 }) {
   const [name, setName] = useState('')
-  const [colors, setColors] = useState({
-    primary: '0099FFFF',
-    secondary: 'CCE6FFFF',
-    tertiary: 'FFFFFFFF'
-  })
+  const [colors, setColors] = useState({ ...DEFAULT_COLORS })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
 
-  // Initialize from editing mod if provided
+  // Initialize from editing mod or vanilla
   useEffect(() => {
     if (editingMod) {
       setName(editingMod.name || '')
       if (editingMod.modifications) {
         setColors({
-          primary: editingMod.modifications.primary?.color || '0099FFFF',
-          secondary: editingMod.modifications.secondary?.color || 'CCE6FFFF',
-          tertiary: editingMod.modifications.tertiary?.color || 'FFFFFFFF'
+          main: editingMod.modifications.main?.color || DEFAULT_COLORS.main,
+          secondary: editingMod.modifications.secondary?.color || DEFAULT_COLORS.secondary,
+          tertiary: editingMod.modifications.tertiary?.color || DEFAULT_COLORS.tertiary
         })
       }
     } else {
-      // Reset for new mod
+      // Reset for new mod - use vanilla colors from extraType if available
       setName('')
-      setColors({ primary: '0099FFFF', secondary: 'CCE6FFFF', tertiary: 'FFFFFFFF' })
+      const vanilla = extraType?.vanilla || DEFAULT_COLORS
+      setColors({
+        main: vanilla.main || DEFAULT_COLORS.main,
+        secondary: vanilla.secondary || DEFAULT_COLORS.secondary,
+        tertiary: vanilla.tertiary || DEFAULT_COLORS.tertiary
+      })
     }
     setError(null)
-  }, [editingMod, show])
+  }, [editingMod, show, extraType])
 
   if (!show) return null
 
-  const handleColorChange = (layer, rgba) => {
-    setColors(prev => ({ ...prev, [layer]: rgba }))
+  const handleColorChange = (layer, value) => {
+    setColors(prev => ({ ...prev, [layer]: value }))
   }
 
   const handleSave = async () => {
@@ -158,13 +159,12 @@ export default function SideBEditorModal({
         extraType: extraType.id,
         name: name.trim(),
         modifications: {
-          primary: { color: colors.primary },
+          main: { color: colors.main },
           secondary: { color: colors.secondary },
           tertiary: { color: colors.tertiary }
         }
       }
 
-      // If editing, include the mod ID
       if (editingMod) {
         modData.modId = editingMod.id
       }
@@ -183,7 +183,7 @@ export default function SideBEditorModal({
         setError(data.error || 'Failed to save mod')
       }
     } catch (err) {
-      console.error('[SideBEditorModal] Save error:', err)
+      console.error('[SwordEditorModal] Save error:', err)
       setError(err.message)
     } finally {
       setSaving(false)
@@ -219,18 +219,29 @@ export default function SideBEditorModal({
     }
   }
 
-  const handleApplyToAll = (rgba) => {
+  // Apply preset to all layers as gradient
+  const handleApplyGradient = (preset) => {
     setColors({
-      primary: rgba,
-      secondary: rgba,
-      tertiary: rgba
+      main: toStorageRgb(preset.hex),
+      secondary: 'FFFF00', // Keep yellow middle
+      tertiary: 'FFFFFF'   // Keep white edge
+    })
+  }
+
+  // Apply same color to all
+  const handleApplyToAll = (preset) => {
+    const rgb = toStorageRgb(preset.hex)
+    setColors({
+      main: rgb,
+      secondary: rgb,
+      tertiary: rgb
     })
   }
 
   // Get display colors for preview
-  const primaryHex = rgbaToHex(colors.primary)
-  const secondaryHex = rgbaToHex(colors.secondary)
-  const tertiaryHex = rgbaToHex(colors.tertiary)
+  const mainHex = toDisplayHex(colors.main)
+  const secondaryHex = toDisplayHex(colors.secondary)
+  const tertiaryHex = toDisplayHex(colors.tertiary)
 
   return (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -238,7 +249,7 @@ export default function SideBEditorModal({
         <div className="laser-editor-header">
           <div className="laser-editor-title">
             <span className="laser-editor-title-text">
-              {editingMod ? 'Edit Side-B Mod' : 'Create Side-B Mod'}
+              {editingMod ? 'Edit Sword Trail' : 'Create Sword Trail'}
             </span>
             <span className="laser-editor-title-char">{character}</span>
           </div>
@@ -255,72 +266,89 @@ export default function SideBEditorModal({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Red Phantasm, Blue Illusion..."
+              placeholder="e.g., Blue Sword, Ice Trail..."
               className="laser-editor-name-input"
             />
           </div>
 
-          {/* Preview - afterimage visualization */}
+          {/* Preview - sword trail visualization */}
           <div className="laser-preview">
             <div className="laser-preview-label">Preview</div>
             <div className="laser-preview-display" style={{ background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)' }}>
-              {/* Afterimage trail */}
-              {[0.15, 0.3, 0.5, 0.7].map((opacity, i) => (
-                <div
-                  key={i}
-                  style={{
-                    position: 'absolute',
-                    left: `${10 + i * 18}%`,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: '24px',
-                    height: '36px',
-                    borderRadius: '4px',
-                    background: `linear-gradient(135deg, ${primaryHex} 0%, ${secondaryHex} 50%, ${tertiaryHex} 100%)`,
-                    opacity: opacity,
-                    boxShadow: `0 0 ${8 + i * 4}px ${primaryHex}40`
-                  }}
-                />
-              ))}
-              {/* Main silhouette */}
-              <div
-                style={{
-                  position: 'absolute',
-                  right: '12%',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: '28px',
-                  height: '40px',
-                  borderRadius: '4px',
-                  background: `linear-gradient(135deg, ${primaryHex} 0%, ${secondaryHex} 50%, ${tertiaryHex} 100%)`,
-                  boxShadow: `0 0 12px ${primaryHex}60, 0 0 20px ${secondaryHex}40`
-                }}
-              />
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {/* Sword trail arc */}
+                <svg width="120" height="60" viewBox="0 0 120 60" style={{ overflow: 'visible' }}>
+                  {/* Outer edge (tertiary) */}
+                  <path
+                    d="M 10 50 Q 60 -10 110 50"
+                    fill="none"
+                    stroke={tertiaryHex}
+                    strokeWidth="16"
+                    strokeLinecap="round"
+                    opacity="0.5"
+                  />
+                  {/* Middle (secondary) */}
+                  <path
+                    d="M 10 50 Q 60 -10 110 50"
+                    fill="none"
+                    stroke={secondaryHex}
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    opacity="0.7"
+                  />
+                  {/* Inner core (main) */}
+                  <path
+                    d="M 10 50 Q 60 -10 110 50"
+                    fill="none"
+                    stroke={mainHex}
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
             </div>
           </div>
 
-          {/* Color pickers for each layer */}
-          {extraType.properties.map((prop) => (
-            <RgbaColorPicker
-              key={prop.id}
-              label={prop.name}
-              description={prop.description}
-              value={colors[prop.id]}
-              onChange={(value) => handleColorChange(prop.id, value)}
-            />
-          ))}
+          {/* Color pickers */}
+          <ColorPicker
+            label="Main"
+            description="Primary trail color (inner)"
+            value={colors.main}
+            onChange={(value) => handleColorChange('main', value)}
+          />
 
-          {/* Quick apply to all */}
+          <ColorPicker
+            label="Secondary"
+            description="Middle gradient color"
+            value={colors.secondary}
+            onChange={(value) => handleColorChange('secondary', value)}
+          />
+
+          <ColorPicker
+            label="Edge"
+            description="Outer edge color"
+            value={colors.tertiary}
+            onChange={(value) => handleColorChange('tertiary', value)}
+          />
+
+          {/* Quick apply */}
           <div className="laser-apply-all">
-            <span className="laser-apply-all-label">Apply to all layers:</span>
+            <span className="laser-apply-all-label">Set main color:</span>
             <div className="laser-apply-all-presets">
               {COLOR_PRESETS.slice(0, 6).map((preset) => (
                 <button
                   key={preset.name}
                   className="laser-apply-preset"
                   style={{ backgroundColor: preset.hex }}
-                  onClick={() => handleApplyToAll(preset.rgba)}
-                  title={`Set all to ${preset.name}`}
+                  onClick={() => handleApplyGradient(preset)}
+                  title={`Set main to ${preset.name}`}
                 />
               ))}
             </div>

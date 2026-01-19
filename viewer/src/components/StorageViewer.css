@@ -4249,11 +4249,38 @@
 /* Editor Footer */
 .laser-editor-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   background: rgba(0, 0, 0, 0.3);
   border-top: 1px solid var(--color-border);
+}
+
+.laser-editor-footer-right {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.laser-editor-delete {
+  background: #5c2b2b;
+  color: #ff8888;
+  border: 1px solid #7a3d3d;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.laser-editor-delete:hover:not(:disabled) {
+  background: #7a3d3d;
+  color: #ffaaaa;
+}
+
+.laser-editor-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .laser-editor-cancel {

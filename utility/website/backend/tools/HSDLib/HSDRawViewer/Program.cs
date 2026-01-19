@@ -13,6 +13,12 @@ using HSDRawViewer.Converters.Animation;
 using HSDRawViewer.GUI.Controls.JObjEditor;
 using HSDRaw.Tools.Melee;
 using HSDRaw.Common.Animation;
+using HSDRawViewer.Converters;
+using IONET;
+using IONET.Core;
+using IONET.Core.Model;
+using HSDRaw;
+using HSDRaw.Common;
 namespace HSDRawViewer
 {
     static class Program
@@ -70,6 +76,15 @@ namespace HSDRawViewer
             {
                 Console.WriteLine("Embedded mode detected");
                 RunEmbeddedServer(args);
+                return;
+            }
+
+            // Check for model export/import mode
+            if (args.Length >= 4 && args[0] == "--model")
+            {
+                AllocConsole();
+                Console.WriteLine("Model operation mode detected");
+                RunModelOperation(args);
                 return;
             }
 
@@ -960,6 +975,346 @@ namespace HSDRawViewer
             finally
             {
                 Console.WriteLine("RunCSPGeneration finally block reached");
+            }
+        }
+
+        /// <summary>
+        /// Run model export/import operations in headless mode.
+        /// Usage:
+        ///   Export: HSDRawViewer.exe --model export [dat_file] [jobj_path] [output.dae]
+        ///   Import: HSDRawViewer.exe --model import [dat_file] [jobj_path] [model.dae] [output.dat]
+        /// </summary>
+        static void RunModelOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 5)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --model export <dat_file> <jobj_path> <output.dae>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --model import <dat_file> <jobj_path> <model.dae> <output.dat>");
+                    Console.WriteLine();
+                    Console.WriteLine("Example paths:");
+                    Console.WriteLine("  ftDataFalco/Articles/Articles_1/Model_/RootModelJoint");
+                    return;
+                }
+
+                string operation = args[1]; // "export" or "import"
+
+                if (operation == "export")
+                {
+                    // HSDRawViewer.exe --model export <dat_file> <jobj_path> <output.dae>
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Export requires: <dat_file> <jobj_path> <output.dae>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string jobjPath = args[3];
+                    string outputFile = args[4];
+
+                    Console.WriteLine($"Exporting model from: {datFile}");
+                    Console.WriteLine($"JOBJ path: {jobjPath}");
+                    Console.WriteLine($"Output file: {outputFile}");
+
+                    // Load DAT
+                    var rawFile = new HSDRawFile(datFile);
+
+                    // Navigate to JOBJ
+                    HSD_JOBJ jobj = NavigateToJOBJ(rawFile, jobjPath);
+                    if (jobj == null)
+                    {
+                        Console.WriteLine($"ERROR: Could not find JOBJ at path: {jobjPath}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine("JOBJ found, exporting...");
+
+                    // Export using existing ModelExporter
+                    var settings = new ModelExportSettings();
+                    var jointMap = new HSDRawViewer.Tools.Animation.JointMap();
+                    ModelExporter.ExportFile(outputFile, jobj, settings, jointMap);
+
+                    Console.WriteLine($"SUCCESS: Exported model to: {outputFile}");
+                }
+                else if (operation == "import")
+                {
+                    // HSDRawViewer.exe --model import <dat_file> <jobj_path> <model.dae> <output.dat>
+                    if (args.Length < 6)
+                    {
+                        Console.WriteLine("Import requires: <dat_file> <jobj_path> <model.dae> <output.dat>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string jobjPath = args[3];
+                    string modelFile = args[4];
+                    string outputDat = args[5];
+
+                    Console.WriteLine($"Importing model into: {datFile}");
+                    Console.WriteLine($"JOBJ path: {jobjPath}");
+                    Console.WriteLine($"Model file: {modelFile}");
+                    Console.WriteLine($"Output DAT: {outputDat}");
+
+                    // Load DAT
+                    var rawFile = new HSDRawFile(datFile);
+
+                    // Get the parent and property info for replacement
+                    var navResult = NavigateToJOBJWithParent(rawFile, jobjPath);
+                    if (navResult.jobj == null)
+                    {
+                        Console.WriteLine($"ERROR: Could not find JOBJ at path: {jobjPath}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine("JOBJ found, importing model...");
+
+                    // Import model headlessly
+                    HSD_JOBJ newJobj = ImportModelHeadless(modelFile, navResult.jobj);
+                    if (newJobj == null)
+                    {
+                        Console.WriteLine("ERROR: Failed to import model");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine("Model imported, replacing structure...");
+
+                    // Replace the JOBJ structure
+                    navResult.jobj._s.SetFromStruct(newJobj._s);
+
+                    // Save modified DAT
+                    rawFile.Save(outputDat);
+
+                    Console.WriteLine($"SUCCESS: Imported model and saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown operation: {operation}");
+                    Console.WriteLine("Use 'export' or 'import'");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Model operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Navigate to a JOBJ within a DAT file using a path like:
+        /// "ftDataFalco/Articles/Articles_1/Model_/RootModelJoint"
+        /// </summary>
+        static HSD_JOBJ NavigateToJOBJ(HSDRawFile rawFile, string path)
+        {
+            var result = NavigateToJOBJWithParent(rawFile, path);
+            return result.jobj;
+        }
+
+        /// <summary>
+        /// Navigate to a JOBJ and return it along with parent info for replacement.
+        /// </summary>
+        static (HSD_JOBJ jobj, HSDAccessor parent, string propertyName) NavigateToJOBJWithParent(HSDRawFile rawFile, string path)
+        {
+            try
+            {
+                string[] parts = path.Split('/');
+                if (parts.Length == 0)
+                    return (null, null, null);
+
+                // Find root by name
+                var root = rawFile.Roots.Find(r => r.Name == parts[0]);
+                if (root == null)
+                {
+                    Console.WriteLine($"Root '{parts[0]}' not found. Available roots:");
+                    foreach (var r in rawFile.Roots)
+                        Console.WriteLine($"  - {r.Name}");
+                    return (null, null, null);
+                }
+
+                HSDAccessor current = root.Data;
+                HSDAccessor parent = null;
+                string lastPropName = null;
+
+                // Navigate through properties
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    string part = parts[i];
+
+                    // Handle array indexing like "Articles_1"
+                    if (part.Contains("_") && !part.EndsWith("_"))
+                    {
+                        int lastUnderscore = part.LastIndexOf('_');
+                        string propName = part.Substring(0, lastUnderscore);
+                        string indexStr = part.Substring(lastUnderscore + 1);
+
+                        if (int.TryParse(indexStr, out int index))
+                        {
+                            var prop = current.GetType().GetProperty(propName);
+                            if (prop == null)
+                            {
+                                Console.WriteLine($"Property '{propName}' not found on type {current.GetType().Name}");
+                                return (null, null, null);
+                            }
+
+                            var arr = prop.GetValue(current);
+                            if (arr is Array array)
+                            {
+                                parent = current;
+                                lastPropName = part;
+                                current = array.GetValue(index) as HSDAccessor;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Property '{propName}' is not an array");
+                                return (null, null, null);
+                            }
+                        }
+                        else
+                        {
+                            // Not an array index, treat as normal property
+                            var prop = current.GetType().GetProperty(part);
+                            if (prop == null)
+                            {
+                                Console.WriteLine($"Property '{part}' not found on type {current.GetType().Name}");
+                                return (null, null, null);
+                            }
+                            parent = current;
+                            lastPropName = part;
+                            current = prop.GetValue(current) as HSDAccessor;
+                        }
+                    }
+                    else
+                    {
+                        var prop = current.GetType().GetProperty(part);
+                        if (prop == null)
+                        {
+                            // Try removing trailing underscore
+                            string altPart = part.TrimEnd('_');
+                            prop = current.GetType().GetProperty(altPart);
+                            if (prop == null)
+                            {
+                                Console.WriteLine($"Property '{part}' not found on type {current.GetType().Name}");
+                                Console.WriteLine($"Available properties:");
+                                foreach (var p in current.GetType().GetProperties())
+                                    Console.WriteLine($"  - {p.Name}");
+                                return (null, null, null);
+                            }
+                        }
+                        parent = current;
+                        lastPropName = part;
+                        current = prop.GetValue(current) as HSDAccessor;
+                    }
+
+                    if (current == null)
+                    {
+                        Console.WriteLine($"Navigation returned null at '{part}'");
+                        return (null, null, null);
+                    }
+                }
+
+                return (current as HSD_JOBJ, parent, lastPropName);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Navigation error: {ex.Message}");
+                return (null, null, null);
+            }
+        }
+
+        /// <summary>
+        /// Import a model file (.dae, .obj, etc.) headlessly and return the resulting JOBJ.
+        /// </summary>
+        static HSD_JOBJ ImportModelHeadless(string modelFile, HSD_JOBJ original)
+        {
+            try
+            {
+                // Load model using IONET
+                IOScene scene = IOManager.LoadScene(modelFile, new ImportSettings { Triangulate = true });
+                if (scene.Models.Count == 0)
+                {
+                    Console.WriteLine("No models found in file");
+                    return null;
+                }
+
+                IOModel model = scene.Models[0];
+                Console.WriteLine($"Loaded model with {model.Meshes.Count} meshes");
+
+                // Remove Blender's armature root if present
+                for (int i = 0; i < model.Skeleton.RootBones.Count; i++)
+                {
+                    if (model.Skeleton.RootBones[i].Name.Equals("Armature"))
+                    {
+                        model.Skeleton.RootBones[i] = model.Skeleton.RootBones[i].Child;
+                        if (model.Skeleton.RootBones[i] != null)
+                            model.Skeleton.RootBones[i].Parent = null;
+                    }
+                }
+
+                // Create default settings
+                var settings = new ModelImportSettings
+                {
+                    UseStrips = true,
+                    ImportSkinning = true,
+                    ClassicalScaling = true
+                };
+
+                // Create mesh settings for each mesh
+                var meshSettings = model.Meshes.Select(m => new MeshImportSettings(m)
+                {
+                    FlipUVs = true,
+                    ImportNormals = ImportNormalSettings.Yes
+                });
+
+                // Create material settings for each material
+                var materialSettings = scene.Materials.Select(m => new MaterialImportSettings(m)
+                {
+                    ImportTexture = true,
+                    EnableDiffuse = true
+                });
+
+                // Create importer - use absolute path for folder
+                string absModelPath = System.IO.Path.GetFullPath(modelFile);
+                string folderPath = System.IO.Path.GetDirectoryName(absModelPath);
+                Console.WriteLine($"Model folder: {folderPath}");
+
+                var importer = new ModelImporter(
+                    folderPath,
+                    scene, model, settings,
+                    meshSettings, materialSettings);
+
+                // Run import synchronously using a dummy worker
+                Console.WriteLine("Running import...");
+                var worker = new System.ComponentModel.BackgroundWorker();
+                worker.WorkerReportsProgress = true;
+                worker.ProgressChanged += (s, e) => Console.WriteLine($"Progress: {e.ProgressPercentage}%");
+
+                // Call Work directly on current thread
+                importer.Work(worker);
+                Console.WriteLine("Import completed");
+
+                // Get the result using reflection (NewModel is private)
+                var newModelField = typeof(ModelImporter).GetField("NewModel",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (newModelField != null)
+                {
+                    var result = newModelField.GetValue(importer) as HSD_JOBJ;
+                    Console.WriteLine($"NewModel found: {result != null}");
+                    return result;
+                }
+
+                Console.WriteLine("Could not access NewModel field");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Import error: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                return null;
             }
         }
 

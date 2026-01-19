@@ -5,6 +5,150 @@
 
 // NOTE: Offsets are character-specific - do not copy between characters
 export const EXTRA_TYPES = {
+  Marth: [
+    {
+      id: 'sword',
+      name: 'Sword Trail',
+      description: 'Sword swing trail colors',
+      targetFile: 'PlMs.dat',
+      icon: 'sword',
+      // 9 bytes: 3x RGB colors for sword trail gradient
+      offsets: {
+        main: { start: 0x3948, size: 3, format: 'RGB' },
+        secondary: { start: 0x394B, size: 3, format: 'RGB' },
+        tertiary: { start: 0x394E, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        main: 'FF0000',      // Red
+        secondary: 'FFFF00', // Yellow
+        tertiary: 'FFFFFF'   // White
+      },
+      properties: [
+        { id: 'main', name: 'Main', description: 'Primary trail color', format: 'RGB' },
+        { id: 'secondary', name: 'Secondary', description: 'Middle gradient color', format: 'RGB' },
+        { id: 'tertiary', name: 'Edge', description: 'Outer edge color', format: 'RGB' }
+      ]
+    }
+  ],
+  Roy: [
+    {
+      id: 'sword',
+      name: 'Sword Trail',
+      description: 'Sword swing trail colors',
+      targetFile: 'PlFe.dat',
+      icon: 'sword',
+      offsets: {
+        main: { start: 0x3AA0, size: 3, format: 'RGB' },
+        secondary: { start: 0x3AA3, size: 3, format: 'RGB' },
+        tertiary: { start: 0x3AA6, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        main: 'FF00EB',      // Magenta/Pink
+        secondary: '785000', // Brown/Orange
+        tertiary: 'FFFFFF'   // White
+      },
+      properties: [
+        { id: 'main', name: 'Main', description: 'Primary trail color', format: 'RGB' },
+        { id: 'secondary', name: 'Secondary', description: 'Middle gradient color', format: 'RGB' },
+        { id: 'tertiary', name: 'Edge', description: 'Outer edge color', format: 'RGB' }
+      ]
+    }
+  ],
+  Link: [
+    {
+      id: 'sword',
+      name: 'Sword Trail',
+      description: 'Sword swing trail colors',
+      targetFile: 'PlLk.dat',
+      icon: 'sword',
+      offsets: {
+        main: { start: 0x35EC, size: 3, format: 'RGB' },
+        secondary: { start: 0x35EF, size: 3, format: 'RGB' },
+        tertiary: { start: 0x35F2, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        main: 'FF0000',      // Red
+        secondary: 'FFFF00', // Yellow
+        tertiary: 'FFFFFF'   // White
+      },
+      properties: [
+        { id: 'main', name: 'Main', description: 'Primary trail color', format: 'RGB' },
+        { id: 'secondary', name: 'Secondary', description: 'Middle gradient color', format: 'RGB' },
+        { id: 'tertiary', name: 'Edge', description: 'Outer edge color', format: 'RGB' }
+      ]
+    }
+  ],
+  'Young Link': [
+    {
+      id: 'sword',
+      name: 'Sword Trail',
+      description: 'Sword swing trail colors',
+      targetFile: 'PlCl.dat',
+      icon: 'sword',
+      offsets: {
+        main: { start: 0x3790, size: 3, format: 'RGB' },
+        secondary: { start: 0x3793, size: 3, format: 'RGB' },
+        tertiary: { start: 0x3796, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        main: 'FF0000',      // Red
+        secondary: 'FFFF00', // Yellow
+        tertiary: 'FFFFFF'   // White
+      },
+      properties: [
+        { id: 'main', name: 'Main', description: 'Primary trail color', format: 'RGB' },
+        { id: 'secondary', name: 'Secondary', description: 'Middle gradient color', format: 'RGB' },
+        { id: 'tertiary', name: 'Edge', description: 'Outer edge color', format: 'RGB' }
+      ]
+    }
+  ],
+  Pikachu: [
+    {
+      id: 'thunder',
+      name: 'Thunder',
+      description: 'Down-B Thunder bolt colors',
+      targetFile: 'PlPk.dat',
+      icon: 'thunder',
+      format: '07_07_07',
+      shared: true,
+      sharedWith: ['Pichu'],
+      owner: 'Pikachu',
+      offsets: {
+        color1: { start: 0xC358, size: 3, format: 'RGB' },
+        color2: { start: 0xC35C, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        color1: 'FFFFFF',  // White
+        color2: 'FFFF00'   // Yellow
+      },
+      properties: [
+        { id: 'color1', name: 'Primary', description: 'Main bolt color', format: 'RGB' },
+        { id: 'color2', name: 'Secondary', description: 'Bolt glow color', format: 'RGB' }
+      ]
+    }
+  ],
+  Mewtwo: [
+    {
+      id: 'shadow_ball',
+      name: 'Shadow Ball',
+      description: 'Shadow Ball colors',
+      targetFile: 'PlMt.dat',
+      icon: 'shadowball',
+      format: 'direct_rgb',
+      offsets: {
+        color1: { start: 0x100B0, size: 3, format: 'RGB' },
+        color2: { start: 0x100B4, size: 3, format: 'RGB' }
+      },
+      vanilla: {
+        color1: 'FFFFFF',  // White
+        color2: '0000FF'   // Blue
+      },
+      properties: [
+        { id: 'color1', name: 'Primary', description: 'Main ball color', format: 'RGB' },
+        { id: 'color2', name: 'Secondary', description: 'Inner glow color', format: 'RGB' }
+      ]
+    }
+  ],
   Falco: [
     {
       id: 'laser',
@@ -47,6 +191,15 @@ export const EXTRA_TYPES = {
         { id: 'secondary', name: 'Secondary', description: 'Edge/gradient color' },
         { id: 'tertiary', name: 'Glow', description: 'Outer glow color' }
       ]
+    },
+    {
+      id: 'gun',
+      name: 'Gun Model',
+      description: 'Replace Falco\'s blaster gun model',
+      targetFile: 'PlFc.dat',
+      icon: 'gun',
+      type: 'model',  // Model type - uses .dae file instead of hex patches
+      modelPath: 'ftDataFalco/Articles/Articles_1/Model_/RootModelJoint'
     }
   ],
   Fox: [
@@ -173,6 +326,15 @@ export const EXTRA_TYPES = {
         { id: 'outer', name: 'Outer Glow', description: 'Outer flash effect', format: 'RGBY' },
         { id: 'bubble', name: 'Bubble', description: 'Transparent bubble overlay', format: '42_48' }
       ]
+    },
+    {
+      id: 'gun',
+      name: 'Gun Model',
+      description: 'Replace Fox\'s blaster gun model',
+      targetFile: 'PlFx.dat',
+      icon: 'gun',
+      type: 'model',  // Model type - uses .dae file instead of hex patches
+      modelPath: 'ftDataFox/Articles/Articles_1/Model_/RootModelJoint'
     }
   ]
 }

@@ -5,6 +5,9 @@ import LaserEditorModal from './LaserEditorModal'
 import SideBEditorModal from './SideBEditorModal'
 import UpBEditorModal from './UpBEditorModal'
 import ShineEditorModal from './ShineEditorModal'
+import SwordEditorModal from './SwordEditorModal'
+import DualColorEditorModal from './DualColorEditorModal'
+import GunEditorModal from './GunEditorModal'
 
 /**
  * ExtrasPageView - Full-page view for managing character extras
@@ -74,6 +77,58 @@ const ShineIcon = () => (
   </svg>
 )
 
+// Icon for sword trail
+const SwordIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M14.5 4L20 9.5 9.5 20H4v-5.5L14.5 4z" strokeLinejoin="round" />
+    <path d="M16 2l6 6" strokeLinecap="round" />
+    <path d="M4 20l3-3" strokeLinecap="round" />
+  </svg>
+)
+
+// Icon for punch effects (Falcon Punch, Warlock Punch)
+const PunchIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 4v4M12 16v4M4 12h4M16 12h4" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.5" />
+  </svg>
+)
+
+// Icon for thunder effects (Pikachu/Pichu Thunder, PK Thunder)
+const ThunderIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinejoin="round" />
+  </svg>
+)
+
+// Icon for fireball effects (Mario/Luigi)
+const FireballIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="6" />
+    <path d="M12 6c-2 0-3 2-3 3s1 2 3 2 3-1 3-2-1-3-3-3z" fill="currentColor" opacity="0.3" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+  </svg>
+)
+
+// Icon for shadow ball (Mewtwo)
+const ShadowBallIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="5" opacity="0.5" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+  </svg>
+)
+
+// Icon for gun model (blaster)
+const GunIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 14h10l4-4h2v4l-2 2H4z" strokeLinejoin="round" />
+    <path d="M6 14v4h2v-4" strokeLinejoin="round" />
+    <circle cx="16" cy="10" r="1" fill="currentColor" />
+  </svg>
+)
+
 const EffectIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
@@ -81,7 +136,19 @@ const EffectIcon = () => (
   </svg>
 )
 
-const ICONS = { laser: LaserIcon, sideb: SideBIcon, upb: UpBIcon, shine: ShineIcon, effect: EffectIcon }
+const ICONS = {
+  laser: LaserIcon,
+  sideb: SideBIcon,
+  upb: UpBIcon,
+  shine: ShineIcon,
+  sword: SwordIcon,
+  punch: PunchIcon,
+  thunder: ThunderIcon,
+  fireball: FireballIcon,
+  shadowball: ShadowBallIcon,
+  gun: GunIcon,
+  effect: EffectIcon
+}
 
 /**
  * LaserBeamPreview - Reusable laser visualization component
@@ -409,10 +476,242 @@ function ShinePreview({ modifications, compact = false }) {
   )
 }
 
+function SwordPreview({ modifications, compact = false }) {
+  // Get RGB colors from modifications
+  const mainColor = modifications?.main?.color ? `#${modifications.main.color}` : '#FF0000'
+  const secondaryColor = modifications?.secondary?.color ? `#${modifications.secondary.color}` : '#FFFF00'
+  const tertiaryColor = modifications?.tertiary?.color ? `#${modifications.tertiary.color}` : '#FFFFFF'
+
+  const height = compact ? 40 : 50
+
+  return (
+    <div
+      className="sword-preview"
+      style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      <svg width={compact ? 80 : 100} height={compact ? 35 : 45} viewBox="0 0 100 45" style={{ overflow: 'visible' }}>
+        {/* Outer edge (tertiary) */}
+        <path
+          d="M 5 40 Q 50 0 95 40"
+          fill="none"
+          stroke={tertiaryColor}
+          strokeWidth={compact ? 12 : 14}
+          strokeLinecap="round"
+          opacity="0.5"
+        />
+        {/* Middle (secondary) */}
+        <path
+          d="M 5 40 Q 50 0 95 40"
+          fill="none"
+          stroke={secondaryColor}
+          strokeWidth={compact ? 7 : 9}
+          strokeLinecap="round"
+          opacity="0.7"
+        />
+        {/* Inner core (main) */}
+        <path
+          d="M 5 40 Q 50 0 95 40"
+          fill="none"
+          stroke={mainColor}
+          strokeWidth={compact ? 3 : 4}
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * DualColorPreview - Preview for 2-color effects (punch, fireball, thunder, shadow ball)
+ * Renders based on the extraType to show appropriate visual
+ */
+function DualColorPreview({ extraType, modifications, compact = false }) {
+  // Get colors - handle both color1/color2 and tip_color1/tip_color2 formats
+  const color1 = modifications?.color1?.color || modifications?.tip_color1?.color || 'FFFFFF'
+  const color2 = modifications?.color2?.color || modifications?.tip_color2?.color || '0000FF'
+  const color1Hex = `#${color1}`
+  const color2Hex = `#${color2}`
+
+  const height = compact ? 40 : 50
+
+  // Punch effect - explosion/flame burst
+  if (extraType?.id === 'falcon_punch' || extraType?.id === 'warlock_punch') {
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 80 : 100} height={compact ? 36 : 45} viewBox="0 0 100 45">
+          <ellipse cx="50" cy="22" rx="40" ry="18" fill={color2Hex} opacity="0.3" />
+          <ellipse cx="50" cy="22" rx="28" ry="12" fill={color1Hex} opacity="0.6" />
+          <ellipse cx="50" cy="22" rx="15" ry="6" fill={color1Hex} />
+        </svg>
+      </div>
+    )
+  }
+
+  // Thunder effect - lightning bolt
+  if (extraType?.id === 'thunder' || extraType?.id === 'pk_thunder') {
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+          <path d="M42 3 L28 18 L38 18 L24 42 L56 22 L44 22 L58 3 Z"
+            fill={color2Hex} opacity="0.4" transform="scale(1.1) translate(-4, -2)" />
+          <path d="M42 3 L28 18 L38 18 L24 42 L56 22 L44 22 L58 3 Z"
+            fill={color1Hex} />
+        </svg>
+      </div>
+    )
+  }
+
+  // Fireball effect
+  if (extraType?.id === 'fireball') {
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+          <circle cx="40" cy="22" r="18" fill={color2Hex} opacity="0.4" />
+          <circle cx="40" cy="22" r="12" fill={color1Hex} opacity="0.7" />
+          <circle cx="40" cy="22" r="6" fill={color1Hex} />
+        </svg>
+      </div>
+    )
+  }
+
+  // Shadow Ball effect
+  if (extraType?.id === 'shadow_ball') {
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+          <circle cx="40" cy="22" r="18" fill={color2Hex} opacity="0.3" />
+          <circle cx="40" cy="22" r="13" fill={color1Hex} opacity="0.5" />
+          <circle cx="40" cy="22" r="7" fill={color1Hex} />
+        </svg>
+      </div>
+    )
+  }
+
+  // Default dual-color
+  return (
+    <div style={{
+      position: 'relative',
+      height: `${height}px`,
+      background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+      borderRadius: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    }}>
+      <svg width={compact ? 80 : 100} height={compact ? 36 : 45} viewBox="0 0 100 45">
+        <circle cx="35" cy="22" r="14" fill={color1Hex} />
+        <circle cx="65" cy="22" r="14" fill={color2Hex} />
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * ModelPreview - Preview for model-type extras (gun, etc.)
+ * Shows a placeholder with 3D icon since we can't render actual models
+ */
+function ModelPreview({ extraType, mod, compact = false }) {
+  const height = compact ? 40 : 50
+
+  return (
+    <div
+      className="model-preview"
+      style={{
+        position: 'relative',
+        height: `${height}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      {/* 3D cube icon */}
+      <svg
+        width={compact ? 24 : 32}
+        height={compact ? 24 : 32}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#4a9eff"
+        strokeWidth="1.5"
+      >
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+      </svg>
+      {mod?.name && (
+        <span style={{
+          position: 'absolute',
+          bottom: '4px',
+          fontSize: '9px',
+          color: '#666',
+          maxWidth: '90%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}>
+          {mod.model_file ? '3D Model' : 'No model'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /**
  * ExtraPreview - Renders appropriate preview based on extra type
  */
-function ExtraPreview({ extraType, modifications, compact = false }) {
+function ExtraPreview({ extraType, modifications, mod, compact = false }) {
+  // Model types use ModelPreview
+  if (extraType.type === 'model') {
+    return <ModelPreview extraType={extraType} mod={mod} compact={compact} />
+  }
   if (extraType.id === 'sideb') {
     return <SideBPreview modifications={modifications} compact={compact} />
   }
@@ -421,6 +720,13 @@ function ExtraPreview({ extraType, modifications, compact = false }) {
   }
   if (extraType.id === 'shine') {
     return <ShinePreview modifications={modifications} compact={compact} />
+  }
+  if (extraType.id === 'sword') {
+    return <SwordPreview modifications={modifications} compact={compact} />
+  }
+  // 2-color effects (punch, thunder, fireball, shadow ball, pk_thunder)
+  if (['falcon_punch', 'warlock_punch', 'thunder', 'pk_thunder', 'fireball', 'shadow_ball'].includes(extraType.id)) {
+    return <DualColorPreview extraType={extraType} modifications={modifications} compact={compact} />
   }
   // Default to laser preview
   return <LaserBeamPreview modifications={modifications} compact={compact} />
@@ -431,6 +737,16 @@ function ExtraPreview({ extraType, modifications, compact = false }) {
  */
 function ExtraTypeCard({ extraType, modCount, onClick }) {
   const Icon = ICONS[extraType.icon] || EffectIcon
+
+  // Build shared text based on sharedWith array
+  const getSharedText = () => {
+    if (!extraType.shared || !extraType.sharedWith) return null
+    const chars = [extraType.owner, ...extraType.sharedWith].filter(Boolean)
+    if (chars.length === 2) {
+      return `Applies to both ${chars[0]} and ${chars[1]}`
+    }
+    return `Shared with ${extraType.sharedWith.join(', ')}`
+  }
 
   return (
     <div className="extra-type-page-card" onClick={onClick}>
@@ -443,7 +759,7 @@ function ExtraTypeCard({ extraType, modCount, onClick }) {
           {modCount} mod{modCount !== 1 ? 's' : ''}
         </span>
         {extraType.shared && (
-          <span className="extra-type-shared">Applies to both Fox and Falco</span>
+          <span className="extra-type-shared">{getSharedText()}</span>
         )}
       </div>
     </div>
@@ -454,67 +770,22 @@ function ExtraTypeCard({ extraType, modCount, onClick }) {
  * ExtraModCard - Individual extra mod card (same size as skin cards)
  */
 function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) {
-  const [deleting, setDeleting] = useState(false)
-
-  const handleDelete = async (e) => {
-    e.stopPropagation()
-    if (!confirm(`Delete "${mod.name}"?`)) return
-
-    setDeleting(true)
-    try {
-      const response = await fetch(`${API_URL}/storage/extras/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character,
-          extraType: extraType.id,
-          modId: mod.id
-        })
-      })
-      const data = await response.json()
-      if (data.success) {
-        onDelete?.(mod.id)
-      } else {
-        alert(`Delete failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('[ExtraModCard] Delete error:', err)
-      alert(`Delete error: ${err.message}`)
-    } finally {
-      setDeleting(false)
-    }
-  }
+  const isModelType = extraType.type === 'model'
 
   return (
     <div className="extra-mod-card" onClick={() => onEdit?.(mod)}>
       <div className="extra-mod-image-container">
         {/* Preview based on extra type */}
-        <ExtraPreview extraType={extraType} modifications={mod.modifications} compact />
-
-        {/* Edit button */}
-        <button
-          className="btn-edit"
-          onClick={(e) => { e.stopPropagation(); onEdit?.(mod) }}
-          title="Edit"
-        >
-          ✎
-        </button>
-
-        {/* Delete button */}
-        <button
-          className="extra-mod-delete"
-          onClick={handleDelete}
-          disabled={deleting}
-          title="Delete"
-        >
-          <TrashIcon />
-        </button>
+        <ExtraPreview extraType={extraType} modifications={mod.modifications} mod={mod} compact />
       </div>
 
       <div className="extra-mod-info">
         <div className="extra-mod-name">{mod.name}</div>
         {mod.source === 'imported' && (
           <div className="extra-mod-badge">Imported</div>
+        )}
+        {mod.source === 'uploaded' && (
+          <div className="extra-mod-badge">Uploaded</div>
         )}
       </div>
     </div>
@@ -523,9 +794,28 @@ function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) 
 
 /**
  * CreateExtraModCard - "Create New Mod" card matching skin card size
+ * For model types, directly shows import option without create
  */
-function CreateExtraModCard({ onCreateNew, onImport, uploading }) {
+function CreateExtraModCard({ extraType, onCreateNew, onImport, uploading }) {
   const [showOptions, setShowOptions] = useState(false)
+  const isModelType = extraType?.type === 'model'
+
+  // For model types, clicking directly opens the import modal
+  if (isModelType) {
+    return (
+      <div className="extra-mod-card create-extra-mod-card" onClick={() => onCreateNew?.()}>
+        <div className="extra-mod-image-container create-extra-mod-placeholder">
+          <div className="create-extra-mod-icon">
+            {uploading ? <span className="create-extra-spinner" /> : <ImportIcon />}
+          </div>
+        </div>
+        <div className="extra-mod-info">
+          <div className="extra-mod-name">{uploading ? 'Importing...' : 'Import Model'}</div>
+          <div className="extra-mod-hint">.dae or .dat</div>
+        </div>
+      </div>
+    )
+  }
 
   if (showOptions) {
     return (
@@ -695,6 +985,7 @@ export default function ExtrasPageView({
               />
             ))}
             <CreateExtraModCard
+              extraType={selectedType}
               onCreateNew={handleCreateNew}
               onImport={handleImport}
               uploading={uploading}
@@ -711,6 +1002,7 @@ export default function ExtrasPageView({
             editingMod={editingMod}
             onClose={handleEditorClose}
             onSave={handleSave}
+            onDelete={handleDelete}
             API_URL={API_URL}
           />
         )}
@@ -724,6 +1016,7 @@ export default function ExtrasPageView({
             editingMod={editingMod}
             onClose={handleEditorClose}
             onSave={handleSave}
+            onDelete={handleDelete}
             API_URL={API_URL}
           />
         )}
@@ -737,6 +1030,7 @@ export default function ExtrasPageView({
             editingMod={editingMod}
             onClose={handleEditorClose}
             onSave={handleSave}
+            onDelete={handleDelete}
             API_URL={API_URL}
           />
         )}
@@ -750,6 +1044,49 @@ export default function ExtrasPageView({
             editingMod={editingMod}
             onClose={handleEditorClose}
             onSave={handleSave}
+            onDelete={handleDelete}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Sword Editor Modal */}
+        {selectedType.id === 'sword' && (
+          <SwordEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            onDelete={handleDelete}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Dual Color Editor Modal - for punch, thunder, fireball, shadow ball effects */}
+        {['falcon_punch', 'warlock_punch', 'thunder', 'pk_thunder', 'fireball', 'shadow_ball'].includes(selectedType.id) && (
+          <DualColorEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            onDelete={handleDelete}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Gun Editor Modal - for model type extras */}
+        {selectedType.type === 'model' && (
+          <GunEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            onDelete={handleDelete}
             API_URL={API_URL}
           />
         )}

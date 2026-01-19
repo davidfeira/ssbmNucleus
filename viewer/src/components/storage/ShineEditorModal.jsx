@@ -172,11 +172,13 @@ export default function ShineEditorModal({
   editingMod,
   onClose,
   onSave,
+  onDelete,
   API_URL
 }) {
   const [name, setName] = useState('')
   const [colors, setColors] = useState({ ...DEFAULT_COLORS })
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
 
   // Initialize from editing mod if provided
@@ -250,6 +252,35 @@ export default function ShineEditorModal({
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editingMod) return
+    if (!confirm(`Delete "${editingMod.name}"?`)) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/extras/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character,
+          extraType: extraType.id,
+          modId: editingMod.id
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        onDelete?.(editingMod.id)
+        onClose()
+      } else {
+        setError(`Delete failed: ${data.error}`)
+      }
+    } catch (err) {
+      setError(`Delete error: ${err.message}`)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -416,17 +447,28 @@ export default function ShineEditorModal({
         </div>
 
         <div className="laser-editor-footer">
-          <button className="laser-editor-cancel" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="laser-editor-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            <SaveIcon />
-            <span>{saving ? 'Saving...' : 'Save Mod'}</span>
-          </button>
+          {editingMod && (
+            <button
+              className="laser-editor-delete"
+              onClick={handleDelete}
+              disabled={deleting || saving}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+          )}
+          <div className="laser-editor-footer-right">
+            <button className="laser-editor-cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="laser-editor-save"
+              onClick={handleSave}
+              disabled={saving || deleting}
+            >
+              <SaveIcon />
+              <span>{saving ? 'Saving...' : 'Save Mod'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

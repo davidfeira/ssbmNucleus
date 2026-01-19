@@ -107,7 +107,13 @@ export default function CharacterMode({
 
     setImportingExtra(true)
     try {
-      const response = await fetch(`${API_URL}/storage/extras/install`, {
+      // Use different endpoint for model types vs hex types
+      const isModelType = selectedExtraType.type === 'model'
+      const endpoint = isModelType
+        ? `${API_URL}/storage/models/install`
+        : `${API_URL}/storage/extras/install`
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,11 +125,19 @@ export default function CharacterMode({
 
       const data = await response.json()
       if (data.success) {
-        await fetchCurrentColors()
+        if (!isModelType) {
+          await fetchCurrentColors()
+        } else {
+          // Only show alert for model types since we can't preview them
+          alert(`Successfully installed ${selectedExtraMod.name}!`)
+        }
         setSelectedExtraMod(null)
+      } else {
+        alert(`Install failed: ${data.error}`)
       }
     } catch (err) {
       console.error('Failed to import extra:', err)
+      alert(`Install error: ${err.message}`)
     } finally {
       setImportingExtra(false)
     }
@@ -887,17 +901,258 @@ export default function CharacterMode({
     )
   }
 
+  // Sword preview component for sword trail
+  const SwordPreview = ({ modifications, compact = false }) => {
+    const mainColor = modifications?.main?.color ? `#${modifications.main.color}` : '#FF0000'
+    const secondaryColor = modifications?.secondary?.color ? `#${modifications.secondary.color}` : '#FFFF00'
+    const tertiaryColor = modifications?.tertiary?.color ? `#${modifications.tertiary.color}` : '#FFFFFF'
+
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 80 : 100} height={compact ? 35 : 45} viewBox="0 0 100 45" style={{ overflow: 'visible' }}>
+          {/* Outer edge (tertiary) */}
+          <path
+            d="M 5 40 Q 50 0 95 40"
+            fill="none"
+            stroke={tertiaryColor}
+            strokeWidth={compact ? 12 : 14}
+            strokeLinecap="round"
+            opacity="0.5"
+          />
+          {/* Middle (secondary) */}
+          <path
+            d="M 5 40 Q 50 0 95 40"
+            fill="none"
+            stroke={secondaryColor}
+            strokeWidth={compact ? 7 : 9}
+            strokeLinecap="round"
+            opacity="0.7"
+          />
+          {/* Inner core (main) */}
+          <path
+            d="M 5 40 Q 50 0 95 40"
+            fill="none"
+            stroke={mainColor}
+            strokeWidth={compact ? 3 : 4}
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    )
+  }
+
+  // Dual color preview for 2-color effects (punch, thunder, fireball, shadow ball)
+  const DualColorPreview = ({ extraType, modifications, compact = false }) => {
+    // Get colors - handle both color1/color2 and tip_color1/tip_color2 formats
+    const color1 = modifications?.color1?.color || modifications?.tip_color1?.color || 'FFFFFF'
+    const color2 = modifications?.color2?.color || modifications?.tip_color2?.color || '0000FF'
+    const color1Hex = `#${color1}`
+    const color2Hex = `#${color2}`
+
+    const height = compact ? 40 : 50
+
+    // Punch effect - explosion/flame burst
+    if (extraType?.id === 'falcon_punch' || extraType?.id === 'warlock_punch') {
+      return (
+        <div style={{
+          position: 'relative',
+          height: `${height}px`,
+          width: '100%',
+          background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          <svg width={compact ? 80 : 100} height={compact ? 36 : 45} viewBox="0 0 100 45">
+            <ellipse cx="50" cy="22" rx="40" ry="18" fill={color2Hex} opacity="0.3" />
+            <ellipse cx="50" cy="22" rx="28" ry="12" fill={color1Hex} opacity="0.6" />
+            <ellipse cx="50" cy="22" rx="15" ry="6" fill={color1Hex} />
+          </svg>
+        </div>
+      )
+    }
+
+    // Thunder effect - lightning bolt
+    if (extraType?.id === 'thunder' || extraType?.id === 'pk_thunder') {
+      return (
+        <div style={{
+          position: 'relative',
+          height: `${height}px`,
+          width: '100%',
+          background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+            <path d="M42 3 L28 18 L38 18 L24 42 L56 22 L44 22 L58 3 Z"
+              fill={color2Hex} opacity="0.4" transform="scale(1.1) translate(-4, -2)" />
+            <path d="M42 3 L28 18 L38 18 L24 42 L56 22 L44 22 L58 3 Z"
+              fill={color1Hex} />
+          </svg>
+        </div>
+      )
+    }
+
+    // Fireball effect
+    if (extraType?.id === 'fireball') {
+      return (
+        <div style={{
+          position: 'relative',
+          height: `${height}px`,
+          width: '100%',
+          background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+            <circle cx="40" cy="22" r="18" fill={color2Hex} opacity="0.4" />
+            <circle cx="40" cy="22" r="12" fill={color1Hex} opacity="0.7" />
+            <circle cx="40" cy="22" r="6" fill={color1Hex} />
+          </svg>
+        </div>
+      )
+    }
+
+    // Shadow Ball effect
+    if (extraType?.id === 'shadow_ball') {
+      return (
+        <div style={{
+          position: 'relative',
+          height: `${height}px`,
+          width: '100%',
+          background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          <svg width={compact ? 60 : 80} height={compact ? 36 : 45} viewBox="0 0 80 45">
+            <circle cx="40" cy="22" r="18" fill={color2Hex} opacity="0.3" />
+            <circle cx="40" cy="22" r="13" fill={color1Hex} opacity="0.5" />
+            <circle cx="40" cy="22" r="7" fill={color1Hex} />
+          </svg>
+        </div>
+      )
+    }
+
+    // Default dual-color
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        <svg width={compact ? 80 : 100} height={compact ? 36 : 45} viewBox="0 0 100 45">
+          <circle cx="35" cy="22" r="14" fill={color1Hex} />
+          <circle cx="65" cy="22" r="14" fill={color2Hex} />
+        </svg>
+      </div>
+    )
+  }
+
+  // Model preview for 3D model extras (gun, etc.)
+  const ModelPreview = ({ mod, compact = false }) => {
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        {/* 3D cube icon */}
+        <svg
+          width={compact ? 24 : 32}
+          height={compact ? 24 : 32}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#4a9eff"
+          strokeWidth="1.5"
+        >
+          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+          <path d="M2 17l10 5 10-5" />
+          <path d="M2 12l10 5 10-5" />
+        </svg>
+        {mod?.name && (
+          <span style={{
+            position: 'absolute',
+            bottom: '4px',
+            fontSize: '9px',
+            color: '#666'
+          }}>
+            3D Model
+          </span>
+        )}
+      </div>
+    )
+  }
+
   // Generic extra preview that switches based on type
-  const ExtraPreview = ({ extraType, modifications, compact = false }) => {
-    if (extraType?.id === 'sideb') {
+  const ExtraPreview = ({ extraType, modifications, mod, compact = false }) => {
+    const typeId = extraType?.id
+
+    // Model types (gun, etc.)
+    if (extraType?.type === 'model') {
+      return <ModelPreview mod={mod} compact={compact} />
+    }
+    // Fox/Falco extras
+    if (typeId === 'laser') {
+      return <LaserBeamPreview modifications={modifications} compact={compact} />
+    }
+    if (typeId === 'sideb') {
       return <SideBPreview modifications={modifications} compact={compact} />
     }
-    if (extraType?.id === 'upb') {
+    if (typeId === 'upb') {
       return <UpBPreview modifications={modifications} compact={compact} />
     }
-    if (extraType?.id === 'shine') {
+    if (typeId === 'shine') {
       return <ShinePreview modifications={modifications} compact={compact} />
     }
+    // Sword trails
+    if (typeId === 'sword') {
+      return <SwordPreview modifications={modifications} compact={compact} />
+    }
+    // 2-color effects (punch, thunder, fireball, shadow ball)
+    if (typeId === 'falcon_punch' || typeId === 'warlock_punch' ||
+        typeId === 'thunder' || typeId === 'pk_thunder' ||
+        typeId === 'fireball' || typeId === 'shadow_ball') {
+      return <DualColorPreview extraType={extraType} modifications={modifications} compact={compact} />
+    }
+    // Fallback to laser for unknown types
+    console.warn('[ExtraPreview] Unknown extra type:', typeId)
     return <LaserBeamPreview modifications={modifications} compact={compact} />
   }
 
@@ -914,6 +1169,10 @@ export default function CharacterMode({
   // Extras mode UI
   if (extrasMode && selectedFighter) {
     const extraTypes = getExtraTypes(selectedFighter.name)
+    console.log('[CharacterMode] Extras for', selectedFighter.name, ':', extraTypes.map(t => t.id))
+    if (selectedExtraType) {
+      console.log('[CharacterMode] Selected extra type:', selectedExtraType.id, selectedExtraType)
+    }
 
     return (
       <div className="mex-content">
@@ -932,8 +1191,10 @@ export default function CharacterMode({
                     <span className="costume-count">
                       {(extraMods[extraType.id] || []).length} in vault
                     </span>
-                    {extraType.shared && (
-                      <span className="shared-note">Applies to both Fox and Falco</span>
+                    {extraType.shared && extraType.sharedWith && (
+                      <span className="shared-note">
+                        Applies to {extraType.owner} & {extraType.sharedWith.join(', ')}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -945,32 +1206,46 @@ export default function CharacterMode({
         <div className="costumes-panel">
           {selectedExtraType ? (
             <>
-              {/* Currently in MEX section - shows actual colors from .dat */}
+              {/* Currently in MEX section - shows actual colors from .dat (or model status) */}
               <div className="costumes-section">
                 <h3>Currently in MEX</h3>
                 <div className="costume-list existing">
-                  <div className={`costume-card existing-costume ${isVanilla ? 'vanilla-extra' : ''}`}>
-                    <div className="costume-preview" style={{ padding: '8px' }}>
-                      {currentColors ? (
-                        <ExtraPreview extraType={selectedExtraType} modifications={currentColorsToMods(currentColors)} compact />
-                      ) : (
-                        <div className="vanilla-preview"><span>Loading...</span></div>
-                      )}
-                      {!isVanilla && (
-                        <button
-                          className="btn-remove"
-                          onClick={handleRestoreVanilla}
-                          disabled={importingExtra}
-                          title="Restore vanilla"
-                        >
-                          ×
-                        </button>
-                      )}
+                  {selectedExtraType.type === 'model' ? (
+                    // Model type - just show a placeholder, no color preview
+                    <div className="costume-card existing-costume">
+                      <div className="costume-preview" style={{ padding: '8px' }}>
+                        <ModelPreview mod={{ name: 'Current' }} compact />
+                      </div>
+                      <div className="costume-info">
+                        <h4>Current Model</h4>
+                        <span style={{ fontSize: '11px', color: '#888' }}>Select a model below to replace</span>
+                      </div>
                     </div>
-                    <div className="costume-info">
-                      <h4>{isVanilla ? 'Vanilla' : 'Custom'}</h4>
+                  ) : (
+                    // Color type - show current colors
+                    <div className={`costume-card existing-costume ${isVanilla ? 'vanilla-extra' : ''}`}>
+                      <div className="costume-preview" style={{ padding: '8px' }}>
+                        {currentColors ? (
+                          <ExtraPreview extraType={selectedExtraType} modifications={currentColorsToMods(currentColors)} compact />
+                        ) : (
+                          <div className="vanilla-preview"><span>Loading...</span></div>
+                        )}
+                        {!isVanilla && (
+                          <button
+                            className="btn-remove"
+                            onClick={handleRestoreVanilla}
+                            disabled={importingExtra}
+                            title="Restore vanilla"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      <div className="costume-info">
+                        <h4>{isVanilla ? 'Vanilla' : 'Custom'}</h4>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -1004,7 +1279,7 @@ export default function CharacterMode({
                       onClick={() => setSelectedExtraMod(mod)}
                     >
                       <div className="costume-preview" style={{ padding: '8px' }}>
-                        <ExtraPreview extraType={selectedExtraType} modifications={mod.modifications} compact />
+                        <ExtraPreview extraType={selectedExtraType} modifications={mod.modifications} mod={mod} compact />
                         <input
                           type="checkbox"
                           className="costume-checkbox"

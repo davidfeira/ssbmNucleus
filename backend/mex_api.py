@@ -253,7 +253,7 @@ def get_project_files_dir():
 
 
 # Initialize extras API with dependencies
-init_extras_api(STORAGE_PATH, get_project_files_dir)
+init_extras_api(STORAGE_PATH, get_project_files_dir, HSDRAW_EXE)
 
 
 @app.route('/api/mex/status', methods=['GET'])
