@@ -190,13 +190,17 @@ const SHINE_PRESETS = [
 // Default colors matching vanilla shine
 const DEFAULT_COLORS = {
   primary: '621F',    // Vanilla bright blue edge
-  secondary: 'AB9F'   // Vanilla grayish fill
+  secondary: 'AB9F',  // Vanilla grayish fill
+  flash1: '63FF',     // Vanilla startup flash color
+  flash2: 'FFFF'      // Vanilla startup flash highlight
 }
 
 // Layer metadata for UI
 const LAYER_INFO = {
   primary: { label: 'Primary (Edge)', desc: 'Bright edge/outline color' },
-  secondary: { label: 'Secondary (Fill)', desc: 'Fill/interior color' }
+  secondary: { label: 'Secondary (Fill)', desc: 'Fill/interior color' },
+  flash1: { label: 'Flash Color', desc: 'Startup flash color' },
+  flash2: { label: 'Flash Highlight', desc: 'Startup flash highlight' }
 }
 
 // RGBY Color picker component
@@ -274,7 +278,9 @@ export default function ShineEditorModal({
       if (editingMod.modifications) {
         setColors({
           primary: editingMod.modifications.primary?.color || DEFAULT_COLORS.primary,
-          secondary: editingMod.modifications.secondary?.color || DEFAULT_COLORS.secondary
+          secondary: editingMod.modifications.secondary?.color || DEFAULT_COLORS.secondary,
+          flash1: editingMod.modifications.flash1?.color || DEFAULT_COLORS.flash1,
+          flash2: editingMod.modifications.flash2?.color || DEFAULT_COLORS.flash2
         })
       }
     } else {
@@ -301,14 +307,24 @@ export default function ShineEditorModal({
     setError(null)
 
     try {
+      const modifications = {
+        primary: { color: colors.primary },
+        secondary: { color: colors.secondary }
+      }
+
+      // Only include flash colors if they've been changed from vanilla
+      if (colors.flash1 !== DEFAULT_COLORS.flash1) {
+        modifications.flash1 = { color: colors.flash1 }
+      }
+      if (colors.flash2 !== DEFAULT_COLORS.flash2) {
+        modifications.flash2 = { color: colors.flash2 }
+      }
+
       const modData = {
         character,
         extraType: extraType.id,
         name: name.trim(),
-        modifications: {
-          primary: { color: colors.primary },
-          secondary: { color: colors.secondary }
-        }
+        modifications
       }
 
       // If editing, include the mod ID
@@ -377,6 +393,8 @@ export default function ShineEditorModal({
   // Get display colors for SVG preview
   const primaryHex = rgbyToHex(colors.primary)
   const secondaryHex = rgbyToHex(colors.secondary)
+  const flash1Hex = rgbyToHex(colors.flash1)
+  const flash2Hex = rgbyToHex(colors.flash2)
 
   // Get current layer info
   const currentLayerInfo = LAYER_INFO[selectedLayer]
@@ -455,6 +473,28 @@ export default function ShineEditorModal({
             >
               <span className="shine-layer-btn-dot" style={{ backgroundColor: secondaryHex }} />
               <span className="shine-layer-btn-label">Fill</span>
+            </button>
+            <button
+              className={`shine-layer-btn ${selectedLayer === 'flash1' ? 'selected' : ''}`}
+              style={{
+                '--layer-color': flash1Hex,
+                borderColor: selectedLayer === 'flash1' ? flash1Hex : undefined
+              }}
+              onClick={() => setSelectedLayer('flash1')}
+            >
+              <span className="shine-layer-btn-dot" style={{ backgroundColor: flash1Hex }} />
+              <span className="shine-layer-btn-label">Flash</span>
+            </button>
+            <button
+              className={`shine-layer-btn ${selectedLayer === 'flash2' ? 'selected' : ''}`}
+              style={{
+                '--layer-color': flash2Hex,
+                borderColor: selectedLayer === 'flash2' ? flash2Hex : undefined
+              }}
+              onClick={() => setSelectedLayer('flash2')}
+            >
+              <span className="shine-layer-btn-dot" style={{ backgroundColor: flash2Hex }} />
+              <span className="shine-layer-btn-label">Highlight</span>
             </button>
           </div>
 

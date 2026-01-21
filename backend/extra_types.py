@@ -326,11 +326,23 @@ EXTRA_TYPES = {
             # These are the colors that appear in the hex region in alternating pattern
             "vanilla": {
                 "primary": "621F",    # Bright blue edge/outline vertices
-                "secondary": "AB9F"   # Grayish fill/interior vertices
+                "secondary": "AB9F",  # Grayish fill/interior vertices
+                "flash1": "63FF",     # Startup flash color (blue)
+                "flash2": "FFFF"      # Startup flash highlight (white)
+            },
+            # Flash region: outer glow during shine startup (98_multi format, 3 ranges)
+            "flash_offsets": {
+                "ranges": [
+                    {"start": 0x1C8E0, "end": 0x1C920},
+                    {"start": 0x1C91F, "end": 0x1C960},
+                    {"start": 0x1C95E, "end": 0x1C9A0}
+                ]
             },
             "properties": [
                 {"id": "primary", "name": "Primary (Edge)", "description": "Bright edge/outline color", "format": "RGBY"},
-                {"id": "secondary", "name": "Secondary (Fill)", "description": "Fill/interior color", "format": "RGBY"}
+                {"id": "secondary", "name": "Secondary (Fill)", "description": "Fill/interior color", "format": "RGBY"},
+                {"id": "flash1", "name": "Flash Color", "description": "Startup flash color", "format": "RGBY"},
+                {"id": "flash2", "name": "Flash Highlight", "description": "Startup flash highlight", "format": "RGBY"}
             ]
         },
         {

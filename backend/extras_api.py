@@ -1075,7 +1075,7 @@ def apply_extras_patches(project_path):
             offsets = get_dynamic_offsets(dat_path, type_id, fallback_offsets)
 
             try:
-                # Special handling for shine_gradient format (two-color gradient)
+                # Special handling for shine_gradient format (two-color gradient + optional flash)
                 if extra_type_config.get('format') == 'shine_gradient':
                     hex_offset = offsets.get('hex', {})
 
@@ -1105,6 +1105,36 @@ def apply_extras_patches(project_path):
                         modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
                         f.seek(start)
                         f.write(modified)
+
+                    # Patch flash colors if provided (startup glow effect - two colors)
+                    flash1_mod = modifications.get('flash1', {}).get('color')
+                    flash2_mod = modifications.get('flash2', {}).get('color')
+
+                    if flash1_mod or flash2_mod:
+                        vanilla_flash1 = vanilla.get('flash1', '63FF')
+                        vanilla_flash2 = vanilla.get('flash2', 'FFFF')
+                        flash_offsets = extra_type_config.get('flash_offsets', {})
+                        flash_ranges = flash_offsets.get('ranges', [])
+
+                        # Build flash color map
+                        flash_map = {}
+                        if flash1_mod:
+                            flash_map[vanilla_flash1] = flash1_mod
+                        if flash2_mod:
+                            flash_map[vanilla_flash2] = flash2_mod
+
+                        if flash_map and flash_ranges:
+                            with open(dat_path, 'r+b') as f:
+                                for range_info in flash_ranges:
+                                    range_start = range_info['start']
+                                    range_end = range_info['end']
+                                    f.seek(range_start)
+                                    data = f.read(range_end - range_start)
+                                    modified = patch_matrix_colors(data, color_format='RGBY', color_map=flash_map)
+                                    f.seek(range_start)
+                                    f.write(modified)
+
+                            logger.info(f"[OK] Applied shine flash colors: {flash_map}")
 
                     logger.info(f"[OK] Applied shine gradient to {character}: {current_primary}->{new_primary}, {current_secondary}->{new_secondary}")
                     results['patched'].append(f"{character}/{type_id}")
@@ -1523,7 +1553,7 @@ def install_extra():
         modifications = found_mod.get('modifications', {})
         logger.info(f"[Install] {extra_type} for {character}: offsets={offsets}, modifications={modifications}")
         if modifications:
-            # Special handling for shine_gradient format (two-color gradient)
+            # Special handling for shine_gradient format (two-color gradient + optional flash)
             if type_config.get('format') == 'shine_gradient':
                 hex_offset = offsets.get('hex', {})
 
@@ -1553,6 +1583,36 @@ def install_extra():
                     modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
                     f.seek(start)
                     f.write(modified)
+
+                # Patch flash colors if provided (startup glow effect - two colors)
+                flash1_mod = modifications.get('flash1', {}).get('color')
+                flash2_mod = modifications.get('flash2', {}).get('color')
+
+                if flash1_mod or flash2_mod:
+                    vanilla_flash1 = vanilla.get('flash1', '63FF')
+                    vanilla_flash2 = vanilla.get('flash2', 'FFFF')
+                    flash_offsets = type_config.get('flash_offsets', {})
+                    flash_ranges = flash_offsets.get('ranges', [])
+
+                    # Build flash color map
+                    flash_map = {}
+                    if flash1_mod:
+                        flash_map[vanilla_flash1] = flash1_mod
+                    if flash2_mod:
+                        flash_map[vanilla_flash2] = flash2_mod
+
+                    if flash_map and flash_ranges:
+                        with open(dat_path, 'r+b') as f:
+                            for range_info in flash_ranges:
+                                range_start = range_info['start']
+                                range_end = range_info['end']
+                                f.seek(range_start)
+                                data = f.read(range_end - range_start)
+                                modified = patch_matrix_colors(data, color_format='RGBY', color_map=flash_map)
+                                f.seek(range_start)
+                                f.write(modified)
+
+                        logger.info(f"[OK] Installed shine flash colors: {flash_map}")
 
                 logger.info(f"[OK] Installed shine gradient {found_mod['name']}: {current_primary}->{new_primary}, {current_secondary}->{new_secondary}")
             else:
@@ -1668,7 +1728,7 @@ def restore_vanilla_extra():
         # Use dynamic offset detection for laser/sideb, fallback to hardcoded
         offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
-        # Special handling for shine_gradient format (two-color gradient)
+        # Special handling for shine_gradient format (two-color gradient + flash)
         if type_config.get('format') == 'shine_gradient':
             # Read current colors to build the restoration map
             hex_offset = offsets.get('hex', {})
@@ -1690,6 +1750,34 @@ def restore_vanilla_extra():
                 modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
                 f.seek(start)
                 f.write(modified)
+
+            # Also restore flash colors to vanilla (two-color: 63FF and FFFF)
+            vanilla_flash1 = vanilla.get('flash1', '63FF')
+            vanilla_flash2 = vanilla.get('flash2', 'FFFF')
+            flash_offsets = type_config.get('flash_offsets', {})
+            flash_ranges = flash_offsets.get('ranges', [])
+
+            if flash_ranges:
+                with open(dat_path, 'r+b') as f:
+                    for range_info in flash_ranges:
+                        range_start = range_info['start']
+                        range_end = range_info['end']
+                        f.seek(range_start)
+                        data = f.read(range_end - range_start)
+                        # Find all non-vanilla colors and map them back
+                        colors_in_range = {}
+                        pos = 4
+                        while pos + 1 < len(data):
+                            c = data[pos:pos+2].hex().upper()
+                            # Map any non-vanilla color to closest vanilla
+                            if c != vanilla_flash1 and c != vanilla_flash2:
+                                # Heuristic: if it's bright (FFFF-ish), map to flash2, else flash1
+                                colors_in_range[c] = vanilla_flash1
+                            pos += 4
+                        if colors_in_range:
+                            modified = patch_matrix_colors(data, color_format='RGBY', color_map=colors_in_range)
+                            f.seek(range_start)
+                            f.write(modified)
 
             logger.info(f"[OK] Restored vanilla shine gradient for {character}")
         else:
