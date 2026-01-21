@@ -4,8 +4,34 @@ import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
 /**
  * UpBEditorModal - Color picker UI for creating/editing Firefox/Firebird flame mods
  * Supports multiple color properties: tip (RGBY), body, trail, rings (RGB)
+ * Plus fire texture hue (extracted and hue-shifted)
  * Shared between Fox and Falco
  */
+
+// Convert hue (0-360) to hex color for preview
+function hueToHex(hue) {
+  // HSL to RGB conversion with full saturation and 50% lightness
+  const h = hue / 360
+  const s = 1
+  const l = 0.5
+
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1
+    if (t > 1) t -= 1
+    if (t < 1/6) return p + (q - p) * 6 * t
+    if (t < 1/2) return q
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+    return p
+  }
+
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+  const p = 2 * l - q
+  const r = Math.round(hue2rgb(p, q, h + 1/3) * 255)
+  const g = Math.round(hue2rgb(p, q, h) * 255)
+  const b = Math.round(hue2rgb(p, q, h - 1/3) * 255)
+
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
 
 const CloseIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -116,6 +142,92 @@ function ColorPicker({ label, description, value, onChange, format = 'RGBY' }) {
   )
 }
 
+// Hue picker for texture-based color control
+function HuePicker({ label, description, value, onChange, loading }) {
+  const hue = value ?? 15 // Default to vanilla fire orange-red
+  const previewColor = hueToHex(hue)
+
+  // Hue presets
+  const HUE_PRESETS = [
+    { name: 'Fire', hue: 15 },
+    { name: 'Red', hue: 0 },
+    { name: 'Orange', hue: 30 },
+    { name: 'Yellow', hue: 60 },
+    { name: 'Green', hue: 120 },
+    { name: 'Cyan', hue: 180 },
+    { name: 'Blue', hue: 240 },
+    { name: 'Purple', hue: 280 },
+    { name: 'Magenta', hue: 320 }
+  ]
+
+  return (
+    <div className="laser-color-picker">
+      <div className="laser-color-header">
+        <span className="laser-color-label">{label}</span>
+        <span className="laser-color-description">{description}</span>
+      </div>
+
+      <div className="laser-color-controls">
+        <div className="laser-color-input-group">
+          {/* Color preview swatch */}
+          <div
+            className="laser-color-input"
+            style={{
+              backgroundColor: previewColor,
+              cursor: 'default'
+            }}
+          />
+          <div className="laser-color-values">
+            {loading ? (
+              <span className="laser-color-hex">Loading...</span>
+            ) : (
+              <>
+                <span className="laser-color-hex">{previewColor.toUpperCase()}</span>
+                <span className="laser-color-rgby">Hue: {Math.round(hue)}°</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Hue slider */}
+        <div style={{ width: '100%', marginTop: '8px' }}>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            value={hue}
+            onChange={(e) => onChange(parseInt(e.target.value))}
+            disabled={loading}
+            style={{
+              width: '100%',
+              height: '20px',
+              cursor: loading ? 'wait' : 'pointer',
+              background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+              borderRadius: '4px',
+              WebkitAppearance: 'none',
+              appearance: 'none'
+            }}
+          />
+        </div>
+
+        {/* Hue presets */}
+        <div className="laser-color-presets" style={{ marginTop: '8px' }}>
+          {HUE_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              className={`laser-preset ${Math.abs(hue - preset.hue) < 10 ? 'active' : ''}`}
+              style={{ backgroundColor: hueToHex(preset.hue) }}
+              onClick={() => onChange(preset.hue)}
+              title={preset.name}
+              disabled={loading}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function UpBEditorModal({
   show,
   character,
@@ -128,6 +240,8 @@ export default function UpBEditorModal({
 }) {
   const [name, setName] = useState('')
   const [colors, setColors] = useState({ ...DEFAULT_COLORS })
+  const [textureHue, setTextureHue] = useState(15) // Fire texture hue (vanilla is ~15)
+  const [loadingTexture, setLoadingTexture] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
@@ -143,6 +257,10 @@ export default function UpBEditorModal({
           trail: editingMod.modifications.trail?.color || DEFAULT_COLORS.trail,
           rings: editingMod.modifications.rings?.color || DEFAULT_COLORS.rings
         })
+        // Load texture hue from mod if saved
+        if (editingMod.modifications.fire?.hue !== undefined) {
+          setTextureHue(editingMod.modifications.fire.hue)
+        }
       }
     } else {
       // Reset for new mod
@@ -151,6 +269,32 @@ export default function UpBEditorModal({
     }
     setError(null)
   }, [editingMod, show])
+
+  // Fetch current texture hue when modal opens (lazy load)
+  useEffect(() => {
+    if (!show) return
+
+    const fetchTextureHue = async () => {
+      // Skip if editing a mod that already has the hue saved
+      if (editingMod?.modifications?.fire?.hue !== undefined) return
+
+      setLoadingTexture(true)
+      try {
+        const response = await fetch(`${API_URL}/storage/textures/current/Fox/upb_texture`)
+        const data = await response.json()
+        if (data.success && data.hue !== null) {
+          setTextureHue(data.hue)
+        }
+      } catch (err) {
+        console.warn('[UpBEditorModal] Failed to fetch texture hue:', err)
+        // Keep default, don't show error
+      } finally {
+        setLoadingTexture(false)
+      }
+    }
+
+    fetchTextureHue()
+  }, [show, API_URL, editingMod])
 
   if (!show) return null
 
@@ -176,7 +320,8 @@ export default function UpBEditorModal({
           tip: { color: colors.tip },
           body: { color: colors.body },
           trail: { color: colors.trail },
-          rings: { color: colors.rings }
+          rings: { color: colors.rings },
+          fire: { hue: textureHue } // Store texture hue in mod
         }
       }
 
@@ -250,6 +395,7 @@ export default function UpBEditorModal({
   const bodyHex = rgbToDisplayHex(colors.body)
   const trailHex = rgbToDisplayHex(colors.trail)
   const ringsHex = rgbToDisplayHex(colors.rings)
+  const fireHex = hueToHex(textureHue) // Fire texture preview color
 
   // Get format for each property
   const getFormat = (propId) => {
@@ -383,6 +529,15 @@ export default function UpBEditorModal({
               format={prop.format || 'RGBY'}
             />
           ))}
+
+          {/* Fire texture hue picker */}
+          <HuePicker
+            label="Fire Texture"
+            description="Main fire/flame texture color"
+            value={textureHue}
+            onChange={setTextureHue}
+            loading={loadingTexture}
+          />
 
           {/* Quick apply to all */}
           <div className="laser-apply-all">

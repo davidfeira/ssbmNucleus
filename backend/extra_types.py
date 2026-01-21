@@ -294,6 +294,22 @@ EXTRA_TYPES = {
             ]
         },
         {
+            "id": "upb_texture",
+            "name": "Up-B Fire Texture",
+            "description": "Firefox/Firebird flame color (hue shift)",
+            "target_file": "EfFxData.dat",
+            "type": "texture",  # Texture type - uses hue shift instead of hex patches
+            "texture_path": "effFoxDataTable/Models_4_/RootJoint",
+            "texture_index": 1,  # 2nd texture (index 1) is the fire texture
+            "shared": True,  # Shared between Fox and Falco
+            "sharedWith": ["Falco"],
+            "owner": "Fox",
+            "vanilla_hue": 15,  # Orange-red, detected from vanilla texture
+            "properties": [
+                {"id": "hue", "name": "Hue", "description": "Fire color hue (0-360)", "type": "slider", "min": 0, "max": 360}
+            ]
+        },
+        {
             "id": "shine",
             "name": "Shine Color",
             "description": "Reflector shield colors",

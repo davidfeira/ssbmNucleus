@@ -88,6 +88,15 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for texture export/import mode
+            if (args.Length >= 4 && args[0] == "--texture")
+            {
+                AllocConsole();
+                Console.WriteLine("Texture operation mode detected");
+                RunTextureOperation(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -1102,6 +1111,304 @@ namespace HSDRawViewer
                 Console.WriteLine($"ERROR: Model operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Run texture export/import operations in headless mode.
+        /// Usage:
+        ///   Export: HSDRawViewer.exe --texture export [dat_file] [node_path] [tex_index] [output.png]
+        ///   Import: HSDRawViewer.exe --texture import [dat_file] [node_path] [tex_index] [input.png] [output.dat]
+        /// </summary>
+        static void RunTextureOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 6)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --texture export <dat_file> <node_path> <tex_index> <output.png>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --texture import <dat_file> <node_path> <tex_index> <input.png> <output.dat>");
+                    Console.WriteLine();
+                    Console.WriteLine("Example path: effFoxDataTable/Models_4_/RootJoint");
+                    return;
+                }
+
+                string operation = args[1]; // "export" or "import"
+
+                if (operation == "export")
+                {
+                    // HSDRawViewer.exe --texture export <dat_file> <node_path> <tex_index> <output.png>
+                    if (args.Length < 6)
+                    {
+                        Console.WriteLine("Export requires: <dat_file> <node_path> <tex_index> <output.png>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string nodePath = args[3];
+                    int texIndex = int.Parse(args[4]);
+                    string outputFile = args[5];
+
+                    Console.WriteLine($"Exporting texture from: {datFile}");
+                    Console.WriteLine($"Node path: {nodePath}");
+                    Console.WriteLine($"Texture index: {texIndex}");
+                    Console.WriteLine($"Output file: {outputFile}");
+
+                    // Load DAT
+                    var rawFile = new HSDRawFile(datFile);
+
+                    // Navigate to the node and get texture
+                    var tobj = NavigateToTexture(rawFile, nodePath, texIndex);
+                    if (tobj == null)
+                    {
+                        Console.WriteLine($"ERROR: Could not find texture at path: {nodePath}, index: {texIndex}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine("Texture found, exporting...");
+
+                    // Export texture to PNG
+                    using (var image = tobj.ToImage())
+                    using (var fs = new System.IO.FileStream(outputFile, System.IO.FileMode.Create))
+                    {
+                        image.Save(fs, new PngEncoder());
+                    }
+
+                    Console.WriteLine($"SUCCESS: Exported texture to: {outputFile}");
+                }
+                else if (operation == "import")
+                {
+                    // HSDRawViewer.exe --texture import <dat_file> <node_path> <tex_index> <input.png> <output.dat>
+                    if (args.Length < 7)
+                    {
+                        Console.WriteLine("Import requires: <dat_file> <node_path> <tex_index> <input.png> <output.dat>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string nodePath = args[3];
+                    int texIndex = int.Parse(args[4]);
+                    string inputPng = args[5];
+                    string outputDat = args[6];
+
+                    Console.WriteLine($"Importing texture into: {datFile}");
+                    Console.WriteLine($"Node path: {nodePath}");
+                    Console.WriteLine($"Texture index: {texIndex}");
+                    Console.WriteLine($"Input PNG: {inputPng}");
+                    Console.WriteLine($"Output DAT: {outputDat}");
+
+                    // Load DAT
+                    var rawFile = new HSDRawFile(datFile);
+
+                    // Navigate to the node and get texture
+                    var tobj = NavigateToTexture(rawFile, nodePath, texIndex);
+                    if (tobj == null)
+                    {
+                        Console.WriteLine($"ERROR: Could not find texture at path: {nodePath}, index: {texIndex}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine("Texture found, importing...");
+
+                    // Load the PNG image
+                    using (var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(inputPng))
+                    {
+                        // Inject the bitmap into the texture object
+                        // Use the original texture's format and palette format
+                        var imgFormat = tobj.ImageData.Format;
+                        var palFormat = tobj.TlutData?.Format ?? HSDRaw.GX.GXTlutFmt.IA8;
+                        tobj.InjectBitmap(image, imgFormat, palFormat);
+                    }
+
+                    // Save modified DAT
+                    rawFile.Save(outputDat);
+
+                    Console.WriteLine($"SUCCESS: Imported texture and saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown operation: {operation}");
+                    Console.WriteLine("Use 'export' or 'import'");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Texture operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Navigate to a texture (HSD_TOBJ) within a DAT file using a path and texture index.
+        /// Path format: "effFoxDataTable/Models_4_/RootJoint"
+        /// The texture is accessed via RootJoint -> DOBJs -> MOBJs -> TOBJs
+        /// </summary>
+        static HSD_TOBJ NavigateToTexture(HSDRawFile rawFile, string path, int texIndex)
+        {
+            try
+            {
+                string[] parts = path.Split('/');
+                if (parts.Length == 0)
+                    return null;
+
+                // Find root by name
+                var root = rawFile.Roots.Find(r => r.Name == parts[0]);
+                if (root == null)
+                {
+                    Console.WriteLine($"Root '{parts[0]}' not found. Available roots:");
+                    foreach (var r in rawFile.Roots)
+                        Console.WriteLine($"  - {r.Name}");
+                    return null;
+                }
+
+                HSDAccessor current = root.Data;
+
+                // Navigate through properties
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    string part = parts[i];
+
+                    // Handle array indexing like "Models_4_"
+                    if (part.Contains("_") && char.IsDigit(part[part.LastIndexOf('_') - 1]))
+                    {
+                        // Find the last underscore that precedes a digit
+                        int lastUnderscoreIdx = part.LastIndexOf('_');
+                        // Look for pattern like "Name_N_" where N is a number
+                        int secondLastUnderscore = part.LastIndexOf('_', lastUnderscoreIdx - 1);
+                        if (secondLastUnderscore >= 0)
+                        {
+                            string propName = part.Substring(0, secondLastUnderscore);
+                            string indexStr = part.Substring(secondLastUnderscore + 1, lastUnderscoreIdx - secondLastUnderscore - 1);
+
+                            if (int.TryParse(indexStr, out int index))
+                            {
+                                var prop = current.GetType().GetProperty(propName);
+                                if (prop == null)
+                                {
+                                    Console.WriteLine($"Property '{propName}' not found on type {current.GetType().Name}");
+                                    return null;
+                                }
+
+                                var arr = prop.GetValue(current);
+                                if (arr is Array array)
+                                {
+                                    current = array.GetValue(index) as HSDAccessor;
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Property '{propName}' is not an array");
+                                    return null;
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Normal property access
+                    var normalProp = current.GetType().GetProperty(part);
+                    if (normalProp == null)
+                    {
+                        // Try removing trailing underscore
+                        string altPart = part.TrimEnd('_');
+                        normalProp = current.GetType().GetProperty(altPart);
+                        if (normalProp == null)
+                        {
+                            Console.WriteLine($"Property '{part}' not found on type {current.GetType().Name}");
+                            Console.WriteLine($"Available properties:");
+                            foreach (var p in current.GetType().GetProperties())
+                                Console.WriteLine($"  - {p.Name}");
+                            return null;
+                        }
+                    }
+                    current = normalProp.GetValue(current) as HSDAccessor;
+
+                    if (current == null)
+                    {
+                        Console.WriteLine($"Navigation returned null at '{part}'");
+                        return null;
+                    }
+                }
+
+                // Now we should be at a JOBJ - traverse to find textures
+                if (current is HSD_JOBJ jobj)
+                {
+                    Console.WriteLine("Found JOBJ, searching for textures...");
+                    return FindTextureInJOBJ(jobj, texIndex);
+                }
+                else
+                {
+                    Console.WriteLine($"Expected HSD_JOBJ at end of path, got {current.GetType().Name}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Navigation error: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Find a texture at the specified index within a JOBJ hierarchy.
+        /// Traverses: JOBJ -> DOBJs -> MOBJs -> TOBJs
+        /// </summary>
+        static HSD_TOBJ FindTextureInJOBJ(HSD_JOBJ jobj, int texIndex)
+        {
+            var textures = new List<HSD_TOBJ>();
+            CollectTexturesFromJOBJ(jobj, textures);
+
+            Console.WriteLine($"Found {textures.Count} textures in JOBJ hierarchy");
+
+            if (texIndex >= 0 && texIndex < textures.Count)
+            {
+                var tex = textures[texIndex];
+                Console.WriteLine($"Texture {texIndex}: {tex.ImageData?.Width}x{tex.ImageData?.Height}, Format: {tex.ImageData?.Format}");
+                return tex;
+            }
+
+            Console.WriteLine($"Texture index {texIndex} out of range (0-{textures.Count - 1})");
+            return null;
+        }
+
+        /// <summary>
+        /// Recursively collect all textures from a JOBJ and its children.
+        /// </summary>
+        static void CollectTexturesFromJOBJ(HSD_JOBJ jobj, List<HSD_TOBJ> textures)
+        {
+            if (jobj == null) return;
+
+            // Check this JOBJ's DOBJs
+            if (jobj.Dobj != null)
+            {
+                foreach (var dobj in jobj.Dobj.List)
+                {
+                    if (dobj.Mobj?.Textures != null)
+                    {
+                        foreach (var tobj in dobj.Mobj.Textures.List)
+                        {
+                            if (tobj.ImageData != null)
+                            {
+                                textures.Add(tobj);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Recurse into children
+            if (jobj.Child != null)
+            {
+                CollectTexturesFromJOBJ(jobj.Child, textures);
+            }
+
+            // Recurse into siblings
+            if (jobj.Next != null)
+            {
+                CollectTexturesFromJOBJ(jobj.Next, textures);
             }
         }
 
