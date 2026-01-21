@@ -6,6 +6,7 @@ import SideBEditorModal from './SideBEditorModal'
 import UpBEditorModal from './UpBEditorModal'
 import ShineEditorModal from './ShineEditorModal'
 import SwordEditorModal from './SwordEditorModal'
+import LaserRingEditorModal from './LaserRingEditorModal'
 import DualColorEditorModal from './DualColorEditorModal'
 import GunEditorModal from './GunEditorModal'
 
@@ -77,6 +78,18 @@ const ShineIcon = () => (
   </svg>
 )
 
+// Icon for laser ring effect
+const LaserRingIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="4" />
+    <line x1="12" y1="2" x2="12" y2="6" strokeLinecap="round" />
+    <line x1="12" y1="18" x2="12" y2="22" strokeLinecap="round" />
+    <line x1="2" y1="12" x2="6" y2="12" strokeLinecap="round" />
+    <line x1="18" y1="12" x2="22" y2="12" strokeLinecap="round" />
+  </svg>
+)
+
 // Icon for sword trail
 const SwordIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -141,6 +154,7 @@ const ICONS = {
   sideb: SideBIcon,
   upb: UpBIcon,
   shine: ShineIcon,
+  laser_ring: LaserRingIcon,
   sword: SwordIcon,
   punch: PunchIcon,
   thunder: ThunderIcon,
@@ -476,6 +490,75 @@ function ShinePreview({ modifications, compact = false }) {
   )
 }
 
+function LaserRingPreview({ modifications, compact = false }) {
+  // Get colors from modifications
+  const color1 = modifications?.color1?.color ? `#${modifications.color1.color}` : '#FF004C'
+  const color2 = modifications?.color2?.color ? `#${modifications.color2.color}` : '#B20000'
+
+  const size = compact ? 40 : 50
+
+  return (
+    <div
+      className="laser-ring-preview"
+      style={{
+        position: 'relative',
+        height: `${size}px`,
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Outer glow - secondary color */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '38px' : '48px',
+          height: compact ? '38px' : '48px',
+          borderRadius: '50%',
+          background: `radial-gradient(ellipse at center, ${color2}40 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 8px ${color2}50)`
+        }}
+      />
+      {/* Main ring - primary color */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '28px' : '36px',
+          height: compact ? '28px' : '36px',
+          borderRadius: '50%',
+          border: `3px solid ${color1}`,
+          boxShadow: `0 0 8px ${color1}, inset 0 0 8px ${color1}40`
+        }}
+      />
+      {/* Inner ring - primary color */}
+      <div
+        style={{
+          position: 'absolute',
+          width: compact ? '14px' : '18px',
+          height: compact ? '14px' : '18px',
+          borderRadius: '50%',
+          border: `2px solid ${color1}`,
+          opacity: 0.6
+        }}
+      />
+      {/* Center dot - primary color */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '4px',
+          height: '4px',
+          borderRadius: '50%',
+          background: color1,
+          boxShadow: `0 0 4px ${color1}`
+        }}
+      />
+    </div>
+  )
+}
+
 function SwordPreview({ modifications, compact = false }) {
   // Get RGB colors from modifications
   const mainColor = modifications?.main?.color ? `#${modifications.main.color}` : '#FF0000'
@@ -720,6 +803,9 @@ function ExtraPreview({ extraType, modifications, mod, compact = false }) {
   }
   if (extraType.id === 'shine') {
     return <ShinePreview modifications={modifications} compact={compact} />
+  }
+  if (extraType.id === 'laser_ring') {
+    return <LaserRingPreview modifications={modifications} compact={compact} />
   }
   if (extraType.id === 'sword') {
     return <SwordPreview modifications={modifications} compact={compact} />
@@ -1038,6 +1124,20 @@ export default function ExtrasPageView({
         {/* Shine Editor Modal */}
         {selectedType.id === 'shine' && (
           <ShineEditorModal
+            show={showEditor}
+            character={character}
+            extraType={selectedType}
+            editingMod={editingMod}
+            onClose={handleEditorClose}
+            onSave={handleSave}
+            onDelete={handleDelete}
+            API_URL={API_URL}
+          />
+        )}
+
+        {/* Laser Ring Editor Modal */}
+        {selectedType.id === 'laser_ring' && (
+          <LaserRingEditorModal
             show={showEditor}
             character={character}
             extraType={selectedType}

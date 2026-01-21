@@ -839,6 +839,64 @@ export default function CharacterMode({
     )
   }
 
+  // Laser Ring preview component for Fox/Falco laser hit ring effect
+  const LaserRingPreview = ({ modifications, compact = false }) => {
+    const color1 = modifications?.color1?.color ? `#${modifications.color1.color}` : '#FF004C'
+    const color2 = modifications?.color2?.color ? `#${modifications.color2.color}` : '#B20000'
+    const height = compact ? 40 : 50
+
+    return (
+      <div style={{
+        position: 'relative',
+        height: `${height}px`,
+        width: '100%',
+        background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)',
+        borderRadius: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        {/* Outer glow - secondary color */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '50px' : '60px',
+          height: compact ? '50px' : '60px',
+          borderRadius: '50%',
+          background: `radial-gradient(ellipse at center, ${color2}40 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 10px ${color2}50)`
+        }} />
+        {/* Main ring - primary color */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '38px' : '46px',
+          height: compact ? '38px' : '46px',
+          borderRadius: '50%',
+          border: `3px solid ${color1}`,
+          boxShadow: `0 0 10px ${color1}, inset 0 0 10px ${color1}40`
+        }} />
+        {/* Inner ring - primary color */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '20px' : '24px',
+          height: compact ? '20px' : '24px',
+          borderRadius: '50%',
+          border: `2px solid ${color1}`,
+          opacity: 0.6
+        }} />
+        {/* Center dot - primary color */}
+        <div style={{
+          position: 'absolute',
+          width: compact ? '6px' : '8px',
+          height: compact ? '6px' : '8px',
+          borderRadius: '50%',
+          background: color1,
+          boxShadow: `0 0 5px ${color1}`
+        }} />
+      </div>
+    )
+  }
+
   // Shine preview component for reflector shield
   const ShinePreview = ({ modifications, compact = false }) => {
     const hexColor = modifications?.hex?.color ? rgbyToHex(modifications.hex.color) : '#0066FF'
@@ -1140,6 +1198,9 @@ export default function CharacterMode({
     }
     if (typeId === 'shine') {
       return <ShinePreview modifications={modifications} compact={compact} />
+    }
+    if (typeId === 'laser_ring') {
+      return <LaserRingPreview modifications={modifications} compact={compact} />
     }
     // Sword trails
     if (typeId === 'sword') {

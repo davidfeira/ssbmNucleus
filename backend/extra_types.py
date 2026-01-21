@@ -348,6 +348,41 @@ EXTRA_TYPES = {
             ]
         },
         {
+            "id": "laser_ring",
+            "name": "Laser Ring",
+            "description": "Laser hit ring effect colors",
+            "target_file": "EfFxData.dat",
+            "shared": True,
+            "sharedWith": ["Falco"],
+            "owner": "Fox",
+            # Two RGB colors + 6 hue index bytes that must be zeroed
+            "offsets": {
+                "color1": {"start": 0x1D2FC, "size": 3, "format": "RGB"},
+                "color2": {"start": 0x1D300, "size": 3, "format": "RGB"},
+                # Hue index bytes - set to 00 for custom colors
+                "hue1": {"start": 0x1D974, "size": 1, "format": "BYTE"},
+                "hue2": {"start": 0x1D988, "size": 1, "format": "BYTE"},
+                "hue3": {"start": 0x1D99C, "size": 1, "format": "BYTE"},
+                "hue4": {"start": 0x1D9B0, "size": 1, "format": "BYTE"},
+                "hue5": {"start": 0x1D9C4, "size": 1, "format": "BYTE"},
+                "hue6": {"start": 0x1D9D8, "size": 1, "format": "BYTE"}
+            },
+            "vanilla": {
+                "color1": "FF004C",
+                "color2": "B20000",
+                "hue1": "0C",
+                "hue2": "0D",
+                "hue3": "0E",
+                "hue4": "10",
+                "hue5": "11",
+                "hue6": "12"
+            },
+            "properties": [
+                {"id": "color1", "name": "Primary", "description": "Main ring color", "format": "RGB"},
+                {"id": "color2", "name": "Secondary", "description": "Secondary ring color", "format": "RGB"}
+            ]
+        },
+        {
             "id": "gun",
             "name": "Gun Model",
             "description": "Replace Fox's blaster gun model",

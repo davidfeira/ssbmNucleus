@@ -380,24 +380,87 @@ def find_shine_offsets(dat_path):
     return None
 
 
+def find_laser_ring_offsets(dat_path):
+    """Dynamically find laser ring color offsets in EfFxData.dat.
+
+    Searches for unique pattern 85 80 08 0f 07 07 07 07 which precedes the colors.
+    Then calculates hue byte offsets relative to the color position.
+
+    Structure at pattern:
+    - 85 80 08 0f: prefix (4 bytes)
+    - 07 07 07 07: marker (4 bytes)
+    - RR GG BB 00: color1 (4 bytes) at prefix+8
+    - RR GG BB 00: color2 (4 bytes) at prefix+12
+
+    Hue bytes are at fixed offsets from color1:
+    - hue1: color1 + 0x678
+    - hue2: color1 + 0x68C
+    - hue3: color1 + 0x6A0
+    - hue4: color1 + 0x6B4
+    - hue5: color1 + 0x6C8
+    - hue6: color1 + 0x6DC
+
+    Args:
+        dat_path: Path to EfFxData.dat
+
+    Returns:
+        Dict with detected offsets, or None if not found
+    """
+    try:
+        with open(dat_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read {dat_path} for laser ring detection: {e}")
+        return None
+
+    # Search for unique prefix pattern 85 80 08 0f 07 07 07 07
+    prefix = bytes([0x85, 0x80, 0x08, 0x0f, 0x07, 0x07, 0x07, 0x07])
+    prefix_pos = data.find(prefix)
+
+    if prefix_pos == -1:
+        logger.warning("Could not find laser ring pattern (85 80 08 0f 07 07 07 07)")
+        return None
+
+    # Color positions relative to prefix
+    color1_pos = prefix_pos + 8   # After 85 80 08 0f 07 07 07 07
+    color2_pos = prefix_pos + 12  # After color1 + separator
+
+    logger.info(f"Found laser ring: color1=0x{color1_pos:X}, color2=0x{color2_pos:X}")
+
+    # Hue byte offsets relative to color1
+    hue_offsets = [0x678, 0x68C, 0x6A0, 0x6B4, 0x6C8, 0x6DC]
+
+    result = {
+        'color1': {'start': color1_pos, 'size': 3, 'format': 'RGB'},
+        'color2': {'start': color2_pos, 'size': 3, 'format': 'RGB'},
+    }
+
+    for i, offset in enumerate(hue_offsets, 1):
+        result[f'hue{i}'] = {'start': color1_pos + offset, 'size': 1, 'format': 'BYTE'}
+
+    logger.info(f"Laser ring hue1 at 0x{color1_pos + 0x678:X}")
+
+    return result
+
+
 def get_dynamic_offsets(dat_path, extra_type_id, fallback_offsets):
     """Get offsets for an extra type, using dynamic detection if applicable.
 
-    For laser, sideb, upb, and shine types, attempts dynamic detection first,
+    For laser, sideb, upb, shine, and laser_ring types, attempts dynamic detection first,
     falling back to hardcoded offsets if detection fails.
 
     Results are cached by (file_path, mtime) to avoid re-scanning.
 
     Args:
         dat_path: Path to the .dat file
-        extra_type_id: The extra type ID (e.g., 'laser', 'sideb', 'upb', 'shine')
+        extra_type_id: The extra type ID (e.g., 'laser', 'sideb', 'upb', 'shine', 'laser_ring')
         fallback_offsets: Hardcoded offsets to use if detection fails
 
     Returns:
         Dict of offset info for each layer
     """
     # Check if this type needs dynamic detection
-    if extra_type_id not in ('laser', 'sideb', 'upb', 'shine'):
+    if extra_type_id not in ('laser', 'sideb', 'upb', 'shine', 'laser_ring'):
         return fallback_offsets
 
     # Check cache
@@ -420,6 +483,8 @@ def get_dynamic_offsets(dat_path, extra_type_id, fallback_offsets):
         detected = find_upb_offsets(dat_path)
     elif extra_type_id == 'shine':
         detected = find_shine_offsets(dat_path)
+    elif extra_type_id == 'laser_ring':
+        detected = find_laser_ring_offsets(dat_path)
 
     if detected:
         logger.info(f"Using dynamically detected offsets for {extra_type_id}")
