@@ -36,6 +36,176 @@ def init_extras_api(storage_path, project_files_dir_func, hsdraw_viewer_path=Non
 
 
 # =============================================================================
+# DYNAMIC OFFSET DETECTION
+# =============================================================================
+
+# Cache for dynamic offsets: (file_path, mtime) -> offsets dict
+_dynamic_offset_cache = {}
+
+
+def find_laser_offsets(dat_path):
+    """Dynamically find laser color matrix offsets in a DAT file.
+
+    Searches for three consecutive 98 00 17 matrices (23 entries each)
+    that are exactly 0xA0 (160 bytes) apart. This pattern is consistent
+    even when file structure changes due to model imports.
+
+    Args:
+        dat_path: Path to the .dat file (PlFc.dat or PlFx.dat)
+
+    Returns:
+        Dict with wide/thin/outline offset info, or None if not found
+    """
+    try:
+        with open(dat_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read {dat_path} for laser detection: {e}")
+        return None
+
+    # Find all 98 00 17 matrices (23 entries = 0x17)
+    candidates = []
+    pattern = bytes([0x98, 0x00, 0x17])
+    pos = 0
+    while True:
+        pos = data.find(pattern, pos)
+        if pos == -1:
+            break
+        candidates.append(pos)
+        pos += 1
+
+    logger.debug(f"Found {len(candidates)} potential 98 00 17 matrices in {dat_path}")
+
+    # Look for three consecutive matrices exactly 0xA0 apart
+    candidate_set = set(candidates)
+    for start in candidates:
+        second = start + 0xA0
+        third = start + 0x140
+        if second in candidate_set and third in candidate_set:
+            # Verify each matrix has uniform colors (same 2-byte color repeated)
+            # Matrix structure: 98 00 17 [VV CC CC] * 23 entries
+            # First color at offset 4 (after header + vertex byte)
+            valid = True
+            for matrix_start in [start, second, third]:
+                if matrix_start + 0x60 > len(data):
+                    valid = False
+                    break
+                first_color = data[matrix_start + 4:matrix_start + 6]
+                # Check a few more entries to verify uniformity
+                for i in range(1, 5):
+                    entry_color = data[matrix_start + 4 + (i * 4):matrix_start + 6 + (i * 4)]
+                    if entry_color != first_color:
+                        valid = False
+                        break
+                if not valid:
+                    break
+
+            if valid:
+                logger.info(f"Found laser offsets at 0x{start:X} (wide), 0x{second:X} (thin), 0x{third:X} (outline)")
+                return {
+                    'wide': {'start': start, 'end': start + 0x60, 'format': 'RGBY'},
+                    'thin': {'start': second, 'end': second + 0x60, 'format': 'RGBY'},
+                    'outline': {'start': third, 'end': third + 0x60, 'format': 'RGBY'}
+                }
+
+    logger.warning(f"Could not find laser pattern in {dat_path}")
+    return None
+
+
+def find_sideb_offsets(dat_path):
+    """Dynamically find side-B RGBA color offsets in a DAT file.
+
+    Searches for the unique marker pattern 3E 99 99 9A 42 48 00 00 that follows
+    the side-B color data. The three 4-byte RGBA values are located
+    12 bytes before this marker.
+
+    Args:
+        dat_path: Path to the .dat file (PlFc.dat or PlFx.dat)
+
+    Returns:
+        Dict with primary/secondary/tertiary offset info, or None if not found
+    """
+    try:
+        with open(dat_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read {dat_path} for side-B detection: {e}")
+        return None
+
+    # Search for the unique marker that follows side-B colors
+    # This pattern (3E99999A42480000) appears right after the 12 color bytes
+    marker = bytes.fromhex('3E99999A42480000')
+    pos = data.find(marker)
+
+    if pos > 12:
+        # Colors are 12 bytes before the marker
+        color_start = pos - 12
+        # Verify it looks like RGBA colors (check alpha bytes are reasonable)
+        if (data[color_start + 3] == 0xFF and
+            data[color_start + 7] == 0xFF and
+            data[color_start + 11] == 0xFF):
+            logger.info(f"Found side-B offsets at 0x{color_start:X} (marker at 0x{pos:X})")
+            return {
+                'primary': {'start': color_start, 'size': 4, 'format': 'RGBA'},
+                'secondary': {'start': color_start + 4, 'size': 4, 'format': 'RGBA'},
+                'tertiary': {'start': color_start + 8, 'size': 4, 'format': 'RGBA'}
+            }
+
+    logger.warning(f"Could not find side-B pattern in {dat_path}")
+    return None
+
+
+def get_dynamic_offsets(dat_path, extra_type_id, fallback_offsets):
+    """Get offsets for an extra type, using dynamic detection if applicable.
+
+    For laser and sideb types on Fox/Falco, attempts dynamic detection first,
+    falling back to hardcoded offsets if detection fails.
+
+    Results are cached by (file_path, mtime) to avoid re-scanning.
+
+    Args:
+        dat_path: Path to the .dat file
+        extra_type_id: The extra type ID (e.g., 'laser', 'sideb')
+        fallback_offsets: Hardcoded offsets to use if detection fails
+
+    Returns:
+        Dict of offset info for each layer
+    """
+    # Check if this type needs dynamic detection
+    if extra_type_id not in ('laser', 'sideb'):
+        return fallback_offsets
+
+    # Check cache
+    try:
+        mtime = os.path.getmtime(dat_path)
+        cache_key = (str(dat_path), mtime, extra_type_id)
+        if cache_key in _dynamic_offset_cache:
+            logger.debug(f"Using cached offsets for {extra_type_id} in {dat_path}")
+            return _dynamic_offset_cache[cache_key]
+    except Exception:
+        pass
+
+    # Attempt dynamic detection
+    detected = None
+    if extra_type_id == 'laser':
+        detected = find_laser_offsets(dat_path)
+    elif extra_type_id == 'sideb':
+        detected = find_sideb_offsets(dat_path)
+
+    if detected:
+        logger.info(f"Using dynamically detected offsets for {extra_type_id}")
+        # Cache the result
+        try:
+            _dynamic_offset_cache[cache_key] = detected
+        except Exception:
+            pass
+        return detected
+    else:
+        logger.info(f"Dynamic detection failed for {extra_type_id}, using hardcoded offsets")
+        return fallback_offsets
+
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -474,7 +644,7 @@ def apply_extras_patches(project_path):
         for extra_type_config in char_extra_types:
             type_id = extra_type_config['id']
             target_file = extra_type_config['target_file']
-            offsets = extra_type_config['offsets']
+            fallback_offsets = extra_type_config['offsets']
 
             # Get mods for this type
             mods = extras.get(type_id, [])
@@ -506,6 +676,9 @@ def apply_extras_patches(project_path):
                 logger.warning(f"Could not find {target_file} for {character}")
                 results['skipped'].append(f"{character}/{type_id}: {target_file} not found")
                 continue
+
+            # Use dynamic offset detection for laser/sideb, fallback to hardcoded
+            offsets = get_dynamic_offsets(dat_path, type_id, fallback_offsets)
 
             try:
                 # Apply hex patches
@@ -603,7 +776,7 @@ def get_current_extra(character, extra_type):
             }), 400
 
         target_file = type_config['target_file']
-        offsets = type_config['offsets']
+        fallback_offsets = type_config['offsets']
         vanilla = type_config.get('vanilla', {})
         dat_path = find_dat_file(files_dir, target_file)
 
@@ -612,6 +785,9 @@ def get_current_extra(character, extra_type):
                 'success': False,
                 'error': f'Could not find {target_file} in MEX project'
             }), 404
+
+        # Use dynamic offset detection for laser/sideb, fallback to hardcoded
+        offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
         # Read current colors from the .dat file
         current_colors = read_current_colors(dat_path, offsets)
@@ -856,7 +1032,7 @@ def install_extra():
             }), 400
 
         target_file = type_config['target_file']
-        offsets = type_config['offsets']
+        fallback_offsets = type_config['offsets']
         dat_path = find_dat_file(files_dir, target_file)
 
         if not dat_path or not dat_path.exists():
@@ -864,6 +1040,9 @@ def install_extra():
                 'success': False,
                 'error': f'Could not find {target_file} in MEX project'
             }), 404
+
+        # Use dynamic offset detection for laser/sideb, fallback to hardcoded
+        offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
         # Load metadata to find the mod
         metadata_file = STORAGE_PATH / 'metadata.json'
@@ -960,7 +1139,7 @@ def restore_vanilla_extra():
             }), 400
 
         target_file = type_config['target_file']
-        offsets = type_config['offsets']
+        fallback_offsets = type_config['offsets']
         dat_path = find_dat_file(files_dir, target_file)
 
         if not dat_path or not dat_path.exists():
@@ -968,6 +1147,9 @@ def restore_vanilla_extra():
                 'success': False,
                 'error': f'Could not find {target_file} in MEX project'
             }), 404
+
+        # Use dynamic offset detection for laser/sideb, fallback to hardcoded
+        offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
         # Apply vanilla colors
         vanilla_mods = {layer: {'color': color} for layer, color in vanilla.items()}
