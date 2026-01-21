@@ -4,11 +4,12 @@ echo Starting MEX Manager (Electron)
 echo ========================================
 echo.
 
-REM Kill any existing Python and Node processes
-echo Cleaning up existing processes...
-taskkill /F /IM python.exe 2>nul
-taskkill /F /IM node.exe 2>nul
-taskkill /F /IM electron.exe 2>nul
+REM Kill processes on our specific ports (not all node/python which kills Claude Code)
+echo Cleaning up existing processes on ports 5000 and 3000...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do taskkill /F /PID %%a 2>nul
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do taskkill /F /PID %%a 2>nul
+REM Kill electron windows with our app title
+taskkill /F /FI "WINDOWTITLE eq MEX Manager*" 2>nul
 timeout /t 2 /nobreak >nul
 
 echo.

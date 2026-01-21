@@ -3318,11 +3318,18 @@
   margin-bottom: var(--space-3);
   display: flex;
   align-items: center;
-  padding: 12px;
+  justify-content: center;
+  padding: 8px;
 }
 
-.extra-mod-image-container .laser-beam-preview {
+.extra-mod-image-container .laser-beam-preview,
+.extra-mod-image-container .laser-ring-preview,
+.extra-mod-image-container .sideb-preview,
+.extra-mod-image-container .upb-preview,
+.extra-mod-image-container .shine-preview,
+.extra-mod-image-container .sword-preview {
   width: 100%;
+  height: 100%;
 }
 
 .extra-mod-preview {
