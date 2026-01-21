@@ -640,19 +640,24 @@ namespace HSDRawViewer
                             string base64Data = dataProp.GetString();
                             byte[] pngData = Convert.FromBase64String(base64Data);
 
-                            _hostForm.BeginInvoke((Action)(() =>
+                            bool success = false;
+                            string error = null;
+
+                            _hostForm.Invoke((Action)(() =>
                             {
                                 try
                                 {
                                     _renderJObj.UpdateTexture(texIndex, pngData);
+                                    success = true;
                                 }
                                 catch (Exception ex)
                                 {
+                                    error = ex.Message;
                                     LogError($"Error updating texture {texIndex}", ex);
                                 }
                             }));
 
-                            await SendJsonAsync(new { type = "textureUpdated", index = texIndex, success = true });
+                            await SendJsonAsync(new { type = "textureUpdated", index = texIndex, success, error });
                         }
                         break;
 

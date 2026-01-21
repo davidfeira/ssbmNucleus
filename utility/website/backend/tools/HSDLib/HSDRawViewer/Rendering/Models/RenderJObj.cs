@@ -1175,22 +1175,16 @@ namespace HSDRawViewer.Rendering.Models
         /// </summary>
         public void UpdateTexture(int textureIndex, byte[] pngData)
         {
-            var dbg = @"C:\Users\david\projects\new aka\logs\TEXTURE_DEBUG.txt";
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} UpdateTexture called: index={textureIndex}, pngData.Length={pngData?.Length ?? 0}\n");
-
             var textures = GetTextureList();
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} GetTextureList returned {textures.Count} textures\n");
 
             if (textureIndex < 0 || textureIndex >= textures.Count)
             {
-                System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: index {textureIndex} out of range (0-{textures.Count - 1})\n");
                 return;
             }
 
             var texInfo = textures[textureIndex];
             if (texInfo.Tobj?.ImageData?.ImageData == null)
             {
-                System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: Tobj or ImageData is null\n");
                 return;
             }
 
@@ -1198,16 +1192,13 @@ namespace HSDRawViewer.Rendering.Models
             byte[] oldImageData = texInfo.Tobj.ImageData.ImageData;
             if (!imageBufferTextureIndex.TryGetValue(oldImageData, out int texManagerIndex))
             {
-                System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: texture not found in imageBufferTextureIndex\n");
                 return;
             }
 
             int glTextureId = TextureManager.GetGLID(texManagerIndex);
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} Found texture: texManagerIndex={texManagerIndex}, glTextureId={glTextureId}\n");
 
             if (glTextureId < 0)
             {
-                System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: glTextureId is {glTextureId}, skipping\n");
                 return;
             }
 
@@ -1226,24 +1217,20 @@ namespace HSDRawViewer.Rendering.Models
                     }
                 }
             }
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} Found {tobjsToUpdate.Count} TOBJs sharing this texture\n");
 
             // Decode PNG to BGRA (matching original texture format)
             using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngData);
             byte[] bgraData = new byte[image.Width * image.Height * 4];
             image.CopyPixelDataTo(bgraData);
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} Image decoded: {image.Width}x{image.Height}\n");
 
             // Update OpenGL texture for live preview (BGRA format)
             GL.BindTexture(TextureTarget.Texture2D, glTextureId);
             GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, image.Width, image.Height,
                 PixelFormat.Bgra, PixelType.UnsignedByte, bgraData);
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} GL.TexSubImage2D done on glTextureId={glTextureId}\n");
 
             // Update HSD TOBJ data for export - update ALL TOBJs that share this texture
             var imgFormat = texInfo.Tobj.ImageData?.Format ?? GXTexFmt.RGBA8;
             var palFormat = texInfo.Tobj.TlutData?.Format ?? GXTlutFmt.RGB565;
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} InjectBitmap: imgFormat={imgFormat}, palFormat={palFormat}\n");
 
             byte[] newImageData = null;
             foreach (var tobj in tobjsToUpdate)
@@ -1259,18 +1246,15 @@ namespace HSDRawViewer.Rendering.Models
                     tobj.ImageData.ImageData = newImageData;
                 }
             }
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} InjectBitmap done for {tobjsToUpdate.Count} TOBJs\n");
 
             // Update the dictionary: remove old key, add new key pointing to same texture index
             if (newImageData != null)
             {
                 imageBufferTextureIndex.Remove(oldImageData);
                 imageBufferTextureIndex[newImageData] = texManagerIndex;
-                System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} Updated imageBufferTextureIndex mapping\n");
             }
 
             texInfo.RgbaData = bgraData; // Also cache for thumbnails
-            System.IO.File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} UpdateTexture COMPLETE\n");
         }
     }
 }
