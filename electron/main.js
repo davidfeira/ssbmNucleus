@@ -34,7 +34,9 @@ function startFlaskServer() {
       return;
     }
 
-    backendCmd = 'python';
+    // Use venv Python in development
+    const venvPython = getResourcePath('venv/Scripts/python.exe');
+    backendCmd = venvPython;
     backendArgs = [backendPath];
     backendCwd = path.dirname(backendPath);
   } else {

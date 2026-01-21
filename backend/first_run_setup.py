@@ -327,11 +327,18 @@ class FirstRunSetup:
             monitor_thread = threading.Thread(target=monitor_size, daemon=True)
             monitor_thread.start()
 
+            # Collect all output for logging
+            stdout_lines = []
+
             # Read output line by line for phase changes
             for line in process.stdout:
                 line = line.strip()
                 if not line:
                     continue
+
+                # Save all output for error logging
+                stdout_lines.append(line)
+                logger.info(f"mexcli output: {line}")
 
                 try:
                     data = json.loads(line)
@@ -349,6 +356,7 @@ class FirstRunSetup:
                             progress_callback('extracting', 100, 'Extraction complete', 100, 100)
 
                 except json.JSONDecodeError:
+                    # Not JSON, just regular output
                     pass
 
             process.wait()
@@ -357,9 +365,13 @@ class FirstRunSetup:
 
             if process.returncode != 0:
                 stderr = process.stderr.read()
+                stdout_text = '\n'.join(stdout_lines)
+                logger.error(f"mexcli failed with return code {process.returncode}")
+                logger.error(f"mexcli stdout: {stdout_text}")
+                logger.error(f"mexcli stderr: {stderr}")
                 return {
                     'success': False,
-                    'error': f'mexcli create failed: {stderr}'
+                    'error': f'mexcli create failed (code {process.returncode}): {stdout_text or stderr}'
                 }
 
             # Verify extraction produced expected files

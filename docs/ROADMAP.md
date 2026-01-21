@@ -9,6 +9,7 @@
 ## PHASE 1: App Feature Completion
 
 ### Bugs / Polish
+- [ ] Vanilla ISO path not saved during first-run setup (requires re-setting in Settings)
 - [ ] Not deleting output ISO after download
 - [ ] Custom poses not working properly:
   - Don't load in HD regeneration mode

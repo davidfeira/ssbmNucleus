@@ -14,7 +14,7 @@ timeout /t 2 /nobreak >nul
 
 echo.
 echo Starting Backend (Flask)...
-start "MEX Backend" cmd /k "cd /d "%~dp0..\.." && python backend/mex_api.py"
+start "MEX Backend" cmd /k "%~dp0..\..\scripts\run_backend.bat"
 
 echo Waiting for backend to start...
 timeout /t 3 /nobreak >nul
