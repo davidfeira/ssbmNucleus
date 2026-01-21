@@ -155,24 +155,249 @@ def find_sideb_offsets(dat_path):
     return None
 
 
+def find_upb_offsets(dat_path):
+    """Dynamically find Up-B (Firefox/Firebird) color offsets in EfFxData.dat.
+
+    Searches for unique patterns to locate:
+    - tip: 98 00 20 (32 entries, unique count)
+    - body: cluster of 98 00 0A (10-entry matrices)
+    - rings: 07 07 07 04 markers (after tip region)
+    - trail: kept hardcoded (CF format, complex, early in file)
+
+    Args:
+        dat_path: Path to EfFxData.dat
+
+    Returns:
+        Dict with detected offsets, or None if not found
+    """
+    try:
+        with open(dat_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read {dat_path} for Up-B detection: {e}")
+        return None
+
+    result = {}
+
+    # Find tip: unique 98 00 20 pattern (32 entries)
+    tip_pattern = bytes([0x98, 0x00, 0x20])
+    tip_pos = data.find(tip_pattern)
+    if tip_pos != -1:
+        # Tip matrix is 0x80 bytes (128 bytes): 3 header + 32 * 4 entries - 3 = 128
+        result['tip'] = {
+            'start': tip_pos,
+            'end': tip_pos + 0x80,
+            'format': 'RGBY',
+            'vanilla': 'FE60'
+        }
+        logger.debug(f"Found Up-B tip at 0x{tip_pos:X}")
+    else:
+        logger.warning("Could not find Up-B tip pattern (98 00 20)")
+        return None
+
+    # Find body: cluster of 98 00 0A matrices (10 entries each)
+    # Look for multiple 98 00 0A patterns close together, before the tip
+    body_pattern = bytes([0x98, 0x00, 0x0A])
+    body_candidates = []
+    pos = 0
+    while pos < tip_pos:  # Body is before tip
+        pos = data.find(body_pattern, pos)
+        if pos == -1 or pos >= tip_pos:
+            break
+        body_candidates.append(pos)
+        pos += 1
+
+    # Find a cluster of 98 00 0A matrices (RGB format, close together)
+    # Body region spans multiple matrices with consistent spacing
+    if len(body_candidates) >= 3:
+        # Calculate actual spacing between matrices
+        matrix_spacing = body_candidates[1] - body_candidates[0]
+
+        # Find the cluster where matrices have consistent spacing
+        cluster_start = None
+        cluster_end = None
+        for i in range(len(body_candidates) - 2):
+            # Check if matrices have consistent spacing (within tolerance)
+            spacing1 = body_candidates[i + 1] - body_candidates[i]
+            spacing2 = body_candidates[i + 2] - body_candidates[i + 1]
+            if abs(spacing1 - spacing2) < 5:  # Consistent spacing
+                cluster_start = body_candidates[i]
+                # Find the end of the cluster
+                last_in_cluster = i
+                for j in range(i + 1, len(body_candidates)):
+                    if j + 1 < len(body_candidates):
+                        next_spacing = body_candidates[j + 1] - body_candidates[j]
+                        if abs(next_spacing - matrix_spacing) > 5:
+                            break
+                    last_in_cluster = j
+
+                # End is last matrix + 0x28 (40 bytes = 10 RGB entries)
+                # This matches the hardcoded value which excludes trailing padding
+                cluster_end = body_candidates[last_in_cluster] + 0x28
+                break
+
+        if cluster_start is not None:
+            result['body'] = {
+                'start': cluster_start,
+                'end': cluster_end,
+                'format': 'RGB',
+                'vanilla': 'FFFFFF'
+            }
+            logger.debug(f"Found Up-B body cluster at 0x{cluster_start:X}-0x{cluster_end:X}")
+
+    # Find rings: 07 07 07 04 markers (after tip region)
+    rings_pattern = bytes([0x07, 0x07, 0x07, 0x04])
+    rings_offsets = []
+    pos = tip_pos  # Rings are after tip
+    while True:
+        pos = data.find(rings_pattern, pos)
+        if pos == -1:
+            break
+        rings_offsets.append(pos)
+        pos += 1
+
+    if len(rings_offsets) >= 2:
+        # Use first two 07 07 07 04 markers after tip
+        result['rings'] = {
+            'format': '070707',
+            'offsets': rings_offsets[:2]
+        }
+        logger.debug(f"Found Up-B rings at {[hex(o) for o in rings_offsets[:2]]}")
+
+    # Trail: keep hardcoded (CF format early in file, complex structure)
+    # These offsets are stable because they're at the beginning of the file
+    result['trail'] = {
+        'format': 'CF',
+        'offsets': [0x2EE, 0x2F4, 0x324, 0x32B, 0x52E, 0x534]
+    }
+
+    if 'tip' in result:
+        logger.info(f"Found Up-B offsets: tip=0x{result['tip']['start']:X}")
+        return result
+
+    return None
+
+
+def find_shine_offsets(dat_path):
+    """Dynamically find Shine (Reflector) color offsets in EfFxData.dat.
+
+    Searches for unique patterns to locate:
+    - hex: 98 00 2B (43 entries, unique count)
+    - inner: 98 00 1B (27 entries, unique count)
+    - outer: 3 consecutive 98 00 0F (15-entry matrices)
+    - bubble: 12 bytes before 3E99999A42480000 marker
+
+    Args:
+        dat_path: Path to EfFxData.dat
+
+    Returns:
+        Dict with detected offsets, or None if not found
+    """
+    try:
+        with open(dat_path, 'rb') as f:
+            data = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read {dat_path} for Shine detection: {e}")
+        return None
+
+    result = {}
+
+    # Find hex: unique 98 00 2B pattern (43 entries)
+    hex_pattern = bytes([0x98, 0x00, 0x2B])
+    hex_pos = data.find(hex_pattern)
+    if hex_pos != -1:
+        # 43 entries * 4 bytes each + 3 header = 175 bytes, round to 0xB0
+        result['hex'] = {
+            'start': hex_pos,
+            'end': hex_pos + 0xB0,
+            'format': 'RGBY'
+        }
+        logger.debug(f"Found Shine hex at 0x{hex_pos:X}")
+    else:
+        logger.warning("Could not find Shine hex pattern (98 00 2B)")
+        return None
+
+    # Find inner: 98 00 1B pattern (27 entries) - search AFTER hex
+    # There are multiple 98 00 1B in the file, inner is the one after hex
+    inner_pattern = bytes([0x98, 0x00, 0x1B])
+    inner_pos = data.find(inner_pattern, hex_pos + 0xB0)  # Start after hex region
+    if inner_pos != -1:
+        # 27 entries * 4 bytes + 3 header = 111 bytes, round to 0x70
+        result['inner'] = {
+            'start': inner_pos,
+            'end': inner_pos + 0x70,
+            'format': 'RGBY'
+        }
+        logger.debug(f"Found Shine inner at 0x{inner_pos:X}")
+
+    # Find outer: 3 consecutive 98 00 0F matrices (15 entries each)
+    outer_pattern = bytes([0x98, 0x00, 0x0F])
+    outer_candidates = []
+    pos = hex_pos if hex_pos != -1 else 0  # Search after hex
+    while True:
+        pos = data.find(outer_pattern, pos)
+        if pos == -1:
+            break
+        outer_candidates.append(pos)
+        pos += 1
+
+    # Look for 3 consecutive 98 00 0F matrices close together
+    for i in range(len(outer_candidates) - 2):
+        first = outer_candidates[i]
+        second = outer_candidates[i + 1]
+        third = outer_candidates[i + 2]
+        # Each 15-entry matrix is about 0x3F bytes (63), with overlapping ends
+        # Hardcoded uses 0x40, 0x41, 0x42 for the three ranges respectively
+        if second - first < 0x50 and third - second < 0x50:
+            result['outer'] = {
+                'format': '98_multi',
+                'ranges': [
+                    {'start': first, 'end': first + 0x40},
+                    {'start': second, 'end': second + 0x41},
+                    {'start': third, 'end': third + 0x42}
+                ]
+            }
+            logger.debug(f"Found Shine outer at 0x{first:X}, 0x{second:X}, 0x{third:X}")
+            break
+
+    # Find bubble: 12 bytes before 3E99999A42480000 marker (same as side-B)
+    bubble_marker = bytes.fromhex('3E99999A42480000')
+    bubble_pos = data.find(bubble_marker)
+    if bubble_pos > 12:
+        # The bubble colors are 12 bytes before the marker
+        bubble_start = bubble_pos - 12
+        result['bubble'] = {
+            'start': bubble_start,
+            'format': '42_48',
+            'size': 12
+        }
+        logger.debug(f"Found Shine bubble at 0x{bubble_start:X}")
+
+    if 'hex' in result:
+        logger.info(f"Found Shine offsets: hex=0x{result['hex']['start']:X}")
+        return result
+
+    return None
+
+
 def get_dynamic_offsets(dat_path, extra_type_id, fallback_offsets):
     """Get offsets for an extra type, using dynamic detection if applicable.
 
-    For laser and sideb types on Fox/Falco, attempts dynamic detection first,
+    For laser, sideb, upb, and shine types, attempts dynamic detection first,
     falling back to hardcoded offsets if detection fails.
 
     Results are cached by (file_path, mtime) to avoid re-scanning.
 
     Args:
         dat_path: Path to the .dat file
-        extra_type_id: The extra type ID (e.g., 'laser', 'sideb')
+        extra_type_id: The extra type ID (e.g., 'laser', 'sideb', 'upb', 'shine')
         fallback_offsets: Hardcoded offsets to use if detection fails
 
     Returns:
         Dict of offset info for each layer
     """
     # Check if this type needs dynamic detection
-    if extra_type_id not in ('laser', 'sideb'):
+    if extra_type_id not in ('laser', 'sideb', 'upb', 'shine'):
         return fallback_offsets
 
     # Check cache
@@ -191,6 +416,10 @@ def get_dynamic_offsets(dat_path, extra_type_id, fallback_offsets):
         detected = find_laser_offsets(dat_path)
     elif extra_type_id == 'sideb':
         detected = find_sideb_offsets(dat_path)
+    elif extra_type_id == 'upb':
+        detected = find_upb_offsets(dat_path)
+    elif extra_type_id == 'shine':
+        detected = find_shine_offsets(dat_path)
 
     if detected:
         logger.info(f"Using dynamically detected offsets for {extra_type_id}")
