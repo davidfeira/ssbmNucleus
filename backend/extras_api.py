@@ -235,7 +235,7 @@ def find_dat_file(files_dir, target_file):
     return matches[0] if matches else None
 
 
-def patch_matrix_colors(data, new_color, color_format="RGBY"):
+def patch_matrix_colors(data, new_color, color_format="RGBY", vanilla_color=None):
     """Replace colors in 98 matrix format data.
 
     The 98 matrix format has:
@@ -255,10 +255,14 @@ def patch_matrix_colors(data, new_color, color_format="RGBY"):
               ^^ ^^^^^^    ^^^^^^    ^^^^^^
               |  color     color     color
 
+    Note: Some matrices have alternating color/position entries. When vanilla_color
+    is provided, only entries matching that color are patched (safe mode).
+
     Args:
         data: Bytes data from the offset range
         new_color: 2-byte RGBY or 3-byte RGB color value
         color_format: "RGBY" for 2-byte colors, "RGB" for 3-byte colors
+        vanilla_color: If provided, only patch entries matching this color (bytes)
 
     Returns:
         Patched bytes data
@@ -270,9 +274,16 @@ def patch_matrix_colors(data, new_color, color_format="RGBY"):
     # Each entry: 1 byte vertex + color bytes + remaining bytes = 4 bytes total
     # First color at position 4 (3 header + 1 vertex)
     pos = 4  # First color position
+    patched_count = 0
     while pos + color_len - 1 < len(result):
-        for i in range(color_len):
-            result[pos + i] = new_color[i]
+        current_color = bytes(result[pos:pos + color_len])
+        # If vanilla_color specified, only patch matching entries (safe mode)
+        # This prevents corrupting position data in mixed-format matrices
+        should_patch = vanilla_color is None or current_color == vanilla_color
+        if should_patch:
+            for i in range(color_len):
+                result[pos + i] = new_color[i]
+            patched_count += 1
         pos += 4  # Move to next color (4 bytes per entry)
 
     return bytes(result)
@@ -474,13 +485,17 @@ def apply_hex_patches(dat_path, offsets, modifications):
                     logger.warning(f"Invalid hex color for {layer_id}: {color_hex}")
                     continue
 
+                # Get vanilla color for safe mode if specified
+                vanilla_hex = offset_info.get('vanilla')
+                vanilla_bytes = bytes.fromhex(vanilla_hex) if vanilla_hex else None
+
                 # Patch each range
                 for range_info in ranges_list:
                     start = range_info['start']
                     end = range_info['end']
                     f.seek(start)
                     data = f.read(end - start)
-                    modified = patch_matrix_colors(data, color_bytes, 'RGBY')
+                    modified = patch_matrix_colors(data, color_bytes, 'RGBY', vanilla_bytes)
                     f.seek(start)
                     f.write(modified)
                 logger.debug(f"Patched 98_multi {layer_id} at {len(ranges_list)} ranges with color {color_hex}")
@@ -584,8 +599,13 @@ def apply_hex_patches(dat_path, offsets, modifications):
                 f.seek(start)
                 data = f.read(end - start)
 
+                # Get vanilla color for safe mode (only patch matching entries)
+                # This prevents corrupting position data in mixed-format matrices
+                vanilla_hex = offset_info.get('vanilla')
+                vanilla_bytes = bytes.fromhex(vanilla_hex) if vanilla_hex else None
+
                 # Patch colors in the matrix format
-                modified = patch_matrix_colors(data, color_bytes, color_format)
+                modified = patch_matrix_colors(data, color_bytes, color_format, vanilla_bytes)
 
                 # Write back
                 f.seek(start)

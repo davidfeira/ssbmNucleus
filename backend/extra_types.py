@@ -260,10 +260,10 @@ EXTRA_TYPES = {
             "sharedWith": ["Falco"],  # Characters that share this extra
             "owner": "Fox",  # Which character owns the mods in storage
             "offsets": {
-                # 98 matrix format for flame tip
-                "tip": {"start": 0x1AC80, "end": 0x1AD00, "format": "RGBY"},
+                # 98 matrix format for flame tip (mixed color/position data - needs safe mode)
+                "tip": {"start": 0x1AC80, "end": 0x1AD00, "format": "RGBY", "vanilla": "FE60"},
                 # 98 matrix format for firefox body when not textured
-                "body": {"start": 0x1A880, "end": 0x1AA50, "format": "RGB"},
+                "body": {"start": 0x1A880, "end": 0x1AA50, "format": "RGB", "vanilla": "FFFFFF"},
                 # CF format - trailing fire (all sizes combined)
                 # CF XX RR GG BB - color at offset+2
                 "trail": {
