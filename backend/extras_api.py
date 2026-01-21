@@ -529,7 +529,7 @@ def find_dat_file(files_dir, target_file):
     return matches[0] if matches else None
 
 
-def patch_matrix_colors(data, new_color, color_format="RGBY", vanilla_color=None):
+def patch_matrix_colors(data, new_color=None, color_format="RGBY", vanilla_color=None, color_map=None):
     """Replace colors in 98 matrix format data.
 
     The 98 matrix format has:
@@ -554,9 +554,12 @@ def patch_matrix_colors(data, new_color, color_format="RGBY", vanilla_color=None
 
     Args:
         data: Bytes data from the offset range
-        new_color: 2-byte RGBY or 3-byte RGB color value
+        new_color: 2-byte RGBY or 3-byte RGB color value (used if color_map not provided)
         color_format: "RGBY" for 2-byte colors, "RGB" for 3-byte colors
         vanilla_color: If provided, only patch entries matching this color (bytes)
+        color_map: Dict mapping vanilla color hex strings to new color hex strings.
+                   Example: {"621F": "0FF0", "AB9F": "0A45"}
+                   If provided, replaces only colors matching map keys.
 
     Returns:
         Patched bytes data
@@ -569,16 +572,40 @@ def patch_matrix_colors(data, new_color, color_format="RGBY", vanilla_color=None
     # First color at position 4 (3 header + 1 vertex)
     pos = 4  # First color position
     patched_count = 0
-    while pos + color_len - 1 < len(result):
-        current_color = bytes(result[pos:pos + color_len])
-        # If vanilla_color specified, only patch matching entries (safe mode)
-        # This prevents corrupting position data in mixed-format matrices
-        should_patch = vanilla_color is None or current_color == vanilla_color
-        if should_patch:
-            for i in range(color_len):
-                result[pos + i] = new_color[i]
-            patched_count += 1
-        pos += 4  # Move to next color (4 bytes per entry)
+
+    # If color_map provided, use targeted replacement
+    if color_map:
+        # Pre-convert map keys/values to bytes for efficiency
+        byte_map = {}
+        for vanilla_hex, new_hex in color_map.items():
+            try:
+                vanilla_bytes = bytes.fromhex(vanilla_hex)
+                new_bytes = bytes.fromhex(new_hex)
+                if len(vanilla_bytes) == color_len and len(new_bytes) == color_len:
+                    byte_map[vanilla_bytes] = new_bytes
+            except ValueError:
+                continue
+
+        while pos + color_len - 1 < len(result):
+            current_color = bytes(result[pos:pos + color_len])
+            if current_color in byte_map:
+                new_bytes = byte_map[current_color]
+                for i in range(color_len):
+                    result[pos + i] = new_bytes[i]
+                patched_count += 1
+            pos += 4  # Move to next color (4 bytes per entry)
+    else:
+        # Original behavior: replace all/matching colors with single new_color
+        while pos + color_len - 1 < len(result):
+            current_color = bytes(result[pos:pos + color_len])
+            # If vanilla_color specified, only patch matching entries (safe mode)
+            # This prevents corrupting position data in mixed-format matrices
+            should_patch = vanilla_color is None or current_color == vanilla_color
+            if should_patch:
+                for i in range(color_len):
+                    result[pos + i] = new_color[i]
+                patched_count += 1
+            pos += 4  # Move to next color (4 bytes per entry)
 
     return bytes(result)
 
@@ -625,6 +652,59 @@ def patch_070707_colors(dat_path, offsets_list, color_bytes):
             # Second color at offset+8 (after first color + 00)
             f.seek(offset + 8)
             f.write(color_bytes)
+
+
+def read_shine_gradient_colors(dat_path, hex_offset):
+    """Read the two-color gradient from shine hex region.
+
+    The shine hex region contains two alternating colors:
+    - Primary (vanilla 621F): bright edge/outline vertices
+    - Secondary (vanilla AB9F): fill/interior vertices
+
+    We read all colors in the matrix and identify the two distinct values.
+
+    Args:
+        dat_path: Path to EfFxData.dat
+        hex_offset: Dict with start/end for the hex region
+
+    Returns:
+        Dict with 'primary' and 'secondary' color hex strings
+    """
+    start = hex_offset.get('start', 0)
+    end = hex_offset.get('end', start)
+
+    with open(dat_path, 'rb') as f:
+        f.seek(start)
+        data = f.read(end - start)
+
+    # Find all distinct 2-byte RGBY colors in the matrix
+    # Header is 3 bytes (98 00 NN), entries are 4 bytes each (vertex + 2-byte color + coord)
+    colors_found = {}
+    pos = 4  # First color position (after header + vertex byte)
+    while pos + 1 < len(data):
+        color = data[pos:pos + 2].hex().upper()
+        colors_found[color] = colors_found.get(color, 0) + 1
+        pos += 4
+
+    # Sort by frequency - secondary (fill) usually has more vertices
+    sorted_colors = sorted(colors_found.items(), key=lambda x: x[1], reverse=True)
+
+    if len(sorted_colors) >= 2:
+        # Most common = secondary (fill), second = primary (edge)
+        secondary = sorted_colors[0][0]
+        primary = sorted_colors[1][0]
+    elif len(sorted_colors) == 1:
+        # Only one color found (already uniform)
+        primary = secondary = sorted_colors[0][0]
+    else:
+        # Fallback to vanilla
+        primary = '621F'
+        secondary = 'AB9F'
+
+    return {
+        'primary': primary,
+        'secondary': secondary
+    }
 
 
 def read_current_colors(dat_path, offsets):
@@ -995,7 +1075,42 @@ def apply_extras_patches(project_path):
             offsets = get_dynamic_offsets(dat_path, type_id, fallback_offsets)
 
             try:
-                # Apply hex patches
+                # Special handling for shine_gradient format (two-color gradient)
+                if extra_type_config.get('format') == 'shine_gradient':
+                    hex_offset = offsets.get('hex', {})
+
+                    # Read CURRENT colors from the file (might be vanilla or from a previous build)
+                    current_colors = read_shine_gradient_colors(dat_path, hex_offset)
+                    current_primary = current_colors.get('primary', '621F')
+                    current_secondary = current_colors.get('secondary', 'AB9F')
+
+                    # Get new colors from modifications
+                    vanilla = extra_type_config.get('vanilla', {})
+                    new_primary = modifications.get('primary', {}).get('color', vanilla.get('primary', '621F'))
+                    new_secondary = modifications.get('secondary', {}).get('color', vanilla.get('secondary', 'AB9F'))
+
+                    # Build color_map from current to new (works whether file is vanilla or modified)
+                    color_map = {
+                        current_primary: new_primary,
+                        current_secondary: new_secondary
+                    }
+
+                    # Patch the hex region with the color_map
+                    start = hex_offset.get('start', 0)
+                    end = hex_offset.get('end', start)
+
+                    with open(dat_path, 'r+b') as f:
+                        f.seek(start)
+                        data = f.read(end - start)
+                        modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
+                        f.seek(start)
+                        f.write(modified)
+
+                    logger.info(f"[OK] Applied shine gradient to {character}: {current_primary}->{new_primary}, {current_secondary}->{new_secondary}")
+                    results['patched'].append(f"{character}/{type_id}")
+                    continue
+
+                # Apply hex patches (standard format)
                 apply_hex_patches(dat_path, offsets, modifications)
                 logger.info(f"[OK] Applied {type_id} extras to {character} ({target_file})")
                 results['patched'].append(f"{character}/{type_id}")
@@ -1102,6 +1217,24 @@ def get_current_extra(character, extra_type):
 
         # Use dynamic offset detection for laser/sideb, fallback to hardcoded
         offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
+
+        # Special handling for shine_gradient format (two-color gradient)
+        if type_config.get('format') == 'shine_gradient':
+            hex_offset = offsets.get('hex', {})
+            current_colors = read_shine_gradient_colors(dat_path, hex_offset)
+
+            # Check if current colors match vanilla
+            is_vanilla = (
+                current_colors.get('primary', '').upper() == vanilla.get('primary', '').upper() and
+                current_colors.get('secondary', '').upper() == vanilla.get('secondary', '').upper()
+            )
+
+            return jsonify({
+                'success': True,
+                'colors': current_colors,
+                'isVanilla': is_vanilla,
+                'vanilla': vanilla
+            })
 
         # Read current colors from the .dat file
         current_colors = read_current_colors(dat_path, offsets)
@@ -1390,8 +1523,41 @@ def install_extra():
         modifications = found_mod.get('modifications', {})
         logger.info(f"[Install] {extra_type} for {character}: offsets={offsets}, modifications={modifications}")
         if modifications:
-            apply_hex_patches(dat_path, offsets, modifications)
-            logger.info(f"[OK] Installed {found_mod['name']} to {target_file} at {dat_path}")
+            # Special handling for shine_gradient format (two-color gradient)
+            if type_config.get('format') == 'shine_gradient':
+                hex_offset = offsets.get('hex', {})
+
+                # Read CURRENT colors from the file (might be vanilla or from another mod)
+                current_colors = read_shine_gradient_colors(dat_path, hex_offset)
+                current_primary = current_colors.get('primary', '621F')
+                current_secondary = current_colors.get('secondary', 'AB9F')
+
+                # Get new colors from modifications
+                vanilla = type_config.get('vanilla', {})
+                new_primary = modifications.get('primary', {}).get('color', vanilla.get('primary', '621F'))
+                new_secondary = modifications.get('secondary', {}).get('color', vanilla.get('secondary', 'AB9F'))
+
+                # Build color_map from current to new (works whether file is vanilla or modified)
+                color_map = {
+                    current_primary: new_primary,
+                    current_secondary: new_secondary
+                }
+
+                # Patch the hex region with the color_map
+                start = hex_offset.get('start', 0)
+                end = hex_offset.get('end', start)
+
+                with open(dat_path, 'r+b') as f:
+                    f.seek(start)
+                    data = f.read(end - start)
+                    modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
+                    f.seek(start)
+                    f.write(modified)
+
+                logger.info(f"[OK] Installed shine gradient {found_mod['name']}: {current_primary}->{new_primary}, {current_secondary}->{new_secondary}")
+            else:
+                apply_hex_patches(dat_path, offsets, modifications)
+                logger.info(f"[OK] Installed {found_mod['name']} to {target_file} at {dat_path}")
 
             # Handle fire texture hue if present (for upb extra)
             if 'fire' in modifications and 'hue' in modifications['fire']:
@@ -1502,10 +1668,35 @@ def restore_vanilla_extra():
         # Use dynamic offset detection for laser/sideb, fallback to hardcoded
         offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
-        # Apply vanilla colors
-        vanilla_mods = {layer: {'color': color} for layer, color in vanilla.items()}
-        apply_hex_patches(dat_path, offsets, vanilla_mods)
-        logger.info(f"[OK] Restored vanilla colors for {character}/{extra_type}")
+        # Special handling for shine_gradient format (two-color gradient)
+        if type_config.get('format') == 'shine_gradient':
+            # Read current colors to build the restoration map
+            hex_offset = offsets.get('hex', {})
+            current_colors = read_shine_gradient_colors(dat_path, hex_offset)
+
+            # Build color_map to restore vanilla colors
+            color_map = {
+                current_colors['primary']: vanilla['primary'],
+                current_colors['secondary']: vanilla['secondary']
+            }
+
+            # Patch back to vanilla
+            start = hex_offset.get('start', 0)
+            end = hex_offset.get('end', start)
+
+            with open(dat_path, 'r+b') as f:
+                f.seek(start)
+                data = f.read(end - start)
+                modified = patch_matrix_colors(data, color_format='RGBY', color_map=color_map)
+                f.seek(start)
+                f.write(modified)
+
+            logger.info(f"[OK] Restored vanilla shine gradient for {character}")
+        else:
+            # Apply vanilla colors (standard format)
+            vanilla_mods = {layer: {'color': color} for layer, color in vanilla.items()}
+            apply_hex_patches(dat_path, offsets, vanilla_mods)
+            logger.info(f"[OK] Restored vanilla colors for {character}/{extra_type}")
 
         # Also restore fire texture for upb extra
         if extra_type == 'upb':

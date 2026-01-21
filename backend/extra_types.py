@@ -312,39 +312,25 @@ EXTRA_TYPES = {
         {
             "id": "shine",
             "name": "Shine Color",
-            "description": "Reflector shield colors",
+            "description": "Reflector shield colors (two-color gradient)",
             "target_file": "EfFxData.dat",
             "shared": True,  # Shared between Fox and Falco
             "sharedWith": ["Falco"],  # Characters that share this extra
             "owner": "Fox",  # Which character owns the mods in storage
+            "format": "shine_gradient",  # Special two-color gradient format
             "offsets": {
-                # 98 matrix format for main hexagon shape
-                "hex": {"start": 0x1C2A0, "end": 0x1C350, "format": "RGBY"},
-                # 98 matrix format for inner glow
-                "inner": {"start": 0x1C860, "end": 0x1C8D0, "format": "RGBY"},
-                # 98 matrix format for outer glow (multiple matrices, same color)
-                "outer": {
-                    "format": "98_multi",
-                    "ranges": [
-                        {"start": 0x1C8E0, "end": 0x1C920},
-                        {"start": 0x1C91F, "end": 0x1C960},
-                        {"start": 0x1C95E, "end": 0x1C9A0}
-                    ]
-                },
-                # 42_48 format for transparent bubble
-                "bubble": {"start": 0x1B4C4, "format": "42_48", "size": 12}
+                # 98 matrix format for main hexagon shape - contains two alternating colors
+                "hex": {"start": 0x1C2A0, "end": 0x1C350, "format": "RGBY"}
             },
+            # Two-color vanilla pattern: primary (bright edge) and secondary (fill)
+            # These are the colors that appear in the hex region in alternating pattern
             "vanilla": {
-                "hex": "621F",       # Blue-ish (RGBY)
-                "inner": "63FF",     # Blue (RGBY)
-                "outer": "63FF",     # Blue (RGBY)
-                "bubble": "808080FFFFFFFFFFFFFFFFFF"  # Gray/white gradient (3x RGBA)
+                "primary": "621F",    # Bright blue edge/outline vertices
+                "secondary": "AB9F"   # Grayish fill/interior vertices
             },
             "properties": [
-                {"id": "hex", "name": "Hexagon", "description": "Main shield shape", "format": "RGBY"},
-                {"id": "inner", "name": "Inner Glow", "description": "Inner glow effect", "format": "RGBY"},
-                {"id": "outer", "name": "Outer Glow", "description": "Outer flash effect", "format": "RGBY"},
-                {"id": "bubble", "name": "Bubble", "description": "Transparent bubble overlay", "format": "42_48"}
+                {"id": "primary", "name": "Primary (Edge)", "description": "Bright edge/outline color", "format": "RGBY"},
+                {"id": "secondary", "name": "Secondary (Fill)", "description": "Fill/interior color", "format": "RGBY"}
             ]
         },
         {

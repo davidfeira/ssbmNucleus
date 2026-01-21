@@ -897,15 +897,11 @@ export default function CharacterMode({
     )
   }
 
-  // Shine preview component for reflector shield
+  // Shine preview component for reflector shield (two-color gradient)
   const ShinePreview = ({ modifications, compact = false }) => {
-    const hexColor = modifications?.hex?.color ? rgbyToHex(modifications.hex.color) : '#0066FF'
-    const innerColor = modifications?.inner?.color ? rgbyToHex(modifications.inner.color) : '#0066FF'
-    const outerColor = modifications?.outer?.color ? rgbyToHex(modifications.outer.color) : '#0066FF'
-
-    // Extract bubble tint from 42_48 data (first 6 hex chars are RGB)
-    const bubbleData = modifications?.bubble?.color || '808080FFFFFFFFFFFFFFFFFF'
-    const bubbleTint = `#${bubbleData.slice(0, 6)}`
+    // Get colors from modifications (new two-color gradient format)
+    const primaryColor = modifications?.primary?.color ? rgbyToHex(modifications.primary.color) : '#0066FF'
+    const secondaryColor = modifications?.secondary?.color ? rgbyToHex(modifications.secondary.color) : '#8888AA'
 
     const size = compact ? 36 : 50
 
@@ -921,39 +917,39 @@ export default function CharacterMode({
         justifyContent: 'center',
         overflow: 'hidden'
       }}>
-        {/* Outer glow */}
+        {/* Outer glow using primary */}
         <div style={{
           position: 'absolute',
           width: compact ? '45px' : '60px',
           height: compact ? '45px' : '60px',
-          background: `radial-gradient(ellipse at center, ${outerColor}50 0%, transparent 70%)`,
-          filter: `drop-shadow(0 0 10px ${outerColor}60)`
+          background: `radial-gradient(ellipse at center, ${primaryColor}50 0%, transparent 70%)`,
+          filter: `drop-shadow(0 0 10px ${primaryColor}60)`
         }} />
-        {/* Inner glow */}
+        {/* Fill glow using secondary */}
         <div style={{
           position: 'absolute',
           width: compact ? '35px' : '45px',
           height: compact ? '35px' : '45px',
-          background: `radial-gradient(ellipse at center, ${innerColor}70 0%, transparent 60%)`
+          background: `radial-gradient(ellipse at center, ${secondaryColor}80 0%, ${secondaryColor}40 40%, transparent 70%)`
         }} />
-        {/* Hexagon */}
+        {/* Hexagon with gradient from secondary (fill) to primary (edge) */}
         <div style={{
           position: 'absolute',
           width: compact ? '26px' : '34px',
           height: compact ? '26px' : '34px',
-          background: hexColor,
+          background: `radial-gradient(circle at center, ${secondaryColor} 30%, ${primaryColor} 100%)`,
           clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-          opacity: 0.85,
-          boxShadow: `0 0 8px ${hexColor}`
+          opacity: 0.9,
+          boxShadow: `0 0 8px ${primaryColor}`
         }} />
-        {/* Bubble overlay */}
+        {/* Edge highlight */}
         <div style={{
           position: 'absolute',
-          width: compact ? '38px' : '48px',
-          height: compact ? '38px' : '48px',
-          borderRadius: '50%',
-          border: `1px solid ${bubbleTint}30`,
-          background: `radial-gradient(ellipse at 30% 30%, ${bubbleTint}15 0%, transparent 50%)`
+          width: compact ? '28px' : '36px',
+          height: compact ? '28px' : '36px',
+          border: `2px solid ${primaryColor}`,
+          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          opacity: 0.7
         }} />
       </div>
     )

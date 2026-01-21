@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react'
 import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
 
 /**
- * ShineEditorModal - Color picker UI for creating/editing Shine (reflector) mods
- * Supports multiple color properties: hex, inner, outer (RGBY), bubble (42_48)
- * Shared between Fox and Falco
+ * ShineEditorModal - Two-color gradient editor for Fox/Falco shine
+ *
+ * The shine has a two-color gradient pattern:
+ * - Primary (621F vanilla) - bright edge/outline vertices
+ * - Secondary (AB9F vanilla) - fill/interior vertices
+ *
+ * Working mods replace these in pairs (e.g., Green: 621F→0FF0, AB9F→0A45)
  */
 
 const CloseIcon = () => (
@@ -22,6 +26,143 @@ const SaveIcon = () => (
   </svg>
 )
 
+/**
+ * Interactive SVG Hexagon showing the two-color gradient
+ * Primary = edge/outline, Secondary = fill
+ */
+function ShineHexagonSVG({ primaryColor, secondaryColor, selectedLayer, onLayerClick }) {
+  // Outer hexagon points
+  const outerHex = [
+    { x: 100, y: 20 },
+    { x: 165, y: 52 },
+    { x: 165, y: 128 },
+    { x: 100, y: 160 },
+    { x: 35, y: 128 },
+    { x: 35, y: 52 }
+  ]
+
+  // Inner hexagon (fill area)
+  const innerHex = [
+    { x: 100, y: 55 },
+    { x: 135, y: 75 },
+    { x: 135, y: 115 },
+    { x: 100, y: 135 },
+    { x: 65, y: 115 },
+    { x: 65, y: 75 }
+  ]
+
+  const toPointsStr = (pts) => pts.map(p => `${p.x},${p.y}`).join(' ')
+  const isSelected = (layer) => selectedLayer === layer
+
+  return (
+    <svg viewBox="0 0 200 180" className="shine-hexagon-svg" style={{ width: '100%', maxWidth: '220px' }}>
+      <defs>
+        <filter id="shineGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        <filter id="shineGlowStrong" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        {/* Gradient showing primary->secondary transition */}
+        <radialGradient id="fillGradient" cx="50%" cy="50%" r="70%">
+          <stop offset="0%" stopColor={secondaryColor} stopOpacity="0.9" />
+          <stop offset="60%" stopColor={secondaryColor} stopOpacity="0.7" />
+          <stop offset="100%" stopColor={primaryColor} stopOpacity="0.5" />
+        </radialGradient>
+      </defs>
+
+      {/* Background */}
+      <rect x="0" y="0" width="200" height="180" fill="#0a0a12" rx="8" />
+
+      {/* Outer glow aura using primary */}
+      <polygon
+        points={toPointsStr(outerHex)}
+        fill={primaryColor}
+        fillOpacity="0.15"
+        filter="url(#shineGlowStrong)"
+      />
+
+      {/* Fill area - SECONDARY color (clickable) */}
+      <g onClick={() => onLayerClick('secondary')} style={{ cursor: 'pointer' }}>
+        <polygon
+          points={toPointsStr(outerHex)}
+          fill="url(#fillGradient)"
+          stroke="none"
+        />
+        <polygon
+          points={toPointsStr(innerHex)}
+          fill={secondaryColor}
+          fillOpacity={isSelected('secondary') ? 0.9 : 0.75}
+          filter="url(#shineGlow)"
+        />
+        {isSelected('secondary') && (
+          <polygon
+            points={toPointsStr(innerHex)}
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2"
+            strokeDasharray="4,4"
+          />
+        )}
+      </g>
+
+      {/* Edge/outline - PRIMARY color (clickable) */}
+      <g onClick={() => onLayerClick('primary')} style={{ cursor: 'pointer' }}>
+        {/* Outer edge stroke */}
+        <polygon
+          points={toPointsStr(outerHex)}
+          fill="none"
+          stroke={primaryColor}
+          strokeWidth={isSelected('primary') ? 6 : 4}
+          filter="url(#shineGlow)"
+        />
+        {/* Inner edge stroke */}
+        <polygon
+          points={toPointsStr(innerHex)}
+          fill="none"
+          stroke={primaryColor}
+          strokeWidth={isSelected('primary') ? 4 : 2}
+          strokeOpacity="0.8"
+        />
+        {/* Vertex dots */}
+        {outerHex.map((p, i) => (
+          <circle
+            key={`v-${i}`}
+            cx={p.x} cy={p.y}
+            r={isSelected('primary') ? 6 : 4}
+            fill={primaryColor}
+            filter="url(#shineGlow)"
+          />
+        ))}
+        {isSelected('primary') && (
+          <polygon
+            points={toPointsStr(outerHex)}
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2"
+            strokeDasharray="6,3"
+          />
+        )}
+      </g>
+
+      {/* Labels */}
+      <g fill="#666" fontSize="10" fontFamily="sans-serif" fontWeight="bold" style={{ pointerEvents: 'none' }}>
+        <text x="100" y="98" textAnchor="middle" fill={isSelected('secondary') ? '#fff' : '#888'}>FILL</text>
+        <text x="100" y="38" textAnchor="middle" fill={isSelected('primary') ? '#fff' : '#888'}>EDGE</text>
+      </g>
+    </svg>
+  )
+}
+
 // Color presets with both RGBY and RGB values
 const COLOR_PRESETS = [
   { name: 'Blue', rgby: '621F', rgb: '0066FF', hex: '#0066FF' },
@@ -36,39 +177,29 @@ const COLOR_PRESETS = [
   { name: 'Pink', rgby: 'FB5F', rgb: 'FF66CC', hex: '#FF66CC' }
 ]
 
-// Default colors matching vanilla
+// Preset shine color combinations (matching known working mods)
+const SHINE_PRESETS = [
+  { name: 'Vanilla Blue', primary: '621F', secondary: 'AB9F' },
+  { name: 'Green', primary: '0FF0', secondary: '0A45' },
+  { name: 'Purple', primary: 'FCCC', secondary: 'A50F' },
+  { name: 'Red', primary: 'FC00', secondary: '8800' },
+  { name: 'White', primary: 'FFFF', secondary: 'AAAA' },
+  { name: 'Gray', primary: 'FFFF', secondary: '5D88' }
+]
+
+// Default colors matching vanilla shine
 const DEFAULT_COLORS = {
-  hex: '621F',      // Blue-ish (RGBY)
-  inner: '63FF',    // Blue (RGBY)
-  outer: '63FF',    // Blue (RGBY)
-  bubble: '808080FFFFFFFFFFFFFFFFFF'  // Gray/white gradient (3x RGBA)
+  primary: '621F',    // Vanilla bright blue edge
+  secondary: 'AB9F'   // Vanilla grayish fill
 }
 
-// Generate bubble 42_48 data from a tint color
-// Format: [tint RGBA] [white RGBA] [white RGBA]
-function generateBubbleData(tintHex) {
-  // Parse tint color
-  const r = parseInt(tintHex.slice(1, 3), 16)
-  const g = parseInt(tintHex.slice(3, 5), 16)
-  const b = parseInt(tintHex.slice(5, 7), 16)
-
-  // First color: tint with 50% opacity (more visible)
-  const c1 = `${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}FF`
-  // Second and third: white with full alpha
-  const c2 = 'FFFFFFFF'
-  const c3 = 'FFFFFFFF'
-
-  return (c1 + c2 + c3).toUpperCase()
+// Layer metadata for UI
+const LAYER_INFO = {
+  primary: { label: 'Primary (Edge)', desc: 'Bright edge/outline color' },
+  secondary: { label: 'Secondary (Fill)', desc: 'Fill/interior color' }
 }
 
-// Extract tint from bubble data
-function extractBubbleTint(bubbleHex) {
-  if (!bubbleHex || bubbleHex.length < 6) return '#808080'
-  // First 6 chars are RGB of the tint
-  return `#${bubbleHex.slice(0, 6)}`
-}
-
-// Color picker that supports RGBY format
+// RGBY Color picker component
 function ColorPicker({ label, description, value, onChange }) {
   const safeValue = value || '621F'
   const hexValue = rgbyToHex(safeValue)
@@ -119,52 +250,6 @@ function ColorPicker({ label, description, value, onChange }) {
   )
 }
 
-// Simple RGB color picker for bubble tint
-function BubblePicker({ label, description, value, onChange }) {
-  const tintHex = extractBubbleTint(value)
-
-  const handleHexChange = (e) => {
-    const hex = e.target.value
-    onChange(generateBubbleData(hex))
-  }
-
-  return (
-    <div className="laser-color-picker">
-      <div className="laser-color-header">
-        <span className="laser-color-label">{label}</span>
-        <span className="laser-color-description">{description}</span>
-      </div>
-
-      <div className="laser-color-controls">
-        <div className="laser-color-input-group">
-          <input
-            type="color"
-            value={tintHex}
-            onChange={handleHexChange}
-            className="laser-color-input"
-          />
-          <div className="laser-color-values">
-            <span className="laser-color-hex">{tintHex.toUpperCase()}</span>
-            <span className="laser-color-rgby">Bubble Tint</span>
-          </div>
-        </div>
-
-        <div className="laser-color-presets">
-          {COLOR_PRESETS.slice(0, 6).map((preset) => (
-            <button
-              key={preset.name}
-              className="laser-preset"
-              style={{ backgroundColor: preset.hex }}
-              onClick={() => onChange(generateBubbleData(preset.hex))}
-              title={preset.name}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function ShineEditorModal({
   show,
   character,
@@ -177,6 +262,7 @@ export default function ShineEditorModal({
 }) {
   const [name, setName] = useState('')
   const [colors, setColors] = useState({ ...DEFAULT_COLORS })
+  const [selectedLayer, setSelectedLayer] = useState('primary')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
@@ -187,10 +273,8 @@ export default function ShineEditorModal({
       setName(editingMod.name || '')
       if (editingMod.modifications) {
         setColors({
-          hex: editingMod.modifications.hex?.color || DEFAULT_COLORS.hex,
-          inner: editingMod.modifications.inner?.color || DEFAULT_COLORS.inner,
-          outer: editingMod.modifications.outer?.color || DEFAULT_COLORS.outer,
-          bubble: editingMod.modifications.bubble?.color || DEFAULT_COLORS.bubble
+          primary: editingMod.modifications.primary?.color || DEFAULT_COLORS.primary,
+          secondary: editingMod.modifications.secondary?.color || DEFAULT_COLORS.secondary
         })
       }
     } else {
@@ -222,10 +306,8 @@ export default function ShineEditorModal({
         extraType: extraType.id,
         name: name.trim(),
         modifications: {
-          hex: { color: colors.hex },
-          inner: { color: colors.inner },
-          outer: { color: colors.outer },
-          bubble: { color: colors.bubble }
+          primary: { color: colors.primary },
+          secondary: { color: colors.secondary }
         }
       }
 
@@ -284,25 +366,24 @@ export default function ShineEditorModal({
     }
   }
 
-  // Apply preset to all RGBY layers
-  const handleApplyToAll = (preset) => {
-    setColors(prev => ({
-      ...prev,
-      hex: preset.rgby,
-      inner: preset.rgby,
-      outer: preset.rgby
-    }))
+  // Apply a preset combination
+  const handleApplyPreset = (preset) => {
+    setColors({
+      primary: preset.primary,
+      secondary: preset.secondary
+    })
   }
 
-  // Get display colors for preview
-  const hexColor = rgbyToHex(colors.hex)
-  const innerColor = rgbyToHex(colors.inner)
-  const outerColor = rgbyToHex(colors.outer)
-  const bubbleTint = extractBubbleTint(colors.bubble)
+  // Get display colors for SVG preview
+  const primaryHex = rgbyToHex(colors.primary)
+  const secondaryHex = rgbyToHex(colors.secondary)
+
+  // Get current layer info
+  const currentLayerInfo = LAYER_INFO[selectedLayer]
 
   return (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="laser-editor-modal">
+      <div className="laser-editor-modal shine-editor-modal">
         <div className="laser-editor-header">
           <div className="laser-editor-title">
             <span className="laser-editor-title-text">
@@ -318,7 +399,7 @@ export default function ShineEditorModal({
         <div className="laser-editor-body">
           {/* Shared effect note */}
           <div className="shared-note">
-            This mod applies to both Fox and Falco
+            Shared between Fox and Falco
           </div>
 
           {/* Name input */}
@@ -328,114 +409,78 @@ export default function ShineEditorModal({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Red Shine, Purple Reflector..."
+              placeholder="e.g., Green Shine, Purple Reflector..."
               className="laser-editor-name-input"
             />
           </div>
 
-          {/* Preview - hexagon visualization */}
-          <div className="laser-preview">
-            <div className="laser-preview-label">Preview</div>
-            <div className="laser-preview-display" style={{ background: 'linear-gradient(180deg, #0a0a12 0%, #0d0d18 100%)' }}>
-              <div className="shine-preview-container">
-                {/* Outer glow */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '70px',
-                    height: '70px',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    background: `radial-gradient(ellipse at center, ${outerColor}60 0%, transparent 70%)`,
-                    filter: `drop-shadow(0 0 15px ${outerColor}80)`
-                  }}
-                />
-                {/* Inner glow */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '50px',
-                    height: '50px',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    background: `radial-gradient(ellipse at center, ${innerColor}80 0%, transparent 60%)`,
-                  }}
-                />
-                {/* Hexagon shape */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '40px',
-                    height: '40px',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    background: hexColor,
-                    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                    opacity: 0.9,
-                    boxShadow: `0 0 10px ${hexColor}`
-                  }}
-                />
-                {/* Bubble overlay */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '55px',
-                    height: '55px',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    borderRadius: '50%',
-                    border: `2px solid ${bubbleTint}40`,
-                    background: `radial-gradient(ellipse at 30% 30%, ${bubbleTint}20 0%, transparent 50%)`,
-                  }}
-                />
+          {/* Interactive SVG Hexagon - click to select layer */}
+          <div className="shine-interactive-preview">
+            <div className="shine-preview-label">Click a region to edit its color</div>
+            <div className="shine-svg-container">
+              <ShineHexagonSVG
+                primaryColor={primaryHex}
+                secondaryColor={secondaryHex}
+                selectedLayer={selectedLayer}
+                onLayerClick={setSelectedLayer}
+              />
+              <div className="shine-layer-indicator">
+                <span className="shine-layer-name" style={{ color: selectedLayer === 'primary' ? primaryHex : secondaryHex }}>
+                  {currentLayerInfo?.label}: {currentLayerInfo?.desc}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Color pickers */}
-          <ColorPicker
-            label="Hexagon"
-            description="Main shield shape"
-            value={colors.hex}
-            onChange={(value) => handleColorChange('hex', value)}
-          />
+          {/* Layer selector buttons */}
+          <div className="shine-layer-buttons">
+            <button
+              className={`shine-layer-btn ${selectedLayer === 'primary' ? 'selected' : ''}`}
+              style={{
+                '--layer-color': primaryHex,
+                borderColor: selectedLayer === 'primary' ? primaryHex : undefined
+              }}
+              onClick={() => setSelectedLayer('primary')}
+            >
+              <span className="shine-layer-btn-dot" style={{ backgroundColor: primaryHex }} />
+              <span className="shine-layer-btn-label">Edge</span>
+            </button>
+            <button
+              className={`shine-layer-btn ${selectedLayer === 'secondary' ? 'selected' : ''}`}
+              style={{
+                '--layer-color': secondaryHex,
+                borderColor: selectedLayer === 'secondary' ? secondaryHex : undefined
+              }}
+              onClick={() => setSelectedLayer('secondary')}
+            >
+              <span className="shine-layer-btn-dot" style={{ backgroundColor: secondaryHex }} />
+              <span className="shine-layer-btn-label">Fill</span>
+            </button>
+          </div>
 
-          <ColorPicker
-            label="Inner Glow"
-            description="Inner glow effect"
-            value={colors.inner}
-            onChange={(value) => handleColorChange('inner', value)}
-          />
+          {/* Color picker for selected layer */}
+          <div className="shine-active-picker">
+            <ColorPicker
+              label={currentLayerInfo?.label}
+              description={currentLayerInfo?.desc}
+              value={colors[selectedLayer]}
+              onChange={(value) => handleColorChange(selectedLayer, value)}
+            />
+          </div>
 
-          <ColorPicker
-            label="Outer Glow"
-            description="Outer flash effect"
-            value={colors.outer}
-            onChange={(value) => handleColorChange('outer', value)}
-          />
-
-          <BubblePicker
-            label="Bubble"
-            description="Transparent bubble overlay tint"
-            value={colors.bubble}
-            onChange={(value) => handleColorChange('bubble', value)}
-          />
-
-          {/* Quick apply to all */}
+          {/* Quick preset combinations */}
           <div className="laser-apply-all">
-            <span className="laser-apply-all-label">Apply to all:</span>
+            <span className="laser-apply-all-label">Presets:</span>
             <div className="laser-apply-all-presets">
-              {COLOR_PRESETS.slice(0, 6).map((preset) => (
+              {SHINE_PRESETS.map((preset) => (
                 <button
                   key={preset.name}
-                  className="laser-apply-preset"
-                  style={{ backgroundColor: preset.hex }}
-                  onClick={() => handleApplyToAll(preset)}
-                  title={`Set all to ${preset.name}`}
+                  className="laser-apply-preset shine-preset-combo"
+                  style={{
+                    background: `linear-gradient(135deg, ${rgbyToHex(preset.primary)} 50%, ${rgbyToHex(preset.secondary)} 50%)`
+                  }}
+                  onClick={() => handleApplyPreset(preset)}
+                  title={preset.name}
                 />
               ))}
             </div>
