@@ -15,6 +15,8 @@ export default function SkinCard({
   displayIdx,
   arrayIdx,
   isDragging,
+  isDropTarget,
+  isJustDropped,
   reordering,
   lastImageUpdate,
   onDragStart,
@@ -41,19 +43,26 @@ export default function SkinCard({
 
   const cspUrl = getCspUrl()
 
+  const classNames = [
+    'skin-card',
+    isDragging && 'dragging',
+    isDropTarget && 'drop-target',
+    isJustDropped && 'just-dropped',
+    folderId && 'in-folder'
+  ].filter(Boolean).join(' ')
+
   return (
     <div
       key={skin.id}
-      className={`skin-card ${isDragging ? 'dragging' : ''} ${folderId ? 'in-folder' : ''}`}
+      className={classNames}
       draggable={!reordering}
-      onDragStart={(e) => onDragStart(e, arrayIdx)}
+      onDragStart={onDragStart}
       onDragOver={onDragOver}
-      onDragEnter={(e) => onDragEnter(e, displayIdx)}
+      onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
-      onDrop={(e) => onDrop(e, displayIdx)}
+      onDrop={onDrop}
       onDragEnd={onDragEnd}
       onContextMenu={(e) => onContextMenu(e, skin, arrayIdx)}
-      style={{ opacity: isDragging ? 0.5 : 1 }}
     >
       <div className="skin-image-container">
         {skin.has_csp ? (

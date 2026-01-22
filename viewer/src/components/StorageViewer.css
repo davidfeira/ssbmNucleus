@@ -1086,14 +1086,22 @@
   user-select: none;
 }
 
-.skin-card[draggable="true"]:active {
-  cursor: grabbing;
+/* Slight press effect before drag starts */
+.skin-card[draggable="true"]:active:not(.dragging) {
+  transform: scale(0.98);
 }
 
-.skin-card.dragging {
-  opacity: 0.4;
+/* Enhanced lift effect during drag */
+.skin-card.dragging,
+.folder-card.dragging {
+  opacity: 1;
+  transform: scale(1.03);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    0 10px 20px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(125, 211, 232, 0.3);
+  z-index: var(--z-dropdown);
   cursor: grabbing;
-  transform: scale(0.95);
 }
 
 .skins-grid .skin-card {
@@ -1101,7 +1109,54 @@
     transform var(--transition-normal),
     opacity var(--transition-fast),
     box-shadow var(--transition-normal),
-    border-color var(--transition-normal);
+    border-color var(--transition-normal),
+    filter var(--transition-fast);
+}
+
+/* Grid-level drag state - smooth gap animation */
+.skins-grid.is-dragging .skin-card,
+.skins-grid.is-dragging .folder-card {
+  transition: transform 0.3s var(--ease-spring);
+}
+
+/* Dim non-dragged items for focus */
+.skins-grid.is-dragging .skin-card:not(.dragging),
+.skins-grid.is-dragging .folder-card:not(.dragging) {
+  opacity: 0.85;
+  filter: brightness(0.95);
+}
+
+/* Drop indicator line - cyan pulsing line at insertion point */
+.skin-card.drop-target::before,
+.folder-card.drop-target::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--gradient-cyan);
+  border-radius: var(--radius-full);
+  box-shadow: var(--glow-cyan);
+  z-index: 10;
+  animation: dropIndicatorPulse 1s ease-in-out infinite;
+}
+
+@keyframes dropIndicatorPulse {
+  0%, 100% { opacity: 1; box-shadow: var(--glow-cyan); }
+  50% { opacity: 0.7; box-shadow: 0 0 12px rgba(125, 211, 232, 0.8); }
+}
+
+/* Spring settle animation when item lands */
+@keyframes dropSettle {
+  0% { transform: scale(1.03) translateY(-4px); }
+  50% { transform: scale(0.98) translateY(2px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.skin-card.just-dropped,
+.folder-card.just-dropped {
+  animation: dropSettle 0.4s var(--ease-spring);
 }
 
 /* ─────────────────────────────────────────
@@ -4544,10 +4599,7 @@
   opacity: 1;
 }
 
-.folder-card.dragging {
-  opacity: 0.5;
-  transform: scale(0.95);
-}
+/* Note: .folder-card.dragging styles are defined in the DRAG & DROP section above */
 
 .folder-card.expanded {
   border-color: var(--color-gold);

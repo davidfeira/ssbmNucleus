@@ -10,6 +10,7 @@
  */
 
 import { useState } from 'react'
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import FolderCard from './FolderCard'
 import SkinCard from './SkinCard'
@@ -30,12 +31,18 @@ export default function CharacterDetailView({
   // Drag and drop
   draggedItem,
   dragStartIndex,
+  dragOverIndex,
+  previewOrder,
   reordering,
+  isDraggingActive,
+  justDroppedId,
+  setJustDroppedId,
   handleDragStart,
   handleDragOver,
   handleDragEnter,
   handleDragLeave,
   handleDragEnd,
+  handleSkinDrop,
   justDraggedRef,
   // Folder management
   handleCreateFolder,
@@ -124,7 +131,12 @@ export default function CharacterDetailView({
   const charData = allCharacters[selectedCharacter]
   const allSkins = charData?.skins || []
   const skinCount = allSkins.filter(s => s.type !== 'folder' && s.visible !== false).length
-  const displayList = buildDisplayList(allSkins, expandedFolders)
+  // Use previewOrder during drag for live reordering visual
+  const itemsForDisplay = previewOrder || allSkins
+  const displayList = buildDisplayList(itemsForDisplay, expandedFolders)
+
+  // Smooth reorder animations
+  const [animateRef] = useAutoAnimate({ duration: 200 })
 
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
@@ -153,44 +165,6 @@ export default function CharacterDetailView({
     } catch (err) {
       console.error('Delete folder error:', err)
       alert(`Error deleting folder: ${err.message}`)
-    }
-  }
-
-  // Custom drop handler that converts display index to allSkins index
-  const handleItemDrop = async (e, displayIdx) => {
-    e.preventDefault()
-    if (!draggedItem) return
-
-    const fromIndex = dragStartIndex
-    const targetItem = displayList[displayIdx]
-    const toIndex = targetItem?.arrayIndex ?? allSkins.length - 1
-
-    if (fromIndex === toIndex || !selectedCharacter) {
-      // Would be cleaned up by drag handlers
-      return
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/storage/costumes/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character: selectedCharacter,
-          fromIndex,
-          toIndex
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        await onRefresh()
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
     }
   }
 
@@ -246,27 +220,30 @@ export default function CharacterDetailView({
             <p>No custom skins yet. Add some using the intake system!</p>
           </div>
         ) : (
-          <div className="skins-grid">
+          <div className="skins-grid" ref={animateRef}>
             {displayList.map((item, idx) => {
               if (item.type === 'folder') {
+                const folderId = item.folder.id
                 return (
                   <FolderCard
-                    key={item.folder.id}
+                    key={folderId}
                     folder={item.folder}
                     isExpanded={item.isExpanded}
                     displayIdx={idx}
                     arrayIdx={item.arrayIndex}
-                    isDragging={draggedItem && draggedItem.id === item.folder.id}
-                    isEditing={editingFolderId === item.folder.id}
+                    isDragging={draggedItem && draggedItem.id === folderId}
+                    isDropTarget={false}
+                    isJustDropped={justDroppedId === folderId}
+                    isEditing={editingFolderId === folderId}
                     editingFolderName={editingFolderName}
-                    folderSkinCount={countSkinsInFolder(item.folder.id, allSkins)}
+                    folderSkinCount={countSkinsInFolder(folderId, allSkins)}
                     reordering={reordering}
                     onToggle={toggleFolder}
-                    onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
+                    onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
                     onDragOver={handleDragOver}
-                    onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
+                    onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
                     onDragLeave={handleDragLeave}
-                    onDrop={handleItemDrop}
+                    onDrop={handleSkinDrop}
                     onDragEnd={handleDragEnd}
                     onEditingFolderNameChange={setEditingFolderName}
                     onSaveFolderName={saveFolderName}
@@ -277,22 +254,25 @@ export default function CharacterDetailView({
                   />
                 )
               } else {
+                const skinId = item.skin.id
                 return (
                   <SkinCard
-                    key={item.skin.id}
+                    key={skinId}
                     skin={item.skin}
                     selectedCharacter={selectedCharacter}
                     folderId={item.folderId}
                     displayIdx={idx}
                     arrayIdx={item.arrayIndex}
-                    isDragging={draggedItem && item.skin.id === draggedItem.id}
+                    isDragging={draggedItem && skinId === draggedItem.id}
+                    isDropTarget={false}
+                    isJustDropped={justDroppedId === skinId}
                     reordering={reordering}
                     lastImageUpdate={lastImageUpdate}
-                    onDragStart={(e, arrayIdx) => handleDragStart(e, arrayIdx, allSkins)}
+                    onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
                     onDragOver={handleDragOver}
-                    onDragEnter={(e, displayIdx) => handleDragEnter(e, displayIdx, displayList)}
+                    onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
                     onDragLeave={handleDragLeave}
-                    onDrop={handleItemDrop}
+                    onDrop={handleSkinDrop}
                     onDragEnd={handleDragEnd}
                     onContextMenu={handleSkinContextMenu}
                     onEditClick={handleEditClick}

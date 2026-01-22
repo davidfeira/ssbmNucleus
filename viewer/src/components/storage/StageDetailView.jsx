@@ -3,10 +3,11 @@
  *
  * Features:
  * - Display stage variants in grid
- * - Drag and drop reordering
+ * - Drag and drop reordering with smooth animations
  * - Edit, CSP manager, context menu integration
  */
 
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
@@ -19,6 +20,7 @@ export default function StageDetailView({
   onBack,
   // Drag and drop
   draggedItem,
+  dragOverIndex,
   previewOrder,
   reordering,
   handleDragStart,
@@ -93,6 +95,9 @@ export default function StageDetailView({
   const stageInfo = selectedStage
   const variants = stageVariants[selectedStage.code] || []
 
+  // Smooth reorder animations
+  const [animateRef] = useAutoAnimate({ duration: 200 })
+
   return (
     <div className="storage-viewer">
       <div className="character-detail">
@@ -111,7 +116,7 @@ export default function StageDetailView({
             <p>No stage variants yet. Add some to your storage!</p>
           </div>
         ) : (
-          <div className="skins-grid">
+          <div className="skins-grid" ref={animateRef}>
             {(previewOrder || variants).map((variant, idx) => {
               const isDragging = draggedItem && variant.id === draggedItem.id
               return (
@@ -121,9 +126,9 @@ export default function StageDetailView({
                   draggable={!reordering}
                   onDragStart={(e) => handleDragStart(e, variants.findIndex(v => v.id === variant.id), variants)}
                   onDragOver={handleDragOver}
-                  onDragEnter={(e) => handleDragEnter(e, idx, variants)}
+                  onDragEnter={(e) => handleDragEnter(e, idx, previewOrder || variants)}
                   onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleVariantDrop(e, idx)}
+                  onDrop={(e) => handleVariantDrop(e)}
                   onDragEnd={handleDragEnd}
                   onContextMenu={(e) => handleVariantContextMenu(e, variant, idx)}
                   style={{ opacity: isDragging ? 0.5 : 1 }}

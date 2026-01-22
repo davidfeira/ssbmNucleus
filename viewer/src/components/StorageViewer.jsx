@@ -99,6 +99,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     dragTargetFolder,
     setDragTargetFolder,
     justDraggedRef,
+    isDraggingActive,
+    justDroppedId,
+    setJustDroppedId,
     handleDragStart,
     handleDragOver,
     handleDragEnter,
@@ -682,6 +685,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         onBack={() => setSelectedStage(null)}
         // Drag and drop
         draggedItem={draggedItem}
+        dragOverIndex={dragOverIndex}
         previewOrder={previewOrder}
         reordering={reordering}
         handleDragStart={handleDragStart}
@@ -769,12 +773,18 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         // Drag and drop
         draggedItem={draggedItem}
         dragStartIndex={dragStartIndex}
+        dragOverIndex={dragOverIndex}
+        previewOrder={previewOrder}
         reordering={reordering}
+        isDraggingActive={isDraggingActive}
+        justDroppedId={justDroppedId}
+        setJustDroppedId={setJustDroppedId}
         handleDragStart={handleDragStart}
         handleDragOver={handleDragOver}
         handleDragEnter={handleDragEnter}
         handleDragLeave={handleDragLeave}
         handleDragEnd={handleDragEnd}
+        handleSkinDrop={handleSkinDrop}
         justDraggedRef={justDraggedRef}
         // Folder management
         handleCreateFolder={handleCreateFolder}

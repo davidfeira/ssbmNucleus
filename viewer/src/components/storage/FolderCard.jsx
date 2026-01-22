@@ -14,6 +14,8 @@ export default function FolderCard({
   displayIdx,
   arrayIdx,
   isDragging,
+  isDropTarget,
+  isJustDropped,
   isEditing,
   editingFolderName,
   folderSkinCount,
@@ -32,16 +34,24 @@ export default function FolderCard({
   onDelete,
   justDraggedRef
 }) {
+  const classNames = [
+    'folder-card',
+    isExpanded && 'expanded',
+    isDragging && 'dragging',
+    isDropTarget && 'drop-target',
+    isJustDropped && 'just-dropped'
+  ].filter(Boolean).join(' ')
+
   return (
     <div
       key={folder.id}
-      className={`folder-card ${isExpanded ? 'expanded' : ''} ${isDragging ? 'dragging' : ''}`}
+      className={classNames}
       draggable={!reordering && !isEditing}
-      onDragStart={(e) => onDragStart(e, arrayIdx)}
+      onDragStart={onDragStart}
       onDragOver={onDragOver}
-      onDragEnter={(e) => onDragEnter(e, displayIdx)}
+      onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
-      onDrop={(e) => onDrop(e, displayIdx)}
+      onDrop={onDrop}
       onDragEnd={onDragEnd}
       onClick={() => !isEditing && !justDraggedRef.current && onToggle(folder.id)}
     >
