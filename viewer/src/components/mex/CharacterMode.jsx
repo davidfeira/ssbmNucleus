@@ -10,7 +10,7 @@
  * - Extras mode for managing character extras (laser colors, etc.)
  */
 import { useState, useEffect } from 'react'
-import { getExtraTypes } from '../../config/extraTypes'
+import { getExtraTypes, hasExtras } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -1234,7 +1234,15 @@ export default function CharacterMode({
     return (
       <div className="mex-content">
         <div className="fighters-list">
-          <h3>Extras</h3>
+          <div className="extras-header">
+            <h3>Extras</h3>
+            <button
+              className="btn-back-small"
+              onClick={() => { setExtrasMode(false); setSelectedExtraType(null); setSelectedExtraMod(null); setCurrentColors(null) }}
+            >
+              ← Back
+            </button>
+          </div>
           <div className="fighter-items">
             {extraTypes.map(extraType => (
               <div
@@ -1517,12 +1525,14 @@ export default function CharacterMode({
                       </button>
                     </>
                   )}
-                  <button
-                    className="btn-extras-mode"
-                    onClick={() => setExtrasMode(true)}
-                  >
-                    Extras
-                  </button>
+                  {hasExtras(selectedFighter.name) && (
+                    <button
+                      className="btn-extras-mode"
+                      onClick={() => setExtrasMode(true)}
+                    >
+                      Extras
+                    </button>
+                  )}
                 </div>
               </div>
               <div className={`costume-list ${loadingFighter ? 'processing' : ''}`}>

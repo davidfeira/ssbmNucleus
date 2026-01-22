@@ -1581,6 +1581,38 @@
   border-color: var(--color-cyan);
 }
 
+/* Extras header with back button */
+.extras-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.extras-header h3 {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.btn-back-small {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+.btn-back-small:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-cyan);
+  color: var(--color-text);
+}
+
 /* Vanilla extra card */
 .vanilla-extra .costume-preview {
   background: linear-gradient(135deg, #4a5568, #2d3748);

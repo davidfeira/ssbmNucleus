@@ -16,8 +16,8 @@
 
 ### Group B: Install Page UI
 - [ ] Install UI redesign
-- [ ] Hide extras button for characters without extras
-- [ ] Show back button without needing to click an extra first
+- [x] Hide extras button for characters without extras
+- [x] Show back button without needing to click an extra first
 
 ### Group C: Custom Poses (CSP Studio)
 - [x] Custom poses don't load in HD regeneration mode
@@ -174,6 +174,7 @@ These are cool ideas but not priority:
 **Currently working on**: Phase 1 - Group B (Install Page UI)
 
 **Recent completions**:
+- Install page: hide extras button when none available, always-visible back button
 - Settings page: ISO path fix, Discord link, flat layout redesign, storage stats
 - Output folder cleanup on startup (ISOs, mod exports, vault backups)
 - Fox/Falco gun model import (custom .dae via HSDRawViewer CLI)
