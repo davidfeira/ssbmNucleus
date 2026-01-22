@@ -8,58 +8,81 @@
 
 ## PHASE 1: App Feature Completion
 
-### Group A: Settings Page
-- [x] Vanilla ISO path not saved during first-run setup
-- [x] Discord link in settings
-- [x] Settings page redesign (flat layout, wider)
-- [x] Storage statistics (costumes, stages, extras, patches, vault size)
-- [ ] Add "try default" button for Slippi Dolphin path
+### TODO
 
-### Group B: Install Page UI
+**Install Page**
 - [ ] Install UI redesign
-- [x] Hide extras button for characters without extras
-- [x] Show back button without needing to click an extra first
 
-### Group C: Custom Poses (CSP Studio)
-- [x] Custom poses don't load in HD regeneration mode
-- [x] Wrong objects not being hidden
-
-### Group G: Vault Organization
-- [ ] Drag and drop improvements for skin reordering
-
-### Group D: Build/Export Flow
-- [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
+**Build/Export**
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
 - [ ] Add notes for Dolphin texture settings (enable dump/load textures)
 - [ ] Auto-delete dump folder contents when clicking "done" with texture pack
 
-### Group F: Polish
+**Polish**
 - [ ] Sounds (CSP tick noise, start button noise)
 - [ ] Standardize modal sizes
 - [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
+
+**Settings**
+- [ ] Add "try default" button for Slippi Dolphin path
+
+**Extras**
+- [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
+
+**Vault**
+- [ ] Drag and drop improvements for skin reordering
+
+### Completed
+
+<details>
+<summary>Settings Page</summary>
+
+- [x] Vanilla ISO path not saved during first-run setup
+- [x] Discord link in settings
+- [x] Settings page redesign (flat layout, wider)
+- [x] Storage statistics (costumes, stages, extras, patches, vault size)
+</details>
+
+<details>
+<summary>Install Page</summary>
+
+- [x] Hide extras button for characters without extras
+- [x] Show back button without needing to click an extra first
+</details>
+
+<details>
+<summary>CSP Studio</summary>
+
+- [x] Custom poses don't load in HD regeneration mode
+- [x] Wrong objects not being hidden
+- [x] Pose manager, HD generation, alt CSPs
+- [x] HD resolution options (2x, 3x, 4x)
+</details>
+
+<details>
+<summary>Build/Export</summary>
+
+- [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
+</details>
+
+<details>
+<summary>Polish</summary>
+
 - [x] Skin Creator: back button in top-left (consistent with other pages)
 - [x] Skin Creator: loading state when editing from vault
 - [x] Stage detail view: removed redundant title/variant count
+</details>
 
-### Extras: Effects (PlXx.dat mods)
-- [x] Fox/Falco effects
-  - Laser
-  - Shine
-  - Side-B
-  - Up-B
-- [x] Marth/Roy/Link/Young Link sword swing trails
+<details>
+<summary>Extras System</summary>
 
-### Extras: Models (new type)
-- [x] Fox/Falco gun model (custom .dae import via HSDRawViewer CLI)
-- [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
-
-### Already Done / Mostly Done
-- [x] CSP Studio (pose manager, HD generation, alt CSPs)
-- [x] Laser Editor
 - [x] Extras system foundation
-- [x] HD resolution options (2x, 3x, 4x)
 - [x] All extra editor modals with delete functionality
-- [x] Model extras type (gun imports)
+- [x] Laser Editor
+- [x] Fox/Falco effects (Laser, Shine, Side-B, Up-B)
+- [x] Marth/Roy/Link/Young Link sword swing trails
+- [x] Fox/Falco gun model (custom .dae import via HSDRawViewer CLI)
+</details>
 
 ---
 
@@ -178,12 +201,4 @@ These are cool ideas but not priority:
 
 **Last updated**: January 2026
 
-**Currently working on**: Phase 1 - Polish & UX improvements
-
-**Recent completions**:
-- Skin Creator UX polish (back button, loading states)
-- Stage detail view cleanup
-- Install page UI fixes
-- Settings page overhaul
-- Fox/Falco extras (effects, gun model)
-- CSP Studio improvements
+**Currently working on**: Phase 1 - Finishing remaining TODO items
