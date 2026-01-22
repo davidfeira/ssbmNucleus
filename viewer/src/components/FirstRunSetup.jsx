@@ -51,6 +51,10 @@ export default function FirstRunSetup({ onComplete }) {
         completed: 100,
         total: 100
       })
+      // Save the ISO path to localStorage so Settings page can find it
+      if (data.isoPath) {
+        localStorage.setItem('vanilla_iso_path', data.isoPath)
+      }
     })
 
     newSocket.on('setup_error', (data) => {

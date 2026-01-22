@@ -136,6 +136,54 @@ OUTPUT_PATH.mkdir(exist_ok=True)
 LOGS_PATH.mkdir(exist_ok=True)
 MEX_PROJECT_PATH.parent.mkdir(exist_ok=True)  # Create build/ directory
 
+
+def cleanup_output_folder():
+    """
+    Clean up old files from the output folder on startup.
+    The output folder should be treated as temp - files are deleted after download.
+    This catches any files that weren't cleaned up properly.
+    """
+    try:
+        cleaned_count = 0
+        cleaned_size = 0
+
+        for item in OUTPUT_PATH.iterdir():
+            if item.is_dir():
+                # Clean contents of mod_exports and vault_backups
+                if item.name in ['mod_exports', 'vault_backups']:
+                    for f in item.iterdir():
+                        if f.is_file():
+                            size = f.stat().st_size
+                            f.unlink()
+                            cleaned_count += 1
+                            cleaned_size += size
+                continue
+
+            # Delete ISOs and other temp files
+            if item.suffix.lower() in ['.iso', '.json', '.png']:
+                size = item.stat().st_size
+                item.unlink()
+                cleaned_count += 1
+                cleaned_size += size
+
+        if cleaned_count > 0:
+            logger.info(f"Startup cleanup: removed {cleaned_count} files ({cleaned_size / (1024*1024):.1f} MB)")
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
+
+
+def get_folder_size(path):
+    """Get total size of a folder in bytes"""
+    total = 0
+    try:
+        for item in Path(path).rglob('*'):
+            if item.is_file():
+                total += item.stat().st_size
+    except Exception:
+        pass
+    return total
+
+
 # Register extras API blueprint
 app.register_blueprint(extras_bp)
 
@@ -208,6 +256,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Clean up output folder on startup
+cleanup_output_folder()
 
 # Global MEX manager instance and current project path
 mex_manager = None
@@ -2385,6 +2436,30 @@ def get_storage_metadata():
         return jsonify({
             'success': True,
             'metadata': metadata
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/storage/stats', methods=['GET'])
+def get_storage_stats():
+    """Get storage size statistics"""
+    try:
+        storage_size = get_folder_size(STORAGE_PATH)
+        output_size = get_folder_size(OUTPUT_PATH)
+        logs_size = get_folder_size(LOGS_PATH)
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'storage': storage_size,
+                'output': output_size,
+                'logs': logs_size,
+                'total': storage_size + output_size + logs_size
+            }
         })
     except Exception as e:
         return jsonify({
@@ -6228,7 +6303,8 @@ def start_first_run_setup():
                         'success': True,
                         'message': result.get('message', 'Setup complete'),
                         'characters': result.get('characters', 0),
-                        'stages': result.get('stages', 0)
+                        'stages': result.get('stages', 0),
+                        'isoPath': iso_path
                     })
                 else:
                     socketio.emit('setup_error', {

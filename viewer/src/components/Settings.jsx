@@ -5,6 +5,7 @@ import IsoPathSection from './settings/IsoPathSection'
 import SlippiPathSection from './settings/SlippiPathSection'
 import HdCspSection from './settings/HdCspSection'
 import ClearStorageSection from './settings/ClearStorageSection'
+import DiscordSection from './settings/DiscordSection'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 
@@ -21,14 +22,17 @@ export default function Settings({ metadata }) {
         {/* Slippi Dolphin Path */}
         <SlippiPathSection API_URL={API_URL} />
 
-        {/* Storage Statistics */}
-        <StorageStatsSection metadata={metadata} />
-
         {/* Vault Backup & Restore Section */}
         <BackupRestore API_URL={API_URL} />
 
         {/* HD CSP Generation Section */}
         <HdCspSection metadata={metadata} API_URL={API_URL} />
+
+        {/* Community */}
+        <DiscordSection />
+
+        {/* Storage Statistics */}
+        <StorageStatsSection metadata={metadata} />
 
         {/* Clear Storage Section */}
         <ClearStorageSection metadata={metadata} API_URL={API_URL} />

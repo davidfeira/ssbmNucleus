@@ -8,7 +8,7 @@
    ───────────────────────────────────────── */
 
 .settings-container {
-  max-width: 700px;
+  max-width: 900px;
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
   animation: fadeIn var(--duration-normal) var(--ease-out);
@@ -31,26 +31,16 @@
 }
 
 /* ─────────────────────────────────────────
-   SETTINGS SECTIONS (Cards)
+   SETTINGS SECTIONS (Flat Layout)
    ───────────────────────────────────────── */
 
 .settings-section {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  margin-bottom: 0;
-  padding-bottom: var(--space-6);
-  border-bottom: none;
-  transition: border-color var(--transition-fast);
-}
-
-.settings-section:hover {
-  border-color: var(--color-border);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .settings-section:last-child {
-  margin-bottom: 0;
+  border-bottom: none;
 }
 
 .settings-section h3 {
@@ -265,8 +255,8 @@
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-4);
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-3);
 }
 
 .stat-item {
@@ -843,4 +833,37 @@
   .hd-csp-generate-btn {
     width: 100%;
   }
+}
+
+/* ─────────────────────────────────────────
+   DISCORD SECTION
+   ───────────────────────────────────────── */
+
+.discord-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  background: #5865F2;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.discord-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(88, 101, 242, 0.4);
+  filter: brightness(1.1);
+}
+
+.discord-button:active {
+  transform: translateY(0) scale(0.98);
 }

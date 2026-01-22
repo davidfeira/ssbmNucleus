@@ -8,16 +8,34 @@
 
 ## PHASE 1: App Feature Completion
 
-### Bugs / Polish
-- [ ] Vanilla ISO path not saved during first-run setup (requires re-setting in Settings)
-- [ ] Not deleting output ISO after download
-- [ ] Custom poses not working properly:
-  - Don't load in HD regeneration mode
-  - Wrong objects not being hidden
-- [ ] Drag and drop improvements
+### Group A: Settings Page
+- [x] Vanilla ISO path not saved during first-run setup
+- [x] Discord link in settings
+- [x] Settings page redesign (flat layout, wider)
+- [x] Storage statistics (costumes, stages, extras, patches, vault size)
+
+### Group B: Install Page UI
 - [ ] Install UI redesign
-- [ ] Fix vertex bug with Up-B edits for Fox/Falco
-- [ ] Better icons/display/UI for extras page
+- [ ] Hide extras button for characters without extras
+- [ ] Show back button without needing to click an extra first
+
+### Group C: Custom Poses (CSP Studio)
+- [x] Custom poses don't load in HD regeneration mode
+- [x] Wrong objects not being hidden
+
+### Group G: Vault Organization
+- [ ] Drag and drop improvements for skin reordering
+
+### Group D: Build/Export Flow
+- [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
+- [ ] Texture pack mode not downscaling placeholder images (memory issue)
+
+### Group E: External Tool Integration
+- [ ] Open skin in HSDRaw (check for new version)
+- [ ] Open build in MEX Tool (use built-in version)
+
+### Group F: Polish
+- [ ] Sounds (CSP tick noise, start button noise)
 
 ### Extras: Effects (PlXx.dat mods)
 - [x] Fox/Falco effects
@@ -29,13 +47,6 @@
 
 ### Extras: Models (new type)
 - [x] Fox/Falco gun model (custom .dae import via HSDRawViewer CLI)
-- [ ] Peach toad
-
-### UX Additions
-- [ ] Discord link in settings
-- [ ] Sounds (CSP tick noise, start button noise)
-- [ ] Open skin in HSDRaw (check for new version)
-- [ ] Open build in MEX Tool (use built-in version for stability)
 
 ### Already Done / Mostly Done
 - [x] CSP Studio (pose manager, HD generation, alt CSPs)
@@ -44,6 +55,20 @@
 - [x] HD resolution options (2x, 3x, 4x)
 - [x] All extra editor modals with delete functionality
 - [x] Model extras type (gun imports)
+
+---
+
+## PHASE 1.5: Code Cleanup
+
+Break down massive files to improve maintainability:
+
+| File | Lines | Notes |
+|------|-------|-------|
+| `backend/mex_api.py` | 7,871 | Split into modules by feature area |
+| `viewer/src/components/SkinCreator.jsx` | 2,023 | Extract sub-components |
+| `viewer/src/components/mex/CharacterMode.jsx` | 1,612 | Extract sub-components |
+| `viewer/src/components/storage/ExtrasPageView.jsx` | 1,228 | Extract sub-components |
+| `viewer/src/components/StorageViewer.jsx` | 1,017 | Extract sub-components |
 
 ---
 
@@ -146,9 +171,11 @@ These are cool ideas but not priority:
 
 **Last updated**: January 2026
 
-**Currently working on**: Phase 1 - UX additions
+**Currently working on**: Phase 1 - Group B (Install Page UI)
 
 **Recent completions**:
+- Settings page: ISO path fix, Discord link, flat layout redesign, storage stats
+- Output folder cleanup on startup (ISOs, mod exports, vault backups)
 - Fox/Falco gun model import (custom .dae via HSDRawViewer CLI)
 - Delete buttons on all editor modals
 - Thunder/Shadow Ball/Sword trail editors
