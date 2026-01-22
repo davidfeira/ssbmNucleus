@@ -22,6 +22,8 @@ const DAS_STAGES = [
 ]
 
 export default function StageMode({
+  mode,
+  onModeChange,
   onRefresh,
   refreshing,
   API_URL
@@ -39,6 +41,7 @@ export default function StageMode({
   const [removing, setRemoving] = useState(false)
   const [batchImporting, setBatchImporting] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
+  const [dataReady, setDataReady] = useState(false)
 
   useEffect(() => {
     checkDASInstallation()
@@ -48,9 +51,11 @@ export default function StageMode({
 
   useEffect(() => {
     if (selectedStage && dasInstalled) {
-      fetchMexVariants(selectedStage.code)
+      setDataReady(false)
+      setMexVariants([])
       setSelectedVariants(new Set())
       setSelectedButton(null)
+      fetchMexVariants(selectedStage.code)
     }
   }, [selectedStage, dasInstalled])
 
@@ -118,6 +123,8 @@ export default function StageMode({
     } catch (err) {
       console.error('Failed to fetch MEX variants:', err)
       setMexVariants([])
+    } finally {
+      setTimeout(() => setDataReady(true), 50)
     }
   }
 
@@ -417,7 +424,23 @@ export default function StageMode({
       ) : (
         <>
           <div className="fighters-list">
-            <h3>Stages ({DAS_STAGES.length})</h3>
+            <div className="fighters-header">
+              <div className="mode-toggle">
+                <button
+                  className={`mode-toggle-btn ${mode === 'characters' ? 'active' : ''}`}
+                  onClick={() => onModeChange('characters')}
+                >
+                  Fighters
+                </button>
+                <button
+                  className={`mode-toggle-btn ${mode === 'stages' ? 'active' : ''}`}
+                  onClick={() => onModeChange('stages')}
+                >
+                  Stages
+                </button>
+              </div>
+              <span className="fighters-count">{DAS_STAGES.length}</span>
+            </div>
             <div className="fighter-items">
               {DAS_STAGES.map(stage => {
                 const availableVariants = getVariantsForStage(stage.code)
@@ -446,12 +469,12 @@ export default function StageMode({
               <>
                 <div className="costumes-section">
                   <div className="costumes-section-header">
-                    <h3>Already in MEX ({mexVariants.length})</h3>
+                    <h3>In ISO ({dataReady ? mexVariants.length : 'Loading...'})</h3>
                     <ButtonTokens />
                   </div>
                   <div className="costume-list existing">
                     {mexVariants.map((variant, idx) => {
-                      const isVanilla = variant.filename === 'vanilla.dat' || variant.filename === 'vanilla.usd'
+                      const isVanilla = variant.filename?.startsWith('vanilla')
                       const imageUrl = isVanilla
                         ? selectedStage.vanillaImage
                         : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null)
@@ -461,9 +484,9 @@ export default function StageMode({
                       return (
                         <div
                           key={idx}
-                          className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''}`}
+                          className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                           onClick={() => handleVariantClick(variant)}
-                          style={{ cursor: canAssignButton ? 'pointer' : 'default' }}
+                          style={{ cursor: canAssignButton ? 'pointer' : 'default', animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
                         >
                           <div className="costume-preview">
                             {hasImage && (
@@ -485,7 +508,7 @@ export default function StageMode({
                               ×
                             </button>
                           </div>
-                          <div className="costume-info">
+                          <div className="costume-info" style={{ height: 'auto' }}>
                             <h4>{variant.name}</h4>
                             {variant.button && (
                               <div
@@ -503,7 +526,7 @@ export default function StageMode({
                         </div>
                       )
                     })}
-                    {mexVariants.length === 0 && (
+                    {dataReady && mexVariants.length === 0 && (
                       <div className="no-costumes">
                         <p>No variants in MEX yet</p>
                       </div>
@@ -514,8 +537,8 @@ export default function StageMode({
                 <div className="costumes-section">
                   <div className="costumes-section-header">
                     <h3>
-                      Available to Import
-                      {selectedVariants.size > 0 && ` (${selectedVariants.size} selected)`}
+                      Available to Import ({dataReady ? getVariantsForStage(selectedStage.code).length : 'Loading...'})
+                      {selectedVariants.size > 0 && ` - ${selectedVariants.size} selected`}
                     </h3>
                     {getVariantsForStage(selectedStage.code).length > 0 && (
                       <div className="batch-controls">
@@ -551,17 +574,19 @@ export default function StageMode({
                   </div>
                   <div className="costume-list">
                     {getVariantsForStage(selectedStage.code).map((variant, idx) => {
-                      const isVanilla = variant.filename === 'vanilla.dat' || variant.filename === 'vanilla.usd'
+                      const isVanilla = variant.filename?.startsWith('vanilla')
                       const imageUrl = isVanilla
                         ? selectedStage.vanillaImage
                         : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null)
                       const hasImage = isVanilla ? true : variant.hasScreenshot
                       const isSelected = selectedVariants.has(variant.zipPath)
+                      const cascadeDelay = (mexVariants.length + idx) * 30
 
                       return (
                         <div
                           key={idx}
-                          className={`costume-card ${isSelected ? 'selected' : ''}`}
+                          className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                          style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
                           onClick={() => !batchImporting && toggleVariantSelection(variant.zipPath)}
                         >
                           <div className="costume-preview">
@@ -579,21 +604,19 @@ export default function StageMode({
                               onChange={() => {}}
                               disabled={batchImporting}
                             />
+                            {variant.slippi_safe && (
+                              <div className="slippi-badge slippi-badge-overlay" title="Slippi Safe">
+                                ✓
+                              </div>
+                            )}
                           </div>
-                          <div className="costume-info">
+                          <div className="costume-info" style={{ height: 'auto' }}>
                             <h4>{variant.name}</h4>
-                            <div className="costume-assets">
-                              {variant.slippi_safe && (
-                                <div className="slippi-badge" title="Slippi Safe">
-                                  ✓
-                                </div>
-                              )}
-                            </div>
                           </div>
                         </div>
                       )
                     })}
-                    {getVariantsForStage(selectedStage.code).length === 0 && (
+                    {dataReady && getVariantsForStage(selectedStage.code).length === 0 && (
                       <div className="no-costumes">
                         <p>No variants available in storage for {selectedStage.name}</p>
                       </div>

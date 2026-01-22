@@ -140,36 +140,14 @@ const MexPanel = () => {
             >
               Switch Project
             </button>
-            <button
-              className="action-btn"
-              onClick={handleRefresh}
-              disabled={refreshing}
-            >
-              Refresh
-            </button>
           </div>
-        </div>
-      </div>
-
-      <div className="mex-mode-row">
-        <div className="mode-switcher">
-          <button
-            className={`mode-btn ${mode === 'characters' ? 'active' : ''}`}
-            onClick={() => setMode('characters')}
-          >
-            Characters
-          </button>
-          <button
-            className={`mode-btn ${mode === 'stages' ? 'active' : ''}`}
-            onClick={() => setMode('stages')}
-          >
-            Stages
-          </button>
         </div>
       </div>
 
       {mode === 'characters' ? (
         <CharacterMode
+          mode={mode}
+          onModeChange={setMode}
           fighters={fighters}
           selectedFighter={selectedFighter}
           onSelectFighter={setSelectedFighter}
@@ -180,6 +158,8 @@ const MexPanel = () => {
         />
       ) : (
         <StageMode
+          mode={mode}
+          onModeChange={setMode}
           onRefresh={handleRefresh}
           refreshing={refreshing}
           API_URL={API_URL}

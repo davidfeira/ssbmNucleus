@@ -312,13 +312,69 @@
   overflow: hidden;
 }
 
+/* Sidebar Header with Mode Toggle */
+.fighters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  gap: var(--space-2);
+}
+
+.mode-toggle {
+  display: flex;
+  background: var(--color-bg-deep);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.mode-toggle-btn {
+  background: transparent;
+  color: var(--color-text-tertiary);
+  border: none;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.mode-toggle-btn:hover:not(.active) {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+}
+
+.mode-toggle-btn.active {
+  background: var(--gradient-cyan);
+  color: var(--color-bg-deep);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.fighters-count {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  color: var(--color-text-muted);
+  background: var(--color-bg-deep);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
 .fighters-list h3 {
   padding: var(--space-3) var(--space-4);
   margin: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-surface);
   font-family: var(--font-display);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
@@ -461,27 +517,43 @@
   border-right: none;
 }
 
-.costumes-section-header {
-  padding: var(--space-3) var(--space-4);
+.costumes-section > h3 {
+  padding: var(--space-2) var(--space-4);
   margin: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-surface);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+}
+
+.costumes-section-header {
+  padding: var(--space-2) var(--space-4);
+  margin: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
-.costumes-section h3,
+/* Invisible spacer to match button height for alignment */
+.header-spacer {
+  height: 24px;
+  visibility: hidden;
+}
+
 .costumes-section-header h3 {
   padding: 0;
   margin: 0;
   border: none;
   background: transparent;
   font-family: var(--font-display);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
 }
 
 /* Batch Controls */
@@ -491,52 +563,74 @@
   align-items: center;
 }
 
-.btn-batch-import,
 .btn-select-all,
 .btn-clear-selection {
-  background: transparent;
-  color: var(--color-text-tertiary);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
   padding: var(--space-1) var(--space-3);
   font-family: var(--font-display);
   font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-medium);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     color var(--transition-fast),
     background var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
   white-space: nowrap;
 }
 
-.btn-batch-import:hover:not(:disabled),
 .btn-select-all:hover:not(:disabled),
 .btn-clear-selection:hover:not(:disabled) {
-  color: var(--color-text-primary);
-  background: var(--color-bg-surface);
+  color: var(--color-cyan);
   border-color: var(--color-cyan);
+  background: var(--color-bg-surface);
 }
 
-.btn-batch-import:disabled,
+.btn-select-all:active:not(:disabled),
+.btn-clear-selection:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 .btn-select-all:disabled,
 .btn-clear-selection:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Import All Selected - cyan highlight */
+/* Import button - primary action */
 .btn-batch-import {
-  background: var(--color-cyan);
-  color: var(--color-bg-primary);
-  border-color: var(--color-cyan);
-  font-weight: 500;
+  background: var(--gradient-cyan);
+  color: var(--color-bg-deep);
+  border: none;
+  padding: var(--space-1) var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+  white-space: nowrap;
 }
 
 .btn-batch-import:hover:not(:disabled) {
-  background: var(--color-cyan-hover, #00d4ff);
-  border-color: var(--color-cyan-hover, #00d4ff);
-  color: var(--color-bg-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--glow-cyan-sm);
+  filter: brightness(1.1);
+}
+
+.btn-batch-import:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-batch-import:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ─────────────────────────────────────────
@@ -800,8 +894,14 @@
 }
 
 .existing-costume h4 {
-  font-size: 11px;
+  font-size: var(--text-xs);
   margin-bottom: 2px;
+}
+
+.slippi-badge-overlay {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
 }
 
 .costume-file {
@@ -1402,8 +1502,8 @@
 }
 
 .button-token {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
   opacity: 0.7;
   transition:
@@ -1549,36 +1649,56 @@
    ============================================================================= */
 
 .btn-extras-mode {
-  background: linear-gradient(135deg, #d97706, #f59e0b);
-  color: white;
+  background: var(--gradient-gold);
+  color: var(--color-bg-deep);
   border: none;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
 }
 
 .btn-extras-mode:hover {
-  background: linear-gradient(135deg, #b45309, #d97706);
   transform: translateY(-1px);
+  box-shadow: var(--glow-gold-sm);
+  filter: brightness(1.1);
+}
+
+.btn-extras-mode:active {
+  transform: scale(0.98);
 }
 
 .btn-back {
-  background: var(--color-bg-hover);
-  color: var(--color-text);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s ease;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .btn-back:hover {
-  background: var(--color-bg-elevated);
+  color: var(--color-cyan);
   border-color: var(--color-cyan);
+  background: var(--color-bg-surface);
+}
+
+.btn-back:active {
+  transform: scale(0.98);
 }
 
 /* Extras header with back button */

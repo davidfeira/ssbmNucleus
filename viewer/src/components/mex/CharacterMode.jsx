@@ -16,6 +16,8 @@ import { rgbyToHex } from '../../utils/rgbyColor'
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
 export default function CharacterMode({
+  mode,
+  onModeChange,
   fighters,
   selectedFighter,
   onSelectFighter,
@@ -1401,7 +1403,23 @@ export default function CharacterMode({
   return (
     <div className="mex-content">
       <div className="fighters-list">
-        <h3>Fighters ({playableFighters.length})</h3>
+        <div className="fighters-header">
+          <div className="mode-toggle">
+            <button
+              className={`mode-toggle-btn ${mode === 'characters' ? 'active' : ''}`}
+              onClick={() => onModeChange('characters')}
+            >
+              Fighters
+            </button>
+            <button
+              className={`mode-toggle-btn ${mode === 'stages' ? 'active' : ''}`}
+              onClick={() => onModeChange('stages')}
+            >
+              Stages
+            </button>
+          </div>
+          <span className="fighters-count">{playableFighters.length}</span>
+        </div>
         <div className="fighter-items">
           {playableFighters.map(fighter => {
             const availableCostumes = getCostumesForFighter(fighter.name)
@@ -1438,7 +1456,10 @@ export default function CharacterMode({
         {selectedFighter ? (
           <>
             <div className="costumes-section">
-              <h3>Already in MEX ({mexCostumes.length})</h3>
+              <div className="costumes-section-header">
+                <h3>In ISO ({dataReady ? mexCostumes.length : 'Loading...'})</h3>
+                <div className="header-spacer" />
+              </div>
               <div className={`costume-list existing ${reordering ? 'processing' : ''} ${loadingFighter ? 'processing' : ''}`}>
                 {mexCostumes.map((costume, idx) => {
                   const isDragging = draggedIndex === idx
@@ -1493,7 +1514,7 @@ export default function CharacterMode({
                     </div>
                   )
                 })}
-                {mexCostumes.length === 0 && (
+                {dataReady && mexCostumes.length === 0 && (
                   <div className="no-costumes">
                     <p>No costumes in MEX yet</p>
                   </div>
@@ -1504,8 +1525,8 @@ export default function CharacterMode({
             <div className="costumes-section">
               <div className="costumes-section-header">
                 <h3>
-                  Available to Import
-                  {selectedCostumes.size > 0 && ` (${selectedCostumes.size} total selected)`}
+                  Available to Import ({dataReady ? getCostumesForFighter(selectedFighter.name).length : 'Loading...'})
+                  {selectedCostumes.size > 0 && ` - ${selectedCostumes.size} selected`}
                 </h3>
                 <div className="batch-controls">
                   {getCostumesForFighter(selectedFighter.name).length > 0 && (
@@ -1596,7 +1617,7 @@ export default function CharacterMode({
                     </div>
                   )
                 })}
-                {getCostumesForFighter(selectedFighter.name).length === 0 && (
+                {dataReady && getCostumesForFighter(selectedFighter.name).length === 0 && (
                   <div className="no-costumes">
                     <p>No costumes available in storage for {selectedFighter.name}</p>
                   </div>
