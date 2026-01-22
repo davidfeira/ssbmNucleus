@@ -1477,39 +1477,37 @@ export default function CharacterMode({
                       onDrop={(e) => handleDrop(e, idx)}
                       onDragEnd={handleDragEnd}
                     >
-                      {costume.cspUrl && (
-                        <div className="costume-preview">
+                      <div className="costume-preview">
+                        {costume.cspUrl && (
                           <img
                             src={`${API_URL.replace('/api/mex', '')}${costume.cspUrl}`}
                             alt={costume.name}
                             onError={(e) => e.target.style.display = 'none'}
                           />
-                          <button
-                            className="btn-remove"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRemoveCostume(selectedFighter.name, idx, costume.name)
-                            }}
-                            disabled={removing}
-                            title="Remove costume"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      )}
-                      <div className="costume-info">
-                        <h4>{costume.name}</h4>
+                        )}
+                        <button
+                          className="btn-remove"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveCostume(selectedFighter.name, idx, costume.name)
+                          }}
+                          disabled={removing}
+                          title="Remove costume"
+                        >
+                          ×
+                        </button>
                         {costume.iconUrl && (
-                          <div className="costume-assets">
-                            <div className="stock-icon">
-                              <img
-                                src={`${API_URL.replace('/api/mex', '')}${costume.iconUrl}`}
-                                alt="Stock"
-                                onError={(e) => e.target.style.display = 'none'}
-                              />
-                            </div>
+                          <div className="stock-icon-overlay">
+                            <img
+                              src={`${API_URL.replace('/api/mex', '')}${costume.iconUrl}`}
+                              alt="Stock"
+                              onError={(e) => e.target.style.display = 'none'}
+                            />
                           </div>
                         )}
+                      </div>
+                      <div className="costume-info">
+                        <h4>{costume.name}</h4>
                       </div>
                     </div>
                   )
@@ -1594,25 +1592,23 @@ export default function CharacterMode({
                           onChange={() => {}}
                           disabled={batchImporting || loadingFighter}
                         />
+                        {costume.stockUrl && (
+                          <div className="stock-icon-overlay">
+                            <img
+                              src={`${API_URL.replace('/api/mex', '')}${costume.stockUrl}`}
+                              alt="Stock"
+                              onError={(e) => e.target.style.display = 'none'}
+                            />
+                          </div>
+                        )}
+                        {costume.slippiSafe && (
+                          <div className="slippi-badge slippi-badge-overlay" title="Slippi Safe">
+                            ✓
+                          </div>
+                        )}
                       </div>
                       <div className="costume-info">
                         <h4>{costume.name?.includes(' - ') ? costume.name.split(' - ').slice(1).join(' - ') : costume.name}</h4>
-                        <div className="costume-assets">
-                          {costume.stockUrl && (
-                            <div className="stock-icon">
-                              <img
-                                src={`${API_URL.replace('/api/mex', '')}${costume.stockUrl}`}
-                                alt="Stock"
-                                onError={(e) => e.target.style.display = 'none'}
-                              />
-                            </div>
-                          )}
-                          {costume.slippiSafe && (
-                            <div className="slippi-badge" title="Slippi Safe">
-                              ✓
-                            </div>
-                          )}
-                        </div>
                       </div>
                     </div>
                   )

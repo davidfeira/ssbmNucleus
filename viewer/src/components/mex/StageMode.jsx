@@ -508,7 +508,7 @@ export default function StageMode({
                               ×
                             </button>
                           </div>
-                          <div className="costume-info" style={{ height: 'auto' }}>
+                          <div className="costume-info">
                             <h4>{variant.name}</h4>
                             {variant.button && (
                               <div
@@ -610,7 +610,7 @@ export default function StageMode({
                               </div>
                             )}
                           </div>
-                          <div className="costume-info" style={{ height: 'auto' }}>
+                          <div className="costume-info">
                             <h4>{variant.name}</h4>
                           </div>
                         </div>
