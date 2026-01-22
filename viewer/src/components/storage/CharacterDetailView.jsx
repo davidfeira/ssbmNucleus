@@ -135,8 +135,15 @@ export default function CharacterDetailView({
   const itemsForDisplay = previewOrder || allSkins
   const displayList = buildDisplayList(itemsForDisplay, expandedFolders)
 
-  // Smooth reorder animations
-  const [animateRef] = useAutoAnimate({ duration: 200 })
+  // Smooth reorder animations - disable during drag for performance
+  const [animateRef, enableAnimations] = useAutoAnimate({ duration: 150 })
+
+  // Disable animations during active drag to avoid lag with many items
+  if (isDraggingActive) {
+    enableAnimations(false)
+  } else {
+    enableAnimations(true)
+  }
 
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
