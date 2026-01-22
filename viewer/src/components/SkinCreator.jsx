@@ -1432,64 +1432,77 @@ export default function SkinCreator({
     <>
       <div className="skin-creator-overlay">
         <div className="skin-creator-modal">
-          {/* Header */}
-          <div className="skin-creator-header">
-            <div className="skin-creator-title">
-              <h1>Skin Creator</h1>
-              <span className="skin-creator-character">{selectedCharacter}</span>
-              {selectedVanillaCostume && (
-                <span className="skin-creator-costume">{selectedVanillaCostume.colorName}</span>
-              )}
-              {isDirty && <span className="skin-creator-dirty">*</span>}
+          {/* Header - only shown in edit step */}
+          {skinCreatorStep === 'edit' && (
+            <div className="skin-creator-header">
+              <div className="skin-creator-title">
+                <h1>Skin Creator</h1>
+                <span className="skin-creator-character">{selectedCharacter}</span>
+                {selectedVanillaCostume && (
+                  <span className="skin-creator-costume">{selectedVanillaCostume.colorName}</span>
+                )}
+                {isDirty && <span className="skin-creator-dirty">*</span>}
+              </div>
+              <div className="skin-creator-header-buttons">
+                <button
+                  className="skin-creator-save"
+                  onClick={openSaveModal}
+                  title="Save to Vault"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  <span>Save</span>
+                </button>
+                <button
+                  className="skin-creator-export"
+                  onClick={handleDownloadDat}
+                  title="Download DAT file"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span>Download</span>
+                </button>
+                <button
+                  className="skin-creator-close"
+                  onClick={() => closeSkinCreator()}
+                  title="Close (Esc)"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  <span>Close</span>
+                </button>
+              </div>
             </div>
-            <div className="skin-creator-header-buttons">
-              {skinCreatorStep === 'edit' && (
-                <>
-                  <button
-                    className="skin-creator-save"
-                    onClick={openSaveModal}
-                    title="Save to Vault"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                      <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                      <polyline points="7 3 7 8 15 8"></polyline>
-                    </svg>
-                    <span>Save</span>
-                  </button>
-                  <button
-                    className="skin-creator-export"
-                    onClick={handleDownloadDat}
-                    title="Download DAT file"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    <span>Download</span>
-                  </button>
-                </>
-              )}
-              <button
-                className="skin-creator-close"
-                onClick={() => closeSkinCreator()}
-                title="Close (Esc)"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-                <span>Close</span>
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Costume Selection Step */}
           {skinCreatorStep === 'select' && (
             <div className="skin-creator-select">
-              <h2>Select a base costume</h2>
-              <p>Choose a vanilla costume to use as your starting point</p>
+              {initialCostume ? (
+                <div className="skin-creator-loading-edit">
+                  <div className="loading-spinner"></div>
+                  <span>Loading skin editor...</span>
+                </div>
+              ) : (
+              <div className="skin-creator-select-content">
+                <div className="skin-creator-select-header">
+                  <button
+                    className="back-button"
+                    onClick={() => closeSkinCreator()}
+                  >
+                    ← Back
+                  </button>
+                </div>
+                <h2>Select a base costume</h2>
+                <p>Choose a vanilla costume to use as your starting point</p>
 
               {skinCreatorLoading && (
                 <div className="skin-creator-loading">Loading costumes...</div>
@@ -1526,6 +1539,8 @@ export default function SkinCreator({
                   </div>
                 ))}
               </div>
+              </div>
+              )}
             </div>
           )}
 

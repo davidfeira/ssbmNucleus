@@ -108,9 +108,6 @@ export default function StageDetailView({
           ← Back to Stages
         </button>
 
-        <h2>{stageInfo?.name}</h2>
-        <p className="skin-count">{variants.length} variant{variants.length !== 1 ? 's' : ''}</p>
-
         {variants.length === 0 ? (
           <div className="no-skins-message">
             <p>No stage variants yet. Add some to your storage!</p>

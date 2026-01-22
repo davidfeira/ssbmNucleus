@@ -581,6 +581,18 @@ button.canvas-float-btn svg {
   align-items: center;
   padding: var(--space-6);
   overflow-y: auto;
+  border-top: 1px solid var(--color-border);
+}
+
+.skin-creator-select-content {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+}
+
+.skin-creator-select-header {
+  margin-bottom: var(--space-4);
 }
 
 .skin-creator-select h2 {
@@ -597,6 +609,29 @@ button.canvas-float-btn svg {
 .skin-creator-loading {
   color: var(--color-text-secondary);
   padding: var(--space-4);
+}
+
+.skin-creator-loading-edit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.skin-creator-loading-edit .loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .skin-creator-reconnecting {
@@ -617,7 +652,6 @@ button.canvas-float-btn svg {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--space-4);
   width: 100%;
-  max-width: 800px;
 }
 
 .skin-creator-costume-card {
