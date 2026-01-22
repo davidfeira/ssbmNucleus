@@ -169,9 +169,12 @@ These are cool ideas but not priority:
 
 **Last updated**: January 2026
 
-**Currently working on**: Phase 1 - Group B (Install Page UI)
+**Currently working on**: Phase 1 - Polish & UX improvements
 
 **Recent completions**:
+- Skin Creator: back button moved to top-left (consistent with other pages)
+- Skin Creator: loading state when editing existing skin from vault
+- Stage detail view: removed redundant title and variant count
 - Install page: hide extras button when none available, always-visible back button
 - Settings page: ISO path fix, Discord link, flat layout redesign, storage stats
 - Output folder cleanup on startup (ISOs, mod exports, vault backups)
