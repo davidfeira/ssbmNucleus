@@ -30,10 +30,6 @@
 - [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
 
-### Group E: External Tool Integration
-- [ ] Open skin in HSDRaw (check for new version)
-- [ ] Open build in MEX Tool (use built-in version)
-
 ### Group F: Polish
 - [ ] Sounds (CSP tick noise, start button noise)
 
@@ -164,6 +160,8 @@ These are cool ideas but not priority:
 - Other texture mods (CSS, SSS, menus)
 - 3D model viewer in CSP Studio
 - Shareable poses / pose marketplace
+- Open skin in HSDRaw (check for new version)
+- Open build in MEX Tool (use built-in version)
 
 ---
 

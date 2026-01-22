@@ -26,6 +26,7 @@ export default function CharacterMode({
 }) {
   const [mexCostumes, setMexCostumes] = useState([])
   const [loadingFighter, setLoadingFighter] = useState(false)
+  const [dataReady, setDataReady] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importingCostume, setImportingCostume] = useState(null)
   const [removing, setRemoving] = useState(false)
@@ -46,6 +47,10 @@ export default function CharacterMode({
 
   useEffect(() => {
     if (selectedFighter) {
+      // Clear old data immediately for clean transition
+      setDataReady(false)
+      setMexCostumes([])
+      setSelectedCostumes(new Set())
       fetchMexCostumes(selectedFighter.name, true)
     }
   }, [selectedFighter])
@@ -180,6 +185,8 @@ export default function CharacterMode({
     } finally {
       if (showLoading) {
         setLoadingFighter(false)
+        // Small delay to let React render, then trigger cascade
+        setTimeout(() => setDataReady(true), 50)
       }
     }
   }
@@ -1387,12 +1394,16 @@ export default function CharacterMode({
   }
 
   // Character mode UI (default)
+  // Hide non-playable characters
+  const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag']
+  const playableFighters = fighters.filter(f => !hiddenCharacters.includes(f.name))
+
   return (
     <div className="mex-content">
       <div className="fighters-list">
-        <h3>Fighters ({fighters.length})</h3>
+        <h3>Fighters ({playableFighters.length})</h3>
         <div className="fighter-items">
-          {fighters.map(fighter => {
+          {playableFighters.map(fighter => {
             const availableCostumes = getCostumesForFighter(fighter.name)
             return (
               <div
@@ -1435,7 +1446,8 @@ export default function CharacterMode({
                   return (
                     <div
                       key={idx}
-                      className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
+                      className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                      style={{ animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
                       draggable={!removing && !reordering}
                       onDragStart={(e) => handleDragStart(e, idx)}
                       onDragOver={handleDragOver}
@@ -1538,10 +1550,12 @@ export default function CharacterMode({
               <div className={`costume-list ${loadingFighter ? 'processing' : ''}`}>
                 {getCostumesForFighter(selectedFighter.name).map((costume, idx) => {
                   const isSelected = selectedCostumes.has(costume.zipPath)
+                  const cascadeDelay = (mexCostumes.length + idx) * 30
                   return (
                     <div
                       key={idx}
-                      className={`costume-card ${isSelected ? 'selected' : ''}`}
+                      className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                      style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
                       onClick={() => !batchImporting && !loadingFighter && toggleCostumeSelection(costume.zipPath)}
                     >
                       <div className="costume-preview">
