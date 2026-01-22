@@ -13,6 +13,7 @@
 - [x] Discord link in settings
 - [x] Settings page redesign (flat layout, wider)
 - [x] Storage statistics (costumes, stages, extras, patches, vault size)
+- [ ] Add "try default" button for Slippi Dolphin path
 
 ### Group B: Install Page UI
 - [ ] Install UI redesign
@@ -29,9 +30,16 @@
 ### Group D: Build/Export Flow
 - [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
+- [ ] Add notes for Dolphin texture settings (enable dump/load textures)
+- [ ] Auto-delete dump folder contents when clicking "done" with texture pack
 
 ### Group F: Polish
 - [ ] Sounds (CSP tick noise, start button noise)
+- [ ] Standardize modal sizes
+- [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
+- [x] Skin Creator: back button in top-left (consistent with other pages)
+- [x] Skin Creator: loading state when editing from vault
+- [x] Stage detail view: removed redundant title/variant count
 
 ### Extras: Effects (PlXx.dat mods)
 - [x] Fox/Falco effects
@@ -43,6 +51,7 @@
 
 ### Extras: Models (new type)
 - [x] Fox/Falco gun model (custom .dae import via HSDRawViewer CLI)
+- [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
 
 ### Already Done / Mostly Done
 - [x] CSP Studio (pose manager, HD generation, alt CSPs)
@@ -172,18 +181,9 @@ These are cool ideas but not priority:
 **Currently working on**: Phase 1 - Polish & UX improvements
 
 **Recent completions**:
-- Skin Creator: back button moved to top-left (consistent with other pages)
-- Skin Creator: loading state when editing existing skin from vault
-- Stage detail view: removed redundant title and variant count
-- Install page: hide extras button when none available, always-visible back button
-- Settings page: ISO path fix, Discord link, flat layout redesign, storage stats
-- Output folder cleanup on startup (ISOs, mod exports, vault backups)
-- Fox/Falco gun model import (custom .dae via HSDRawViewer CLI)
-- Delete buttons on all editor modals
-- Thunder/Shadow Ball/Sword trail editors
-- Shine and Up-B color editors (shared Fox/Falco)
-- HD resolution standardization (2x, 3x, 4x)
-- Pose Manager CSP viewport fix
-- Laser Editor implementation
-- Extras system foundation
-- CSP upload modal with Normal/HD slots
+- Skin Creator UX polish (back button, loading states)
+- Stage detail view cleanup
+- Install page UI fixes
+- Settings page overhaul
+- Fox/Falco extras (effects, gun model)
+- CSP Studio improvements
