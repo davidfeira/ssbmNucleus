@@ -225,6 +225,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   };
 
   const handleDownload = () => {
+    playSound('start');
     // Create a temporary anchor element to trigger download without opening new window
     const link = document.createElement('a');
     link.href = `${API_URL}/api/mex/export/download/${filename}`;
