@@ -33,6 +33,7 @@ export default function BackupRestore({ API_URL }) {
 
       if (data.success) {
         setBackupMessage({ text: 'Backup created! Downloading...', type: 'success' })
+        playSound('start')
 
         // Download the backup file
         const downloadUrl = `${API_URL}/storage/backup/download/${data.filename}`
@@ -63,6 +64,7 @@ export default function BackupRestore({ API_URL }) {
   const handleRestoreFileSelect = (e) => {
     const file = e.target.files[0]
     if (file) {
+      playSound('start')
       setRestoreFile(file)
     }
   }
@@ -88,6 +90,7 @@ export default function BackupRestore({ API_URL }) {
 
       if (data.success) {
         setBackupMessage({ text: 'Vault restored successfully!', type: 'success' })
+        playSound('start')
         // Reload page after 1.5 seconds to refresh metadata
         setTimeout(() => {
           window.location.reload()
@@ -121,7 +124,7 @@ export default function BackupRestore({ API_URL }) {
           <button
             className="backup-button"
             onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); handleBackupVault(); }}
+            onClick={() => { playSound('start'); handleBackupVault(); }}
             disabled={backingUp || restoring}
           >
             {backingUp ? 'Creating Backup...' : 'Export Vault'}
@@ -130,7 +133,7 @@ export default function BackupRestore({ API_URL }) {
           <button
             className="restore-button"
             onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); handleRestoreClick(); }}
+            onClick={() => { playSound('start'); handleRestoreClick(); }}
             disabled={backingUp || restoring}
           >
             {restoring ? 'Restoring...' : 'Import Vault'}
