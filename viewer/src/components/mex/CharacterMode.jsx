@@ -53,6 +53,10 @@ export default function CharacterMode({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState(null)
 
+  // Team color state
+  const [teamColors, setTeamColors] = useState({ red: null, blue: null, green: null })
+  const [selectedTeamColor, setSelectedTeamColor] = useState(null)
+
   // Ref for scrolling Available to Import list to top on character change
   const availableListRef = useRef(null)
 
@@ -62,7 +66,9 @@ export default function CharacterMode({
       setDataReady(false)
       setMexCostumes([])
       setSelectedCostumes(new Set())
+      setSelectedTeamColor(null)
       fetchMexCostumes(selectedFighter.name, true)
+      fetchTeamColors(selectedFighter.name)
       // Reset scroll position of Available to Import list
       if (availableListRef.current) {
         availableListRef.current.scrollTop = 0
@@ -204,6 +210,63 @@ export default function CharacterMode({
         setTimeout(() => setDataReady(true), 50)
       }
     }
+  }
+
+  const fetchTeamColors = async (fighterName) => {
+    try {
+      const response = await fetch(`${API_URL}/fighters/${encodeURIComponent(fighterName)}/team-colors`)
+      const data = await response.json()
+      if (data.success) {
+        setTeamColors({
+          red: data.red,
+          blue: data.blue,
+          green: data.green
+        })
+      }
+    } catch (err) {
+      console.error('Failed to fetch team colors:', err)
+      setTeamColors({ red: null, blue: null, green: null })
+    }
+  }
+
+  const handleTeamColorClick = (color) => {
+    playSound('boop')
+    setSelectedTeamColor(selectedTeamColor === color ? null : color)
+  }
+
+  const handleCostumeTeamAssign = async (costumeIndex) => {
+    if (!selectedTeamColor || !selectedFighter) return
+
+    try {
+      const response = await fetch(`${API_URL}/fighters/${encodeURIComponent(selectedFighter.name)}/team-colors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          color: selectedTeamColor,
+          costumeIndex: costumeIndex
+        })
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        await fetchTeamColors(selectedFighter.name)
+        setSelectedTeamColor(null)
+      } else {
+        console.error('Failed to set team color:', data.error)
+      }
+    } catch (err) {
+      console.error('Failed to set team color:', err)
+    }
+  }
+
+  // Get the team color assigned to a costume index
+  const getCostumeTeamColor = (costumeIndex) => {
+    const colors = []
+    if (teamColors.red === costumeIndex) colors.push('red')
+    if (teamColors.blue === costumeIndex) colors.push('blue')
+    if (teamColors.green === costumeIndex) colors.push('green')
+    return colors
   }
 
   const handleImportCostume = async (costume) => {
@@ -635,6 +698,7 @@ export default function CharacterMode({
 
       if (data.success) {
         console.log(`✓ Successfully reordered costume from ${fromIndex} to ${toIndex}`)
+        playSound('newSkin')
         await fetchMexCostumes(selectedFighter.name)
       } else {
         alert(`Reorder failed: ${data.error}`)
@@ -1480,20 +1544,40 @@ export default function CharacterMode({
             <div className="costumes-section">
               <div className="costumes-section-header">
                 <h3>In ISO ({dataReady ? mexCostumes.length : 'Loading...'})</h3>
-                <div className="header-spacer" />
+                <div className="team-color-tokens">
+                  {[
+                    { id: 'red', label: 'R', color: '#ff4757' },
+                    { id: 'blue', label: 'B', color: '#3742fa' },
+                    { id: 'green', label: 'G', color: '#2ed573' }
+                  ].map(c => (
+                    <div
+                      key={c.id}
+                      className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''}`}
+                      style={{ '--token-color': c.color }}
+                      onClick={() => handleTeamColorClick(c.id)}
+                      onMouseEnter={playHoverSound}
+                      title={`${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click to assign`}
+                    >
+                      {c.label}
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className={`costume-list existing ${reordering ? 'processing' : ''} ${loadingFighter ? 'processing' : ''}`}>
                 {mexCostumes.map((costume, idx) => {
                   const isDragging = draggedIndex === idx
                   const isDragOver = dragOverIndex === idx
+                  const costumeTeamColors = getCostumeTeamColor(idx)
+                  const isTeamAssignable = selectedTeamColor !== null
                   return (
                     <div
                       key={idx}
-                      className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                      className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
                       style={{ animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
-                      draggable={!removing && !reordering}
+                      draggable={!removing && !reordering && !isTeamAssignable}
                       onMouseEnter={playHoverSound}
-                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onClick={isTeamAssignable ? () => handleCostumeTeamAssign(idx) : undefined}
+                      onDragStart={(e) => !isTeamAssignable && handleDragStart(e, idx)}
                       onDragOver={handleDragOver}
                       onDragEnter={(e) => handleDragEnter(e, idx)}
                       onDragLeave={handleDragLeave}
@@ -1526,6 +1610,20 @@ export default function CharacterMode({
                               alt="Stock"
                               onError={(e) => e.target.style.display = 'none'}
                             />
+                          </div>
+                        )}
+                        {/* Team color badges */}
+                        {costumeTeamColors.length > 0 && (
+                          <div className="team-color-badges">
+                            {costumeTeamColors.map(color => (
+                              <div
+                                key={color}
+                                className={`team-color-badge team-${color}`}
+                                title={`${color.charAt(0).toUpperCase() + color.slice(1)} Team`}
+                              >
+                                {color[0].toUpperCase()}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
