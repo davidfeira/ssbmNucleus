@@ -1528,7 +1528,7 @@ export default function SkinCreator({
                     key={costume.code}
                     className="skin-creator-costume-card"
                     onMouseEnter={playHoverSound}
-                    onClick={() => { playSound('boop'); startSkinCreatorViewer(costume); }}
+                    onClick={() => { playSound('start'); startSkinCreatorViewer(costume); }}
                   >
                     <div className="costume-preview">
                       {costume.hasCsp ? (
