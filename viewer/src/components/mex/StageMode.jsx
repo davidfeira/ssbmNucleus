@@ -8,7 +8,7 @@
  * - Available variants panel with batch selection/import
  * - Button token UI for variant assignment
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -49,6 +49,9 @@ export default function StageMode({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState(null)
 
+  // Ref for scrolling Available to Import list to top on stage change
+  const availableListRef = useRef(null)
+
   useEffect(() => {
     checkDASInstallation()
     fetchStorageVariants()
@@ -62,6 +65,10 @@ export default function StageMode({
       setSelectedVariants(new Set())
       setSelectedButton(null)
       fetchMexVariants(selectedStage.code)
+      // Reset scroll position of Available to Import list
+      if (availableListRef.current) {
+        availableListRef.current.scrollTop = 0
+      }
     }
   }, [selectedStage, dasInstalled])
 
@@ -594,7 +601,7 @@ export default function StageMode({
                       </div>
                     )}
                   </div>
-                  <div className="costume-list">
+                  <div className="costume-list" ref={availableListRef}>
                     {getVariantsForStage(selectedStage.code).map((variant, idx) => {
                       const isVanilla = variant.filename?.startsWith('vanilla')
                       const imageUrl = isVanilla

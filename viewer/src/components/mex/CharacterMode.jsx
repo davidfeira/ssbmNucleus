@@ -9,7 +9,7 @@
  * - Single and batch costume import/removal
  * - Extras mode for managing character extras (laser colors, etc.)
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getExtraTypes, hasExtras } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
 import { playSound, playHoverSound } from '../../utils/sounds'
@@ -53,6 +53,9 @@ export default function CharacterMode({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState(null)
 
+  // Ref for scrolling Available to Import list to top on character change
+  const availableListRef = useRef(null)
+
   useEffect(() => {
     if (selectedFighter) {
       // Clear old data immediately for clean transition
@@ -60,6 +63,10 @@ export default function CharacterMode({
       setMexCostumes([])
       setSelectedCostumes(new Set())
       fetchMexCostumes(selectedFighter.name, true)
+      // Reset scroll position of Available to Import list
+      if (availableListRef.current) {
+        availableListRef.current.scrollTop = 0
+      }
     }
   }, [selectedFighter])
 
@@ -1592,7 +1599,7 @@ export default function CharacterMode({
                   )}
                 </div>
               </div>
-              <div className={`costume-list ${loadingFighter ? 'processing' : ''}`}>
+              <div className={`costume-list ${loadingFighter ? 'processing' : ''}`} ref={availableListRef}>
                 {getCostumesForFighter(selectedFighter.name).map((costume, idx) => {
                   const isSelected = selectedCostumes.has(costume.zipPath)
                   const cascadeDelay = (mexCostumes.length + idx) * 30
