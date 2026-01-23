@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef } from 'react'
+import { playSound } from '../utils/sounds'
 
 export function useDragAndDrop({
   mode, // 'characters' or 'stages'
@@ -106,6 +107,8 @@ export function useDragAndDrop({
       const data = await response.json()
 
       if (data.success) {
+        playSound('newSkin') // Play success sound on reorder complete
+
         // Trigger settle animation on dropped item
         const droppedId = draggedItem.id
         setJustDroppedId(droppedId)
@@ -177,6 +180,8 @@ export function useDragAndDrop({
       const data = await response.json()
 
       if (data.success) {
+        playSound('newSkin') // Play success sound on reorder complete
+
         // Trigger settle animation on dropped item
         const droppedId = draggedItem.id
         setJustDroppedId(droppedId)

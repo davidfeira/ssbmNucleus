@@ -177,6 +177,7 @@ export default function ProjectSelector({
     }
 
     console.log('Selected project directory:', projectDir)
+    playSound('start') // Folder selected - play start sound
 
     // Show loading
     setCreatingProject(true)
