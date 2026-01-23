@@ -1607,7 +1607,39 @@
   pointer-events: none;
 }
 
-/* Button Badge on Stage Cards */
+/* Button Badge on Stage Cards - Overlay Style */
+.button-badge-overlay {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 212, 170, 0.5);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.button-badge-overlay:hover {
+  background: var(--color-danger-muted);
+  border-color: rgba(255, 71, 87, 0.6);
+  transform: scale(1.1);
+}
+
+.button-badge-overlay img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* Legacy button badge (kept for compatibility) */
 .button-badge {
   display: inline-flex;
   align-items: center;

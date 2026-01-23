@@ -533,12 +533,10 @@ export default function StageMode({
                             >
                               ×
                             </button>
-                          </div>
-                          <div className="costume-info">
-                            <h4>{variant.name}</h4>
+                            {/* Button badge overlay */}
                             {variant.button && (
                               <div
-                                className="button-badge"
+                                className="button-badge-overlay"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleRemoveButton(variant)
@@ -548,6 +546,9 @@ export default function StageMode({
                                 <img src={`${BACKEND_URL}/utility/buttons/${variant.button}.svg`} alt={variant.button} />
                               </div>
                             )}
+                          </div>
+                          <div className="costume-info">
+                            <h4>{variant.name}</h4>
                           </div>
                         </div>
                       )
