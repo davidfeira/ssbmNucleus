@@ -1052,7 +1052,6 @@
   min-height: 80vh;
   padding: var(--space-8);
   text-align: center;
-  animation: fadeIn var(--duration-normal) var(--ease-out);
 }
 
 .project-selection h1 {
@@ -1060,17 +1059,19 @@
   font-family: var(--font-display);
   font-size: var(--text-4xl);
   font-weight: var(--font-extrabold);
-  background: var(--gradient-gold);
+  background: var(--gradient-cyan);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 30px rgba(255, 199, 0, 0.3));
+  filter: drop-shadow(0 0 30px rgba(125, 211, 232, 0.3));
+  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
 
 .project-selection .subtitle {
   margin: 0 0 var(--space-10) 0;
   font-size: var(--text-lg);
   color: var(--color-text-secondary);
+  animation: cardEntrance var(--duration-slow) var(--ease-out) 0.03s backwards;
 }
 
 /* Recent Projects */
@@ -1078,6 +1079,7 @@
   width: 100%;
   max-width: 900px;
   margin-bottom: var(--space-8);
+  animation: cardEntrance var(--duration-slow) var(--ease-out) 0.06s backwards;
 }
 
 .recent-projects h3 {
@@ -1165,7 +1167,12 @@
     box-shadow var(--transition-normal);
   position: relative;
   overflow: hidden;
+  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
+
+/* Staggered entrance for project options */
+.project-option:nth-child(1) { animation-delay: 0.09s; }
+.project-option:nth-child(2) { animation-delay: 0.12s; }
 
 .project-option::before {
   content: '';

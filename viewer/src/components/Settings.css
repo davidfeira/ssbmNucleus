@@ -11,7 +11,6 @@
   max-width: 900px;
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
-  animation: fadeIn var(--duration-normal) var(--ease-out);
 }
 
 .settings-content {
@@ -28,6 +27,7 @@
   margin: 0 0 var(--space-2) 0;
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-border-subtle);
+  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* ─────────────────────────────────────────
@@ -37,11 +37,21 @@
 .settings-section {
   padding: var(--space-5) 0;
   border-bottom: 1px solid var(--color-border-subtle);
+  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
 
 .settings-section:last-child {
   border-bottom: none;
 }
+
+/* Staggered entrance for settings sections */
+.settings-section:nth-child(2) { animation-delay: 0.03s; }
+.settings-section:nth-child(3) { animation-delay: 0.06s; }
+.settings-section:nth-child(4) { animation-delay: 0.09s; }
+.settings-section:nth-child(5) { animation-delay: 0.12s; }
+.settings-section:nth-child(6) { animation-delay: 0.15s; }
+.settings-section:nth-child(7) { animation-delay: 0.18s; }
+.settings-section:nth-child(8) { animation-delay: 0.21s; }
 
 .settings-section h3 {
   font-family: var(--font-display);

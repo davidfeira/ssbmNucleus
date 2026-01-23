@@ -9,7 +9,7 @@
  * - Skin creator integration
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import FolderCard from './FolderCard'
@@ -151,6 +151,24 @@ export default function CharacterDetailView({
   // Extras page state
   const [showExtrasPage, setShowExtrasPage] = useState(false)
 
+  // More dropdown menu state
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const moreMenuRef = useRef(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showMoreMenu) return
+
+    const handleClickOutside = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMoreMenu])
+
   // Helper to delete a folder
   const handleDeleteFolder = async (folderId) => {
     try {
@@ -197,29 +215,32 @@ export default function CharacterDetailView({
           >
             ← Back to Characters
           </button>
-          <button
-            onClick={handleCreateFolder}
-            className="create-folder-button"
-            title="Create new folder"
+          <div
+            className={`more-dropdown ${hasExtras(selectedCharacter) ? 'has-extras' : ''}`}
+            ref={moreMenuRef}
           >
-            + New Folder
-          </button>
-          <button
-            onClick={() => setShowPoseManager(true)}
-            className="poses-button"
-            title="Manage character poses for CSP generation"
-          >
-            Poses
-          </button>
-          {hasExtras(selectedCharacter) && (
             <button
-              onClick={() => setShowExtrasPage(true)}
-              className="extras-button"
-              title="Manage character extras (effects, projectiles, etc.)"
+              className="more-button"
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
             >
-              Extras
+              More <span className="more-arrow">▼</span>
             </button>
-          )}
+            {showMoreMenu && (
+              <div className="more-menu">
+                <button onClick={() => { handleCreateFolder(); setShowMoreMenu(false); }}>
+                  New Folder
+                </button>
+                <button onClick={() => { setShowPoseManager(true); setShowMoreMenu(false); }}>
+                  Poses
+                </button>
+                {hasExtras(selectedCharacter) && (
+                  <button className="extras-item" onClick={() => { setShowExtrasPage(true); setShowMoreMenu(false); }}>
+                    Extras
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
@@ -292,8 +313,10 @@ export default function CharacterDetailView({
               className="create-mod-card"
               onClick={openSkinCreator}
             >
-              <div className="create-mod-content">
+              <div className="create-mod-image-area">
                 <span className="create-mod-icon">+</span>
+              </div>
+              <div className="create-mod-info">
                 <span className="create-mod-label">Create New Mod</span>
               </div>
             </div>

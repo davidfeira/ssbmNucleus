@@ -10,13 +10,10 @@
 
 ### TODO
 
-**Install Page**
-- [ ] Install UI redesign
 
 **Build/Export**
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
 - [ ] Add notes for Dolphin texture settings (enable dump/load textures)
-- [ ] Auto-delete dump folder contents when clicking "done" with texture pack
 
 **Polish**
 - [ ] Sounds (CSP tick noise, start button noise)
@@ -29,9 +26,7 @@
 **Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
 
-**Vault**
-- [ ] Drag and drop improvements for skin reordering
-
+choose team color costume token on char install page, can be similar to the button tokens of stages
 ### Completed
 
 <details>
