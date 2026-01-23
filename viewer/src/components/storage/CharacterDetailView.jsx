@@ -319,7 +319,8 @@ export default function CharacterDetailView({
             })}
             <div
               className="create-mod-card"
-              onClick={openSkinCreator}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); openSkinCreator(); }}
             >
               <div className="create-mod-image-area">
                 <span className="create-mod-icon">+</span>
