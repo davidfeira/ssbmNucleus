@@ -9,6 +9,7 @@
  */
 import { useState } from 'react'
 import { getStorageStats } from './StorageStatsSection'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function ClearStorageSection({ metadata, API_URL }) {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -68,7 +69,8 @@ export default function ClearStorageSection({ metadata, API_URL }) {
 
         <button
           className="clear-button"
-          onClick={handleClearStorage}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); handleClearStorage(); }}
           disabled={clearing}
         >
           {clearing ? 'Clearing...' : 'Clear Storage'}
@@ -98,10 +100,10 @@ export default function ClearStorageSection({ metadata, API_URL }) {
               This action cannot be undone!
             </p>
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={cancelClear}>
+              <button className="btn-cancel" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); cancelClear(); }}>
                 Cancel
               </button>
-              <button className="btn-confirm" onClick={confirmClear}>
+              <button className="btn-confirm" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); confirmClear(); }}>
                 Clear Storage
               </button>
             </div>

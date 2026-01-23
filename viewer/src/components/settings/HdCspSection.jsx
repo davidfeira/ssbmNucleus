@@ -8,6 +8,7 @@
  * - Success/error messaging
  */
 import { useState } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function HdCspSection({ metadata, API_URL }) {
   const [generatingHdCsps, setGeneratingHdCsps] = useState(false)
@@ -127,7 +128,8 @@ export default function HdCspSection({ metadata, API_URL }) {
                 <button
                   key={res}
                   className={`hd-csp-resolution-btn ${hdCspResolution === res ? 'active' : ''}`}
-                  onClick={() => setHdCspResolution(res)}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('tick'); setHdCspResolution(res); }}
                   disabled={generatingHdCsps}
                 >
                   {res}
@@ -138,7 +140,8 @@ export default function HdCspSection({ metadata, API_URL }) {
 
           <button
             className="hd-csp-generate-btn"
-            onClick={handleGenerateAllHdCsps}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); handleGenerateAllHdCsps(); }}
             disabled={generatingHdCsps || hdCspStats.missing === 0}
           >
             {generatingHdCsps ? (

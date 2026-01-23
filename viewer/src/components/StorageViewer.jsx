@@ -5,6 +5,7 @@ import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
+import ConfirmDialog from './shared/ConfirmDialog'
 import EditModal from './storage/EditModal'
 import CspManagerModal from './storage/CspManagerModal'
 import FolderCard from './storage/FolderCard'
@@ -316,6 +317,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setSlippiAdvancedOpen,
     show3DViewer,
     setShow3DViewer,
+    showConfirmDialog,
+    confirmDialogData,
     handleEditClick,
     handleScreenshotChange,
     handleCspChange,
@@ -323,7 +326,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleSave,
     handleDelete,
     handleExport,
-    handleCancel
+    handleCancel,
+    confirmDelete,
+    cancelDelete
   } = useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastImageUpdate })
 
   // Store setEditingItem in ref for CSP manager callback
@@ -757,6 +762,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         retestingItem={retestingItem}
         handleRetestFixChoice={handleRetestFixChoice}
         handleSlippiChoice={handleSlippiChoice}
+        // Confirm dialog
+        showConfirmDialog={showConfirmDialog}
+        confirmDialogData={confirmDialogData}
+        confirmDelete={confirmDelete}
+        cancelDelete={cancelDelete}
         // API
         API_URL={API_URL}
       />
@@ -854,6 +864,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         retestingItem={retestingItem}
         handleRetestFixChoice={handleRetestFixChoice}
         handleSlippiChoice={handleSlippiChoice}
+        // Confirm dialog
+        showConfirmDialog={showConfirmDialog}
+        confirmDialogData={confirmDialogData}
+        confirmDelete={confirmDelete}
+        cancelDelete={cancelDelete}
         // Context menu
         contextMenu={contextMenu}
         handleMoveToTop={handleMoveToTop}
@@ -1007,6 +1022,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         data={slippiDialogData}
         onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
         isRetest={retestingItem !== null}
+      />
+
+      <ConfirmDialog
+        show={showConfirmDialog}
+        title={confirmDialogData?.title}
+        message={confirmDialogData?.message}
+        confirmText={confirmDialogData?.confirmText}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
 
       {/* XDelta Build Modal */}

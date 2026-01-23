@@ -8,6 +8,7 @@
  * - Skeleton loading state
  * - Click to select stage
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
@@ -42,7 +43,8 @@ export default function StagesGrid({ stageVariants, isLoading, onSelectStage }) 
             <div
               key={stage.code}
               className="stage-card"
-              onClick={() => onSelectStage(stage)}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); onSelectStage(stage); }}
             >
               <div className="stage-icon-container">
                 <img

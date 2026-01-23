@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getExtraTypes, getExtraType } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
+import { playSound, playHoverSound } from '../../utils/sounds'
 import LaserEditorModal from './LaserEditorModal'
 import SideBEditorModal from './SideBEditorModal'
 import UpBEditorModal from './UpBEditorModal'
@@ -830,7 +831,7 @@ function ExtraTypeCard({ extraType, modCount, onClick }) {
   }
 
   return (
-    <div className="extra-type-page-card" onClick={onClick}>
+    <div className="extra-type-page-card" onMouseEnter={playHoverSound} onClick={onClick}>
       <div className="extra-type-page-icon">
         <Icon />
       </div>
@@ -854,7 +855,7 @@ function ExtraModCard({ mod, character, extraType, onEdit, onDelete, API_URL }) 
   const isModelType = extraType.type === 'model'
 
   return (
-    <div className="extra-mod-card" onClick={() => onEdit?.(mod)}>
+    <div className="extra-mod-card" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); onEdit?.(mod); }}>
       <div className="extra-mod-image-container">
         {/* Preview based on extra type */}
         <ExtraPreview extraType={extraType} modifications={mod.modifications} mod={mod} compact />
@@ -884,7 +885,7 @@ function CreateExtraModCard({ extraType, onCreateNew, onImport, uploading }) {
   // For model types, clicking directly opens the import modal
   if (isModelType) {
     return (
-      <div className="extra-mod-card create-extra-mod-card" onClick={() => onCreateNew?.()}>
+      <div className="extra-mod-card create-extra-mod-card" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); onCreateNew?.(); }}>
         <div className="extra-mod-image-container create-extra-mod-placeholder">
           <div className="create-extra-mod-icon">
             {uploading ? <span className="create-extra-spinner" /> : <ImportIcon />}
@@ -910,7 +911,7 @@ function CreateExtraModCard({ extraType, onCreateNew, onImport, uploading }) {
             <ImportIcon />
             <span>Import .dat</span>
           </button>
-          <button className="create-extra-mod-cancel" onClick={() => setShowOptions(false)}>
+          <button className="create-extra-mod-cancel" onClick={() => { playSound('back'); setShowOptions(false); }}>
             Cancel
           </button>
         </div>
@@ -919,7 +920,7 @@ function CreateExtraModCard({ extraType, onCreateNew, onImport, uploading }) {
   }
 
   return (
-    <div className="extra-mod-card create-extra-mod-card" onClick={() => setShowOptions(true)}>
+    <div className="extra-mod-card create-extra-mod-card" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); setShowOptions(true); }}>
       <div className="extra-mod-image-container create-extra-mod-placeholder">
         <div className="create-extra-mod-icon">
           {uploading ? <span className="create-extra-spinner" /> : <PlusIcon />}
@@ -1028,6 +1029,7 @@ export default function ExtrasPageView({
   }
 
   const handleEditorClose = () => {
+    playSound('back')
     setShowEditor(false)
     setEditingMod(null)
   }
@@ -1044,7 +1046,7 @@ export default function ExtrasPageView({
       <div className="storage-viewer">
         <div className="character-detail extras-page">
           <div className="character-header">
-            <button onClick={() => setSelectedType(null)} className="back-button">
+            <button onClick={() => { playSound('back'); setSelectedType(null); }} className="back-button">
               ← Back to Extras
             </button>
             <div className="character-title-area">
@@ -1194,7 +1196,7 @@ export default function ExtrasPageView({
     <div className="storage-viewer">
       <div className="character-detail extras-page">
         <div className="character-header">
-          <button onClick={onBack} className="back-button">
+          <button onClick={() => { playSound('back'); onBack(); }} className="back-button">
             ← Back to {character}
           </button>
           <div className="character-title-area">
@@ -1217,7 +1219,7 @@ export default function ExtrasPageView({
                 key={type.id}
                 extraType={type}
                 modCount={(extras[type.id] || []).length}
-                onClick={() => setSelectedType(type)}
+                onClick={() => { playSound('boop'); setSelectedType(type); }}
               />
             ))}
           </div>

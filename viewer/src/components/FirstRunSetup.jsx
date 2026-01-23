@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
+import { playSound } from '../utils/sounds'
 import './FirstRunSetup.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -59,6 +60,7 @@ export default function FirstRunSetup({ onComplete }) {
 
     newSocket.on('setup_error', (data) => {
       console.log('[FirstRunSetup] Error:', data)
+      playSound('error')
       setStep('error')
       setError(data.error)
     })
@@ -72,6 +74,7 @@ export default function FirstRunSetup({ onComplete }) {
 
   const handleBrowseIso = async () => {
     if (!window.electron) {
+      playSound('error')
       setError('Electron API not available')
       return
     }
@@ -82,16 +85,19 @@ export default function FirstRunSetup({ onComplete }) {
         setIsoPath(selectedPath)
       }
     } catch (err) {
+      playSound('error')
       setError(`Error selecting file: ${err.message}`)
     }
   }
 
   const handleStartSetup = async () => {
     if (!isoPath) {
+      playSound('error')
       setError('Please select an ISO file')
       return
     }
 
+    playSound('start')
     setStep('verifying')
     setError(null)
 
@@ -106,6 +112,7 @@ export default function FirstRunSetup({ onComplete }) {
       const data = await response.json()
 
       if (!data.success) {
+        playSound('error')
         setStep('error')
         setError(data.error || 'Setup failed')
         return
@@ -115,6 +122,7 @@ export default function FirstRunSetup({ onComplete }) {
       setStep('extracting')
 
     } catch (err) {
+      playSound('error')
       setStep('error')
       setError(`Failed to start setup: ${err.message}`)
     }

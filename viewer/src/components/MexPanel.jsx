@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import './MexPanel.css'
+import { playSound, playHoverSound } from '../utils/sounds'
 import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
 import CharacterMode from './mex/CharacterMode'
@@ -130,13 +131,15 @@ const MexPanel = () => {
           <div className="action-buttons-group">
             <button
               className="action-btn export-btn"
-              onClick={() => setShowIsoBuilder(true)}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); setShowIsoBuilder(true); }}
             >
               Export ISO
             </button>
             <button
               className="action-btn"
-              onClick={() => setShowProjectModal(true)}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); setShowProjectModal(true); }}
             >
               Switch Project
             </button>

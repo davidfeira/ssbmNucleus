@@ -8,6 +8,8 @@
  * - Context menu (right-click)
  * - Edit button
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function SkinCard({
   skin,
   selectedCharacter,
@@ -56,6 +58,7 @@ export default function SkinCard({
       key={skin.id}
       className={classNames}
       draggable={!reordering}
+      onMouseEnter={playHoverSound}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
@@ -93,6 +96,7 @@ export default function SkinCard({
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
+            playSound('boop')
             onEditClick('costume', {
               id: skin.id,
               character: selectedCharacter,

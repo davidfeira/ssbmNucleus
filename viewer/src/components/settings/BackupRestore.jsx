@@ -8,6 +8,7 @@
  * - Progress/error messages
  */
 import { useState } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function BackupRestore({ API_URL }) {
   // State
@@ -119,7 +120,8 @@ export default function BackupRestore({ API_URL }) {
         <div className="backup-buttons">
           <button
             className="backup-button"
-            onClick={handleBackupVault}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); handleBackupVault(); }}
             disabled={backingUp || restoring}
           >
             {backingUp ? 'Creating Backup...' : 'Export Vault'}
@@ -127,7 +129,8 @@ export default function BackupRestore({ API_URL }) {
 
           <button
             className="restore-button"
-            onClick={handleRestoreClick}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); handleRestoreClick(); }}
             disabled={backingUp || restoring}
           >
             {restoring ? 'Restoring...' : 'Import Vault'}
@@ -198,12 +201,13 @@ export default function BackupRestore({ API_URL }) {
             )}
 
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={cancelRestore}>
+              <button className="btn-cancel" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); cancelRestore(); }}>
                 Cancel
               </button>
               <button
                 className="btn-confirm"
-                onClick={confirmRestore}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); confirmRestore(); }}
                 disabled={!restoreFile}
               >
                 Restore Vault

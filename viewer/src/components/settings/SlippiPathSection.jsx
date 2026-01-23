@@ -8,6 +8,7 @@
  * - Persist path to localStorage
  */
 import { useState, useEffect } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function SlippiPathSection({ API_URL }) {
   const [slippiDolphinPath, setSlippiDolphinPath] = useState('')
@@ -128,7 +129,8 @@ export default function SlippiPathSection({ API_URL }) {
             <span className="iso-path-text" title={slippiDolphinPath}>{slippiDolphinPath}</span>
             <button
               className="iso-clear-button"
-              onClick={handleClearSlippiPath}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); handleClearSlippiPath(); }}
               title="Clear Slippi path"
             >
               ×
@@ -139,7 +141,8 @@ export default function SlippiPathSection({ API_URL }) {
         )}
         <button
           className="iso-browse-button"
-          onClick={handleBrowseSlippi}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); handleBrowseSlippi(); }}
           disabled={verifyingSlippi}
         >
           {verifyingSlippi ? 'Verifying...' : slippiDolphinPath ? 'Change' : 'Browse'}

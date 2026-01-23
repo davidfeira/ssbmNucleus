@@ -66,7 +66,9 @@ class FirstRunSetup:
         118: "start",
         119: "tick",
         120: "error",
-        135: "camera_click"
+        127: "click",
+        135: "camera_click",
+        216: "major_error"
     }
 
     # Mapping: csp_data folder -> list of (vanilla_char, costume_code) tuples

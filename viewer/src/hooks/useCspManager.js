@@ -10,6 +10,7 @@
  */
 
 import { useState } from 'react'
+import { playSound } from '../utils/sounds'
 
 export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onUpdateEditingItemActiveCsp }) {
   // CSP Manager modal state
@@ -55,6 +56,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
 
   // Close CSP manager
   const closeCspManager = () => {
+    playSound('back')
     setShowCspManager(false)
     setCspManagerSkin(null)
     setAlternativeCsps([])
@@ -288,15 +290,18 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
       const data = await response.json()
 
       if (data.success) {
+        playSound('camera')
         // Update local state to show HD badge
         setAlternativeCsps(prev => prev.map((alt, i) =>
           i === altIndex ? { ...alt, isHd: true } : alt
         ))
         setLastImageUpdate(Date.now())
       } else {
+        playSound('error')
         alert(`Failed to regenerate HD: ${data.error}`)
       }
     } catch (err) {
+      playSound('error')
       alert(`Error regenerating HD: ${err.message}`)
     }
   }
@@ -336,6 +341,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
       const data = await response.json()
 
       if (data.success) {
+        playSound('camera')
         if (!activeAltId) {
           // Update main CSP HD info
           setHdCspInfo({
@@ -365,9 +371,11 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
           onRefresh()
         }
       } else {
+        playSound('error')
         alert(`Failed to capture HD CSP: ${data.error}`)
       }
     } catch (err) {
+      playSound('error')
       alert(`Error capturing HD CSP: ${err.message}`)
     } finally {
       setCapturingHdCsp(false)

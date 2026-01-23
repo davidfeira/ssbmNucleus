@@ -51,3 +51,6 @@ utility/website/backend/tools/processor/csp_data/**/Pl*.dat
 
 # Extras reference files
 zzzMoreExtras/
+
+# Test sound dumps
+**/testsounds/

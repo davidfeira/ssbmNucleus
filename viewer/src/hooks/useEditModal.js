@@ -10,6 +10,7 @@
  */
 
 import { useState } from 'react'
+import { playSound } from '../utils/sounds'
 
 export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastImageUpdate }) {
   // Edit modal state
@@ -19,6 +20,10 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  // Confirm dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [confirmDialogData, setConfirmDialogData] = useState(null)
 
   // File upload state
   const [newScreenshot, setNewScreenshot] = useState(null) // File object for new screenshot
@@ -111,6 +116,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
   // Save changes
   const handleSave = async () => {
     if (!editName.trim()) {
+      playSound('error')
       alert('Name cannot be empty')
       return
     }
@@ -144,6 +150,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
       const data = await response.json()
 
       if (!data.success) {
+        playSound('error')
         alert(`Save failed: ${data.error}`)
         setSaving(false)
         return
@@ -164,6 +171,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         const screenshotData = await screenshotResponse.json()
 
         if (!screenshotData.success) {
+          playSound('error')
           alert(`Screenshot upload failed: ${screenshotData.error}`)
           setSaving(false)
           return
@@ -185,6 +193,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         const slippiData = await slippiResponse.json()
 
         if (!slippiData.success) {
+          playSound('error')
           alert(`Slippi status update failed: ${slippiData.error}`)
           setSaving(false)
           return
@@ -206,6 +215,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         const cspData = await cspResponse.json()
 
         if (!cspData.success) {
+          playSound('error')
           alert(`CSP upload failed: ${cspData.error}`)
           setSaving(false)
           return
@@ -227,6 +237,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         const stockData = await stockResponse.json()
 
         if (!stockData.success) {
+          playSound('error')
           alert(`Stock icon upload failed: ${stockData.error}`)
           setSaving(false)
           return
@@ -249,37 +260,48 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
       setShowEditModal(false)
       setEditingItem(null)
     } catch (err) {
+      playSound('error')
       alert(`Save error: ${err.message}`)
     } finally {
       setSaving(false)
     }
   }
 
-  // Delete item
-  const handleDelete = async () => {
+  // Delete item - shows confirmation dialog
+  const handleDelete = () => {
     const itemName = editingItem.type === 'costume'
       ? `${editingItem.data.character} - ${editingItem.data.color}`
       : editingItem.data.name
 
-    if (!confirm(`Are you sure you want to delete "${itemName}"? This cannot be undone.`)) {
-      return
-    }
+    setConfirmDialogData({
+      title: 'Delete Item',
+      message: `Are you sure you want to delete "${itemName}"? This cannot be undone.`,
+      confirmText: 'Delete',
+      itemToDelete: editingItem
+    })
+    setShowConfirmDialog(true)
+  }
 
+  // Actually perform the delete after confirmation
+  const confirmDelete = async () => {
+    const itemToDelete = confirmDialogData?.itemToDelete || editingItem
+    setShowConfirmDialog(false)
+    setConfirmDialogData(null)
     setDeleting(true)
 
     try {
-      const endpoint = editingItem.type === 'costume'
+      const endpoint = itemToDelete.type === 'costume'
         ? `${API_URL}/storage/costumes/delete`
         : `${API_URL}/storage/stages/delete`
 
-      const body = editingItem.type === 'costume'
+      const body = itemToDelete.type === 'costume'
         ? {
-            character: editingItem.data.character,
-            skinId: editingItem.data.id
+            character: itemToDelete.data.character,
+            skinId: itemToDelete.data.id
           }
         : {
-            stageFolder: editingItem.data.stageFolder,
-            variantId: editingItem.data.id
+            stageFolder: itemToDelete.data.stageFolder,
+            variantId: itemToDelete.data.id
           }
 
       const response = await fetch(endpoint, {
@@ -292,7 +314,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
 
       if (data.success) {
         // Refetch data before closing modal
-        if (editingItem.type === 'stage') {
+        if (itemToDelete.type === 'stage') {
           await fetchStageVariants()
         }
 
@@ -300,20 +322,28 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         await onRefresh()
 
         // Update cache-busting timestamp to force image reload after deletion
-        if (editingItem.type === 'costume') {
+        if (itemToDelete.type === 'costume') {
           setLastImageUpdate(Date.now())
         }
 
         setShowEditModal(false)
         setEditingItem(null)
       } else {
+        playSound('error')
         alert(`Delete failed: ${data.error}`)
       }
     } catch (err) {
+      playSound('error')
       alert(`Delete error: ${err.message}`)
     } finally {
       setDeleting(false)
     }
+  }
+
+  // Cancel delete confirmation
+  const cancelDelete = () => {
+    setShowConfirmDialog(false)
+    setConfirmDialogData(null)
   }
 
   // Export item
@@ -356,9 +386,11 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
         link.click()
         document.body.removeChild(link)
       } else {
+        playSound('error')
         alert(`Export failed: ${data.error}`)
       }
     } catch (err) {
+      playSound('error')
       alert(`Export error: ${err.message}`)
     } finally {
       setExporting(false)
@@ -367,6 +399,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
 
   // Cancel and close modal
   const handleCancel = () => {
+    playSound('back')
     setShowEditModal(false)
     setEditingItem(null)
     setEditName('')
@@ -403,6 +436,10 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     show3DViewer,
     setShow3DViewer,
 
+    // Confirm dialog state
+    showConfirmDialog,
+    confirmDialogData,
+
     // Handlers
     handleEditClick,
     handleScreenshotChange,
@@ -411,6 +448,10 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     handleSave,
     handleDelete,
     handleExport,
-    handleCancel
+    handleCancel,
+
+    // Confirm dialog handlers
+    confirmDelete,
+    cancelDelete
   }
 }

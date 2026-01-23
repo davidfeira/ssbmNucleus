@@ -12,6 +12,8 @@
 import { useState, useEffect } from 'react'
 import { getExtraTypes, hasExtras } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
+import { playSound, playHoverSound } from '../../utils/sounds'
+import ConfirmDialog from '../shared/ConfirmDialog'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
@@ -46,6 +48,10 @@ export default function CharacterMode({
   const [extraMods, setExtraMods] = useState({})
   const [selectedExtraMod, setSelectedExtraMod] = useState(null)
   const [importingExtra, setImportingExtra] = useState(false)
+
+  // Confirm dialog state for removing costumes
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState(null)
 
   useEffect(() => {
     if (selectedFighter) {
@@ -311,7 +317,7 @@ export default function CharacterMode({
     }
   }
 
-  const handleRemoveCostume = async (fighterName, costumeIndex, costumeName) => {
+  const handleRemoveCostume = (fighterName, costumeIndex, costumeName) => {
     if (removing || removingCostume !== null) {
       console.log('Remove already in progress, ignoring click')
       return
@@ -322,9 +328,17 @@ export default function CharacterMode({
       ? `Are you sure you want to remove "${costumeName}" (and paired Nana) from Ice Climbers?`
       : `Are you sure you want to remove "${costumeName}" from ${fighterName}?`
 
-    if (!confirm(confirmMessage)) {
-      return
-    }
+    // Show confirm dialog instead of native confirm()
+    setPendingRemoval({ fighterName, costumeIndex, costumeName, isIceClimbers })
+    setShowConfirmDialog(true)
+  }
+
+  const confirmRemoveCostume = async () => {
+    if (!pendingRemoval) return
+
+    const { fighterName, costumeIndex, costumeName, isIceClimbers } = pendingRemoval
+    setShowConfirmDialog(false)
+    setPendingRemoval(null)
 
     console.log(`=== REMOVE REQUEST ===`)
     console.log(`Fighter: ${fighterName}`)
@@ -546,8 +560,10 @@ export default function CharacterMode({
 
     // Show summary
     if (failCount > 0) {
+      playSound('error')
       alert(`Batch import completed:\n${successCount} succeeded, ${failCount} failed`)
     } else {
+      playSound('newSkin')
       console.log(`✓ Successfully imported ${successCount} costume(s)`)
     }
   }
@@ -1247,7 +1263,8 @@ export default function CharacterMode({
             <h3>Extras</h3>
             <button
               className="btn-back-small"
-              onClick={() => { setExtrasMode(false); setSelectedExtraType(null); setSelectedExtraMod(null); setCurrentColors(null) }}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('back'); setExtrasMode(false); setSelectedExtraType(null); setSelectedExtraMod(null); setCurrentColors(null); }}
             >
               ← Back
             </button>
@@ -1331,18 +1348,13 @@ export default function CharacterMode({
                     {selectedExtraMod && (
                       <button
                         className="btn-batch-import"
-                        onClick={handleImportExtra}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => { playSound('start'); handleImportExtra(); }}
                         disabled={importingExtra}
                       >
                         {importingExtra ? 'Importing...' : 'Import Selected'}
                       </button>
                     )}
-                    <button
-                      className="btn-back"
-                      onClick={() => { setExtrasMode(false); setSelectedExtraType(null); setSelectedExtraMod(null); setCurrentColors(null) }}
-                    >
-                      ← Back
-                    </button>
                   </div>
                 </div>
                 <div className="costume-list">
@@ -1407,13 +1419,15 @@ export default function CharacterMode({
           <div className="mode-toggle">
             <button
               className={`mode-toggle-btn ${mode === 'characters' ? 'active' : ''}`}
-              onClick={() => onModeChange('characters')}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (mode !== 'characters') { playSound('boop'); onModeChange('characters'); } }}
             >
               Fighters
             </button>
             <button
               className={`mode-toggle-btn ${mode === 'stages' ? 'active' : ''}`}
-              onClick={() => onModeChange('stages')}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (mode !== 'stages') { playSound('boop'); onModeChange('stages'); } }}
             >
               Stages
             </button>
@@ -1427,7 +1441,8 @@ export default function CharacterMode({
               <div
                 key={fighter.internalId}
                 className={`fighter-item ${selectedFighter?.internalId === fighter.internalId ? 'selected' : ''}`}
-                onClick={() => onSelectFighter(fighter)}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); onSelectFighter(fighter); }}
               >
                 {fighter.defaultStockUrl && (
                   <img
@@ -1470,6 +1485,7 @@ export default function CharacterMode({
                       className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                       style={{ animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
                       draggable={!removing && !reordering}
+                      onMouseEnter={playHoverSound}
                       onDragStart={(e) => handleDragStart(e, idx)}
                       onDragOver={handleDragOver}
                       onDragEnter={(e) => handleDragEnter(e, idx)}
@@ -1518,6 +1534,12 @@ export default function CharacterMode({
                   </div>
                 )}
               </div>
+              {reordering && (
+                <div className="reorder-overlay">
+                  <div className="reorder-spinner"></div>
+                  <span>Reordering...</span>
+                </div>
+              )}
             </div>
 
             <div className="costumes-section">
@@ -1530,7 +1552,8 @@ export default function CharacterMode({
                   {getCostumesForFighter(selectedFighter.name).length > 0 && (
                     <button
                       className="btn-select-all"
-                      onClick={selectAllCostumes}
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('boop'); selectAllCostumes(); }}
                       disabled={loadingFighter || batchImporting}
                     >
                       Select All
@@ -1540,7 +1563,8 @@ export default function CharacterMode({
                     <>
                       <button
                         className="btn-batch-import"
-                        onClick={handleBatchImport}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => { playSound('start'); handleBatchImport(); }}
                         disabled={batchImporting || loadingFighter}
                       >
                         {batchImporting
@@ -1549,7 +1573,8 @@ export default function CharacterMode({
                       </button>
                       <button
                         className="btn-clear-selection"
-                        onClick={clearSelection}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => { playSound('boop'); clearSelection(); }}
                         disabled={batchImporting || loadingFighter}
                       >
                         Clear
@@ -1559,7 +1584,8 @@ export default function CharacterMode({
                   {hasExtras(selectedFighter.name) && (
                     <button
                       className="btn-extras-mode"
-                      onClick={() => setExtrasMode(true)}
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('boop'); setExtrasMode(true); }}
                     >
                       Extras
                     </button>
@@ -1575,7 +1601,8 @@ export default function CharacterMode({
                       key={idx}
                       className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                       style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
-                      onClick={() => !batchImporting && !loadingFighter && toggleCostumeSelection(costume.zipPath)}
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { if (!batchImporting && !loadingFighter) { playSound('boop'); toggleCostumeSelection(costume.zipPath); } }}
                     >
                       <div className="costume-preview">
                         {costume.cspUrl && (
@@ -1648,6 +1675,19 @@ export default function CharacterMode({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        show={showConfirmDialog}
+        title="Remove Costume"
+        message={pendingRemoval
+          ? (pendingRemoval.isIceClimbers
+              ? `Are you sure you want to remove "${pendingRemoval.costumeName}" (and paired Nana) from Ice Climbers?`
+              : `Are you sure you want to remove "${pendingRemoval.costumeName}" from ${pendingRemoval.fighterName}?`)
+          : ''}
+        confirmText="Remove"
+        onConfirm={confirmRemoveCostume}
+        onCancel={() => { setShowConfirmDialog(false); setPendingRemoval(null); }}
+      />
     </div>
   )
 }

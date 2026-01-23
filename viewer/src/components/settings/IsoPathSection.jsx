@@ -8,6 +8,7 @@
  * - Persist path to localStorage
  */
 import { useState, useEffect } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function IsoPathSection({ API_URL }) {
   const [vanillaIsoPath, setVanillaIsoPath] = useState('')
@@ -126,7 +127,8 @@ export default function IsoPathSection({ API_URL }) {
             <span className="iso-path-text" title={vanillaIsoPath}>{vanillaIsoPath}</span>
             <button
               className="iso-clear-button"
-              onClick={handleClearIsoPath}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); handleClearIsoPath(); }}
               title="Clear ISO path"
             >
               ×
@@ -137,7 +139,8 @@ export default function IsoPathSection({ API_URL }) {
         )}
         <button
           className="iso-browse-button"
-          onClick={handleBrowseIso}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); handleBrowseIso(); }}
           disabled={verifyingIso}
         >
           {verifyingIso ? 'Verifying...' : vanillaIsoPath ? 'Change' : 'Browse'}

@@ -8,6 +8,8 @@
  * - Rename and delete actions
  * - Skin count display
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function FolderCard({
   folder,
   isExpanded,
@@ -47,13 +49,14 @@ export default function FolderCard({
       key={folder.id}
       className={classNames}
       draggable={!reordering && !isEditing}
+      onMouseEnter={playHoverSound}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onClick={() => !isEditing && !justDraggedRef.current && onToggle(folder.id)}
+      onClick={() => { if (!isEditing && !justDraggedRef.current) { playSound('boop'); onToggle(folder.id); } }}
     >
       <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
         {isExpanded ? (
@@ -86,6 +89,7 @@ export default function FolderCard({
         <button
           onClick={(e) => {
             e.stopPropagation()
+            playSound('boop')
             onStartEditing(folder)
           }}
           title="Rename folder"
@@ -95,6 +99,7 @@ export default function FolderCard({
         <button
           onClick={(e) => {
             e.stopPropagation()
+            playSound('boop')
             onDelete(folder.id)
           }}
           title="Delete folder"

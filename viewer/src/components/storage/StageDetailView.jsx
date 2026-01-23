@@ -8,9 +8,11 @@
  */
 
 import { useAutoAnimate } from '@formkit/auto-animate/react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
+import ConfirmDialog from '../shared/ConfirmDialog'
 import ContextMenu from './ContextMenu'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 
@@ -89,6 +91,11 @@ export default function StageDetailView({
   retestingItem,
   handleRetestFixChoice,
   handleSlippiChoice,
+  // Confirm dialog
+  showConfirmDialog,
+  confirmDialogData,
+  confirmDelete,
+  cancelDelete,
   // API
   API_URL
 }) {
@@ -102,7 +109,7 @@ export default function StageDetailView({
     <div className="storage-viewer">
       <div className="character-detail">
         <button
-          onClick={onBack}
+          onClick={() => { playSound('back'); onBack(); }}
           className="back-button"
         >
           ← Back to Stages
@@ -121,6 +128,7 @@ export default function StageDetailView({
                   key={variant.id}
                   className={`skin-card ${isDragging ? 'dragging' : ''}`}
                   draggable={!reordering}
+                  onMouseEnter={playHoverSound}
                   onDragStart={(e) => handleDragStart(e, variants.findIndex(v => v.id === variant.id), variants)}
                   onDragOver={handleDragOver}
                   onDragEnter={(e) => handleDragEnter(e, idx, previewOrder || variants)}
@@ -152,6 +160,7 @@ export default function StageDetailView({
                       onClick={(e) => {
                         e.stopPropagation()
                         e.preventDefault()
+                        playSound('boop')
                         handleEditClick('stage', {
                           id: variant.id,  // ← Use the immutable ID for API calls
                           name: variant.name,  // ← Use the editable name for display
@@ -244,6 +253,14 @@ export default function StageDetailView({
         data={slippiDialogData}
         onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
         isRetest={retestingItem !== null}
+      />
+      <ConfirmDialog
+        show={showConfirmDialog}
+        title={confirmDialogData?.title}
+        message={confirmDialogData?.message}
+        confirmText={confirmDialogData?.confirmText}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
       <ContextMenu
         contextMenu={contextMenu}

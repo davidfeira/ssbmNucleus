@@ -1,3 +1,4 @@
+import { playSound } from '../../utils/sounds'
 import './SlippiSafetyDialog.css'
 
 /**
@@ -12,6 +13,7 @@ export default function SlippiSafetyDialog({ show, data, onChoice, isRetest = fa
   if (!show || !data) return null
 
   const handleOverlayClick = () => {
+    playSound('back')
     onChoice('cancel')
   }
 
@@ -58,7 +60,7 @@ export default function SlippiSafetyDialog({ show, data, onChoice, isRetest = fa
           </button>
           <button
             className="btn-cancel"
-            onClick={() => onChoice('cancel')}
+            onClick={() => { playSound('back'); onChoice('cancel'); }}
             style={{ width: '100%' }}
           >
             Cancel

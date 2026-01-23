@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react'
+import { playSound } from '../utils/sounds'
 
 export function useFileImport({
   mode,
@@ -53,6 +54,7 @@ export function useFileImport({
       }
 
       if (data.success) {
+        playSound('newSkin')
         const typeMsg = data.type === 'character'
           ? `${data.imported_count} costume(s)`
           : `${data.stage} stage`
@@ -72,6 +74,7 @@ export function useFileImport({
           setImportMessage('')
         }, 2000)
       } else {
+        playSound('error')
         setImportMessage(`✗ Import failed: ${data.error}`)
         setTimeout(() => {
           setImporting(false)
@@ -79,6 +82,7 @@ export function useFileImport({
         }, 5000)
       }
     } catch (err) {
+      playSound('error')
       setImportMessage(`✗ Error: ${err.message}`)
       setTimeout(() => {
         setImporting(false)

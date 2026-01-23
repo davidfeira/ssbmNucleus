@@ -8,6 +8,7 @@
  * - Skeleton loading state
  * - Click to select character
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
@@ -42,7 +43,8 @@ export default function CharactersGrid({ characters, allCharacters, isLoading, o
             <div
               key={characterName}
               className="character-card"
-              onClick={() => onSelectCharacter(characterName)}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); onSelectCharacter(characterName); }}
             >
               <div className="character-icon-container">
                 <img

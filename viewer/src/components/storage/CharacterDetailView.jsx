@@ -12,11 +12,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
+import { playSound, playHoverSound } from '../../utils/sounds'
 import FolderCard from './FolderCard'
 import SkinCard from './SkinCard'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
+import ConfirmDialog from '../shared/ConfirmDialog'
 import ContextMenu from './ContextMenu'
 import SkinCreator from '../SkinCreator'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
@@ -112,6 +114,11 @@ export default function CharacterDetailView({
   retestingItem,
   handleRetestFixChoice,
   handleSlippiChoice,
+  // Confirm dialog
+  showConfirmDialog,
+  confirmDialogData,
+  confirmDelete,
+  cancelDelete,
   // Context menu
   contextMenu,
   handleMoveToTop,
@@ -210,7 +217,7 @@ export default function CharacterDetailView({
       <div className="character-detail">
         <div className="character-header">
           <button
-            onClick={onBack}
+            onClick={() => { playSound('back'); onBack(); }}
             className="back-button"
           >
             ← Back to Characters
@@ -221,20 +228,21 @@ export default function CharacterDetailView({
           >
             <button
               className="more-button"
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowMoreMenu(!showMoreMenu); }}
             >
               More <span className="more-arrow">▼</span>
             </button>
             {showMoreMenu && (
               <div className="more-menu">
-                <button onClick={() => { handleCreateFolder(); setShowMoreMenu(false); }}>
+                <button onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); handleCreateFolder(); setShowMoreMenu(false); }}>
                   New Folder
                 </button>
-                <button onClick={() => { setShowPoseManager(true); setShowMoreMenu(false); }}>
+                <button onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); setShowPoseManager(true); setShowMoreMenu(false); }}>
                   Poses
                 </button>
                 {hasExtras(selectedCharacter) && (
-                  <button className="extras-item" onClick={() => { setShowExtrasPage(true); setShowMoreMenu(false); }}>
+                  <button className="extras-item" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); setShowExtrasPage(true); setShowMoreMenu(false); }}>
                     Extras
                   </button>
                 )}
@@ -390,6 +398,14 @@ export default function CharacterDetailView({
         data={slippiDialogData}
         onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
         isRetest={retestingItem !== null}
+      />
+      <ConfirmDialog
+        show={showConfirmDialog}
+        title={confirmDialogData?.title}
+        message={confirmDialogData?.message}
+        confirmText={confirmDialogData?.confirmText}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
       <ContextMenu
         contextMenu={contextMenu}

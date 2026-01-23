@@ -6,24 +6,36 @@
  * - Active mode highlighting
  * - Clears selections when switching modes
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function ModeToolbar({ mode, onModeChange }) {
+  const handleModeChange = (newMode) => {
+    if (mode !== newMode) {
+      playSound('boop')
+      onModeChange(newMode)
+    }
+  }
+
   return (
     <div className="mode-switcher">
       <button
         className={`mode-btn ${mode === 'characters' ? 'active' : ''}`}
-        onClick={() => onModeChange('characters')}
+        onMouseEnter={playHoverSound}
+        onClick={() => handleModeChange('characters')}
       >
         Characters
       </button>
       <button
         className={`mode-btn ${mode === 'stages' ? 'active' : ''}`}
-        onClick={() => onModeChange('stages')}
+        onMouseEnter={playHoverSound}
+        onClick={() => handleModeChange('stages')}
       >
         Stages
       </button>
       <button
         className={`mode-btn ${mode === 'patches' ? 'active' : ''}`}
-        onClick={() => onModeChange('patches')}
+        onMouseEnter={playHoverSound}
+        onClick={() => handleModeChange('patches')}
       >
         Patches
       </button>

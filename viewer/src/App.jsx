@@ -4,6 +4,7 @@ import MexPanel from './components/MexPanel'
 import Settings from './components/Settings'
 import FirstRunSetup from './components/FirstRunSetup'
 import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
+import { playSound, playHoverSound } from './utils/sounds'
 import './App.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -228,19 +229,22 @@ function App() {
           <nav className="app-tabs">
             <button
               className={`tab ${activeTab === 'storage' ? 'active' : ''}`}
-              onClick={() => setActiveTab('storage')}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (activeTab !== 'storage') { playSound('boop'); setActiveTab('storage'); } }}
             >
               Vault
             </button>
             <button
               className={`tab ${activeTab === 'mex' ? 'active' : ''}`}
-              onClick={() => setActiveTab('mex')}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (activeTab !== 'mex') { playSound('boop'); setActiveTab('mex'); } }}
             >
               Install
             </button>
             <button
               className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (activeTab !== 'settings') { playSound('boop'); setActiveTab('settings'); } }}
             >
               Settings
             </button>

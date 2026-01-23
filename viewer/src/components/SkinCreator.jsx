@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePanelResize } from '../hooks/usePanelResize'
+import { playSound, playHoverSound } from '../utils/sounds'
 import './SkinCreator.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -356,6 +357,7 @@ export default function SkinCreator({
       const confirmed = window.confirm('You have unsaved changes. Are you sure you want to close?')
       if (!confirmed) return
     }
+    playSound('back')
 
     if (skinCreatorReconnectTimeoutRef.current) {
       clearTimeout(skinCreatorReconnectTimeoutRef.current)
@@ -1372,9 +1374,11 @@ export default function SkinCreator({
 
       onRefresh?.()
 
+      playSound('newSkin')
       alert(`Skin "${skinName}" saved to vault!`)
     } catch (error) {
       console.error('Save error:', error)
+      playSound('error')
       setSaveError(error.message)
     } finally {
       setIsSaving(false)
@@ -1523,7 +1527,8 @@ export default function SkinCreator({
                   <div
                     key={costume.code}
                     className="skin-creator-costume-card"
-                    onClick={() => startSkinCreatorViewer(costume)}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); startSkinCreatorViewer(costume); }}
                   >
                     <div className="costume-preview">
                       {costume.hasCsp ? (
@@ -2017,7 +2022,7 @@ export default function SkinCreator({
             <div className="save-modal-buttons">
               <button
                 className="save-cancel"
-                onClick={() => setShowSaveModal(false)}
+                onClick={() => { playSound('back'); setShowSaveModal(false); }}
                 disabled={isSaving}
               >
                 Cancel

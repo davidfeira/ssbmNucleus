@@ -647,7 +647,8 @@ def serve_vanilla(file_path):
             'jpg': 'image/jpeg',
             'jpeg': 'image/jpeg',
             'webp': 'image/webp',
-            'gif': 'image/gif'
+            'gif': 'image/gif',
+            'wav': 'audio/wav'
         }
         mimetype = mimetype_map.get(ext, 'application/octet-stream')
 

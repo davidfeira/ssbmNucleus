@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { playSound } from '../utils/sounds';
 import './IsoBuilder.css';
 
 const IsoBuilder = ({ onClose, projectName = 'game' }) => {
@@ -65,6 +66,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       setComplete(true);
       setExporting(false);
       setExportedIsoPath(data.path);
+      playSound('achievement');
 
       // If texture pack mode, start listening
       if (data.texturePackMode && data.buildId) {
@@ -128,6 +130,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     });
 
     newSocket.on('export_error', (data) => {
+      playSound('error');
       setError(data.error);
       setExporting(false);
     });
@@ -164,6 +167,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   }, [patchCreateId]);
 
   const handleStartExport = async () => {
+    playSound('start');
     setExporting(true);
     setProgress(0);
     setMessage('Starting export...');
@@ -190,12 +194,14 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       const data = await response.json();
 
       if (!data.success) {
+        playSound('error');
         setError(data.error);
         setExporting(false);
       } else if (data.buildId) {
         setBuildId(data.buildId);
       }
     } catch (err) {
+      playSound('error');
       setError(`Failed to start export: ${err.message}`);
       setExporting(false);
     }
@@ -292,7 +298,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       <div className="iso-builder-modal">
         <div className="modal-header">
           <h2>Export ISO</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <button className="close-btn" onClick={() => { playSound('back'); onClose(); }}>×</button>
         </div>
 
         <div className="modal-body">
@@ -420,7 +426,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload}>
                   Download {filename}
                 </button>
-                <button className="btn-secondary" onClick={onClose}>
+                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
                   Close
                 </button>
               </div>
@@ -535,7 +541,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload} style={{ background: 'var(--gradient-gold)' }}>
                   Download ISO
                 </button>
-                <button className="btn-secondary" onClick={onClose}>
+                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
                   Close
                 </button>
               </div>
@@ -551,7 +557,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload}>
                   Download ISO Anyway
                 </button>
-                <button className="btn-secondary" onClick={onClose}>
+                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
                   Close
                 </button>
               </div>
@@ -641,7 +647,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
               <div className="error-icon">✕</div>
               <h3>Export Failed</h3>
               <p className="error-message">{error}</p>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
                 Close
               </button>
             </div>

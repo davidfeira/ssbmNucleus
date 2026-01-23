@@ -9,6 +9,8 @@
  * - Button token UI for variant assignment
  */
 import { useState, useEffect } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
+import ConfirmDialog from '../shared/ConfirmDialog'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
@@ -42,6 +44,10 @@ export default function StageMode({
   const [batchImporting, setBatchImporting] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   const [dataReady, setDataReady] = useState(false)
+
+  // Confirm dialog state for removing variants
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState(null)
 
   useEffect(() => {
     checkDASInstallation()
@@ -243,8 +249,10 @@ export default function StageMode({
 
     // Show summary
     if (failCount > 0) {
+      playSound('error')
       alert(`Batch import completed:\n${successCount} succeeded, ${failCount} failed`)
     } else {
+      playSound('newSkin')
       console.log(`✓ Successfully imported ${successCount} stage variant(s)`)
     }
   }
@@ -323,13 +331,20 @@ export default function StageMode({
     }
   }
 
-  const handleRemoveVariant = async (stageCode, variantName) => {
+  const handleRemoveVariant = (stageCode, variantName) => {
     if (removing) return
 
-    if (!confirm(`Are you sure you want to remove "${variantName}"?`)) {
-      return
-    }
+    // Show confirm dialog instead of native confirm()
+    setPendingRemoval({ stageCode, variantName })
+    setShowConfirmDialog(true)
+  }
 
+  const confirmRemoveVariant = async () => {
+    if (!pendingRemoval) return
+
+    const { stageCode, variantName } = pendingRemoval
+    setShowConfirmDialog(false)
+    setPendingRemoval(null)
     setRemoving(true)
 
     try {
@@ -428,13 +443,15 @@ export default function StageMode({
               <div className="mode-toggle">
                 <button
                   className={`mode-toggle-btn ${mode === 'characters' ? 'active' : ''}`}
-                  onClick={() => onModeChange('characters')}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { if (mode !== 'characters') { playSound('boop'); onModeChange('characters'); } }}
                 >
                   Fighters
                 </button>
                 <button
                   className={`mode-toggle-btn ${mode === 'stages' ? 'active' : ''}`}
-                  onClick={() => onModeChange('stages')}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { if (mode !== 'stages') { playSound('boop'); onModeChange('stages'); } }}
                 >
                   Stages
                 </button>
@@ -449,7 +466,8 @@ export default function StageMode({
                   <div
                     key={stage.code}
                     className={`fighter-item ${selectedStage?.code === stage.code ? 'selected' : ''}`}
-                    onClick={() => setSelectedStage(stage)}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); setSelectedStage(stage); }}
                   >
                     <div className="fighter-name">{stage.name}</div>
                     <div className="fighter-info">
@@ -485,6 +503,7 @@ export default function StageMode({
                         <div
                           key={idx}
                           className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                          onMouseEnter={playHoverSound}
                           onClick={() => handleVariantClick(variant)}
                           style={{ cursor: canAssignButton ? 'pointer' : 'default', animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
                         >
@@ -546,7 +565,8 @@ export default function StageMode({
                           <>
                             <button
                               className="btn-batch-import"
-                              onClick={handleBatchImportVariants}
+                              onMouseEnter={playHoverSound}
+                              onClick={() => { playSound('start'); handleBatchImportVariants(); }}
                               disabled={batchImporting}
                             >
                               {batchImporting
@@ -555,7 +575,8 @@ export default function StageMode({
                             </button>
                             <button
                               className="btn-clear-selection"
-                              onClick={clearVariantSelection}
+                              onMouseEnter={playHoverSound}
+                              onClick={() => { playSound('boop'); clearVariantSelection(); }}
                               disabled={batchImporting}
                             >
                               Clear
@@ -564,7 +585,8 @@ export default function StageMode({
                         ) : (
                           <button
                             className="btn-select-all"
-                            onClick={selectAllVariants}
+                            onMouseEnter={playHoverSound}
+                            onClick={() => { playSound('boop'); selectAllVariants(); }}
                           >
                             Select All
                           </button>
@@ -587,7 +609,8 @@ export default function StageMode({
                           key={idx}
                           className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                           style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
-                          onClick={() => !batchImporting && toggleVariantSelection(variant.zipPath)}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => { if (!batchImporting) { playSound('boop'); toggleVariantSelection(variant.zipPath); } }}
                         >
                           <div className="costume-preview">
                             {hasImage && (
@@ -653,6 +676,15 @@ export default function StageMode({
           )}
         </>
       )}
+
+      <ConfirmDialog
+        show={showConfirmDialog}
+        title="Remove Variant"
+        message={pendingRemoval ? `Are you sure you want to remove "${pendingRemoval.variantName}"?` : ''}
+        confirmText="Remove"
+        onConfirm={confirmRemoveVariant}
+        onCancel={() => { setShowConfirmDialog(false); setPendingRemoval(null); }}
+      />
     </div>
   )
 }

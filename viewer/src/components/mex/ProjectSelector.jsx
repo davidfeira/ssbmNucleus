@@ -8,6 +8,7 @@
  * - Project switching modal
  */
 import { useState, useEffect } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function ProjectSelector({
   showModal,
@@ -269,7 +270,8 @@ export default function ProjectSelector({
                   <div
                     key={idx}
                     className="recent-project-item"
-                    onClick={() => handleOpenProjectFromPath(project.path)}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('start'); handleOpenProjectFromPath(project.path); }}
                   >
                     <div>
                       <div className="recent-project-name">{project.path?.split(/[/\\]/).slice(-2, -1)[0] || project.name}</div>
@@ -277,8 +279,10 @@ export default function ProjectSelector({
                     </div>
                     <button
                       className="recent-project-remove"
+                      onMouseEnter={playHoverSound}
                       onClick={(e) => {
                         e.stopPropagation()
+                        playSound('boop')
                         removeFromRecentProjects(project.path)
                       }}
                       title="Remove from recent"
@@ -298,7 +302,8 @@ export default function ProjectSelector({
               <p>Select a .mexproj file to continue working on an existing MEX mod</p>
               <button
                 className="project-btn"
-                onClick={handleOpenProject}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); handleOpenProject(); }}
                 disabled={openingProject}
               >
                 {openingProject ? 'Opening...' : 'Browse for .mexproj'}
@@ -311,7 +316,8 @@ export default function ProjectSelector({
               <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
               <button
                 className="project-btn"
-                onClick={handleCreateProject}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); handleCreateProject(); }}
                 disabled={creatingProject}
               >
                 {creatingProject ? 'Creating Project...' : 'Create from Vanilla ISO'}
@@ -353,7 +359,8 @@ export default function ProjectSelector({
                 <div
                   key={idx}
                   className="recent-project-item-modal"
-                  onClick={() => handleOpenProjectFromPath(project.path)}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('start'); handleOpenProjectFromPath(project.path); }}
                 >
                   <div>
                     <div className="recent-project-name">{project.path?.split(/[/\\]/).slice(-2, -1)[0] || project.name}</div>
@@ -361,8 +368,10 @@ export default function ProjectSelector({
                   </div>
                   <button
                     className="recent-project-remove"
+                    onMouseEnter={playHoverSound}
                     onClick={(e) => {
                       e.stopPropagation()
+                      playSound('boop')
                       removeFromRecentProjects(project.path)
                     }}
                     title="Remove from recent"
@@ -382,7 +391,8 @@ export default function ProjectSelector({
             <p>Select a .mexproj file to switch to a different MEX mod</p>
             <button
               className="project-btn"
-              onClick={handleOpenProject}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); handleOpenProject(); }}
               disabled={openingProject}
             >
               {openingProject ? 'Opening...' : 'Browse for .mexproj'}
@@ -395,7 +405,8 @@ export default function ProjectSelector({
             <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
             <button
               className="project-btn"
-              onClick={handleCreateProject}
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); handleCreateProject(); }}
               disabled={creatingProject}
             >
               {creatingProject ? 'Creating Project...' : 'Create from Vanilla ISO'}
@@ -405,7 +416,8 @@ export default function ProjectSelector({
 
         <button
           className="btn-cancel-modal"
-          onClick={onClose}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('back'); onClose(); }}
         >
           Cancel
         </button>
