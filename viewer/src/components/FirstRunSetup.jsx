@@ -34,7 +34,7 @@ export default function FirstRunSetup({ onComplete }) {
       // Update step based on phase
       if (data.phase === 'extracting') {
         setStep('extracting')
-      } else if (data.phase === 'copying_characters' || data.phase === 'copying_stages') {
+      } else if (data.phase === 'copying_characters' || data.phase === 'copying_stages' || data.phase === 'copying_csp_data' || data.phase === 'extracting_sounds') {
         setStep('copying')
       } else if (data.phase === 'complete') {
         setStep('complete')

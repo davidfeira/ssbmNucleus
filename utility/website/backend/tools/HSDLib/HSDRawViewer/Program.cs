@@ -19,6 +19,8 @@ using IONET.Core;
 using IONET.Core.Model;
 using HSDRaw;
 using HSDRaw.Common;
+using HSDRawViewer.Sound;
+using System.Text.Json;
 namespace HSDRawViewer
 {
     static class Program
@@ -94,6 +96,15 @@ namespace HSDRawViewer
                 AllocConsole();
                 Console.WriteLine("Texture operation mode detected");
                 RunTextureOperation(args);
+                return;
+            }
+
+            // Check for sound extraction mode
+            if (args.Length >= 1 && args[0] == "--sound")
+            {
+                AllocConsole();
+                Console.WriteLine("Sound operation mode detected");
+                RunSoundOperation(args);
                 return;
             }
 
@@ -1237,6 +1248,153 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: Texture operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Run sound extraction operations in headless mode.
+        /// Usage:
+        ///   Extract: HSDRawViewer.exe --sound extract [ssm_file] [output_dir] [--names json_file]
+        /// </summary>
+        static void RunSoundOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 4)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  HSDRawViewer.exe --sound extract <ssm_file> <output_dir> [--names <json_file>]");
+                    Console.WriteLine();
+                    Console.WriteLine("Options:");
+                    Console.WriteLine("  --names <json_file>  JSON file mapping sound indices to names");
+                    Console.WriteLine("                       Format: { \"0\": \"sound_name\", \"1\": \"another_sound\" }");
+                    Console.WriteLine();
+                    Console.WriteLine("Example:");
+                    Console.WriteLine("  HSDRawViewer.exe --sound extract main.ssm ./output --names sounds.json");
+                    return;
+                }
+
+                string operation = args[1]; // "extract"
+
+                if (operation == "extract")
+                {
+                    string ssmFile = args[2];
+                    string outputDir = args[3];
+
+                    // Parse optional --names argument
+                    string namesFile = null;
+                    for (int i = 4; i < args.Length - 1; i++)
+                    {
+                        if (args[i] == "--names")
+                        {
+                            namesFile = args[i + 1];
+                            break;
+                        }
+                    }
+
+                    Console.WriteLine($"Extracting sounds from: {ssmFile}");
+                    Console.WriteLine($"Output directory: {outputDir}");
+                    if (namesFile != null)
+                        Console.WriteLine($"Names file: {namesFile}");
+
+                    // Verify SSM file exists
+                    if (!System.IO.File.Exists(ssmFile))
+                    {
+                        Console.WriteLine($"ERROR: SSM file not found: {ssmFile}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    // Create output directory if it doesn't exist
+                    if (!System.IO.Directory.Exists(outputDir))
+                    {
+                        System.IO.Directory.CreateDirectory(outputDir);
+                        Console.WriteLine($"Created output directory: {outputDir}");
+                    }
+
+                    // Load sound name mappings if provided
+                    Dictionary<int, string> soundNames = new Dictionary<int, string>();
+                    if (namesFile != null && System.IO.File.Exists(namesFile))
+                    {
+                        try
+                        {
+                            string jsonContent = System.IO.File.ReadAllText(namesFile);
+                            var nameDict = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
+                            if (nameDict != null)
+                            {
+                                foreach (var kvp in nameDict)
+                                {
+                                    if (int.TryParse(kvp.Key, out int index))
+                                    {
+                                        soundNames[index] = kvp.Value;
+                                    }
+                                }
+                                Console.WriteLine($"Loaded {soundNames.Count} sound name mappings");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Warning: Failed to load names file: {ex.Message}");
+                        }
+                    }
+
+                    // Parse SSM file
+                    Console.WriteLine("Parsing SSM file...");
+                    SSM ssm = new SSM();
+                    ssm.Open(ssmFile);
+
+                    Console.WriteLine($"Found {ssm.Sounds.Length} sounds (starting index: {ssm.StartIndex})");
+
+                    // Extract each sound
+                    int extractedCount = 0;
+                    for (int i = 0; i < ssm.Sounds.Length; i++)
+                    {
+                        DSP sound = ssm.Sounds[i];
+                        int soundIndex = ssm.StartIndex + i;
+
+                        // Determine output filename
+                        string fileName;
+                        if (soundNames.TryGetValue(soundIndex, out string name))
+                        {
+                            fileName = $"{name}.wav";
+                        }
+                        else if (soundNames.TryGetValue(i, out string nameByArrayIndex))
+                        {
+                            // Also try array index (0-based)
+                            fileName = $"{nameByArrayIndex}.wav";
+                        }
+                        else
+                        {
+                            fileName = $"sound_{soundIndex:D4}.wav";
+                        }
+
+                        string outputPath = System.IO.Path.Combine(outputDir, fileName);
+
+                        try
+                        {
+                            sound.ExportFormat(outputPath);
+                            Console.WriteLine($"  [{i + 1}/{ssm.Sounds.Length}] Exported: {fileName} ({sound.ChannelType}, {sound.Frequency}Hz, {sound.Length})");
+                            extractedCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"  [{i + 1}/{ssm.Sounds.Length}] FAILED: {fileName} - {ex.Message}");
+                        }
+                    }
+
+                    Console.WriteLine($"SUCCESS: Extracted {extractedCount}/{ssm.Sounds.Length} sounds to: {outputDir}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown operation: {operation}");
+                    Console.WriteLine("Use 'extract'");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Sound operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

@@ -57,6 +57,18 @@ class FirstRunSetup:
     # Expected size of extracted ISO in bytes (~1.4GB for vanilla Melee)
     EXPECTED_EXTRACTION_SIZE = 1_400_000_000
 
+    # Menu sound mappings: index in main.ssm -> filename
+    # These are the UI sounds used in the app
+    MENU_SOUNDS = {
+        115: "new_skin",
+        116: "big_achievement",
+        117: "back",
+        118: "start",
+        119: "tick",
+        120: "error",
+        135: "camera_click"
+    }
+
     # Mapping: csp_data folder -> list of (vanilla_char, costume_code) tuples
     # Used to copy vanilla DATs to csp_data directory for CSP generation tooling
     CSP_DATA_DAT_MAPPING = {
@@ -101,7 +113,9 @@ class FirstRunSetup:
         self.mexcli_path = mexcli_path
         self.vanilla_dir = project_root / "utility" / "assets" / "vanilla"
         self.stages_dir = project_root / "utility" / "assets" / "stages"
+        self.sounds_dir = project_root / "utility" / "assets" / "vanilla" / "sounds"
         self.csp_data_dir = project_root / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
+        self.hsdraw_path = project_root / "utility" / "website" / "backend" / "tools" / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows" / "HSDRawViewer.exe"
 
     def check_setup_needed(self) -> dict:
         """
@@ -224,6 +238,15 @@ class FirstRunSetup:
             if not result['success']:
                 logger.warning(f"csp_data DAT copy had issues: {result.get('error')}")
                 # Don't fail setup, just warn - these files are supplementary
+
+            # Phase 5: Extract menu sounds from main.ssm
+            if progress_callback:
+                progress_callback('extracting_sounds', 0, 'Extracting menu sounds...', 0, len(self.MENU_SOUNDS))
+
+            result = self._extract_menu_sounds(temp_dir, progress_callback)
+            if not result['success']:
+                logger.warning(f"Sound extraction had issues: {result.get('error')}")
+                # Don't fail setup, just warn - sounds are supplementary
 
             # Success
             if progress_callback:
@@ -585,4 +608,88 @@ class FirstRunSetup:
 
         except Exception as e:
             logger.error(f"Failed to copy csp_data DATs: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
+
+    def _extract_menu_sounds(
+        self,
+        temp_dir: Path,
+        progress_callback: Optional[Callable] = None
+    ) -> dict:
+        """Extract menu sounds from main.ssm using HSDRawViewer."""
+        try:
+            # Find main.ssm in the extracted ISO
+            main_ssm = temp_dir / 'files' / 'audio' / 'us' / 'main.ssm'
+            if not main_ssm.exists():
+                # Try alternate location
+                main_ssm = temp_dir / 'files' / 'audio' / 'main.ssm'
+
+            if not main_ssm.exists():
+                logger.warning(f"main.ssm not found in extracted ISO")
+                return {'success': False, 'error': 'main.ssm not found'}
+
+            # Check if HSDRawViewer exists
+            if not self.hsdraw_path.exists():
+                # Try Debug build
+                debug_path = self.hsdraw_path.parent.parent.parent / "Debug" / "net6.0-windows" / "HSDRawViewer.exe"
+                if debug_path.exists():
+                    self.hsdraw_path = debug_path
+                else:
+                    logger.warning(f"HSDRawViewer not found at {self.hsdraw_path}")
+                    return {'success': False, 'error': 'HSDRawViewer.exe not found'}
+
+            # Ensure sounds directory exists
+            self.sounds_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create JSON mapping file for sound names
+            names_json = self.sounds_dir / 'menu_sounds.json'
+            with open(names_json, 'w') as f:
+                json.dump({str(k): v for k, v in self.MENU_SOUNDS.items()}, f, indent=2)
+
+            # Run HSDRawViewer to extract sounds
+            cmd = [
+                str(self.hsdraw_path),
+                '--sound', 'extract',
+                str(main_ssm),
+                str(self.sounds_dir),
+                '--names', str(names_json)
+            ]
+
+            logger.info(f"Running: {' '.join(cmd)}")
+
+            if progress_callback:
+                progress_callback('extracting_sounds', 10, 'Extracting sounds from main.ssm...', 1, len(self.MENU_SOUNDS))
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode != 0:
+                logger.error(f"HSDRawViewer failed: {result.stderr}")
+                return {'success': False, 'error': f'Sound extraction failed: {result.stderr}'}
+
+            # Remove numbered sound files, keep only named ones
+            for f in self.sounds_dir.glob('sound_*.wav'):
+                f.unlink()
+
+            # Verify we got the sounds we wanted
+            extracted_count = 0
+            for name in self.MENU_SOUNDS.values():
+                sound_file = self.sounds_dir / f'{name}.wav'
+                if sound_file.exists():
+                    extracted_count += 1
+
+            if progress_callback:
+                progress_callback('extracting_sounds', 100, f'Extracted {extracted_count} menu sounds', extracted_count, len(self.MENU_SOUNDS))
+
+            logger.info(f"Extracted {extracted_count}/{len(self.MENU_SOUNDS)} menu sounds")
+            return {'success': True, 'extracted': extracted_count}
+
+        except subprocess.TimeoutExpired:
+            logger.error("Sound extraction timed out")
+            return {'success': False, 'error': 'Sound extraction timed out'}
+        except Exception as e:
+            logger.error(f"Failed to extract menu sounds: {e}", exc_info=True)
             return {'success': False, 'error': str(e)}

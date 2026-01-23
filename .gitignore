@@ -39,8 +39,10 @@ venv-*/
 
 # Vanilla assets (extracted from user's ISO during first-run setup)
 utility/assets/vanilla/*
-# Keep Sheik assets (not in vanilla Melee, custom assets)
+# Keep Sheik folder structure and CSPs (custom assets not in vanilla Melee)
 !utility/assets/vanilla/Sheik/
+# But ignore Sheik's DAT files (extracted from user's ISO)
+utility/assets/vanilla/Sheik/**/*.dat
 utility/assets/stages/
 
 # Vanilla DAT files in csp_data (copied from user's ISO during first-run setup)
