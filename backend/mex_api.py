@@ -551,6 +551,108 @@ def get_fighter_costumes(fighter_name):
         }), 500
 
 
+def find_fighter_json_by_name(fighter_name):
+    """Find fighter JSON file by scanning data/fighters/ directory.
+    Returns (path, data) tuple or (None, None) if not found.
+    This avoids calling MexCLI which can cause file locking issues."""
+    if current_project_path is None:
+        return None, None
+
+    fighters_dir = current_project_path.parent / "data" / "fighters"
+    if not fighters_dir.exists():
+        return None, None
+
+    # Scan all fighter JSON files to find matching name
+    for json_file in fighters_dir.glob("*.json"):
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data.get('name', '').lower() == fighter_name.lower():
+                    return json_file, data
+        except (json.JSONDecodeError, IOError):
+            continue
+
+    return None, None
+
+
+@app.route('/api/mex/fighters/<fighter_name>/team-colors', methods=['GET'])
+def get_team_colors(fighter_name):
+    """Get team color costume indices for a fighter"""
+    try:
+        if current_project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded'}), 400
+
+        # Find fighter JSON by scanning files (avoids MexCLI call)
+        fighter_json_path, fighter_data = find_fighter_json_by_name(fighter_name)
+        if fighter_json_path is None:
+            return jsonify({'success': False, 'error': f'Fighter not found: {fighter_name}'}), 404
+
+        return jsonify({
+            'success': True,
+            'fighter': fighter_name,
+            'red': fighter_data.get('redCostumeIndex'),
+            'blue': fighter_data.get('blueCostumeIndex'),
+            'green': fighter_data.get('greenCostumeIndex')
+        })
+    except Exception as e:
+        logger.error(f"Error getting team colors for {fighter_name}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/fighters/<fighter_name>/team-colors', methods=['POST'])
+def set_team_color(fighter_name):
+    """Set a team color costume index for a fighter"""
+    try:
+        if current_project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded'}), 400
+
+        data = request.json
+        color = data.get('color')  # 'red', 'blue', or 'green'
+        costume_index = data.get('costumeIndex')
+
+        if color not in ('red', 'blue', 'green'):
+            return jsonify({'success': False, 'error': f'Invalid color: {color}'}), 400
+
+        if costume_index is None:
+            return jsonify({'success': False, 'error': 'costumeIndex is required'}), 400
+
+        # Find fighter JSON by scanning files (avoids MexCLI call)
+        fighter_json_path, fighter_data = find_fighter_json_by_name(fighter_name)
+        if fighter_json_path is None:
+            return jsonify({'success': False, 'error': f'Fighter not found: {fighter_name}'}), 404
+
+        # Validate costume index is within range
+        costume_count = len(fighter_data.get('costumes', []))
+        if costume_index < 0 or costume_index >= costume_count:
+            return jsonify({'success': False, 'error': f'Costume index {costume_index} out of range (0-{costume_count-1})'}), 400
+
+        # Update the team color field
+        field_name = f'{color}CostumeIndex'
+        fighter_data[field_name] = costume_index
+
+        # Write back to file
+        with open(fighter_json_path, 'w', encoding='utf-8') as f:
+            json.dump(fighter_data, f, indent=2)
+
+        logger.info(f"Set {color} team color for {fighter_name} to costume index {costume_index}")
+
+        return jsonify({
+            'success': True,
+            'fighter': fighter_name,
+            'color': color,
+            'costumeIndex': costume_index
+        })
+    except Exception as e:
+        logger.error(f"Error setting team color for {fighter_name}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/assets/<path:asset_path>', methods=['GET'])
 def serve_mex_asset(asset_path):
     """Serve MEX asset files (CSP, stock icons, etc.)"""
