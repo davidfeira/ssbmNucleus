@@ -327,7 +327,8 @@ class MexManager:
         output_path: str,
         progress_callback: Optional[Callable[[int, str], None]] = None,
         csp_compression: float = 1.0,
-        use_color_smash: bool = False
+        use_color_smash: bool = False,
+        skip_compression: bool = False
     ) -> Dict:
         """
         Export modified ISO.
@@ -337,12 +338,13 @@ class MexManager:
             progress_callback: Optional callback function(percentage, message)
             csp_compression: CSP compression level (0.1-1.0, default 1.0)
             use_color_smash: Enable color smash to save memory (default False)
+            skip_compression: Skip ApplyCompression entirely (for texture pack mode)
 
         Returns:
             Dict with export results
         """
         cmd = [str(self.cli_path), "export", str(self.project_path), str(output_path),
-               str(csp_compression), str(use_color_smash).lower()]
+               str(csp_compression), str(use_color_smash).lower(), str(skip_compression).lower()]
 
         try:
             # Run process with streaming output for progress

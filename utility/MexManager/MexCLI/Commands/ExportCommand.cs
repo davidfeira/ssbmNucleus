@@ -10,7 +10,7 @@ namespace MexCLI.Commands
         {
             if (args.Length < 3)
             {
-                Console.Error.WriteLine("Usage: mexcli export <project.mexproj> <output.iso> [csp-compression] [use-color-smash]");
+                Console.Error.WriteLine("Usage: mexcli export <project.mexproj> <output.iso> [csp-compression] [use-color-smash] [skip-compression]");
                 return 1;
             }
 
@@ -41,6 +41,14 @@ namespace MexCLI.Commands
                     Console.Error.WriteLine("Invalid use-color-smash value. Expected true or false.");
                     return 1;
                 }
+            }
+
+            // Optional skip-compression parameter (default false)
+            // When true, skips ApplyCompression entirely (useful for texture pack mode with fixed-size placeholders)
+            bool skipCompression = false;
+            if (args.Length >= 6 && bool.TryParse(args[5], out bool parsedSkipCompression))
+            {
+                skipCompression = parsedSkipCompression;
             }
 
             MexWorkspace? workspace;
@@ -81,10 +89,12 @@ namespace MexCLI.Commands
                 Console.Error.WriteLine($"[DEBUG] Target CSP Dimensions: {targetWidth}x{targetHeight}");
                 Console.Error.WriteLine($"[DEBUG] Will apply compression: {cspCompression < 1.0f}");
                 Console.Error.WriteLine($"[DEBUG] UseColorSmash setting: {useColorSmash}");
+                Console.Error.WriteLine($"[DEBUG] SkipCompression setting: {skipCompression}");
 
                 // Apply compression to CSPs (force=true to ensure it processes even if already at target size)
                 // OR if color smash is disabled (need to assign unique ColorSmashGroups)
-                if (cspCompression < 1.0f || !useColorSmash)
+                // Skip entirely if skipCompression is true (texture pack mode with fixed-size placeholders)
+                if (!skipCompression && (cspCompression < 1.0f || !useColorSmash))
                 {
                     var compressionStart = new
                     {

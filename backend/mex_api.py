@@ -1206,7 +1206,10 @@ def start_export():
                 # Note: Extras are patched immediately on import, not at export time
 
                 # Run the actual export
-                result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash)
+                # When using texture pack mode, skip compression entirely
+                # because placeholders must stay at fixed 16x16 size
+                skip_compression = texture_pack_mode
+                result = mex.export_iso(str(output_file), progress_callback, csp_compression, use_color_smash, skip_compression)
 
                 # Restore original CSPs if texture pack mode
                 if texture_pack_mode and backup_dir and backup_dir.exists():
