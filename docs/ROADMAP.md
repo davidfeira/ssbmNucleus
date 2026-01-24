@@ -21,15 +21,16 @@
 
 **Build/Export**
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
-- [ ] Add notes for Dolphin texture settings (enable dump/load textures)
+- figure out rough formula to  automatically set proper csp compression without texture pack mode
 - [ ] .nucleus or just .zip with patch and texture pack and installation from patch page
 - [x] Try to find Slippi paths and Melee ISO from dolphin.ini in default location before asking during setup
-- [ ] Automate dump/load settings if available in dolphin.ini
-- [ ] Automate texture pack offset names (analyze ISO hex or find correlation with MEX/HSD)
+- [x] Automate dump/load settings via GFX.ini (auto-enable on listen start, auto-disable on stop, clear DUMP folder on export)
+
 
 **Polish**
 - [ ] Standardize modal sizes
 - [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
+- [ ] Add UI indicator for Dolphin texture settings status (remind to restart Dolphin)
 
 **Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
@@ -212,7 +213,7 @@ These are cool ideas but not priority:
 - Code stuff
 - Music and sounds
 - Replay viewer and clipper
-
+- [ ] Automate texture pack offset names (analyze ISO hex or find correlation with MEX/HSD)
 ---
 
 ## Current Status
