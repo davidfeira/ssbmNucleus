@@ -21,6 +21,7 @@ import tempfile
 import shutil
 import zipfile
 import re
+import configparser
 from werkzeug.utils import secure_filename
 import signal
 import atexit
@@ -1134,6 +1135,14 @@ def start_export():
                         TexturePackMapping,
                         CostumeMapping
                     )
+
+                    # Clear the DUMP folder to prevent old placeholders from confusing the scanner
+                    if slippi_dolphin_path:
+                        dump_path = Path(slippi_dolphin_path) / "User" / "Dump" / "Textures" / "GALE01"
+                        if dump_path.exists():
+                            shutil.rmtree(dump_path)
+                            dump_path.mkdir(parents=True)
+                            logger.info(f"Cleared dump folder: {dump_path}")
 
                     project_dir = current_project_path.parent
                     csp_dir = project_dir / "assets" / "csp"
@@ -6085,6 +6094,7 @@ def verify_slippi_path():
 # Global watcher instance
 _active_texture_watcher = None
 _active_texture_mapping = None
+_active_slippi_path = None
 
 
 def convert_windows_to_wsl_path(windows_path: str) -> str:
@@ -6098,6 +6108,100 @@ def convert_windows_to_wsl_path(windows_path: str) -> str:
     return windows_path
 
 
+def get_dolphin_gfx_ini_path(slippi_path: str) -> Path:
+    """Get path to Dolphin's GFX.ini configuration file."""
+    return Path(slippi_path) / "User" / "Config" / "GFX.ini"
+
+
+def get_dolphin_texture_settings(slippi_path: str) -> dict:
+    """
+    Read current texture settings from Dolphin's GFX.ini.
+
+    Returns:
+        dict with 'dump_textures' and 'hires_textures' booleans,
+        or None values if settings don't exist.
+    """
+    gfx_ini = get_dolphin_gfx_ini_path(slippi_path)
+
+    result = {
+        'dump_textures': None,
+        'hires_textures': None
+    }
+
+    if not gfx_ini.exists():
+        logger.warning(f"GFX.ini not found at {gfx_ini}")
+        return result
+
+    config = configparser.ConfigParser()
+    # Preserve case of keys
+    config.optionxform = str
+
+    try:
+        config.read(gfx_ini)
+
+        if 'Settings' in config:
+            if 'DumpTextures' in config['Settings']:
+                result['dump_textures'] = config['Settings']['DumpTextures'].lower() == 'true'
+            if 'HiresTextures' in config['Settings']:
+                result['hires_textures'] = config['Settings']['HiresTextures'].lower() == 'true'
+
+    except Exception as e:
+        logger.error(f"Error reading GFX.ini: {e}")
+
+    return result
+
+
+def set_dolphin_texture_settings(slippi_path: str, dump_textures: bool = None, hires_textures: bool = None) -> bool:
+    """
+    Modify texture settings in Dolphin's GFX.ini.
+
+    Args:
+        slippi_path: Path to Slippi Dolphin installation
+        dump_textures: If set, enable/disable texture dumping
+        hires_textures: If set, enable/disable loading custom textures
+
+    Returns:
+        True if successful, False otherwise
+    """
+    gfx_ini = get_dolphin_gfx_ini_path(slippi_path)
+
+    # Ensure directory exists
+    gfx_ini.parent.mkdir(parents=True, exist_ok=True)
+
+    config = configparser.ConfigParser()
+    # Preserve case of keys
+    config.optionxform = str
+
+    try:
+        # Read existing config if it exists
+        if gfx_ini.exists():
+            config.read(gfx_ini)
+
+        # Ensure Settings section exists
+        if 'Settings' not in config:
+            config['Settings'] = {}
+
+        # Update requested settings
+        if dump_textures is not None:
+            config['Settings']['DumpTextures'] = 'True' if dump_textures else 'False'
+            logger.info(f"Set DumpTextures = {dump_textures}")
+
+        if hires_textures is not None:
+            config['Settings']['HiresTextures'] = 'True' if hires_textures else 'False'
+            logger.info(f"Set HiresTextures = {hires_textures}")
+
+        # Write back
+        with open(gfx_ini, 'w') as f:
+            config.write(f)
+
+        logger.info(f"Updated GFX.ini at {gfx_ini}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error writing GFX.ini: {e}")
+        return False
+
+
 @app.route('/api/mex/texture-pack/start-listening', methods=['POST'])
 def start_texture_listening():
     """
@@ -6109,7 +6213,7 @@ def start_texture_listening():
         "slippiPath": "C:\\Users\\...\\Slippi Launcher\\netplay"
     }
     """
-    global _active_texture_watcher, _active_texture_mapping
+    global _active_texture_watcher, _active_texture_mapping, _active_slippi_path
 
     try:
         data = request.json or {}
@@ -6131,6 +6235,13 @@ def start_texture_listening():
         # Convert Windows path to WSL path if needed
         slippi_path = convert_windows_to_wsl_path(slippi_path)
         logger.info(f"Slippi path (converted): {slippi_path}")
+
+        # Enable texture dumping in Dolphin's GFX.ini
+        set_dolphin_texture_settings(slippi_path, dump_textures=True, hires_textures=True)
+        logger.info("Enabled DumpTextures in GFX.ini")
+
+        # Store slippi path for use when stopping
+        _active_slippi_path = slippi_path
 
         # Load the mapping file
         mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
@@ -6238,7 +6349,7 @@ def start_texture_listening():
 @app.route('/api/mex/texture-pack/stop-listening', methods=['POST'])
 def stop_texture_listening():
     """Stop watching and finalize the texture pack."""
-    global _active_texture_watcher, _active_texture_mapping
+    global _active_texture_watcher, _active_texture_mapping, _active_slippi_path
 
     try:
         if not _active_texture_watcher:
@@ -6246,6 +6357,11 @@ def stop_texture_listening():
                 'success': False,
                 'error': 'No active texture watcher'
             }), 400
+
+        # Disable texture dumping in Dolphin's GFX.ini (keep HiresTextures on for texture packs)
+        if _active_slippi_path:
+            set_dolphin_texture_settings(_active_slippi_path, dump_textures=False, hires_textures=True)
+            logger.info("Disabled DumpTextures in GFX.ini (keeping HiresTextures on)")
 
         # Get status before stopping
         status = _active_texture_watcher.get_status()
@@ -6272,6 +6388,7 @@ def stop_texture_listening():
 
         _active_texture_watcher = None
         _active_texture_mapping = None
+        _active_slippi_path = None
 
         logger.info(f"Stopped texture pack watcher. Matched {result['matchedCount']}/{result['totalCount']} textures")
 
@@ -6279,6 +6396,85 @@ def stop_texture_listening():
 
     except Exception as e:
         logger.error(f"Stop texture listening error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/dolphin/texture-settings', methods=['GET', 'POST'])
+def dolphin_texture_settings():
+    """
+    GET: Read current texture settings from Dolphin's GFX.ini
+    POST: Update texture settings in Dolphin's GFX.ini
+
+    Query/Body params:
+        slippiPath: Path to Slippi Dolphin installation (required)
+
+    POST body also accepts:
+        dumpTextures: boolean (optional)
+        hiresTextures: boolean (optional)
+    """
+    try:
+        if request.method == 'GET':
+            slippi_path = request.args.get('slippiPath')
+            if not slippi_path:
+                return jsonify({
+                    'success': False,
+                    'error': 'slippiPath query parameter is required'
+                }), 400
+
+            # Convert Windows path to WSL path if needed
+            slippi_path = convert_windows_to_wsl_path(slippi_path)
+
+            settings = get_dolphin_texture_settings(slippi_path)
+            return jsonify({
+                'success': True,
+                'dumpTextures': settings['dump_textures'],
+                'hiresTextures': settings['hires_textures']
+            })
+
+        else:  # POST
+            data = request.json or {}
+            slippi_path = data.get('slippiPath')
+
+            if not slippi_path:
+                return jsonify({
+                    'success': False,
+                    'error': 'slippiPath is required'
+                }), 400
+
+            # Convert Windows path to WSL path if needed
+            slippi_path = convert_windows_to_wsl_path(slippi_path)
+
+            dump_textures = data.get('dumpTextures')
+            hires_textures = data.get('hiresTextures')
+
+            if dump_textures is None and hires_textures is None:
+                return jsonify({
+                    'success': False,
+                    'error': 'At least one of dumpTextures or hiresTextures must be provided'
+                }), 400
+
+            success = set_dolphin_texture_settings(slippi_path, dump_textures, hires_textures)
+
+            if success:
+                # Read back the settings to confirm
+                settings = get_dolphin_texture_settings(slippi_path)
+                return jsonify({
+                    'success': True,
+                    'dumpTextures': settings['dump_textures'],
+                    'hiresTextures': settings['hires_textures'],
+                    'message': 'Settings updated. Restart Dolphin for changes to take effect.'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to update GFX.ini'
+                }), 500
+
+    except Exception as e:
+        logger.error(f"Dolphin texture settings error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
