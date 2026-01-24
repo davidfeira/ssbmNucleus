@@ -23,7 +23,7 @@
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
 - [ ] Add notes for Dolphin texture settings (enable dump/load textures)
 - [ ] .nucleus or just .zip with patch and texture pack and installation from patch page
-- [ ] Try to find Slippi paths and Melee ISO from dolphin.ini in default location before asking during setup
+- [x] Try to find Slippi paths and Melee ISO from dolphin.ini in default location before asking during setup
 - [ ] Automate dump/load settings if available in dolphin.ini
 - [ ] Automate texture pack offset names (analyze ISO hex or find correlation with MEX/HSD)
 
@@ -110,7 +110,9 @@ Break down massive files to improve maintainability:
 **Bug Fixes**
 - [ ] Fix Ice Climbers
 - [ ] Fix Kirby
-
+fix console errors
+fix xdelta constant connection to server for progress
+fix other isues with packaged version
 ---
 
 ## PHASE 2: App-Website Integration

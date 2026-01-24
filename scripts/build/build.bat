@@ -38,7 +38,7 @@ if exist "%~dp0__pycache__" (
 echo.
 echo [1/4] Building Python Backend...
 echo ----------------------------------------
-python -m PyInstaller "%~dp0mex_backend.spec" --clean --noconfirm
+python -m PyInstaller "%~dp0mex_backend.spec" --clean --noconfirm --distpath "%PROJECT_ROOT%\dist"
 if %errorlevel% neq 0 (
     echo ERROR: Python backend build failed
     pause

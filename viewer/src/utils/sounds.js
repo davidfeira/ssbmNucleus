@@ -6,6 +6,12 @@
 // Default volume (0.0 to 1.0)
 const DEFAULT_VOLUME = 0.3
 
+// Load saved volume from localStorage, or use default
+let masterVolume = (() => {
+  const saved = localStorage.getItem('settings_master_volume')
+  return saved !== null ? parseFloat(saved) : DEFAULT_VOLUME
+})()
+
 // Preload and cache audio instances
 const sounds = {
   back: new Audio('/vanilla/sounds/back.wav'),
@@ -18,14 +24,16 @@ const sounds = {
   achievement: new Audio('/vanilla/sounds/big_achievement.wav'),
 }
 
-// Preload all sounds and set default volume
-Object.values(sounds).forEach(s => {
-  s.load()
-  s.volume = DEFAULT_VOLUME
-})
+// Apply volume to all sounds (achievement is quieter)
+const applyVolume = () => {
+  Object.entries(sounds).forEach(([name, sound]) => {
+    sound.volume = name === 'achievement' ? masterVolume * 0.66 : masterVolume
+  })
+}
 
-// Achievement sound is quieter
-sounds.achievement.volume = 0.2
+// Preload all sounds and set initial volume
+Object.values(sounds).forEach(s => s.load())
+applyVolume()
 
 // Hover debounce - prevent tick spam on rapid hovers
 let lastHoverTime = 0
@@ -52,4 +60,19 @@ export const playHoverSound = () => {
     lastHoverTime = now
     playSound('tick')
   }
+}
+
+/**
+ * Get the current master volume (0.0 to 1.0)
+ */
+export const getMasterVolume = () => masterVolume
+
+/**
+ * Set the master volume and persist to localStorage
+ * @param {number} volume - Volume level from 0.0 to 1.0
+ */
+export const setMasterVolume = (volume) => {
+  masterVolume = Math.max(0, Math.min(1, volume))
+  localStorage.setItem('settings_master_volume', masterVolume.toString())
+  applyVolume()
 }

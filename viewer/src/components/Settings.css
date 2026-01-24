@@ -52,6 +52,7 @@
 .settings-section:nth-child(6) { animation-delay: 0.15s; }
 .settings-section:nth-child(7) { animation-delay: 0.18s; }
 .settings-section:nth-child(8) { animation-delay: 0.21s; }
+.settings-section:nth-child(9) { animation-delay: 0.24s; }
 
 .settings-section h3 {
   font-family: var(--font-display);
@@ -876,4 +877,81 @@
 
 .discord-button:active {
   transform: translateY(0) scale(0.98);
+}
+
+/* ─────────────────────────────────────────
+   VOLUME CONTROLS
+   ───────────────────────────────────────── */
+
+.volume-control {
+  max-width: 300px;
+}
+
+.volume-slider-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.volume-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  background-image: linear-gradient(var(--color-cyan), var(--color-cyan));
+  background-size: var(--volume-percent, 30%) 100%;
+  background-repeat: no-repeat;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--gradient-cyan);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: var(--shadow-md), 0 0 12px rgba(125, 211, 232, 0.4);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--gradient-cyan);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.volume-slider::-moz-range-track {
+  height: 6px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+}
+
+.volume-slider::-moz-range-progress {
+  height: 6px;
+  background: var(--color-cyan);
+  border-radius: var(--radius-full);
+}
+
+.volume-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+  min-width: 45px;
+  text-align: right;
 }

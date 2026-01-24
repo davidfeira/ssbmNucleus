@@ -17,6 +17,8 @@ export default function FirstRunSetup({ onComplete }) {
   })
   const [error, setError] = useState(null)
   const [socket, setSocket] = useState(null)
+  const [autoDetecting, setAutoDetecting] = useState(true)
+  const [autoDetectedPaths, setAutoDetectedPaths] = useState(null)
 
   // Connect to WebSocket for progress updates
   useEffect(() => {
@@ -70,6 +72,46 @@ export default function FirstRunSetup({ onComplete }) {
     return () => {
       newSocket.disconnect()
     }
+  }, [])
+
+  // Auto-detect Slippi and ISO paths on mount
+  useEffect(() => {
+    const autoDetect = async () => {
+      try {
+        console.log('[FirstRunSetup] Starting auto-detection...')
+        const response = await fetch(`${API_URL}/setup/auto-detect`)
+        const data = await response.json()
+
+        console.log('[FirstRunSetup] Auto-detect result:', data)
+
+        if (data.success) {
+          setAutoDetectedPaths(data)
+
+          // If ISO path found, pre-fill it
+          if (data.isoPath) {
+            setIsoPath(data.isoPath)
+          }
+
+          // Save Slippi path if found
+          if (data.slippiPath) {
+            localStorage.setItem('slippi_dolphin_path', data.slippiPath)
+            console.log('[FirstRunSetup] Saved Slippi path:', data.slippiPath)
+          }
+
+          // Save ISO folder path for later use
+          if (data.isoFolderPath) {
+            localStorage.setItem('dolphin_iso_folder_path', data.isoFolderPath)
+            console.log('[FirstRunSetup] Saved ISO folder path:', data.isoFolderPath)
+          }
+        }
+      } catch (err) {
+        console.log('[FirstRunSetup] Auto-detect failed, continuing with manual setup:', err)
+      } finally {
+        setAutoDetecting(false)
+      }
+    }
+
+    autoDetect()
   }, [])
 
   const handleBrowseIso = async () => {
@@ -146,33 +188,130 @@ export default function FirstRunSetup({ onComplete }) {
   }
 
   // Render different steps
-  const renderWelcome = () => (
-    <div className="setup-step">
-      <div className="setup-icon">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
+  const renderWelcome = () => {
+    // Show loading spinner while auto-detecting
+    if (autoDetecting) {
+      return (
+        <div className="setup-step">
+          <div className="setup-spinner"></div>
+          <h2>Welcome to SSBM Nucleus</h2>
+          <p className="setup-description">
+            Detecting your Slippi Dolphin installation...
+          </p>
+        </div>
+      )
+    }
+
+    // Check what was auto-detected
+    const hasSlippi = autoDetectedPaths?.slippiPath
+    const hasIso = autoDetectedPaths?.isoPath
+
+    // ISO found - streamlined flow
+    if (hasIso) {
+      return (
+        <div className="setup-step">
+          <div className="setup-icon success">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <h2>Welcome to SSBM Nucleus</h2>
+          <p className="setup-description">
+            We found your Melee ISO and Slippi Dolphin installation.
+          </p>
+          <div className="auto-detected-paths">
+            <div className="detected-path">
+              <span className="detected-label">Melee ISO:</span>
+              <span className="detected-value">{autoDetectedPaths.isoPath}</span>
+            </div>
+            {hasSlippi && (
+              <div className="detected-path">
+                <span className="detected-label">Slippi Dolphin:</span>
+                <span className="detected-value">{autoDetectedPaths.slippiPath}</span>
+              </div>
+            )}
+          </div>
+          <div className="setup-buttons">
+            <button className="btn-secondary" onClick={() => {
+              setAutoDetectedPaths(null)
+              setIsoPath('')
+            }}>
+              Use Different ISO
+            </button>
+            <button className="btn-primary" onClick={handleStartSetup}>
+              Continue with Setup
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // Only Slippi found - need ISO selection
+    if (hasSlippi && !hasIso) {
+      return (
+        <div className="setup-step">
+          <div className="setup-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <h2>Welcome to SSBM Nucleus</h2>
+          <p className="setup-description">
+            We found your Slippi Dolphin installation, but we need you to locate your Melee ISO.
+          </p>
+          <div className="auto-detected-paths">
+            <div className="detected-path">
+              <span className="detected-label">Slippi Dolphin:</span>
+              <span className="detected-value">{autoDetectedPaths.slippiPath}</span>
+            </div>
+          </div>
+          <p className="setup-description">
+            You'll need to provide your own <strong>vanilla Super Smash Bros. Melee 1.02 (NTSC) ISO</strong>.
+            This is typically named <code>GALE01</code>.
+          </p>
+          <div className="setup-note">
+            <strong>Note:</strong> Only the original, unmodified Melee 1.02 ISO will work.
+            Modified or other region ISOs won't be accepted.
+          </div>
+          <button className="btn-primary" onClick={() => setStep('select-iso')}>
+            Select ISO
+          </button>
+        </div>
+      )
+    }
+
+    // Nothing found - full manual flow
+    return (
+      <div className="setup-step">
+        <div className="setup-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h2>Welcome to SSBM Nucleus</h2>
+        <p className="setup-description">
+          Before you can use Nucleus, we need to set up the vanilla Melee assets.
+          This is required for legal reasons - we can't distribute copyrighted game files.
+        </p>
+        <p className="setup-description">
+          You'll need to provide your own <strong>vanilla Super Smash Bros. Melee 1.02 (NTSC) ISO</strong>.
+          This is typically named <code>GALE01</code>.
+        </p>
+        <div className="setup-note">
+          <strong>Note:</strong> Only the original, unmodified Melee 1.02 ISO will work.
+          Modified or other region ISOs won't be accepted.
+        </div>
+        <button className="btn-primary" onClick={() => setStep('select-iso')}>
+          Get Started
+        </button>
       </div>
-      <h2>Welcome to SSBM Nucleus</h2>
-      <p className="setup-description">
-        Before you can use Nucleus, we need to set up the vanilla Melee assets.
-        This is required for legal reasons - we can't distribute copyrighted game files.
-      </p>
-      <p className="setup-description">
-        You'll need to provide your own <strong>vanilla Super Smash Bros. Melee 1.02 (NTSC) ISO</strong>.
-        This is typically named <code>GALE01</code>.
-      </p>
-      <div className="setup-note">
-        <strong>Note:</strong> Only the original, unmodified Melee 1.02 ISO will work.
-        Modified or other region ISOs won't be accepted.
-      </div>
-      <button className="btn-primary" onClick={() => setStep('select-iso')}>
-        Get Started
-      </button>
-    </div>
-  )
+    )
+  }
 
   const renderSelectIso = () => (
     <div className="setup-step">

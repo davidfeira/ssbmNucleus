@@ -6,6 +6,7 @@ import SlippiPathSection from './settings/SlippiPathSection'
 import HdCspSection from './settings/HdCspSection'
 import ClearStorageSection from './settings/ClearStorageSection'
 import DiscordSection from './settings/DiscordSection'
+import VolumeSection from './settings/VolumeSection'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
 
@@ -15,6 +16,9 @@ export default function Settings({ metadata }) {
     <div className="settings-container">
       <div className="settings-content">
         <h2>Settings</h2>
+
+        {/* Volume Controls */}
+        <VolumeSection />
 
         {/* Vanilla ISO Path */}
         <IsoPathSection API_URL={API_URL} />

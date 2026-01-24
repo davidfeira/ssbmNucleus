@@ -78,8 +78,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "include": "build/installer.nsh"
+      "createStartMenuShortcut": true
     },
     "mac": null,
     "linux": {

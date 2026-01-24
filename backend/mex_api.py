@@ -6439,6 +6439,180 @@ def start_first_run_setup():
         }), 500
 
 
+# ============= Auto-Detect Slippi/ISO Paths =============
+
+def verify_slippi_structure(slippi_path: str) -> bool:
+    """Verify that a path has the expected Slippi Dolphin structure."""
+    slippi_dir = Path(slippi_path)
+    user_dir = slippi_dir / 'User'
+
+    # Must have a User folder
+    if not user_dir.exists() or not user_dir.is_dir():
+        return False
+
+    # Should have Config folder (Dolphin creates this)
+    config_dir = user_dir / 'Config'
+    if not config_dir.exists():
+        return False
+
+    return True
+
+
+def parse_dolphin_ini_iso_path(ini_path: str) -> str:
+    """Parse Dolphin.ini to extract the ISO directory path.
+
+    Looks for ISOPath0, ISOPath1, etc. or DefaultISO in the [General] section.
+    Returns the first valid directory found.
+    """
+    import configparser
+
+    try:
+        # Dolphin.ini uses a Windows INI format
+        config = configparser.ConfigParser()
+        config.read(ini_path, encoding='utf-8')
+
+        # Check [General] section for ISO paths
+        if 'General' in config:
+            general = config['General']
+
+            # Try ISOPath0, ISOPath1, etc.
+            for i in range(10):  # Check up to 10 paths
+                key = f'ISOPath{i}'
+                if key in general:
+                    iso_dir = general[key]
+                    if iso_dir and Path(iso_dir).is_dir():
+                        logger.info(f"Found ISO directory from {key}: {iso_dir}")
+                        return iso_dir
+
+            # Also check DefaultISO (this is a file path, so get its directory)
+            if 'DefaultISO' in general:
+                default_iso = general['DefaultISO']
+                if default_iso:
+                    iso_dir = str(Path(default_iso).parent)
+                    if Path(iso_dir).is_dir():
+                        logger.info(f"Found ISO directory from DefaultISO: {iso_dir}")
+                        return iso_dir
+
+        return None
+    except Exception as e:
+        logger.warning(f"Error parsing Dolphin.ini: {e}")
+        return None
+
+
+def find_vanilla_melee_iso(folder: str) -> str:
+    """Scan a folder for a vanilla Melee 1.02 ISO.
+
+    Checks .iso and .gcm files against the known MD5 hash.
+    Returns the path to the first matching ISO found, or None.
+    """
+    import hashlib
+
+    folder_path = Path(folder)
+    if not folder_path.is_dir():
+        return None
+
+    # Look for ISO and GCM files
+    iso_files = list(folder_path.glob('*.iso')) + list(folder_path.glob('*.gcm'))
+    iso_files += list(folder_path.glob('*.ISO')) + list(folder_path.glob('*.GCM'))
+
+    # Remove duplicates (case-insensitive systems)
+    seen = set()
+    unique_files = []
+    for f in iso_files:
+        lower_path = str(f).lower()
+        if lower_path not in seen:
+            seen.add(lower_path)
+            unique_files.append(f)
+
+    for iso_file in unique_files:
+        try:
+            # Check file size first (vanilla Melee is ~1.36GB)
+            file_size = iso_file.stat().st_size
+            expected_size = 1459978240  # Vanilla Melee 1.02 size
+            if file_size != expected_size:
+                continue
+
+            logger.info(f"Checking ISO: {iso_file}")
+
+            # Calculate MD5 hash
+            md5_hash = hashlib.md5()
+            with open(iso_file, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192 * 1024), b''):
+                    md5_hash.update(chunk)
+
+            calculated_md5 = md5_hash.hexdigest()
+            if calculated_md5.lower() == VANILLA_ISO_MD5.lower():
+                logger.info(f"Found vanilla Melee ISO: {iso_file}")
+                return str(iso_file)
+        except Exception as e:
+            logger.warning(f"Error checking ISO {iso_file}: {e}")
+            continue
+
+    return None
+
+
+@app.route('/api/mex/setup/auto-detect', methods=['GET'])
+def auto_detect_paths():
+    """Auto-detect Slippi Dolphin path and vanilla Melee ISO."""
+    result = {
+        'slippiPath': None,
+        'isoPath': None,
+        'isoFolderPath': None
+    }
+
+    try:
+        # 1. Check default Slippi path
+        appdata = os.environ.get('APPDATA', '')
+        if not appdata:
+            # Fallback for non-Windows or missing APPDATA
+            logger.info("APPDATA not found, cannot auto-detect Slippi path")
+            return jsonify({'success': True, **result})
+
+        default_slippi = os.path.join(appdata, 'Slippi Launcher', 'netplay')
+        logger.info(f"Checking default Slippi path: {default_slippi}")
+
+        if os.path.isdir(default_slippi):
+            if verify_slippi_structure(default_slippi):
+                result['slippiPath'] = default_slippi
+                logger.info(f"Found valid Slippi installation: {default_slippi}")
+            else:
+                logger.info(f"Path exists but structure invalid: {default_slippi}")
+        else:
+            logger.info(f"Default Slippi path not found: {default_slippi}")
+
+        # 2. Parse dolphin.ini for ISO path
+        if result['slippiPath']:
+            dolphin_ini = os.path.join(result['slippiPath'], 'User', 'Config', 'Dolphin.ini')
+            logger.info(f"Checking Dolphin.ini: {dolphin_ini}")
+
+            if os.path.isfile(dolphin_ini):
+                iso_dir = parse_dolphin_ini_iso_path(dolphin_ini)
+                if iso_dir:
+                    result['isoFolderPath'] = iso_dir
+                    logger.info(f"Found ISO folder: {iso_dir}")
+
+                    # 3. Scan folder for vanilla Melee ISO
+                    vanilla_iso = find_vanilla_melee_iso(iso_dir)
+                    if vanilla_iso:
+                        result['isoPath'] = vanilla_iso
+                        logger.info(f"Found vanilla Melee ISO: {vanilla_iso}")
+                    else:
+                        logger.info(f"No vanilla Melee ISO found in: {iso_dir}")
+                else:
+                    logger.info("No ISO directory found in Dolphin.ini")
+            else:
+                logger.info(f"Dolphin.ini not found: {dolphin_ini}")
+
+        return jsonify({'success': True, **result})
+
+    except Exception as e:
+        logger.error(f"Auto-detect error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # ============= XDelta Patches =============
 
 XDELTA_PATH = STORAGE_PATH / "xdelta"
