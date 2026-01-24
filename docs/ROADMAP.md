@@ -10,23 +10,30 @@
 
 ### TODO
 
+**Downloads**
+- [x] Proper download modal (remove Windows dialogue)
+- [x] Play sound when download complete
+- [x] Prevent data corruption when downloading multiple mods simultaneously
+
+**Settings**
+- [x] Add volume controls
+- [ ] Show more data (temp data size, ISO sizes)
 
 **Build/Export**
 - [ ] Texture pack mode not downscaling placeholder images (memory issue)
 - [ ] Add notes for Dolphin texture settings (enable dump/load textures)
+- [ ] .nucleus or just .zip with patch and texture pack and installation from patch page
+- [ ] Try to find Slippi paths and Melee ISO from dolphin.ini in default location before asking during setup
+- [ ] Automate dump/load settings if available in dolphin.ini
+- [ ] Automate texture pack offset names (analyze ISO hex or find correlation with MEX/HSD)
 
 **Polish**
-- [ ] Sounds (CSP tick noise, start button noise)
 - [ ] Standardize modal sizes
 - [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
-
-**Settings**
-- [ ] Add "try default" button for Slippi Dolphin path
 
 **Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
 
-choose team color costume token on char install page, can be similar to the button tokens of stages
 ### Completed
 
 <details>
@@ -66,6 +73,13 @@ choose team color costume token on char install page, can be similar to the butt
 - [x] Skin Creator: back button in top-left (consistent with other pages)
 - [x] Skin Creator: loading state when editing from vault
 - [x] Stage detail view: removed redundant title/variant count
+- [x] Sounds (CSP tick noise, start button noise)
+</details>
+
+<details>
+<summary>Install Page Features</summary>
+
+- [x] Team color costume token selector on character install page
 </details>
 
 <details>
@@ -92,6 +106,10 @@ Break down massive files to improve maintainability:
 | `viewer/src/components/mex/CharacterMode.jsx` | 1,612 | Extract sub-components |
 | `viewer/src/components/storage/ExtrasPageView.jsx` | 1,228 | Extract sub-components |
 | `viewer/src/components/StorageViewer.jsx` | 1,017 | Extract sub-components |
+
+**Bug Fixes**
+- [ ] Fix Ice Climbers
+- [ ] Fix Kirby
 
 ---
 
@@ -181,14 +199,17 @@ Break down massive files to improve maintainability:
 These are cool ideas but not priority:
 
 - Stable diffusion stocks (AI-generated stock icons)
-- AI rigger (auto-rig custom models?)
+- AI rigger (auto-rig custom models)
 - Custom stages
 - SSS editor (stage select screen)
 - Other texture mods (CSS, SSS, menus)
 - 3D model viewer in CSP Studio
-- Shareable poses / pose marketplace
 - Open skin in HSDRaw (check for new version)
 - Open build in MEX Tool (use built-in version)
+- Custom characters
+- Code stuff
+- Music and sounds
+- Replay viewer and clipper
 
 ---
 

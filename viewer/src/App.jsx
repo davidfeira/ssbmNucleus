@@ -4,6 +4,8 @@ import MexPanel from './components/MexPanel'
 import Settings from './components/Settings'
 import FirstRunSetup from './components/FirstRunSetup'
 import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
+import DownloadModal from './components/shared/DownloadModal'
+import { useDownloadQueue, DOWNLOAD_PHASES } from './hooks/useDownloadQueue'
 import { playSound, playHoverSound } from './utils/sounds'
 import './App.css'
 
@@ -17,6 +19,17 @@ function App() {
 
   // First-run setup state
   const [setupNeeded, setSetupNeeded] = useState(null); // null = checking, true = needed, false = complete
+
+  // Download queue for nucleus:// imports
+  const {
+    currentDownload,
+    phase,
+    error,
+    result,
+    queueDownload,
+    clearDownload,
+    retryWithSlippiAction
+  } = useDownloadQueue()
 
   // Check if first-run setup is needed
   useEffect(() => {
@@ -40,7 +53,7 @@ function App() {
     checkSetupStatus();
   }, []);
 
-  // Slippi dialog state for nucleus:// imports
+  // Slippi dialog state for nucleus:// imports (legacy - keeping for other import paths)
   const [showSlippiDialog, setShowSlippiDialog] = useState(false);
   const [slippiDialogData, setSlippiDialogData] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null); // Stores {blob, name} for retry
@@ -53,72 +66,27 @@ function App() {
 
     // Listen for nucleus:// protocol imports
     if (window.electron?.onNucleusImport) {
-      const cleanup = window.electron.onNucleusImport(async (data) => {
+      const cleanup = window.electron.onNucleusImport((data) => {
         console.log('[Nucleus] Import triggered:', data);
         const { url, name, title } = data;
 
-        console.log('[Nucleus DEBUG] url:', url);
-        console.log('[Nucleus DEBUG] name:', name);
-        console.log('[Nucleus DEBUG] title:', title);
-        console.log('[Nucleus DEBUG] title type:', typeof title);
-        console.log('[Nucleus DEBUG] title length:', title?.length);
-
-        try {
-          // Download the file from the URL
-          const response = await fetch(url);
-          const blob = await response.blob();
-
-          // Create a FormData to send to the import API
-          const formData = new FormData();
-          formData.append('file', blob, `${name || 'mod'}.zip`);
-
-          // Add custom title if provided
-          console.log('[Nucleus DEBUG] About to check title:', title, 'truthy?', !!title);
-          if (title) {
-            console.log('[Nucleus DEBUG] Adding custom_title to formData:', title);
-            formData.append('custom_title', title);
-          } else {
-            console.log('[Nucleus DEBUG] NOT adding custom_title - title is falsy');
-          }
-
-          // Trigger import via existing API
-          const importResponse = await fetch(`${API_URL}/import/file`, {
-            method: 'POST',
-            body: formData
-          });
-
-          const result = await importResponse.json();
-
-          // Check if we need to show slippi safety dialog
-          if (result.type === 'slippi_dialog') {
-            console.log('[Nucleus] Slippi safety dialog needed:', result);
-            setSlippiDialogData(result);
-            setPendingImportData({ blob, name, title });
-            setShowSlippiDialog(true);
-            return; // Don't show error - user will choose action
-          }
-
-          if (result.success) {
-            console.log('[Nucleus] Import successful:', result);
-            // Refresh metadata to show the new mod
-            fetchMetadata();
-            // Switch to storage tab to show the imported mod
-            setActiveTab('storage');
-            alert(`Successfully imported: ${name || 'mod'}`);
-          } else {
-            console.error('[Nucleus] Import failed:', result);
-            alert(`Import failed: ${result.error || 'Unknown error'}`);
-          }
-        } catch (error) {
-          console.error('[Nucleus] Import error:', error);
-          alert(`Import failed: ${error.message}`);
-        }
+        // Queue the download - the hook handles everything
+        queueDownload({ url, name, title });
       });
 
       // Cleanup listener on unmount
       return cleanup;
     }
-  }, [setupNeeded]);
+  }, [setupNeeded, queueDownload]);
+
+  // Handle download completion - refresh metadata and play sound
+  useEffect(() => {
+    if (phase === DOWNLOAD_PHASES.COMPLETE && result?.success) {
+      playSound('newSkin')
+      fetchMetadata()
+      setActiveTab('storage')
+    }
+  }, [phase, result]);
 
   const fetchMetadata = async () => {
     try {
@@ -191,6 +159,22 @@ function App() {
   const handleSetupComplete = () => {
     setSetupNeeded(false);
     fetchMetadata();
+  };
+
+  // Handle slippi choice from download modal
+  const handleDownloadSlippiChoice = async (choice) => {
+    try {
+      await retryWithSlippiAction(choice)
+      // Success - effect will handle refresh and sound
+    } catch (err) {
+      // Error state is already set by the hook
+      console.error('[Nucleus] Slippi retry failed:', err)
+    }
+  };
+
+  // Handle download modal close
+  const handleDownloadClose = () => {
+    clearDownload()
   };
 
   // Show loading state while checking setup status
@@ -272,11 +256,21 @@ function App() {
         )}
       </main>
 
-      {/* Slippi safety dialog for nucleus:// imports */}
+      {/* Slippi safety dialog for nucleus:// imports (legacy) */}
       <SlippiSafetyDialog
         show={showSlippiDialog}
         data={slippiDialogData}
         onChoice={handleSlippiChoice}
+      />
+
+      {/* Download modal for nucleus:// protocol imports */}
+      <DownloadModal
+        download={currentDownload}
+        phase={phase}
+        error={error}
+        result={result}
+        onClose={handleDownloadClose}
+        onSlippiChoice={handleDownloadSlippiChoice}
       />
     </div>
   )
