@@ -167,7 +167,14 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       const response = await fetch(`${API_URL}/bundle/list`)
       const data = await response.json()
       if (data.success) {
-        setBundles(data.bundles)
+        // Dedupe by id just in case
+        const seen = new Set()
+        const uniqueBundles = data.bundles.filter(b => {
+          if (seen.has(b.id)) return false
+          seen.add(b.id)
+          return true
+        })
+        setBundles(uniqueBundles)
       }
     } catch (err) {
       console.error('Failed to fetch bundles:', err)
