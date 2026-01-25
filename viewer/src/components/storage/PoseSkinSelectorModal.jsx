@@ -280,13 +280,34 @@ export default function PoseSkinSelectorModal({
         .pss-modal {
           background: #1a1a2e;
           border-radius: 12px;
-          width: 90vw;
+          width: 65vw;
           max-width: 900px;
-          max-height: 85vh;
+          max-height: 80vh;
           display: flex;
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        @media (min-width: 1440px) {
+          .pss-modal {
+            max-width: 1000px;
+            max-height: 1000px;
+          }
+        }
+
+        @media (min-width: 1920px) {
+          .pss-modal {
+            max-width: 1150px;
+            max-height: 1100px;
+          }
+        }
+
+        @media (min-width: 2560px) {
+          .pss-modal {
+            max-width: 1400px;
+            max-height: 1300px;
+          }
         }
 
         .pss-header {

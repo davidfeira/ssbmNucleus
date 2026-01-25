@@ -2255,10 +2255,10 @@
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
-  width: 95%;
-  max-width: 1100px;
-  height: 85vh;
-  max-height: 800px;
+  width: 65vw;
+  height: 80vh;
+  max-width: 1000px;
+  max-height: 900px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2267,6 +2267,28 @@
     0 24px 80px rgba(0, 0, 0, 0.6),
     0 0 120px rgba(125, 211, 232, 0.05);
   animation: mvSlideUp 0.25s var(--ease-out);
+}
+
+/* Scale animation viewer for larger screens */
+@media (min-width: 1440px) {
+  .mv-container {
+    max-width: 1100px;
+    max-height: 1000px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .mv-container {
+    max-width: 1250px;
+    max-height: 1100px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .mv-container {
+    max-width: 1500px;
+    max-height: 1300px;
+  }
 }
 
 @keyframes mvSlideUp {
@@ -2719,6 +2741,15 @@
    Pose Manager Viewer Overrides
    ───────────────────────────────────────── */
 
+/* Left section wrapper for viewer + category bar */
+.pm-left-section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  align-self: stretch;
+  border-right: 1px solid var(--color-border);
+}
+
 .pm-viewer-section {
   width: auto;
   max-width: 500px;
@@ -2726,6 +2757,39 @@
   aspect-ratio: 136 / 188;
   flex-shrink: 1;
   align-self: flex-start;
+}
+
+/* Category bar below viewer */
+.pm-category-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+}
+
+.pm-cat-btn {
+  padding: 5px 10px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pm-cat-btn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-text-tertiary);
+}
+
+.pm-cat-btn.active {
+  background: var(--color-accent);
+  color: var(--color-bg-base);
+  border-color: var(--color-accent);
 }
 
 .pm-viewer-section .mv-overlay {
@@ -2793,7 +2857,9 @@
 }
 
 .pm-poses-section {
-  flex: 1;
+  width: 260px;
+  min-width: 240px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
@@ -2921,7 +2987,8 @@
 
 /* Pose Manager Animation Panel */
 .pm-anim-section {
-  width: 180px;
+  width: 280px;
+  min-width: 260px;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
@@ -4493,7 +4560,7 @@
 
 /* Shine editor modal adjustments */
 .shine-editor-modal {
-  max-width: 480px;
+  max-width: 500px;
 }
 
 /* Layer selector buttons */
@@ -4962,9 +5029,10 @@
 }
 
 .csp-manager-modal {
-  width: 70vw;
-  max-width: 900px;
-  max-height: 85vh;
+  width: 65vw;
+  height: 80vh;
+  max-width: 1000px;
+  max-height: 900px;
   background: linear-gradient(
     165deg,
     var(--color-bg-elevated) 0%,
@@ -4983,6 +5051,28 @@
   position: relative;
   overflow: hidden;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
+}
+
+/* Scale CSP manager modal for larger screens */
+@media (min-width: 1440px) {
+  .csp-manager-modal {
+    max-width: 1100px;
+    max-height: 1000px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .csp-manager-modal {
+    max-width: 1250px;
+    max-height: 1100px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .csp-manager-modal {
+    max-width: 1500px;
+    max-height: 1300px;
+  }
 }
 
 .csp-manager-modal::before {

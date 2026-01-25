@@ -5,9 +5,170 @@ import PoseSkinSelectorModal from './PoseSkinSelectorModal'
 /**
  * Pose Manager Modal
  * Allows users to pose characters and save poses for CSP generation
- * Left side: 3D viewer for posing
+ * Left side: 3D viewer for posing + category buttons
+ * Middle: Animation list with human-readable names
  * Right side: Grid of saved poses with thumbnails
  */
+
+// Human-readable animation names
+const ANIM_NAMES = {
+  // Grounded Attacks
+  'Attack11': 'Jab 1', 'Attack12': 'Jab 2', 'Attack13': 'Jab 3',
+  'Attack100Start': 'Rapid Jab Start', 'Attack100Loop': 'Rapid Jab Loop', 'Attack100End': 'Rapid Jab End',
+  'AttackDash': 'Dash Attack',
+  'AttackS3Hi': 'F-Tilt (High)', 'AttackS3HiS': 'F-Tilt (Mid-High)', 'AttackS3S': 'F-Tilt',
+  'AttackS3LwS': 'F-Tilt (Mid-Low)', 'AttackS3Lw': 'F-Tilt (Low)',
+  'AttackHi3': 'Up Tilt', 'AttackLw3': 'Down Tilt',
+  'AttackS4Hi': 'F-Smash (High)', 'AttackS4HiS': 'F-Smash (Mid-High)', 'AttackS4S': 'F-Smash',
+  'AttackS4LwS': 'F-Smash (Mid-Low)', 'AttackS4Lw': 'F-Smash (Low)',
+  'AttackHi4': 'Up Smash', 'AttackLw4': 'Down Smash',
+  // Aerials
+  'AttackAirN': 'Neutral Air', 'AttackAirF': 'Forward Air', 'AttackAirB': 'Back Air',
+  'AttackAirHi': 'Up Air', 'AttackAirLw': 'Down Air', 'LandingAirN': 'N-Air Landing',
+  'LandingAirF': 'F-Air Landing', 'LandingAirB': 'B-Air Landing',
+  'LandingAirHi': 'U-Air Landing', 'LandingAirLw': 'D-Air Landing',
+  // Specials
+  'SpecialN': 'Neutral B', 'SpecialNStart': 'Neutral B Start', 'SpecialNLoop': 'Neutral B Loop',
+  'SpecialNEnd': 'Neutral B End', 'SpecialAirN': 'Neutral B (Air)',
+  'SpecialS': 'Side B', 'SpecialSStart': 'Side B Start', 'SpecialAirS': 'Side B (Air)',
+  'SpecialHi': 'Up B', 'SpecialHiStart': 'Up B Start', 'SpecialAirHi': 'Up B (Air)',
+  'SpecialLw': 'Down B', 'SpecialLwStart': 'Down B Start', 'SpecialAirLw': 'Down B (Air)',
+  // Grabs & Throws
+  'Catch': 'Grab', 'CatchDash': 'Dash Grab', 'CatchWait': 'Grab Hold',
+  'CatchAttack': 'Pummel', 'CatchCut': 'Grab Release',
+  'ThrowF': 'Forward Throw', 'ThrowB': 'Back Throw', 'ThrowHi': 'Up Throw', 'ThrowLw': 'Down Throw',
+  // Movement
+  'Wait1': 'Idle 1', 'Wait2': 'Idle 2', 'Wait3': 'Idle 3', 'Wait4': 'Idle 4',
+  'Walk': 'Walk', 'WalkSlow': 'Walk (Slow)', 'WalkMiddle': 'Walk (Mid)', 'WalkFast': 'Walk (Fast)',
+  'Dash': 'Dash', 'Run': 'Run', 'RunBrake': 'Run Stop',
+  'Turn': 'Turn', 'TurnRun': 'Run Turn', 'TurnRunBrake': 'Skid Turn',
+  'KneeBend': 'Jumpsquat', 'JumpF': 'Jump (Forward)', 'JumpB': 'Jump (Back)',
+  'JumpAerialF': 'Double Jump (F)', 'JumpAerialB': 'Double Jump (B)',
+  'Fall': 'Fall', 'FallF': 'Fall (Forward)', 'FallB': 'Fall (Back)',
+  'FallAerial': 'Fall (After DJ)', 'FallAerialF': 'Fall (DJ Forward)', 'FallAerialB': 'Fall (DJ Back)',
+  'FallSpecial': 'Fall (Special)', 'Landing': 'Landing', 'LandingFallSpecial': 'Landing (Special)',
+  'Squat': 'Crouch', 'SquatWait': 'Crouch Idle', 'SquatRv': 'Stand Up',
+  'Pass': 'Platform Drop',
+  // Defense
+  'Guard': 'Shield', 'GuardOn': 'Shield Start', 'GuardOff': 'Shield Drop',
+  'GuardReflect': 'Powershield', 'GuardDamage': 'Shield Stun',
+  'EscapeN': 'Spot Dodge', 'EscapeF': 'Roll Forward', 'EscapeB': 'Roll Back',
+  'EscapeAir': 'Air Dodge',
+  // Damage & KO
+  'DamageN1': 'Damage (Weak)', 'DamageN2': 'Damage (Mid)', 'DamageN3': 'Damage (Strong)',
+  'DamageHi1': 'Damage High (W)', 'DamageHi2': 'Damage High (M)', 'DamageHi3': 'Damage High (S)',
+  'DamageLw1': 'Damage Low (W)', 'DamageLw2': 'Damage Low (M)', 'DamageLw3': 'Damage Low (S)',
+  'DamageAir1': 'Damage Air (W)', 'DamageAir2': 'Damage Air (M)', 'DamageAir3': 'Damage Air (S)',
+  'DamageFlyN': 'Tumble', 'DamageFlyHi': 'Tumble (High)', 'DamageFlyLw': 'Tumble (Low)',
+  'DamageFlyTop': 'Tumble (Top)', 'DamageFlyRoll': 'Tumble Roll',
+  'DownBoundU': 'Knockdown (Up)', 'DownBoundD': 'Knockdown (Down)',
+  'DownWaitU': 'Grounded (Up)', 'DownWaitD': 'Grounded (Down)',
+  'DownStandU': 'Getup (Up)', 'DownStandD': 'Getup (Down)',
+  'DownAttackU': 'Getup Attack (Up)', 'DownAttackD': 'Getup Attack (Down)',
+  'DownForwardU': 'Getup Roll (Fwd)', 'DownBackU': 'Getup Roll (Back)',
+  'DownForwardD': 'Getup Roll (Fwd)', 'DownBackD': 'Getup Roll (Back)',
+  // Ledge
+  'CliffCatch': 'Ledge Grab', 'CliffWait': 'Ledge Hang',
+  'CliffClimbSlow': 'Ledge Climb (Slow)', 'CliffClimbQuick': 'Ledge Climb (Fast)',
+  'CliffAttackSlow': 'Ledge Attack (Slow)', 'CliffAttackQuick': 'Ledge Attack (Fast)',
+  'CliffEscapeSlow': 'Ledge Roll (Slow)', 'CliffEscapeQuick': 'Ledge Roll (Fast)',
+  'CliffJumpSlow1': 'Ledge Jump (Slow)', 'CliffJumpQuick1': 'Ledge Jump (Fast)',
+  // Misc
+  'Appeal': 'Taunt', 'AppealL': 'Taunt (Left)', 'AppealR': 'Taunt (Right)',
+  'Entry': 'Entry', 'EntryStart': 'Entry Start', 'EntryEnd': 'Entry End',
+  'Win1': 'Victory 1', 'Win2': 'Victory 2', 'Win3': 'Victory 3',
+  'Lose': 'Defeat', 'Dead': 'Star KO', 'DeadUp': 'Up KO', 'DeadLeft': 'Side KO',
+  'ReboundStop': 'Clang', 'WallDamage': 'Wall Tech Damage',
+  'StopCeil': 'Ceiling Tech', 'StopWall': 'Wall Tech', 'WallJump': 'Wall Jump',
+  'Ottotto': 'Teeter', 'OttottoWait': 'Teeter Idle',
+  'ItemParasolOpen': 'Parasol Open', 'ItemParasolFall': 'Parasol Fall',
+  'LightGet': 'Item Pickup (Light)', 'HeavyGet': 'Item Pickup (Heavy)',
+  'LightThrowF': 'Throw Item (F)', 'LightThrowB': 'Throw Item (B)',
+  'LightThrowHi': 'Throw Item (Up)', 'LightThrowLw': 'Throw Item (Down)',
+  'LightThrowDash': 'Throw Item (Dash)', 'LightThrowDrop': 'Drop Item',
+  'LightThrowAirF': 'Air Throw (F)', 'LightThrowAirB': 'Air Throw (B)',
+  'LightThrowAirHi': 'Air Throw (Up)', 'LightThrowAirLw': 'Air Throw (Down)',
+  'SwordSwing1': 'Bat Swing 1', 'SwordSwing3': 'Bat Swing 2', 'SwordSwing4': 'Bat Swing 3',
+  'SwordSwingDash': 'Bat Dash', 'BatSwingDash': 'Bat Dash Attack'
+}
+
+// Animation categories
+const ANIM_CATEGORIES = {
+  'Grounded': [
+    'Attack11', 'Attack12', 'Attack13', 'Attack100Start', 'Attack100Loop', 'Attack100End',
+    'AttackDash', 'AttackS3Hi', 'AttackS3HiS', 'AttackS3S', 'AttackS3LwS', 'AttackS3Lw',
+    'AttackHi3', 'AttackLw3', 'AttackS4Hi', 'AttackS4HiS', 'AttackS4S', 'AttackS4LwS', 'AttackS4Lw',
+    'AttackHi4', 'AttackLw4'
+  ],
+  'Aerials': [
+    'AttackAirN', 'AttackAirF', 'AttackAirB', 'AttackAirHi', 'AttackAirLw',
+    'LandingAirN', 'LandingAirF', 'LandingAirB', 'LandingAirHi', 'LandingAirLw'
+  ],
+  'Specials': [
+    'SpecialN', 'SpecialNStart', 'SpecialNLoop', 'SpecialNEnd', 'SpecialAirN',
+    'SpecialS', 'SpecialSStart', 'SpecialAirS',
+    'SpecialHi', 'SpecialHiStart', 'SpecialAirHi',
+    'SpecialLw', 'SpecialLwStart', 'SpecialAirLw'
+  ],
+  'Grabs': [
+    'Catch', 'CatchDash', 'CatchWait', 'CatchAttack', 'CatchCut',
+    'ThrowF', 'ThrowB', 'ThrowHi', 'ThrowLw'
+  ],
+  'Movement': [
+    'Wait1', 'Wait2', 'Wait3', 'Wait4', 'Walk', 'WalkSlow', 'WalkMiddle', 'WalkFast',
+    'Dash', 'Run', 'RunBrake', 'Turn', 'TurnRun', 'TurnRunBrake',
+    'KneeBend', 'JumpF', 'JumpB', 'JumpAerialF', 'JumpAerialB',
+    'Fall', 'FallF', 'FallB', 'FallAerial', 'FallAerialF', 'FallAerialB',
+    'FallSpecial', 'Landing', 'LandingFallSpecial', 'Squat', 'SquatWait', 'SquatRv', 'Pass'
+  ],
+  'Defense': [
+    'Guard', 'GuardOn', 'GuardOff', 'GuardReflect', 'GuardDamage',
+    'EscapeN', 'EscapeF', 'EscapeB', 'EscapeAir'
+  ],
+  'Damage': [
+    'DamageN1', 'DamageN2', 'DamageN3', 'DamageHi1', 'DamageHi2', 'DamageHi3',
+    'DamageLw1', 'DamageLw2', 'DamageLw3', 'DamageAir1', 'DamageAir2', 'DamageAir3',
+    'DamageFlyN', 'DamageFlyHi', 'DamageFlyLw', 'DamageFlyTop', 'DamageFlyRoll',
+    'DownBoundU', 'DownBoundD', 'DownWaitU', 'DownWaitD', 'DownStandU', 'DownStandD',
+    'DownAttackU', 'DownAttackD', 'DownForwardU', 'DownBackU', 'DownForwardD', 'DownBackD'
+  ],
+  'Ledge': [
+    'CliffCatch', 'CliffWait', 'CliffClimbSlow', 'CliffClimbQuick',
+    'CliffAttackSlow', 'CliffAttackQuick', 'CliffEscapeSlow', 'CliffEscapeQuick',
+    'CliffJumpSlow1', 'CliffJumpQuick1'
+  ],
+  'Misc': [
+    'Appeal', 'AppealL', 'AppealR', 'Entry', 'EntryStart', 'EntryEnd',
+    'Win1', 'Win2', 'Win3', 'Lose', 'Dead', 'DeadUp', 'DeadLeft',
+    'ReboundStop', 'WallDamage', 'StopCeil', 'StopWall', 'WallJump',
+    'Ottotto', 'OttottoWait', 'ItemParasolOpen', 'ItemParasolFall',
+    'LightGet', 'HeavyGet', 'LightThrowF', 'LightThrowB', 'LightThrowHi', 'LightThrowLw',
+    'LightThrowDash', 'LightThrowDrop', 'LightThrowAirF', 'LightThrowAirB',
+    'LightThrowAirHi', 'LightThrowAirLw', 'SwordSwing1', 'SwordSwing3', 'SwordSwing4',
+    'SwordSwingDash', 'BatSwingDash'
+  ]
+}
+
+// Extract base animation name from symbol (e.g., "PlFx_Share_ACTION_Wait1_figatree" -> "Wait1")
+const extractAnimName = (symbol) => {
+  const match = symbol.match(/ACTION_(\w+)_figatree/)
+  return match ? match[1] : symbol
+}
+
+// Get human-readable display name for animation
+const getAnimDisplayName = (symbol) => {
+  const baseName = extractAnimName(symbol)
+  return ANIM_NAMES[baseName] || baseName
+}
+
+// Get category for an animation
+const getAnimCategory = (symbol) => {
+  const baseName = extractAnimName(symbol)
+  for (const [category, anims] of Object.entries(ANIM_CATEGORIES)) {
+    if (anims.includes(baseName)) return category
+  }
+  return 'Other'
+}
 
 // Character to costume code prefix mapping
 const CHAR_PREFIXES = {
@@ -121,6 +282,7 @@ export default function PoseManagerModal({
   const [animList, setAnimList] = useState([])
   const [selectedAnim, setSelectedAnim] = useState('')
   const [animFilter, setAnimFilter] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('All')
   const viewerRef = useRef(null)
 
   // Poll viewer for animation list
@@ -242,52 +404,86 @@ export default function PoseManagerModal({
 
         {/* Body with viewer and poses grid */}
         <div className="pm-body">
-          {/* Left: 3D Viewer (hidden when skin selector is open) */}
+          {/* Left: Viewer + Category Buttons */}
           {!selectedPose && (
-            <div className="pm-viewer-section">
-              <EmbeddedModelViewer
-                ref={viewerRef}
-                character={character}
-                costumeCode={getDefaultCostumeCode(character)}
-                onClose={onClose}
-                cspMode={true}
-                showGrid={false}
-                showBackground={false}
-              />
+            <div className="pm-left-section">
+              <div className="pm-viewer-section">
+                <EmbeddedModelViewer
+                  ref={viewerRef}
+                  character={character}
+                  costumeCode={getDefaultCostumeCode(character)}
+                  onClose={onClose}
+                  cspMode={true}
+                  showGrid={false}
+                  showBackground={false}
+                />
+              </div>
+
+              {/* Category buttons below viewer */}
+              <div className="pm-category-bar">
+                <button
+                  className={`pm-cat-btn ${selectedCategory === 'All' ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory('All')}
+                >
+                  All
+                </button>
+                {Object.keys(ANIM_CATEGORIES).map(cat => (
+                  <button
+                    key={cat}
+                    className={`pm-cat-btn ${selectedCategory === cat ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Middle: Animation List */}
+          {/* Middle: Animation List (bigger) */}
           {!selectedPose && animList.length > 0 && (
             <div className="pm-anim-section">
               <div className="pm-anim-header">
                 <span>Animations</span>
-                <span className="pm-anim-count">{animList.length}</span>
+                <span className="pm-anim-count">
+                  {animList.filter(a => {
+                    const matchesCategory = selectedCategory === 'All' || getAnimCategory(a) === selectedCategory
+                    const matchesFilter = a.toLowerCase().includes(animFilter.toLowerCase()) ||
+                                          getAnimDisplayName(a).toLowerCase().includes(animFilter.toLowerCase())
+                    return matchesCategory && matchesFilter
+                  }).length}
+                </span>
               </div>
               <input
                 type="text"
                 className="pm-anim-filter"
-                placeholder="Filter..."
+                placeholder="Search animations..."
                 value={animFilter}
                 onChange={(e) => setAnimFilter(e.target.value)}
               />
               <div className="pm-anim-list">
                 {animList
-                  .filter(a => a.toLowerCase().includes(animFilter.toLowerCase()))
+                  .filter(a => {
+                    const matchesCategory = selectedCategory === 'All' || getAnimCategory(a) === selectedCategory
+                    const matchesFilter = a.toLowerCase().includes(animFilter.toLowerCase()) ||
+                                          getAnimDisplayName(a).toLowerCase().includes(animFilter.toLowerCase())
+                    return matchesCategory && matchesFilter
+                  })
                   .map(anim => (
                     <button
                       key={anim}
                       className={`pm-anim-item ${selectedAnim === anim ? 'active' : ''}`}
                       onClick={() => handleLoadAnim(anim)}
+                      title={anim}
                     >
-                      {anim}
+                      {getAnimDisplayName(anim)}
                     </button>
                   ))}
               </div>
             </div>
           )}
 
-          {/* Right: Saved Poses Grid */}
+          {/* Right: Saved Poses (smaller) */}
           <div className="pm-poses-section">
             <div className="pm-poses-header">
               <span>Saved Poses</span>
@@ -379,13 +575,35 @@ export default function PoseManagerModal({
         .pm-modal {
           background: #1a1a2e;
           border-radius: 12px;
-          width: 95vw;
-          max-width: 1600px;
-          height: 90vh;
+          width: 65vw;
+          height: 80vh;
+          max-width: 1000px;
+          max-height: 900px;
           display: flex;
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        @media (min-width: 1440px) {
+          .pm-modal {
+            max-width: 1100px;
+            max-height: 1000px;
+          }
+        }
+
+        @media (min-width: 1920px) {
+          .pm-modal {
+            max-width: 1250px;
+            max-height: 1100px;
+          }
+        }
+
+        @media (min-width: 2560px) {
+          .pm-modal {
+            max-width: 1500px;
+            max-height: 1300px;
+          }
         }
 
         .pm-header {
@@ -438,12 +656,49 @@ export default function PoseManagerModal({
           overflow: hidden;
         }
 
-        /* Left: Viewer Section */
+        /* Left: Viewer + Category Section */
+        .pm-left-section {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          border-right: 1px solid #2a2a4a;
+        }
+
         .pm-viewer-section {
           flex: 1;
           position: relative;
           overflow: hidden;
-          border-right: 1px solid #2a2a4a;
+        }
+
+        /* Category bar below viewer */
+        .pm-category-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 10px 12px;
+          background: #16162a;
+          border-top: 1px solid #2a2a4a;
+        }
+
+        .pm-cat-btn {
+          padding: 5px 10px;
+          background: #2a2a4a;
+          border: none;
+          border-radius: 4px;
+          color: #888;
+          font-size: 11px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .pm-cat-btn:hover {
+          background: #3a3a5a;
+          color: #ccc;
+        }
+
+        .pm-cat-btn.active {
+          background: #4a9eff;
+          color: #fff;
         }
 
         .pm-viewer-section .mv-overlay {
@@ -499,8 +754,8 @@ export default function PoseManagerModal({
 
         /* Right: Poses Section */
         .pm-poses-section {
-          width: 320px;
-          min-width: 280px;
+          width: 260px;
+          min-width: 240px;
           display: flex;
           flex-direction: column;
           background: #16162a;
@@ -528,10 +783,10 @@ export default function PoseManagerModal({
         .pm-poses-grid {
           flex: 1;
           overflow-y: auto;
-          padding: 12px;
+          padding: 10px;
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
+          gap: 10px;
           align-content: start;
         }
 

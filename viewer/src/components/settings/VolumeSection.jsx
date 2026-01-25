@@ -40,7 +40,9 @@ export default function VolumeSection() {
             onMouseUp={handleSliderRelease}
             onTouchEnd={handleSliderRelease}
             className="volume-slider"
-            style={{ '--volume-percent': `${volumePercent}%` }}
+            style={{
+              background: `linear-gradient(to right, #7dd3e8 0%, #7dd3e8 ${volumePercent}%, #2a2a3e ${volumePercent}%, #2a2a3e 100%)`
+            }}
           />
           <span className="volume-value">{volumePercent}%</span>
         </div>
