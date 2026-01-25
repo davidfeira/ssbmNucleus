@@ -140,7 +140,13 @@ namespace MexCLI.Commands
                 }
                 else
                 {
-                    Console.Error.WriteLine($"[DEBUG] Skipping compression (value is 1.0)");
+                    Console.Error.WriteLine($"[DEBUG] Skipping compression (skipCompression={skipCompression})");
+
+                    // Even when skipping compression, we MUST call Save() to rebuild MnSlChr.usd
+                    // with the current CSP textures. Without this, the ISO will have stale data.
+                    Console.Error.WriteLine($"[DEBUG] Calling Save() to rebuild asset files...");
+                    workspace.Save(null);
+                    Console.Error.WriteLine($"[DEBUG] Save() complete");
                 }
 
                 // Set up progress reporting

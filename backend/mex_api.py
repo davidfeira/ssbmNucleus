@@ -308,6 +308,61 @@ def get_project_files_dir():
 init_extras_api(STORAGE_PATH, get_project_files_dir, HSDRAW_EXE)
 
 
+# Vanilla Melee has 128 total costumes across all fighters
+# (26 playable + Nana + Master Hand)
+VANILLA_COSTUME_COUNT = 128
+
+
+def calculate_auto_compression(added_costume_count: int) -> float:
+    """Calculate recommended CSP compression based on ADDED costume count.
+
+    Formula: ratio = max(0.1, 1.0 - (addedSkinCount * 0.003))
+
+    Only new costumes (beyond vanilla) affect memory, so we use:
+    added_costumes = total_costumes - vanilla_costumes
+
+    Data points (for added costumes):
+    - 20 added → 0.94
+    - 40 added → 0.88
+    - 120 added → 0.64
+    """
+    ratio = 1.0 - (added_costume_count * 0.003)
+    return max(0.1, min(1.0, ratio))
+
+
+@app.route('/api/mex/recommended-compression', methods=['GET'])
+def get_recommended_compression():
+    """Get recommended CSP compression based on added costume count."""
+    try:
+        mex = get_mex_manager()
+        fighters = mex.list_fighters()
+
+        # Sum costumeCount from list-fighters (already included, no extra API calls)
+        total_costumes = sum(f.get('costumeCount', 0) for f in fighters)
+
+        # Calculate added costumes (can't be negative)
+        added_costumes = max(0, total_costumes - VANILLA_COSTUME_COUNT)
+
+        ratio = calculate_auto_compression(added_costumes)
+
+        return jsonify({
+            'success': True,
+            'totalCostumes': total_costumes,
+            'vanillaCostumes': VANILLA_COSTUME_COUNT,
+            'addedCostumes': added_costumes,
+            'ratio': round(ratio, 2)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'totalCostumes': 0,
+            'vanillaCostumes': VANILLA_COSTUME_COUNT,
+            'addedCostumes': 0,
+            'ratio': 1.0
+        }), 500
+
+
 @app.route('/api/mex/status', methods=['GET'])
 def get_status():
     """Get MEX project status"""
@@ -1211,6 +1266,14 @@ def start_export():
                     mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
                     mapping.save(mapping_file)
                     logger.info(f"Saved texture mapping to {mapping_file}")
+
+                    # CRITICAL: Recompile CSPs from PNG sources
+                    # This regenerates the .tex files from the placeholder PNGs we just wrote.
+                    # Without this step, MexCLI would use the old cached .tex files instead
+                    # of the new placeholder images.
+                    logger.info("Recompiling CSPs from placeholder PNGs...")
+                    recompile_result = mex.recompile_csps()
+                    logger.info(f"CSP recompile complete: {recompile_result.get('message', 'done')}")
 
                 # Note: Extras are patched immediately on import, not at export time
 

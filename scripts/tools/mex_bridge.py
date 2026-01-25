@@ -322,6 +322,23 @@ class MexManager:
         """
         return self._run_command("save", str(self.project_path))
 
+    def recompile_csps(self) -> Dict:
+        """
+        Recompile CSP textures from their source PNG files.
+
+        This regenerates .tex files from the .png sources without resizing.
+        Useful when PNG files have been modified externally (e.g., replaced
+        with texture pack placeholders).
+
+        Returns:
+            Dict with recompile results:
+                - success: bool
+                - recompiledCount: int
+                - errorCount: int
+                - message: str
+        """
+        return self._run_command("recompile-csps", str(self.project_path))
+
     def export_iso(
         self,
         output_path: str,

@@ -38,6 +38,8 @@ namespace MexCLI
                         return Commands.SaveCommand.Execute(args);
                     case "export":
                         return Commands.ExportCommand.Execute(args);
+                    case "recompile-csps":
+                        return Commands.RecompileCommand.Execute(args);
                     case "info":
                         return Commands.InfoCommand.Execute(args);
                     case "help":
@@ -81,6 +83,7 @@ namespace MexCLI
             Console.WriteLine("  reorder-costume <project> <fighter> <from> <to> - Reorder costume");
             Console.WriteLine("  save <project.mexproj>                     - Save project changes");
             Console.WriteLine("  export <project.mexproj> <output.iso>      - Export ISO");
+            Console.WriteLine("  recompile-csps <project.mexproj>           - Recompile CSPs from PNG sources");
             Console.WriteLine("  info <project.mexproj>                     - Get project information");
             Console.WriteLine("  help                                       - Show this help message");
         }
