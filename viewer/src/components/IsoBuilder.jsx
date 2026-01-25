@@ -307,6 +307,15 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     }
   };
 
+  // Handle modal close - cleanup texture listening if active
+  const handleClose = async () => {
+    playSound('back');
+    if (listeningMode) {
+      await handleStopListening();
+    }
+    onClose();
+  };
+
   const handleDownload = () => {
     playSound('start');
     // Create a temporary anchor element to trigger download without opening new window
@@ -382,7 +391,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       <div className="iso-builder-modal">
         <div className="modal-header">
           <h2>Export ISO</h2>
-          <button className="close-btn" onClick={() => { playSound('back'); onClose(); }}>×</button>
+          <button className="close-btn" onClick={handleClose}>×</button>
         </div>
 
         <div className="modal-body">
@@ -553,7 +562,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload}>
                   Download {filename}
                 </button>
-                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
+                <button className="btn-secondary" onClick={handleClose}>
                   Close
                 </button>
               </div>
@@ -668,7 +677,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload} style={{ background: 'var(--gradient-gold)' }}>
                   Download ISO
                 </button>
-                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
+                <button className="btn-secondary" onClick={handleClose}>
                   Close
                 </button>
               </div>
@@ -684,7 +693,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-download" onClick={handleDownload}>
                   Download ISO Anyway
                 </button>
-                <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
+                <button className="btn-secondary" onClick={handleClose}>
                   Close
                 </button>
               </div>
@@ -778,7 +787,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
               <div className="error-icon">✕</div>
               <h3>Export Failed</h3>
               <p className="error-message">{error}</p>
-              <button className="btn-secondary" onClick={() => { playSound('back'); onClose(); }}>
+              <button className="btn-secondary" onClick={handleClose}>
                 Close
               </button>
             </div>
