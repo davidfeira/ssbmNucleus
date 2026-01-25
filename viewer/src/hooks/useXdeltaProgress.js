@@ -2,6 +2,7 @@
  * useXdeltaProgress Hook
  *
  * Manages WebSocket connection for real-time XDelta build/create progress updates.
+ * Also handles bundle import progress events.
  * Listens for progress, complete, and error events from the backend.
  */
 
@@ -22,7 +23,16 @@ export function useXdeltaProgress({
   setXdeltaCreateResult,
   setXdeltaCreateState,
   setXdeltaCreateError,
-  fetchXdeltaPatches
+  fetchXdeltaPatches,
+  // Bundle import props
+  bundleImportId,
+  setBundleProgress,
+  setBundleMessage,
+  setBundleComplete,
+  setBundleResult,
+  setBundleImporting,
+  setBundleError,
+  fetchBundles
 }) {
   const socketRef = useRef(null)
 
@@ -82,6 +92,32 @@ export function useXdeltaProgress({
       }
     })
 
+    // Bundle import progress events
+    socket.on('bundle_import_progress', (data) => {
+      if (bundleImportId && data.import_id === bundleImportId) {
+        setBundleProgress?.(data.percentage)
+        setBundleMessage?.(data.message)
+      }
+    })
+
+    socket.on('bundle_import_complete', (data) => {
+      if (bundleImportId && data.import_id === bundleImportId) {
+        setBundleProgress?.(100)
+        setBundleComplete?.(true)
+        setBundleResult?.(data)
+        setBundleImporting?.(false)
+        // Refresh bundles list
+        fetchBundles?.()
+      }
+    })
+
+    socket.on('bundle_import_error', (data) => {
+      if (bundleImportId && data.import_id === bundleImportId) {
+        setBundleError?.(data.error)
+        setBundleImporting?.(false)
+      }
+    })
+
     return () => {
       socket.disconnect()
     }
@@ -89,6 +125,7 @@ export function useXdeltaProgress({
     BACKEND_URL,
     xdeltaBuildPatch,
     xdeltaCreateId,
+    bundleImportId,
     setXdeltaBuildProgress,
     setXdeltaBuildMessage,
     setXdeltaBuildFilename,
@@ -99,7 +136,14 @@ export function useXdeltaProgress({
     setXdeltaCreateResult,
     setXdeltaCreateState,
     setXdeltaCreateError,
-    fetchXdeltaPatches
+    fetchXdeltaPatches,
+    setBundleProgress,
+    setBundleMessage,
+    setBundleComplete,
+    setBundleResult,
+    setBundleImporting,
+    setBundleError,
+    fetchBundles
   ])
 
   return { socketRef }

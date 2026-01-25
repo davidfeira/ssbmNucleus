@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './StorageViewer.css'
 import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
@@ -15,6 +15,7 @@ import XdeltaImportModal from './storage/XdeltaImportModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
 import XdeltaCreateModal from './storage/XdeltaCreateModal'
 import XdeltaBuildModal from './storage/XdeltaBuildModal'
+import BundleEditModal from './storage/BundleEditModal'
 import ModeToolbar from './storage/ModeToolbar'
 import ImportToolbar from './storage/ImportToolbar'
 import CharactersGrid from './storage/CharactersGrid'
@@ -59,6 +60,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [selectedCharacter, setSelectedCharacter] = useState(null)
   const [selectedStage, setSelectedStage] = useState(null)
   const [stageVariants, setStageVariants] = useState({})
+  const [bundles, setBundles] = useState([])
+  const [showBundleEditModal, setShowBundleEditModal] = useState(false)
+  const [editingBundle, setEditingBundle] = useState(null)
 
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
@@ -157,6 +161,19 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     fetchStageVariants
   })
 
+  // Fetch bundles - defined before hooks that need it as callback
+  const fetchBundles = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/bundle/list`)
+      const data = await response.json()
+      if (data.success) {
+        setBundles(data.bundles)
+      }
+    } catch (err) {
+      console.error('Failed to fetch bundles:', err)
+    }
+  }, [])
+
   // XDelta patches hook
   const {
     xdeltaPatches,
@@ -198,6 +215,23 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setXdeltaCreateError,
     xdeltaCreateResult,
     setXdeltaCreateResult,
+    // Bundle import state
+    bundlePreview,
+    bundleImporting,
+    setBundleImporting,
+    bundleImportId,
+    setBundleImportId,
+    bundleProgress,
+    setBundleProgress,
+    bundleMessage,
+    setBundleMessage,
+    bundleComplete,
+    setBundleComplete,
+    bundleError,
+    setBundleError,
+    bundleResult,
+    setBundleResult,
+    // Handlers
     fetchXdeltaPatches,
     handleImportXdelta,
     handleBuildXdeltaIso,
@@ -210,8 +244,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleDeleteXdelta,
     handleEditXdelta,
     handleSaveXdeltaEdit,
-    handleUpdateXdeltaImage
-  } = useXdeltaPatches({ API_URL })
+    handleUpdateXdeltaImage,
+    closeXdeltaImportModal,
+    // Bundle handlers
+    handleBundlePreview,
+    handleBundleImport,
+    handleBundleReset
+  } = useXdeltaPatches({ API_URL, onBundleImportSuccess: fetchBundles })
 
   // XDelta progress WebSocket hook
   useXdeltaProgress({
@@ -228,7 +267,16 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setXdeltaCreateResult,
     setXdeltaCreateState,
     setXdeltaCreateError,
-    fetchXdeltaPatches
+    fetchXdeltaPatches,
+    // Bundle import props
+    bundleImportId,
+    setBundleProgress,
+    setBundleMessage,
+    setBundleComplete,
+    setBundleResult,
+    setBundleImporting,
+    setBundleError,
+    fetchBundles
   })
 
   // Ref for setEditingItem - used by CSP manager callback (initialized after useEditModal)
@@ -341,10 +389,139 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }, [mode, metadata])
 
-  // Fetch xdelta patches when in patches mode
+  // Bundle handlers
+  const handleDownloadBundle = (bundleId) => {
+    const link = document.createElement('a')
+    link.href = `${API_URL}/bundle/download/${bundleId}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleEditBundle = (bundle) => {
+    setEditingBundle(bundle)
+    setShowBundleEditModal(true)
+  }
+
+  const handleSaveBundleEdit = async () => {
+    if (!editingBundle) return
+
+    try {
+      const response = await fetch(`${API_URL}/bundle/update/${editingBundle.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingBundle.name,
+          description: editingBundle.description
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        fetchBundles()
+        setShowBundleEditModal(false)
+        setEditingBundle(null)
+      } else {
+        alert(`Failed to save bundle: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error saving bundle: ${err.message}`)
+    }
+  }
+
+  const handleUpdateBundleImage = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !editingBundle) return
+
+    const formData = new FormData()
+    formData.append('image', file)
+
+    try {
+      const response = await fetch(`${API_URL}/bundle/update-image/${editingBundle.id}`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        setEditingBundle({ ...editingBundle, imageUrl: data.imageUrl })
+        fetchBundles()
+      } else {
+        alert(`Failed to update image: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error updating image: ${err.message}`)
+    }
+  }
+
+  const handleDeleteBundle = async (bundleId) => {
+    try {
+      const response = await fetch(`${API_URL}/bundle/delete/${bundleId}`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+      if (data.success) {
+        fetchBundles()
+      } else {
+        alert(`Failed to delete bundle: ${data.error}`)
+      }
+    } catch (err) {
+      alert(`Error deleting bundle: ${err.message}`)
+    }
+  }
+
+  const handleInstallBundle = async (bundle) => {
+    const slippiPath = localStorage.getItem('slippi_dolphin_path')
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
+
+    if (!slippiPath) {
+      alert('Slippi Dolphin path not set. Please configure it in Settings.')
+      return
+    }
+
+    if (!vanillaIsoPath) {
+      alert('Vanilla ISO path not set. Please configure it in Settings.')
+      return
+    }
+
+    // Set up progress tracking via the existing bundle import state
+    setBundleImporting(true)
+    setBundleProgress(0)
+    setBundleMessage('Starting install...')
+    setBundleError(null)
+    setBundleComplete(false)
+    setBundleResult(null)
+
+    // Show the import modal for progress display
+    setShowXdeltaImportModal(true)
+
+    try {
+      const response = await fetch(`${API_URL}/bundle/install/${bundle.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slippiPath,
+          vanillaIsoPath
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setBundleImportId(data.import_id)
+      } else {
+        setBundleError(data.error)
+        setBundleImporting(false)
+      }
+    } catch (err) {
+      setBundleError(`Install error: ${err.message}`)
+      setBundleImporting(false)
+    }
+  }
+
+  // Fetch xdelta patches and bundles when in patches mode
   useEffect(() => {
     if (mode === 'patches') {
       fetchXdeltaPatches()
+      fetchBundles()
     }
   }, [mode])
 
@@ -930,10 +1107,14 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       ) : (
         <PatchesGrid
           xdeltaPatches={xdeltaPatches}
+          bundles={bundles}
           onEditPatch={handleEditXdelta}
           onDownloadPatch={handleDownloadPatch}
           onBuildIso={handleBuildXdeltaIso}
           onShowCreateModal={() => setShowXdeltaCreateModal(true)}
+          onEditBundle={handleEditBundle}
+          onDownloadBundle={handleDownloadBundle}
+          onInstallBundle={handleInstallBundle}
         />
       )}
 
@@ -944,10 +1125,18 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         onImportDataChange={setXdeltaImportData}
         importing={importingXdelta}
         onImport={handleImportXdelta}
-        onCancel={() => {
-          setShowXdeltaImportModal(false)
-          setXdeltaImportData({ name: '', description: '', file: null, image: null })
-        }}
+        onCancel={closeXdeltaImportModal}
+        // Bundle props
+        bundlePreview={bundlePreview}
+        bundleImporting={bundleImporting}
+        bundleProgress={bundleProgress}
+        bundleMessage={bundleMessage}
+        bundleComplete={bundleComplete}
+        bundleError={bundleError}
+        bundleResult={bundleResult}
+        onBundleImport={handleBundleImport}
+        onBundlePreview={handleBundlePreview}
+        onBundleReset={handleBundleReset}
       />
 
       {/* XDelta Edit Modal */}
@@ -962,6 +1151,21 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         }}
         onDelete={handleDeleteXdelta}
         onUpdateImage={handleUpdateXdeltaImage}
+        BACKEND_URL={BACKEND_URL}
+      />
+
+      {/* Bundle Edit Modal */}
+      <BundleEditModal
+        show={showBundleEditModal}
+        bundle={editingBundle}
+        onBundleChange={setEditingBundle}
+        onSave={handleSaveBundleEdit}
+        onCancel={() => {
+          setShowBundleEditModal(false)
+          setEditingBundle(null)
+        }}
+        onDelete={handleDeleteBundle}
+        onUpdateImage={handleUpdateBundleImage}
         BACKEND_URL={BACKEND_URL}
       />
 

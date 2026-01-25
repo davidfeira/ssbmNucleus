@@ -6,11 +6,12 @@
  * - Building ISOs from patches
  * - Creating new patches from modded ISOs
  * - Download functionality
+ * - Bundle (.ssbm) import handling
  */
 
 import { useState } from 'react'
 
-export function useXdeltaPatches({ API_URL }) {
+export function useXdeltaPatches({ API_URL, onBundleImportSuccess }) {
   // Patches list state
   const [xdeltaPatches, setXdeltaPatches] = useState([])
 
@@ -41,6 +42,16 @@ export function useXdeltaPatches({ API_URL }) {
   const [xdeltaCreateMessage, setXdeltaCreateMessage] = useState('')
   const [xdeltaCreateError, setXdeltaCreateError] = useState(null)
   const [xdeltaCreateResult, setXdeltaCreateResult] = useState(null)
+
+  // Bundle import state
+  const [bundlePreview, setBundlePreview] = useState(null)
+  const [bundleImporting, setBundleImporting] = useState(false)
+  const [bundleImportId, setBundleImportId] = useState(null)
+  const [bundleProgress, setBundleProgress] = useState(0)
+  const [bundleMessage, setBundleMessage] = useState('')
+  const [bundleComplete, setBundleComplete] = useState(false)
+  const [bundleError, setBundleError] = useState(null)
+  const [bundleResult, setBundleResult] = useState(null)
 
   // Fetch patches list
   const fetchXdeltaPatches = async () => {
@@ -101,6 +112,79 @@ export function useXdeltaPatches({ API_URL }) {
     } finally {
       setImportingXdelta(false)
     }
+  }
+
+  // Preview bundle
+  const handleBundlePreview = async (file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`${API_URL}/bundle/preview`, {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setBundlePreview(data)
+      } else {
+        setBundleError(data.error)
+      }
+    } catch (err) {
+      setBundleError(`Preview error: ${err.message}`)
+    }
+  }
+
+  // Import bundle (just saves to storage, does NOT install)
+  const handleBundleImport = async () => {
+    if (!xdeltaImportData.file) {
+      alert('Please select a bundle file')
+      return
+    }
+
+    setBundleImporting(true)
+    setBundleError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', xdeltaImportData.file)
+
+      const response = await fetch(`${API_URL}/bundle/import`, {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Import complete - just saved to storage
+        setBundleComplete(true)
+        setBundleResult({ name: data.name, saved: true })
+        setBundleImporting(false)
+        // Refresh bundles list
+        onBundleImportSuccess?.()
+      } else {
+        setBundleError(data.error)
+        setBundleImporting(false)
+      }
+    } catch (err) {
+      setBundleError(`Import error: ${err.message}`)
+      setBundleImporting(false)
+    }
+  }
+
+  // Reset bundle state
+  const handleBundleReset = () => {
+    setBundlePreview(null)
+    setBundleImporting(false)
+    setBundleImportId(null)
+    setBundleProgress(0)
+    setBundleMessage('')
+    setBundleComplete(false)
+    setBundleError(null)
+    setBundleResult(null)
   }
 
   // Build ISO from patch
@@ -337,6 +421,13 @@ export function useXdeltaPatches({ API_URL }) {
     }
   }
 
+  // Close import modal and reset bundle state
+  const closeXdeltaImportModal = () => {
+    setShowXdeltaImportModal(false)
+    setXdeltaImportData({ name: '', description: '', file: null, image: null })
+    handleBundleReset()
+  }
+
   return {
     // State
     xdeltaPatches,
@@ -379,6 +470,24 @@ export function useXdeltaPatches({ API_URL }) {
     xdeltaCreateResult,
     setXdeltaCreateResult,
 
+    // Bundle state
+    bundlePreview,
+    setBundlePreview,
+    bundleImporting,
+    setBundleImporting,
+    bundleImportId,
+    setBundleImportId,
+    bundleProgress,
+    setBundleProgress,
+    bundleMessage,
+    setBundleMessage,
+    bundleComplete,
+    setBundleComplete,
+    bundleError,
+    setBundleError,
+    bundleResult,
+    setBundleResult,
+
     // Handlers
     fetchXdeltaPatches,
     handleImportXdelta,
@@ -392,6 +501,12 @@ export function useXdeltaPatches({ API_URL }) {
     handleDeleteXdelta,
     handleEditXdelta,
     handleSaveXdeltaEdit,
-    handleUpdateXdeltaImage
+    handleUpdateXdeltaImage,
+    closeXdeltaImportModal,
+
+    // Bundle handlers
+    handleBundlePreview,
+    handleBundleImport,
+    handleBundleReset
   }
 }

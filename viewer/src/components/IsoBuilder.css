@@ -942,3 +942,151 @@
 .btn-advanced-export {
   margin-top: 1rem;
 }
+
+/* Bundle Export Form */
+.bundle-form {
+  padding: 1rem 0;
+}
+
+.bundle-form h3 {
+  margin: 0 0 0.5rem;
+  color: var(--color-text-primary, #fff);
+}
+
+.bundle-form .form-field {
+  margin-bottom: 1rem;
+}
+
+.bundle-form .form-field label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.bundle-form .form-field input,
+.bundle-form .form-field textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #3d4f5c);
+  background: var(--color-bg-surface, #1a2332);
+  color: var(--color-text-primary, #fff);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.bundle-form .form-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.bundle-form .form-field input:focus,
+.bundle-form .form-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary, #3b82f6);
+}
+
+.bundle-form .image-input-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.bundle-form .image-preview {
+  position: relative;
+  width: 120px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #3d4f5c);
+}
+
+.bundle-form .image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bundle-form .image-preview .remove-image {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bundle-form .image-preview .remove-image:hover {
+  background: rgba(239, 68, 68, 0.9);
+}
+
+.bundle-form .image-select-btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px dashed var(--color-border, #3d4f5c);
+  background: transparent;
+  color: var(--color-text-secondary, #94a3b8);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bundle-form .image-select-btn:hover {
+  border-color: var(--color-primary, #3b82f6);
+  color: var(--color-text-primary, #fff);
+}
+
+.bundle-form .form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.bundle-form .btn-export {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  border: none;
+  color: #000;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.bundle-form .btn-export:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.bundle-form .btn-export:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bundle-form .btn-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bundle-form .btn-secondary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #3d4f5c);
+  background: transparent;
+  color: var(--color-text-secondary, #94a3b8);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bundle-form .btn-secondary:hover {
+  background: var(--color-bg-surface, #1a2332);
+}

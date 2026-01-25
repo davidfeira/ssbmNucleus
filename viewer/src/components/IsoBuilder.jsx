@@ -59,6 +59,21 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [recommendedCompression, setRecommendedCompression] = useState(1.0);
   const [costumeCount, setCostumeCount] = useState(0);
 
+  // Bundle export state (inline, no separate modal)
+  const [texturePackPath, setTexturePackPath] = useState(null);
+  const [showBundleForm, setShowBundleForm] = useState(false);
+  const [bundleName, setBundleName] = useState('');
+  const [bundleDescription, setBundleDescription] = useState('');
+  const [bundleImage, setBundleImage] = useState(null);
+  const [bundleImagePreview, setBundleImagePreview] = useState(null);
+  const [bundleExporting, setBundleExporting] = useState(false);
+  const [bundleExportId, setBundleExportId] = useState(null);
+  const [bundleProgress, setBundleProgress] = useState(0);
+  const [bundleMessage, setBundleMessage] = useState('');
+  const [bundleComplete, setBundleComplete] = useState(false);
+  const [bundleError, setBundleError] = useState(null);
+  const [bundleResult, setBundleResult] = useState(null);
+
   const API_URL = 'http://127.0.0.1:5000';
 
   useEffect(() => {
@@ -195,12 +210,38 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       }
     });
 
+    // Bundle export events
+    newSocket.on('bundle_export_progress', (data) => {
+      if (bundleExportId && data.export_id === bundleExportId) {
+        setBundleProgress(data.percentage);
+        setBundleMessage(data.message);
+      }
+    });
+
+    newSocket.on('bundle_export_complete', (data) => {
+      if (bundleExportId && data.export_id === bundleExportId) {
+        setBundleProgress(100);
+        setBundleComplete(true);
+        setBundleExporting(false);
+        setBundleResult(data);
+        playSound('achievement');
+      }
+    });
+
+    newSocket.on('bundle_export_error', (data) => {
+      if (bundleExportId && data.export_id === bundleExportId) {
+        setBundleError(data.error);
+        setBundleExporting(false);
+        playSound('error');
+      }
+    });
+
     setSocket(newSocket);
 
     return () => {
       newSocket.disconnect();
     };
-  }, [patchCreateId]);
+  }, [patchCreateId, bundleExportId]);
 
   // Fetch recommended compression on mount
   useEffect(() => {
@@ -299,6 +340,10 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       const data = await response.json();
       if (data.success) {
         setListeningMode(false);
+        // Save texture pack path for bundle export
+        if (data.texturePackPath) {
+          setTexturePackPath(data.texturePackPath);
+        }
         // Show success message with path
         setMessage(`Texture pack created! ${data.matchedCount}/${data.totalCount} textures matched.`);
       }
@@ -322,6 +367,113 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     const link = document.createElement('a');
     link.href = `${API_URL}/api/mex/export/download/${filename}`;
     link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleShowBundleForm = () => {
+    // Initialize with project name
+    setBundleName(projectName || 'My Mod Pack');
+    setBundleDescription('');
+    setBundleImage(null);
+    setBundleImagePreview(null);
+    setShowBundleForm(true);
+    playSound('select');
+  };
+
+  const handleBundleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setBundleImage(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setBundleImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleStartBundleExport = async () => {
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path');
+    if (!vanillaIsoPath) {
+      alert('Vanilla ISO path not set. Please configure it in Settings.');
+      return;
+    }
+
+    if (!bundleName.trim()) {
+      alert('Please enter a name for the bundle');
+      return;
+    }
+
+    setShowBundleForm(false);
+    setBundleExporting(true);
+    setBundleProgress(0);
+    setBundleMessage('Finalizing texture pack...');
+    setBundleError(null);
+    setBundleComplete(false);
+    setBundleResult(null);
+    playSound('start');
+
+    try {
+      // First, stop listening to finalize the texture pack and get the path
+      let finalTexturePackPath = texturePackPath;
+      if (listeningMode) {
+        const stopResponse = await fetch(`${API_URL}/api/mex/texture-pack/stop-listening`, {
+          method: 'POST'
+        });
+        const stopData = await stopResponse.json();
+        if (stopData.success && stopData.texturePackPath) {
+          finalTexturePackPath = stopData.texturePackPath;
+          setTexturePackPath(stopData.texturePackPath);
+        }
+        setListeningMode(false);
+      }
+
+      setBundleMessage('Creating bundle...');
+
+      // Use FormData to support image upload
+      const formData = new FormData();
+      formData.append('name', bundleName.trim());
+      formData.append('description', bundleDescription.trim());
+      formData.append('buildName', buildId || bundleName.trim().toLowerCase().replace(/\s+/g, '-'));
+      formData.append('vanillaIsoPath', vanillaIsoPath);
+      formData.append('exportedIsoPath', exportedIsoPath);
+      if (finalTexturePackPath) {
+        formData.append('texturePackPath', finalTexturePackPath);
+      }
+      if (bundleImage) {
+        formData.append('image', bundleImage);
+      }
+
+      const response = await fetch(`${API_URL}/api/mex/bundle/export`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setBundleExportId(data.export_id);
+      } else {
+        setBundleError(data.error);
+        setBundleExporting(false);
+        playSound('error');
+      }
+    } catch (err) {
+      setBundleError(`Export error: ${err.message}`);
+      setBundleExporting(false);
+      playSound('error');
+    }
+  };
+
+  const handleDownloadBundle = () => {
+    if (!bundleResult?.bundle_id) return;
+    playSound('start');
+    const link = document.createElement('a');
+    link.href = `${API_URL}/api/mex/bundle/download/${bundleResult.bundle_id}`;
+    link.download = bundleResult.filename || 'bundle.ssbm';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -777,6 +929,161 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 </button>
                 <button className="btn-done" onClick={handleStopListening}>
                   Done - Finish Texture Pack
+                </button>
+                <button
+                  className="btn-export-bundle"
+                  onClick={handleShowBundleForm}
+                  style={{ background: 'var(--gradient-gold)' }}
+                >
+                  Export as Bundle
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bundle export form */}
+          {showBundleForm && (
+            <div className="bundle-form">
+              <h3>Export as Bundle</h3>
+              <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                Create a shareable .ssbm file that friends can install with one click!
+              </p>
+
+              <div className="form-field">
+                <label>Bundle Name</label>
+                <input
+                  type="text"
+                  value={bundleName}
+                  onChange={(e) => setBundleName(e.target.value)}
+                  placeholder="My Awesome Mod Pack"
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Description (optional)</label>
+                <textarea
+                  value={bundleDescription}
+                  onChange={(e) => setBundleDescription(e.target.value)}
+                  placeholder="Describe what's in this bundle..."
+                  rows={2}
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Cover Image (optional)</label>
+                <div className="image-input-row">
+                  {bundleImagePreview ? (
+                    <div className="image-preview">
+                      <img src={bundleImagePreview} alt="Bundle preview" />
+                      <button
+                        className="remove-image"
+                        onClick={() => {
+                          setBundleImage(null);
+                          setBundleImagePreview(null);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="image-select-btn">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBundleImageChange}
+                        style={{ display: 'none' }}
+                      />
+                      Select Image
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn-export"
+                  onClick={handleStartBundleExport}
+                  disabled={!bundleName.trim()}
+                  style={{ background: 'var(--gradient-gold)' }}
+                >
+                  Create Bundle
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => setShowBundleForm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bundle export in progress */}
+          {bundleExporting && (
+            <div className="export-progress">
+              <div className="progress-header">
+                <h3>Creating Bundle...</h3>
+                <span className="progress-percentage">{bundleProgress}%</span>
+              </div>
+
+              <div className="progress-bar">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${bundleProgress}%` }}
+                ></div>
+              </div>
+
+              <p className="progress-message">{bundleMessage}</p>
+
+              <div className="export-spinner">
+                <div className="spinner"></div>
+              </div>
+            </div>
+          )}
+
+          {/* Bundle export complete */}
+          {bundleComplete && bundleResult && (
+            <div className="export-complete">
+              <div className="success-icon">✓</div>
+              <h3>Bundle Created!</h3>
+              <p style={{ marginBottom: '0.5rem' }}>{bundleResult.filename}</p>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
+                Size: {bundleResult.size_mb} MB
+                {bundleResult.texture_count > 0 && ` • ${bundleResult.texture_count} textures`}
+              </p>
+              <p style={{
+                color: 'var(--color-text-muted)',
+                fontSize: '0.85rem',
+                marginTop: '1rem',
+                padding: '0.75rem',
+                background: 'var(--color-bg-surface)',
+                borderRadius: 'var(--radius-md)'
+              }}>
+                Share this file with friends - they can install it with one click!
+              </p>
+              <div className="complete-actions">
+                <button className="btn-download" onClick={handleDownloadBundle} style={{ background: 'var(--gradient-gold)' }}>
+                  Download Bundle
+                </button>
+                <button className="btn-secondary" onClick={handleClose}>
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bundle export error */}
+          {bundleError && (
+            <div className="export-error">
+              <div className="error-icon">✕</div>
+              <h3>Bundle Export Failed</h3>
+              <p className="error-message">{bundleError}</p>
+              <div className="complete-actions">
+                <button className="btn-download" onClick={handleDownload}>
+                  Download ISO Anyway
+                </button>
+                <button className="btn-secondary" onClick={handleClose}>
+                  Close
                 </button>
               </div>
             </div>
