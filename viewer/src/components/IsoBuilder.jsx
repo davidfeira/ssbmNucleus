@@ -3,6 +3,14 @@ import { io } from 'socket.io-client';
 import { playSound } from '../utils/sounds';
 import './IsoBuilder.css';
 
+// CSS screen order for scanning - matches the character select screen layout
+const CSS_SCAN_ORDER = [
+  'Dr. Mario', 'Mario', 'Luigi', 'Bowser', 'Peach', 'Yoshi',
+  'Donkey Kong', 'Captain Falcon', 'Ganondorf', 'Young Link', 'Link', 'Zelda',
+  'Samus', 'Kirby', 'Ice Climbers', 'Ness', 'Fox', 'Falco',
+  'Pichu', 'Pikachu', 'Jigglypuff', 'Mewtwo', 'Mr. Game & Watch', 'Marth', 'Roy'
+];
+
 const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   // Format: BUILDNAME_YYYY-MM-DD_HH-MM.iso
   const getDefaultFilename = () => {
@@ -92,9 +100,19 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
             setListeningMode(true);
             // Filter out Sheik - she shares Zelda's CSP slot so can't be scanned separately
             const filteredChars = (result.characters || []).filter(c => c.name !== 'Sheik');
-            const filteredTotal = filteredChars.reduce((sum, c) => sum + c.total, 0);
+            // Sort by CSS screen order for intuitive scanning
+            const sortedChars = [...filteredChars].sort((a, b) => {
+              const aIdx = CSS_SCAN_ORDER.indexOf(a.name);
+              const bIdx = CSS_SCAN_ORDER.indexOf(b.name);
+              // Put unknown characters at the end
+              if (aIdx === -1 && bIdx === -1) return a.name.localeCompare(b.name);
+              if (aIdx === -1) return 1;
+              if (bIdx === -1) return -1;
+              return aIdx - bIdx;
+            });
+            const filteredTotal = sortedChars.reduce((sum, c) => sum + c.total, 0);
             setTextureProgress({ matched: 0, total: filteredTotal, percentage: 0 });
-            setCharacters(filteredChars);
+            setCharacters(sortedChars);
             setCurrentCharIndex(0);
             setConfirmedChars(new Set());
           }
