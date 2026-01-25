@@ -109,7 +109,7 @@ export default function HdCspSection({ metadata, API_URL }) {
     <section className="settings-section">
       <h3>HD Portrait Generation</h3>
       <p className="section-description">
-        Generate high-resolution CSPs for texture pack mode where memory constraints don't apply.
+        Batch generate high-resolution portraits for all skins in your vault.
       </p>
 
       <div className="hd-csp-tool">

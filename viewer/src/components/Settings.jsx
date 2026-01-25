@@ -21,20 +21,20 @@ export default function Settings({ metadata }) {
         {/* Volume Controls */}
         <VolumeSection />
 
+        {/* Community */}
+        <DiscordSection />
+
         {/* Vanilla ISO Path */}
         <IsoPathSection API_URL={API_URL} />
 
         {/* Slippi Dolphin Path */}
         <SlippiPathSection API_URL={API_URL} />
 
-        {/* Vault Backup & Restore Section */}
-        <BackupRestore API_URL={API_URL} />
-
         {/* HD CSP Generation Section */}
         <HdCspSection metadata={metadata} API_URL={API_URL} />
 
-        {/* Community */}
-        <DiscordSection />
+        {/* Vault Backup & Restore Section */}
+        <BackupRestore API_URL={API_URL} />
 
         {/* Storage Statistics */}
         <StorageStatsSection metadata={metadata} />

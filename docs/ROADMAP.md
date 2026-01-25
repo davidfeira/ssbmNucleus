@@ -22,12 +22,12 @@
 - [x] Texture pack mode placeholder sizing (skip compression to preserve 16x16 placeholders)
 - [x] Auto-detect Slippi paths and Melee ISO from Dolphin.ini during first-run setup
 - [x] Automate dump/load settings via GFX.ini (auto-enable on listen, auto-disable on stop, clear DUMP on export)
-- [ ] Auto-calculate CSP compression ratio based on costume count
-- [ ] .nucleus bundle format (patch + texture pack with one-click install)
+- [x] Auto-calculate CSP compression ratio based on costume count
+- [x] .nucleus bundle format (patch + texture pack with one-click install)
 
 **Polish**
-- [ ] Standardize modal sizes
-- [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
+- [x] Standardize modal sizes
+- [x] Pose manager: standard CSP sizes, human-readable animation names, improved layout
 
 **Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
@@ -107,7 +107,12 @@ Break down massive files to improve maintainability:
 
 **Bug Fixes**
 - [ ] Fix Ice Climbers
+    - write extensive ics docs about the special things with them
+    - find all places where this could cause problems
+    - fix
 - [ ] Fix Kirby
+    - write kirby docs
+    - find where it could cause problems (prolly just during installation, we just need to figure out  kirby hats)
 - [ ] Fix console errors
 - [ ] Fix xdelta constant server connection for progress updates
 - [ ] Fix issues with packaged version
