@@ -35,7 +35,6 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [patchCreateId, setPatchCreateId] = useState(null);
 
   // Texture pack mode state
-  const [texturePackMode, setTexturePackMode] = useState(false);
   const [listeningMode, setListeningMode] = useState(false);
   const [textureProgress, setTextureProgress] = useState({ matched: 0, total: 0, percentage: 0 });
   const [matchedTextures, setMatchedTextures] = useState([]);
@@ -44,6 +43,11 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [characters, setCharacters] = useState([]);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [confirmedChars, setConfirmedChars] = useState(new Set());
+
+  // New state for redesigned UI
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [recommendedCompression, setRecommendedCompression] = useState(1.0);
+  const [costumeCount, setCostumeCount] = useState(0);
 
   const API_URL = 'http://127.0.0.1:5000';
 
@@ -86,8 +90,11 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
           const result = await response.json();
           if (result.success) {
             setListeningMode(true);
-            setTextureProgress({ matched: 0, total: result.totalCostumes, percentage: 0 });
-            setCharacters(result.characters || []);
+            // Filter out Sheik - she shares Zelda's CSP slot so can't be scanned separately
+            const filteredChars = (result.characters || []).filter(c => c.name !== 'Sheik');
+            const filteredTotal = filteredChars.reduce((sum, c) => sum + c.total, 0);
+            setTextureProgress({ matched: 0, total: filteredTotal, percentage: 0 });
+            setCharacters(filteredChars);
             setCurrentCharIndex(0);
             setConfirmedChars(new Set());
           }
@@ -101,27 +108,37 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     newSocket.on('texture_matched', (data) => {
       setMatchedTextures(prev => [...prev.slice(-9), data]); // Keep last 10
 
-      // Update character progress
-      setCharacters(prev => prev.map(char => {
-        if (char.name === data.character) {
-          return {
-            ...char,
-            matched: char.matched + 1,
-            costumes: char.costumes.map(c =>
-              c.index === data.costumeIndex ? { ...c, matched: true } : c
-            )
-          };
-        }
-        return char;
-      }));
-
-      // Auto-advance: jump to the character that just got a match
+      // Update character progress and auto-advance
       setCharacters(prev => {
-        const matchedCharIdx = prev.findIndex(c => c.name === data.character);
-        if (matchedCharIdx !== -1) {
+        const updated = prev.map(char => {
+          if (char.name === data.character) {
+            return {
+              ...char,
+              matched: char.matched + 1,
+              costumes: char.costumes.map(c =>
+                c.index === data.costumeIndex ? { ...c, matched: true } : c
+              )
+            };
+          }
+          return char;
+        });
+
+        // Auto-advance: find next character that still needs scanning
+        const matchedCharIdx = updated.findIndex(c => c.name === data.character);
+        const matchedChar = updated[matchedCharIdx];
+
+        // If current character is now complete, find next incomplete one
+        if (matchedChar && matchedChar.matched + 1 >= matchedChar.total) {
+          const nextIncomplete = updated.findIndex(c => c.matched < c.total);
+          if (nextIncomplete !== -1) {
+            setCurrentCharIndex(nextIncomplete);
+          }
+        } else if (matchedCharIdx !== -1) {
+          // Otherwise just show the character that got the match
           setCurrentCharIndex(matchedCharIdx);
         }
-        return prev;
+
+        return updated;
       });
     });
 
@@ -166,7 +183,26 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     };
   }, [patchCreateId]);
 
-  const handleStartExport = async () => {
+  // Fetch recommended compression on mount
+  useEffect(() => {
+    fetch(`${API_URL}/api/mex/recommended-compression`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setRecommendedCompression(data.ratio);
+          setCostumeCount(data.addedCostumes);
+        }
+      })
+      .catch(err => console.error('Failed to fetch recommended compression:', err));
+  }, []);
+
+  const handleStartExport = async (options = {}) => {
+    const {
+      useTexturePack = false,
+      compressionOverride = null,
+      colorSmashOverride = null
+    } = options;
+
     playSound('start');
     setExporting(true);
     setProgress(0);
@@ -176,6 +212,10 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     setListeningMode(false);
     setMatchedTextures([]);
 
+    // Determine compression: override > manual slider value
+    const finalCompression = compressionOverride !== null ? compressionOverride : cspCompression;
+    const finalColorSmash = colorSmashOverride !== null ? colorSmashOverride : useColorSmash;
+
     try {
       const response = await fetch(`${API_URL}/api/mex/export/start`, {
         method: 'POST',
@@ -184,10 +224,10 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         },
         body: JSON.stringify({
           filename,
-          cspCompression,
-          useColorSmash,
-          texturePackMode,
-          slippiDolphinPath: texturePackMode ? slippiDolphinPath : null
+          cspCompression: finalCompression,
+          useColorSmash: finalColorSmash,
+          texturePackMode: useTexturePack,
+          slippiDolphinPath: useTexturePack ? slippiDolphinPath : null
         })
       });
 
@@ -205,6 +245,30 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       setError(`Failed to start export: ${err.message}`);
       setExporting(false);
     }
+  };
+
+  const handleQuickExport = () => {
+    handleStartExport({
+      useTexturePack: false,
+      compressionOverride: recommendedCompression,
+      colorSmashOverride: false
+    });
+  };
+
+  const handleTexturePackExport = () => {
+    handleStartExport({
+      useTexturePack: true,
+      compressionOverride: 1.0,
+      colorSmashOverride: false
+    });
+  };
+
+  const handleAdvancedExport = () => {
+    handleStartExport({
+      useTexturePack: false,
+      compressionOverride: cspCompression,
+      colorSmashOverride: useColorSmash
+    });
   };
 
   const handleStopListening = async () => {
@@ -305,94 +369,137 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         <div className="modal-body">
           {!exporting && !complete && !error && (
             <>
-              <div className="form-group">
-                <label htmlFor="compression">
-                  CSP Compression
-                </label>
-                <div className="compression-input-group">
-                  <input
-                    type="number"
-                    id="compression-input"
-                    min="0.1"
-                    max="1.0"
-                    step="0.01"
-                    value={cspCompression}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (!isNaN(val) && val >= 0.1 && val <= 1.0) {
-                        setCspCompression(val);
-                      }
-                    }}
-                    className="compression-number-input"
-                  />
-                  <span className="compression-multiplier">x</span>
+              {/* Export Mode Cards */}
+              <div className="export-mode-cards">
+                {/* Quick Export Card */}
+                <div className="export-mode-card">
+                  <div className="card-header">
+                    <h3>Quick Export</h3>
+                  </div>
+                  <div className="card-body">
+                    <p className="card-description">
+                      Auto-optimized for {costumeCount} added costume{costumeCount !== 1 ? 's' : ''}
+                    </p>
+                    <div className="compression-badge">
+                      Compression: {recommendedCompression}x
+                    </div>
+                    <p className="card-note">
+                      Required for console/Wii
+                    </p>
+                  </div>
+                  <button
+                    className="btn-card-export"
+                    onClick={handleQuickExport}
+                  >
+                    Export
+                  </button>
                 </div>
-                <input
-                  type="range"
-                  id="compression"
-                  min="0.1"
-                  max="1.0"
-                  step="0.01"
-                  value={cspCompression}
-                  onChange={(e) => setCspCompression(parseFloat(e.target.value))}
-                  className="compression-slider"
-                />
-                <div className="compression-hints">
-                  <span className="hint-label">0.1 (Tiny)</span>
-                  <span className="hint-label">1.0 (Full)</span>
-                </div>
-                <p className="compression-info">
-                  Melee can crash if there are too many images. Try reducing the compression ratio to free up more memory.
-                </p>
-              </div>
 
-              <div className="form-group color-smash-group">
-                <label className="color-smash-label">
-                  <input
-                    type="checkbox"
-                    checked={useColorSmash}
-                    onChange={(e) => setUseColorSmash(e.target.checked)}
-                    className="color-smash-checkbox"
-                  />
-                  <span>Enable Color Smash</span>
-                </label>
-                <p className="color-smash-info">
-                  Can save a lot of memory, but produces artifacts/compression.
-                </p>
-              </div>
-
-              <div className="form-group texture-pack-group">
-                <label className="texture-pack-label">
-                  <input
-                    type="checkbox"
-                    checked={texturePackMode}
-                    onChange={(e) => setTexturePackMode(e.target.checked)}
+                {/* Texture Pack Card */}
+                <div className={`export-mode-card texture-pack-card ${!slippiDolphinPath ? 'disabled' : ''}`}>
+                  <div className="card-header">
+                    <h3>Texture Pack</h3>
+                    <span className="recommended-badge">Recommended</span>
+                  </div>
+                  <div className="card-body">
+                    <p className="card-description">
+                      Best quality, no compression
+                    </p>
+                    <ol className="workflow-steps">
+                      <li>Export ISO</li>
+                      <li>Scroll through CSS in Dolphin</li>
+                      <li>Done - textures auto-apply</li>
+                    </ol>
+                    {!slippiDolphinPath && (
+                      <p className="card-warning">
+                        Set Slippi path in Settings first
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    className="btn-card-export btn-texture-pack"
+                    onClick={handleTexturePackExport}
                     disabled={!slippiDolphinPath}
-                    className="texture-pack-checkbox"
-                  />
-                  <span>Texture Pack Mode</span>
-                </label>
-                {!slippiDolphinPath ? (
-                  <p className="texture-pack-info warning">
-                    Set your Slippi Dolphin path in Settings first.
-                  </p>
-                ) : (
-                  <p className="texture-pack-info">
-                    Creates low-res placeholders in ISO, then generates a texture pack via Dolphin dumping.
-                  </p>
+                  >
+                    Export
+                  </button>
+                </div>
+              </div>
+
+              {/* Advanced Options (Collapsible) */}
+              <div className="advanced-section">
+                <button
+                  className="advanced-toggle"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                >
+                  <span className="toggle-arrow">{showAdvanced ? '▼' : '▶'}</span>
+                  Advanced Options
+                </button>
+
+                {showAdvanced && (
+                  <div className="advanced-content">
+                    <div className="form-group">
+                      <label htmlFor="compression">
+                        Manual CSP Compression
+                      </label>
+                      <div className="compression-input-group">
+                        <input
+                          type="number"
+                          id="compression-input"
+                          min="0.1"
+                          max="1.0"
+                          step="0.01"
+                          value={cspCompression}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val) && val >= 0.1 && val <= 1.0) {
+                              setCspCompression(val);
+                            }
+                          }}
+                          className="compression-number-input"
+                        />
+                        <span className="compression-multiplier">x</span>
+                      </div>
+                      <input
+                        type="range"
+                        id="compression"
+                        min="0.1"
+                        max="1.0"
+                        step="0.01"
+                        value={cspCompression}
+                        onChange={(e) => setCspCompression(parseFloat(e.target.value))}
+                        className="compression-slider"
+                      />
+                      <div className="compression-hints">
+                        <span className="hint-label">0.1 (Tiny)</span>
+                        <span className="hint-label">1.0 (Full)</span>
+                      </div>
+                    </div>
+
+                    <div className="form-group color-smash-group">
+                      <label className="color-smash-label">
+                        <input
+                          type="checkbox"
+                          checked={useColorSmash}
+                          onChange={(e) => setUseColorSmash(e.target.checked)}
+                          className="color-smash-checkbox"
+                        />
+                        <span>Enable Color Smash</span>
+                      </label>
+                      <p className="color-smash-info">
+                        Saves memory but adds artifacts
+                      </p>
+                    </div>
+
+                    <button
+                      className="btn-export btn-advanced-export"
+                      onClick={handleAdvancedExport}
+                    >
+                      Export with Custom Settings
+                    </button>
+                  </div>
                 )}
               </div>
-
-              <div className="warning-box">
-                <p><strong>Note:</strong> This can take a few minutes.</p>
-              </div>
-
-              <button
-                className="btn-export"
-                onClick={handleStartExport}
-              >
-                Start Export
-              </button>
             </>
           )}
 
@@ -588,7 +695,11 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
               {characters.length > 0 && currentCharIndex < characters.length && (
                 <div className="current-character-section">
                   <div className="current-char-header">
-                    <span className="current-label">Currently matching:</span>
+                    <span className="current-label">
+                      {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total
+                        ? 'Complete!'
+                        : 'Scan next:'}
+                    </span>
                     <span className="current-char-name">{characters[currentCharIndex]?.name}</span>
                   </div>
                   <div className="costume-dots">
@@ -602,7 +713,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                   </div>
                   <p className="current-char-progress">
                     {characters[currentCharIndex]?.matched} / {characters[currentCharIndex]?.total} costumes
-                    {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total && ' ✓ Complete!'}
+                    {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total && ' ✓'}
                   </p>
                 </div>
               )}
