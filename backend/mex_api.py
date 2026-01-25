@@ -2646,6 +2646,110 @@ def get_storage_stats():
         }), 500
 
 
+@app.route('/api/mex/texture-pack/stats', methods=['GET'])
+def get_texture_pack_stats():
+    """Get texture pack folder statistics"""
+    try:
+        slippi_path = request.args.get('slippiPath', '')
+
+        if not slippi_path:
+            return jsonify({
+                'success': True,
+                'stats': {
+                    'size': 0,
+                    'fileCount': 0,
+                    'path': '',
+                    'exists': False
+                }
+            })
+
+        # Texture pack folder is at <Slippi>/User/Load/Textures/GALE01
+        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01'
+
+        if not texture_path.exists():
+            return jsonify({
+                'success': True,
+                'stats': {
+                    'size': 0,
+                    'fileCount': 0,
+                    'path': str(texture_path),
+                    'exists': False
+                }
+            })
+
+        # Calculate size and file count
+        total_size = 0
+        file_count = 0
+        for item in texture_path.rglob('*'):
+            if item.is_file():
+                total_size += item.stat().st_size
+                file_count += 1
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'size': total_size,
+                'fileCount': file_count,
+                'path': str(texture_path),
+                'exists': True
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting texture pack stats: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/texture-pack/clear', methods=['POST'])
+def clear_texture_pack():
+    """Clear texture pack folder contents"""
+    try:
+        data = request.json or {}
+        slippi_path = data.get('slippiPath', '')
+
+        if not slippi_path:
+            return jsonify({
+                'success': False,
+                'error': 'slippiPath is required'
+            }), 400
+
+        # Texture pack folder is at <Slippi>/User/Load/Textures/GALE01
+        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01'
+
+        if not texture_path.exists():
+            return jsonify({
+                'success': True,
+                'deletedCount': 0,
+                'message': 'Texture pack folder does not exist'
+            })
+
+        # Delete all contents
+        deleted_count = 0
+        for item in texture_path.iterdir():
+            if item.is_file():
+                item.unlink()
+                deleted_count += 1
+            elif item.is_dir():
+                shutil.rmtree(item)
+                deleted_count += 1
+
+        logger.info(f"Cleared texture pack folder: {deleted_count} items deleted from {texture_path}")
+
+        return jsonify({
+            'success': True,
+            'deletedCount': deleted_count,
+            'message': f'Deleted {deleted_count} items from texture pack folder'
+        })
+    except Exception as e:
+        logger.error(f"Error clearing texture pack: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/mex/storage/clear', methods=['POST'])
 def clear_storage_endpoint():
     """Clear storage based on provided options"""

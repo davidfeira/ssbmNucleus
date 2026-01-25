@@ -1,6 +1,7 @@
 import './Settings.css'
 import BackupRestore from './settings/BackupRestore'
 import StorageStatsSection from './settings/StorageStatsSection'
+import AdditionalDataSection from './settings/AdditionalDataSection'
 import IsoPathSection from './settings/IsoPathSection'
 import SlippiPathSection from './settings/SlippiPathSection'
 import HdCspSection from './settings/HdCspSection'
@@ -37,6 +38,9 @@ export default function Settings({ metadata }) {
 
         {/* Storage Statistics */}
         <StorageStatsSection metadata={metadata} />
+
+        {/* Additional Data (Texture Pack & ISO Output) */}
+        <AdditionalDataSection />
 
         {/* Clear Storage Section */}
         <ClearStorageSection metadata={metadata} API_URL={API_URL} />

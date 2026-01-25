@@ -17,20 +17,17 @@
 
 **Settings**
 - [x] Add volume controls
-- [ ] Show more data (temp data size, ISO sizes)
 
 **Build/Export**
-- [ ] Texture pack mode not downscaling placeholder images (memory issue)
-- figure out rough formula to  automatically set proper csp compression without texture pack mode
-- [ ] .nucleus or just .zip with patch and texture pack and installation from patch page
-- [x] Try to find Slippi paths and Melee ISO from dolphin.ini in default location before asking during setup
-- [x] Automate dump/load settings via GFX.ini (auto-enable on listen start, auto-disable on stop, clear DUMP folder on export)
-
+- [x] Texture pack mode placeholder sizing (skip compression to preserve 16x16 placeholders)
+- [x] Auto-detect Slippi paths and Melee ISO from Dolphin.ini during first-run setup
+- [x] Automate dump/load settings via GFX.ini (auto-enable on listen, auto-disable on stop, clear DUMP on export)
+- [ ] Auto-calculate CSP compression ratio based on costume count
+- [ ] .nucleus bundle format (patch + texture pack with one-click install)
 
 **Polish**
 - [ ] Standardize modal sizes
 - [ ] Pose manager: standard CSP sizes, human-readable animation names, use unused space
-- [ ] Add UI indicator for Dolphin texture settings status (remind to restart Dolphin)
 
 **Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
@@ -111,9 +108,10 @@ Break down massive files to improve maintainability:
 **Bug Fixes**
 - [ ] Fix Ice Climbers
 - [ ] Fix Kirby
-fix console errors
-fix xdelta constant connection to server for progress
-fix other isues with packaged version
+- [ ] Fix console errors
+- [ ] Fix xdelta constant server connection for progress updates
+- [ ] Fix issues with packaged version
+
 ---
 
 ## PHASE 2: App-Website Integration
@@ -210,10 +208,12 @@ These are cool ideas but not priority:
 - Open skin in HSDRaw (check for new version)
 - Open build in MEX Tool (use built-in version)
 - Custom characters
-- Code stuff
+- Code mods
 - Music and sounds
 - Replay viewer and clipper
-- [ ] Automate texture pack offset names (analyze ISO hex or find correlation with MEX/HSD)
+- Automate texture pack offset names (analyze ISO hex or find MEX/HSD correlation)
+- Show storage statistics (temp data size, ISO sizes)
+
 ---
 
 ## Current Status

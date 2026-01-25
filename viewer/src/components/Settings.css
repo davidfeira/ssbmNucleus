@@ -53,6 +53,7 @@
 .settings-section:nth-child(7) { animation-delay: 0.18s; }
 .settings-section:nth-child(8) { animation-delay: 0.21s; }
 .settings-section:nth-child(9) { animation-delay: 0.24s; }
+.settings-section:nth-child(10) { animation-delay: 0.27s; }
 
 .settings-section h3 {
   font-family: var(--font-display);
@@ -954,4 +955,38 @@
   color: var(--color-text-secondary);
   min-width: 45px;
   text-align: right;
+}
+
+/* ─────────────────────────────────────────
+   TEXTURE PACK SECTION
+   ───────────────────────────────────────── */
+
+.texture-pack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.texture-pack-size {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-cyan);
+}
+
+.data-stat-detail {
+  font-weight: var(--font-normal);
+  color: var(--color-text-tertiary);
+  margin-left: var(--space-2);
+}
+
+.data-stat-empty {
+  font-style: italic;
+  color: var(--color-text-quaternary);
+  font-weight: var(--font-normal);
 }
