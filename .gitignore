@@ -14,6 +14,7 @@ logs/
 /storage/
 intake/
 output/
+output/temp_bundle_*
 
 # Build outputs
 dist/
@@ -21,6 +22,7 @@ dist-electron/
 dist-backend/
 /build/
 viewer/dist/
+*.exe
 
 # Dependencies
 node_modules/
@@ -49,8 +51,9 @@ utility/assets/stages/
 # Keep animation files (.anim), scene files (.yml), and images - only exclude vanilla Pl*.dat
 utility/website/backend/tools/processor/csp_data/**/Pl*.dat
 
-# Extras reference files
-zzzMoreExtras/
+# Reference files (large vanilla dumps)
+reference/vanilla-dump/
+reference/costume-examples/
 
 # Test sound dumps
 **/testsounds/

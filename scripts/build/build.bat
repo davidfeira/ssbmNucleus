@@ -121,12 +121,20 @@ if %errorlevel% neq 0 (
 )
 
 echo.
+echo Copying installer to project root...
+copy /Y "%PROJECT_ROOT%\dist-electron\*.exe" "%PROJECT_ROOT%\"
+
+echo.
+echo Cleaning up build artifacts...
+rmdir /s /q "%PROJECT_ROOT%\dist"
+rmdir /s /q "%PROJECT_ROOT%\dist-backend"
+rmdir /s /q "%PROJECT_ROOT%\dist-electron"
+
+echo.
 echo ========================================
 echo Build Complete!
 echo ========================================
 echo.
-echo Installer location: dist-electron\
-echo.
-dir /b dist-electron\*.exe 2>nul
+dir /b "%PROJECT_ROOT%\*.exe" 2>nul
 echo.
 pause

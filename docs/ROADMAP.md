@@ -1,101 +1,19 @@
 # Nucleus Roadmap
 
-## Overview
-
 **Goal**: Finish app features → App-website integration → Website refactor → Marketing → Monetization (Nucleus+ $6/month)
 
 ---
 
 ## PHASE 1: App Feature Completion
 
-### TODO
-
-**Downloads**
-- [x] Proper download modal (remove Windows dialogue)
-- [x] Play sound when download complete
-- [x] Prevent data corruption when downloading multiple mods simultaneously
-
-**Settings**
-- [x] Add volume controls
-
-**Build/Export**
-- [x] Texture pack mode placeholder sizing (skip compression to preserve 16x16 placeholders)
-- [x] Auto-detect Slippi paths and Melee ISO from Dolphin.ini during first-run setup
-- [x] Automate dump/load settings via GFX.ini (auto-enable on listen, auto-disable on stop, clear DUMP on export)
-- [x] Auto-calculate CSP compression ratio based on costume count
-- [x] .nucleus bundle format (patch + texture pack with one-click install)
-
-**Polish**
-- [x] Standardize modal sizes
-- [x] Pose manager: standard CSP sizes, human-readable animation names, improved layout
-
-**Extras**
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
-
-### Completed
-
-<details>
-<summary>Settings Page</summary>
-
-- [x] Vanilla ISO path not saved during first-run setup
-- [x] Discord link in settings
-- [x] Settings page redesign (flat layout, wider)
-- [x] Storage statistics (costumes, stages, extras, patches, vault size)
-</details>
-
-<details>
-<summary>Install Page</summary>
-
-- [x] Hide extras button for characters without extras
-- [x] Show back button without needing to click an extra first
-</details>
-
-<details>
-<summary>CSP Studio</summary>
-
-- [x] Custom poses don't load in HD regeneration mode
-- [x] Wrong objects not being hidden
-- [x] Pose manager, HD generation, alt CSPs
-- [x] HD resolution options (2x, 3x, 4x)
-</details>
-
-<details>
-<summary>Build/Export</summary>
-
-- [x] Not deleting output ISO after download (startup cleanup + post-download cleanup)
-</details>
-
-<details>
-<summary>Polish</summary>
-
-- [x] Skin Creator: back button in top-left (consistent with other pages)
-- [x] Skin Creator: loading state when editing from vault
-- [x] Stage detail view: removed redundant title/variant count
-- [x] Sounds (CSP tick noise, start button noise)
-</details>
-
-<details>
-<summary>Install Page Features</summary>
-
-- [x] Team color costume token selector on character install page
-</details>
-
-<details>
-<summary>Extras System</summary>
-
-- [x] Extras system foundation
-- [x] All extra editor modals with delete functionality
-- [x] Laser Editor
-- [x] Fox/Falco effects (Laser, Shine, Side-B, Up-B)
-- [x] Marth/Roy/Link/Young Link sword swing trails
-- [x] Fox/Falco gun model (custom .dae import via HSDRawViewer CLI)
-</details>
+- [ ] Standardize buttons/toggles/modal styles and more sound polish
 
 ---
 
 ## PHASE 1.5: Code Cleanup
 
-Break down massive files to improve maintainability:
+**Large File Refactoring**
 
 | File | Lines | Notes |
 |------|-------|-------|
@@ -107,18 +25,15 @@ Break down massive files to improve maintainability:
 
 **Bug Fixes**
 - [ ] Fix Ice Climbers
-    - write extensive ics docs about the special things with them
-    - find all places where this could cause problems
-    - fix
+    - Write extensive ICs docs about the special things with them
+    - Find all places where this could cause problems
+    - Fix
 - [ ] Fix Kirby
-    - write kirby docs
-    - find where it could cause problems (prolly just during installation, we just need to figure out  kirby hats)
+    - Write Kirby docs
+    - Find where it could cause problems (probably just during installation - figure out Kirby hats)
 - [ ] Fix console errors
 - [ ] Fix xdelta constant server connection for progress updates
-- [ ] Fix issues with packaged version
-      - logo doesnt show up in setup, or in the top left
-      - mexcli popup during setup
-      - sounds dont work
+- [ ] Fix HD CSP shadows and Ness/Fox bugs
 
 ---
 
@@ -223,10 +138,3 @@ These are cool ideas but not priority:
 - Automate texture pack offset names (analyze ISO hex or find MEX/HSD correlation)
 - Show storage statistics (temp data size, ISO sizes)
 
----
-
-## Current Status
-
-**Last updated**: January 2026
-
-**Currently working on**: Phase 1 - Finishing remaining TODO items
