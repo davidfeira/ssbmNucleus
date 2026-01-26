@@ -6,6 +6,8 @@
  * - Import status message display
  * - Disabled state during import
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function ImportToolbar({
   mode,
   importing,
@@ -16,7 +18,12 @@ export default function ImportToolbar({
   return (
     <div className="import-file-container">
       {(mode === 'characters' || mode === 'stages') ? (
-        <label className="intake-import-btn" style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}>
+        <label
+          className="intake-import-btn"
+          style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
+          onMouseEnter={playHoverSound}
+          onClick={() => { if (!importing) playSound('start'); }}
+        >
           {importing ? 'Importing...' : 'Import File'}
           <input
             type="file"
@@ -29,7 +36,8 @@ export default function ImportToolbar({
       ) : (
         <button
           className="intake-import-btn"
-          onClick={onShowXdeltaImportModal}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('start'); onShowXdeltaImportModal(); }}
         >
           Import Patch
         </button>

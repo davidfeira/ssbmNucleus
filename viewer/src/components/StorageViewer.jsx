@@ -1116,11 +1116,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           xdeltaPatches={xdeltaPatches}
           bundles={bundles}
           onEditPatch={handleEditXdelta}
-          onDownloadPatch={handleDownloadPatch}
           onBuildIso={handleBuildXdeltaIso}
           onShowCreateModal={() => setShowXdeltaCreateModal(true)}
           onEditBundle={handleEditBundle}
-          onDownloadBundle={handleDownloadBundle}
           onInstallBundle={handleInstallBundle}
         />
       )}
@@ -1158,6 +1156,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         }}
         onDelete={handleDeleteXdelta}
         onUpdateImage={handleUpdateXdeltaImage}
+        onDownload={handleDownloadPatch}
         BACKEND_URL={BACKEND_URL}
       />
 
@@ -1173,6 +1172,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         }}
         onDelete={handleDeleteBundle}
         onUpdateImage={handleUpdateBundleImage}
+        onDownload={handleDownloadBundle}
         BACKEND_URL={BACKEND_URL}
       />
 

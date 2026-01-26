@@ -8,6 +8,8 @@
  * - Success confirmation with download option
  */
 
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function XdeltaCreateModal({
   show,
   xdeltaCreateState,
@@ -29,7 +31,7 @@ export default function XdeltaCreateModal({
         <div className="modal-header">
           <h2>Create New Patch</h2>
           {xdeltaCreateState !== 'creating' && (
-            <button className="close-btn" onClick={onClose}>×</button>
+            <button className="close-btn" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>×</button>
           )}
         </div>
 
@@ -74,7 +76,8 @@ export default function XdeltaCreateModal({
                   />
                   <button
                     className="btn-secondary"
-                    onClick={onSelectModdedIso}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); onSelectModdedIso(); }}
                     style={{ whiteSpace: 'nowrap' }}
                   >
                     Browse...
@@ -85,12 +88,13 @@ export default function XdeltaCreateModal({
               <div className="edit-buttons" style={{ marginTop: '1.5rem' }}>
                 <button
                   className="btn-save"
-                  onClick={onStartCreate}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('start'); onStartCreate(); }}
                   disabled={!xdeltaCreateData.moddedIsoPath || !xdeltaCreateData.name.trim()}
                 >
                   Create Patch
                 </button>
-                <button className="btn-cancel" onClick={onClose}>
+                <button className="btn-cancel" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>
                   Cancel
                 </button>
               </div>
@@ -127,11 +131,12 @@ export default function XdeltaCreateModal({
               <div className="complete-actions">
                 <button
                   className="btn-download"
-                  onClick={() => onDownloadPatch(xdeltaCreateResult.patch_id)}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); onDownloadPatch(xdeltaCreateResult.patch_id); }}
                 >
                   Download Patch
                 </button>
-                <button className="btn-secondary" onClick={onClose}>
+                <button className="btn-secondary" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>
                   Close
                 </button>
               </div>
@@ -143,7 +148,7 @@ export default function XdeltaCreateModal({
               <div className="error-icon">✕</div>
               <h3>Creation Failed</h3>
               <p className="error-message">{xdeltaCreateError}</p>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>
                 Close
               </button>
             </div>

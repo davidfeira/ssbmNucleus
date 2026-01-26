@@ -65,7 +65,6 @@ export default function CharacterMode({
       // Clear old data immediately for clean transition
       setDataReady(false)
       setMexCostumes([])
-      setSelectedCostumes(new Set())
       setSelectedTeamColor(null)
       fetchMexCostumes(selectedFighter.name, true)
       fetchTeamColors(selectedFighter.name)
@@ -698,7 +697,7 @@ export default function CharacterMode({
 
       if (data.success) {
         console.log(`✓ Successfully reordered costume from ${fromIndex} to ${toIndex}`)
-        playSound('newSkin')
+        playSound('boop')
         await fetchMexCostumes(selectedFighter.name)
       } else {
         alert(`Reorder failed: ${data.error}`)

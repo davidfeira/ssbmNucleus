@@ -1489,6 +1489,38 @@
   overflow: hidden;
   flex-shrink: 0;
   background: var(--color-bg-deep);
+  position: relative;
+}
+
+.btn-edit-overlay {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.patch-row:hover .btn-edit-overlay {
+  opacity: 1;
+}
+
+.btn-edit-overlay:hover {
+  background: var(--color-cyan);
+  color: var(--color-bg-deep);
 }
 
 .patch-row-image img {
@@ -1552,10 +1584,16 @@
   align-items: center;
   justify-content: center;
   font-size: var(--text-md);
+  opacity: 0;
   transition:
+    opacity var(--transition-fast),
     background var(--transition-fast),
     border-color var(--transition-fast),
     color var(--transition-fast);
+}
+
+.patch-row:hover .btn-edit-small {
+  opacity: 1;
 }
 
 .btn-edit-small:hover {
@@ -1565,7 +1603,7 @@
 }
 
 .btn-build-iso {
-  background: var(--gradient-gold);
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep);
   border: none;
   padding: var(--space-2) var(--space-4);
@@ -1583,7 +1621,7 @@
 
 .btn-build-iso:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--glow-gold-sm);
+  box-shadow: var(--shadow-md), var(--glow-cyan-sm);
   filter: brightness(1.05);
 }
 

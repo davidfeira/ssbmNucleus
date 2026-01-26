@@ -251,13 +251,8 @@ export default function CharacterDetailView({
           </div>
         </div>
 
-        {skinCount === 0 && displayList.filter(d => d.type === 'folder').length === 0 ? (
-          <div className="no-skins-message">
-            <p>No custom skins yet. Add some using the intake system!</p>
-          </div>
-        ) : (
-          <div className="skins-grid" ref={animateRef}>
-            {displayList.map((item, idx) => {
+        <div className="skins-grid" ref={animateRef}>
+          {displayList.map((item, idx) => {
               if (item.type === 'folder') {
                 const folderId = item.folder.id
                 return (
@@ -329,8 +324,7 @@ export default function CharacterDetailView({
                 <span className="create-mod-label">Create New Mod</span>
               </div>
             </div>
-          </div>
-        )}
+        </div>
       </div>
       <EditModal
         show={showEditModal}

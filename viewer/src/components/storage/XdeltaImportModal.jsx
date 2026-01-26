@@ -2,6 +2,7 @@
  * XdeltaImportModal - Modal for importing XDelta patches and .ssbm bundles
  */
 import { useState, useEffect } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function XdeltaImportModal({
   show,
@@ -35,6 +36,7 @@ export default function XdeltaImportModal({
 
   const handleOverlayClick = () => {
     if (!importing && !bundleImporting) {
+      playSound('back')
       onCancel()
     }
   }
@@ -75,6 +77,7 @@ export default function XdeltaImportModal({
   }
 
   const handleCancel = () => {
+    playSound('back')
     if (onBundleReset) {
       onBundleReset()
     }
@@ -82,6 +85,7 @@ export default function XdeltaImportModal({
   }
 
   const handleImport = () => {
+    playSound('start')
     if (fileType === 'ssbm') {
       onBundleImport()
     } else {
@@ -154,7 +158,7 @@ export default function XdeltaImportModal({
           </div>
 
           <div className="edit-buttons">
-            <button className="btn-save" onClick={handleCancel}>
+            <button className="btn-save" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); if (onBundleReset) onBundleReset(); onCancel(); }}>
               Done
             </button>
           </div>
@@ -176,7 +180,7 @@ export default function XdeltaImportModal({
           </div>
 
           <div className="edit-buttons">
-            <button className="btn-cancel" onClick={handleCancel}>
+            <button className="btn-cancel" onMouseEnter={playHoverSound} onClick={handleCancel}>
               Close
             </button>
           </div>
@@ -228,6 +232,7 @@ export default function XdeltaImportModal({
           <div className="edit-buttons">
             <button
               className="btn-save"
+              onMouseEnter={playHoverSound}
               onClick={handleImport}
               disabled={bundleImporting}
             >
@@ -235,6 +240,7 @@ export default function XdeltaImportModal({
             </button>
             <button
               className="btn-cancel"
+              onMouseEnter={playHoverSound}
               onClick={handleCancel}
             >
               Cancel
@@ -299,6 +305,7 @@ export default function XdeltaImportModal({
         <div className="edit-buttons">
           <button
             className="btn-save"
+            onMouseEnter={playHoverSound}
             onClick={handleImport}
             disabled={importing || !importData.file}
           >
@@ -306,6 +313,7 @@ export default function XdeltaImportModal({
           </button>
           <button
             className="btn-cancel"
+            onMouseEnter={playHoverSound}
             onClick={handleCancel}
           >
             Cancel

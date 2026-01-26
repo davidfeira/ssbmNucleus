@@ -353,9 +353,9 @@
 }
 
 .mode-toggle-btn.active {
-  background: var(--gradient-cyan);
+  background: var(--gradient-gold);
   color: var(--color-bg-deep);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--glow-gold-sm), 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .fighters-count {
@@ -415,15 +415,15 @@
 }
 
 .fighter-item:hover::before {
-  background: var(--color-cyan-muted);
+  background: var(--color-gold-muted);
 }
 
 .fighter-item.selected {
-  background: var(--gradient-cyan);
+  background: var(--gradient-gold);
 }
 
 .fighter-item.selected::before {
-  background: var(--color-cyan);
+  background: var(--color-gold);
 }
 
 .fighter-stock-icon {
@@ -463,7 +463,7 @@
 }
 
 .available-count {
-  color: var(--color-cyan);
+  color: var(--color-gold);
   font-weight: var(--font-medium);
 }
 
@@ -1254,7 +1254,7 @@
 .project-btn {
   display: inline-block;
   padding: var(--space-3) var(--space-8);
-  background: var(--gradient-gold);
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep);
   border: none;
   border-radius: var(--radius-md);
@@ -1266,12 +1266,12 @@
     transform var(--transition-fast),
     box-shadow var(--transition-fast),
     filter var(--transition-fast);
-  box-shadow: var(--shadow-md), var(--glow-gold-sm);
+  box-shadow: var(--shadow-md), var(--glow-cyan-sm);
 }
 
 .project-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-lg), var(--glow-gold);
+  box-shadow: var(--shadow-lg), var(--glow-cyan);
   filter: brightness(1.1);
 }
 

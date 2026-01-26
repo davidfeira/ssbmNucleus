@@ -1,6 +1,8 @@
 /**
  * XdeltaEditModal - Modal for editing XDelta patch details
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function XdeltaEditModal({
   show,
   patch,
@@ -9,11 +11,13 @@ export default function XdeltaEditModal({
   onCancel,
   onDelete,
   onUpdateImage,
+  onDownload,
   BACKEND_URL
 }) {
   if (!show || !patch) return null
 
   const handleOverlayClick = () => {
+    playSound('back')
     onCancel()
   }
 
@@ -46,7 +50,8 @@ export default function XdeltaEditModal({
           />
           <button
             className="btn-edit-screenshot"
-            onClick={() => document.getElementById('xdelta-image-input').click()}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); document.getElementById('xdelta-image-input').click(); }}
             title="Replace image"
           >
             ✎
@@ -72,18 +77,28 @@ export default function XdeltaEditModal({
         </div>
 
         <div className="edit-buttons">
-          <button className="btn-save" onClick={onSave}>
+          <button className="btn-save" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); onSave(); }}>
             Save
           </button>
           <button
+            className="btn-export"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onDownload(patch.id); }}
+          >
+            Export
+          </button>
+          <button
             className="btn-cancel"
-            onClick={onCancel}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('back'); onCancel(); }}
           >
             Cancel
           </button>
           <button
             className="btn-delete-modal"
+            onMouseEnter={playHoverSound}
             onClick={() => {
+              playSound('boop')
               onDelete(patch.id)
               onCancel()
             }}

@@ -300,7 +300,7 @@ export default function ProjectSelector({
             {/* Open existing project */}
             <div className="project-option">
               <h3>Open Existing Project</h3>
-              <p>Select a .mexproj file to continue working on an existing MEX mod</p>
+              <p>Select a .mexproj file to continue working on an existing project</p>
               <button
                 className="project-btn"
                 onMouseEnter={playHoverSound}
@@ -314,7 +314,7 @@ export default function ProjectSelector({
             {/* Create new project */}
             <div className="project-option">
               <h3>Create New Project</h3>
-              <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
+              <p>Provide a vanilla Melee ISO to create a new project</p>
               <button
                 className="project-btn"
                 onMouseEnter={playHoverSound}
@@ -389,7 +389,7 @@ export default function ProjectSelector({
           {/* Open existing project */}
           <div className="project-option-modal">
             <h3>Open Existing Project</h3>
-            <p>Select a .mexproj file to switch to a different MEX mod</p>
+            <p>Select a .mexproj file to switch to a different project</p>
             <button
               className="project-btn"
               onMouseEnter={playHoverSound}
@@ -403,7 +403,7 @@ export default function ProjectSelector({
           {/* Create new project */}
           <div className="project-option-modal">
             <h3>Create New Project</h3>
-            <p>Provide a vanilla Melee ISO to create a new MEX mod project</p>
+            <p>Provide a vanilla Melee ISO to create a new project</p>
             <button
               className="project-btn"
               onMouseEnter={playHoverSound}

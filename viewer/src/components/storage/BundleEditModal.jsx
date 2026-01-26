@@ -1,6 +1,8 @@
 /**
  * BundleEditModal - Modal for editing bundle details
  */
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function BundleEditModal({
   show,
   bundle,
@@ -9,11 +11,13 @@ export default function BundleEditModal({
   onCancel,
   onDelete,
   onUpdateImage,
+  onDownload,
   BACKEND_URL
 }) {
   if (!show || !bundle) return null
 
   const handleOverlayClick = () => {
+    playSound('back')
     onCancel()
   }
 
@@ -46,7 +50,8 @@ export default function BundleEditModal({
           />
           <button
             className="btn-edit-screenshot"
-            onClick={() => document.getElementById('bundle-image-input').click()}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); document.getElementById('bundle-image-input').click(); }}
             title="Replace image"
           >
             ✎
@@ -72,19 +77,29 @@ export default function BundleEditModal({
         </div>
 
         <div className="edit-buttons">
-          <button className="btn-save" onClick={onSave}>
+          <button className="btn-save" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); onSave(); }}>
             Save
           </button>
           <button
+            className="btn-export"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onDownload(bundle.id); }}
+          >
+            Export
+          </button>
+          <button
             className="btn-cancel"
-            onClick={onCancel}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('back'); onCancel(); }}
           >
             Cancel
           </button>
           <button
             className="btn-delete-modal"
+            onMouseEnter={playHoverSound}
             onClick={() => {
               if (confirm('Are you sure you want to delete this bundle?')) {
+                playSound('boop')
                 onDelete(bundle.id)
                 onCancel()
               }

@@ -7,6 +7,8 @@
  * - Error handling
  */
 
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 export default function XdeltaBuildModal({
   show,
   xdeltaBuildState,
@@ -26,7 +28,7 @@ export default function XdeltaBuildModal({
         <div className="modal-header">
           <h2>Build ISO</h2>
           {xdeltaBuildState !== 'building' && (
-            <button className="close-btn" onClick={onClose}>×</button>
+            <button className="close-btn" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>×</button>
           )}
         </div>
 
@@ -61,10 +63,10 @@ export default function XdeltaBuildModal({
               <h3>Build Complete!</h3>
               <p>Your patched ISO is ready to download.</p>
               <div className="complete-actions">
-                <button className="btn-download" onClick={onDownload}>
+                <button className="btn-download" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); onDownload(); }}>
                   Download {xdeltaBuildFilename}
                 </button>
-                <button className="btn-secondary" onClick={onClose}>
+                <button className="btn-secondary" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>
                   Close
                 </button>
               </div>
@@ -76,7 +78,7 @@ export default function XdeltaBuildModal({
               <div className="error-icon">✕</div>
               <h3>Build Failed</h3>
               <p className="error-message">{xdeltaBuildError}</p>
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onMouseEnter={playHoverSound} onClick={() => { playSound('back'); onClose(); }}>
                 Close
               </button>
             </div>

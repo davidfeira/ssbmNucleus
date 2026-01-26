@@ -9,17 +9,17 @@
  * - "Create New Patch" card to trigger creation modal
  */
 
+import { playSound, playHoverSound } from '../../utils/sounds'
+
 const BACKEND_URL = 'http://127.0.0.1:5000'
 
 export default function PatchesGrid({
   xdeltaPatches,
   bundles = [],
   onEditPatch,
-  onDownloadPatch,
   onBuildIso,
   onShowCreateModal,
   onEditBundle,
-  onDownloadBundle,
   onInstallBundle
 }) {
   return (
@@ -47,6 +47,14 @@ export default function PatchesGrid({
                   <div className="patch-row-placeholder" style={{ display: bundle.imageUrl ? 'none' : 'flex', background: 'linear-gradient(135deg, #d4a574 0%, #c9956c 100%)' }}>
                     {bundle.name[0]}
                   </div>
+                  <button
+                    className="btn-edit-overlay"
+                    onMouseEnter={playHoverSound}
+                    onClick={(e) => { e.stopPropagation(); playSound('boop'); onEditBundle(bundle); }}
+                    title="Edit"
+                  >
+                    ✎
+                  </button>
                 </div>
 
                 <div className="patch-row-info">
@@ -62,23 +70,9 @@ export default function PatchesGrid({
 
                 <div className="patch-row-actions">
                   <button
-                    className="btn-edit-small"
-                    onClick={() => onEditBundle(bundle)}
-                    title="Edit"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className="btn-edit-small"
-                    onClick={() => onDownloadBundle(bundle.id)}
-                    title="Download Bundle"
-                    style={{ fontSize: '14px' }}
-                  >
-                    ⬇
-                  </button>
-                  <button
                     className="btn-build-iso"
-                    onClick={() => onInstallBundle(bundle)}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('start'); onInstallBundle(bundle); }}
                   >
                     Install
                   </button>
@@ -110,6 +104,14 @@ export default function PatchesGrid({
               <div className="patch-row-placeholder" style={{ display: patch.imageUrl ? 'none' : 'flex' }}>
                 {patch.name[0]}
               </div>
+              <button
+                className="btn-edit-overlay"
+                onMouseEnter={playHoverSound}
+                onClick={(e) => { e.stopPropagation(); playSound('boop'); onEditPatch(patch); }}
+                title="Edit"
+              >
+                ✎
+              </button>
             </div>
 
             <div className="patch-row-info">
@@ -126,23 +128,9 @@ export default function PatchesGrid({
 
             <div className="patch-row-actions">
               <button
-                className="btn-edit-small"
-                onClick={() => onEditPatch(patch)}
-                title="Edit"
-              >
-                ✎
-              </button>
-              <button
-                className="btn-edit-small"
-                onClick={() => onDownloadPatch(patch.id)}
-                title="Download Patch"
-                style={{ fontSize: '14px' }}
-              >
-                ⬇
-              </button>
-              <button
                 className="btn-build-iso"
-                onClick={() => onBuildIso(patch)}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); onBuildIso(patch); }}
               >
                 Build ISO
               </button>
@@ -153,7 +141,8 @@ export default function PatchesGrid({
         {/* Create New Patch Card */}
         <div
           className="patch-row create-patch-row"
-          onClick={onShowCreateModal}
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); onShowCreateModal(); }}
           style={{ cursor: 'pointer', borderStyle: 'dashed' }}
         >
           <div className="patch-row-image">
@@ -170,8 +159,10 @@ export default function PatchesGrid({
           <div className="patch-row-actions">
             <button
               className="btn-build-iso"
+              onMouseEnter={playHoverSound}
               onClick={(e) => {
                 e.stopPropagation()
+                playSound('boop')
                 onShowCreateModal()
               }}
             >

@@ -173,6 +173,7 @@ export default function FirstRunSetup({ onComplete }) {
   }
 
   const handleComplete = () => {
+    playSound('start')
     onComplete()
   }
 

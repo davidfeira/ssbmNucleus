@@ -9,7 +9,8 @@
 ## PHASE 1: App Feature Completion
 
 ### TODO
-
+- fix (add back) ability to batch select skins from multiple characters at once (dont unselect when  you change selected character)
+- when we export via texture pack mode we should like do it all in ram, so that the dats with the non  placeholder csps remain in the project folder. otherwise when we come back to  open a project  we wont be able to see any of the csps and i dont want to do crazy tracking or anything. 
 **Downloads**
 - [x] Proper download modal (remove Windows dialogue)
 - [x] Play sound when download complete
@@ -116,6 +117,9 @@ Break down massive files to improve maintainability:
 - [ ] Fix console errors
 - [ ] Fix xdelta constant server connection for progress updates
 - [ ] Fix issues with packaged version
+      - logo doesnt show up in setup, or in the top left
+      - mexcli popup during setup
+      - sounds dont work
 
 ---
 

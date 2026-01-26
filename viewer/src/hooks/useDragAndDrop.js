@@ -107,7 +107,7 @@ export function useDragAndDrop({
       const data = await response.json()
 
       if (data.success) {
-        playSound('newSkin') // Play success sound on reorder complete
+        playSound('boop') // Play click sound on reorder complete
 
         // Trigger settle animation on dropped item
         const droppedId = draggedItem.id
@@ -180,7 +180,7 @@ export function useDragAndDrop({
       const data = await response.json()
 
       if (data.success) {
-        playSound('newSkin') // Play success sound on reorder complete
+        playSound('boop') // Play click sound on reorder complete
 
         // Trigger settle animation on dropped item
         const droppedId = draggedItem.id
