@@ -9,8 +9,7 @@
 ## PHASE 1: App Feature Completion
 
 ### TODO
-- fix (add back) ability to batch select skins from multiple characters at once (dont unselect when  you change selected character)
-- when we export via texture pack mode we should like do it all in ram, so that the dats with the non  placeholder csps remain in the project folder. otherwise when we come back to  open a project  we wont be able to see any of the csps and i dont want to do crazy tracking or anything. 
+
 **Downloads**
 - [x] Proper download modal (remove Windows dialogue)
 - [x] Play sound when download complete
@@ -208,6 +207,7 @@ Break down massive files to improve maintainability:
 
 These are cool ideas but not priority:
 
+- Texture pack export: use temp project copy instead of backup/restore (cleaner, avoids issues if export is interrupted)
 - Stable diffusion stocks (AI-generated stock icons)
 - AI rigger (auto-rig custom models)
 - Custom stages
