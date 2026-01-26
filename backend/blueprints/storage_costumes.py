@@ -53,6 +53,32 @@ def get_folder_id_at_position(skins, position):
     return None
 
 
+@storage_costumes_bp.route('/api/mex/storage/metadata', methods=['GET'])
+def get_storage_metadata():
+    """Get storage metadata.json"""
+    try:
+        metadata_file = STORAGE_PATH / 'metadata.json'
+
+        if not metadata_file.exists():
+            return jsonify({
+                'success': True,
+                'metadata': {'characters': {}}
+            })
+
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        return jsonify({
+            'success': True,
+            'metadata': metadata
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @storage_costumes_bp.route('/api/mex/storage/costumes', methods=['GET'])
 def list_storage_costumes():
     """List all costumes in storage with MEX-compatible ZIPs."""
