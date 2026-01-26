@@ -12,16 +12,30 @@ let masterVolume = (() => {
   return saved !== null ? parseFloat(saved) : DEFAULT_VOLUME
 })()
 
-// Preload and cache audio instances
-const sounds = {
-  back: new Audio('/vanilla/sounds/back.wav'),
-  start: new Audio('/vanilla/sounds/start.wav'),
-  tick: new Audio('/vanilla/sounds/tick.wav'),
-  boop: new Audio('/vanilla/sounds/click.wav'),
-  error: new Audio('/vanilla/sounds/error.wav'),
-  camera: new Audio('/vanilla/sounds/camera_click.wav'),
-  newSkin: new Audio('/vanilla/sounds/new_skin.wav'),
-  achievement: new Audio('/vanilla/sounds/big_achievement.wav'),
+// Backend URL for sound files (production loads via file://, needs full URL)
+const BACKEND_URL = 'http://127.0.0.1:5000'
+
+// Sound file names mapping
+const SOUND_FILES = {
+  back: 'back.wav',
+  start: 'start.wav',
+  tick: 'tick.wav',
+  boop: 'click.wav',
+  error: 'error.wav',
+  camera: 'camera_click.wav',
+  newSkin: 'new_skin.wav',
+  achievement: 'big_achievement.wav',
+}
+
+// Audio instances (created lazily or on reload)
+let sounds = {}
+
+// Create audio instances for all sounds
+const createSounds = () => {
+  sounds = {}
+  Object.entries(SOUND_FILES).forEach(([name, file]) => {
+    sounds[name] = new Audio(`${BACKEND_URL}/vanilla/sounds/${file}`)
+  })
 }
 
 // Apply volume to all sounds (achievement is quieter)
@@ -31,7 +45,8 @@ const applyVolume = () => {
   })
 }
 
-// Preload all sounds and set initial volume
+// Initialize sounds
+createSounds()
 Object.values(sounds).forEach(s => s.load())
 applyVolume()
 
@@ -74,5 +89,15 @@ export const getMasterVolume = () => masterVolume
 export const setMasterVolume = (volume) => {
   masterVolume = Math.max(0, Math.min(1, volume))
   localStorage.setItem('settings_master_volume', masterVolume.toString())
+  applyVolume()
+}
+
+/**
+ * Reload all sounds (call after first-run setup extracts sounds)
+ * Creates fresh Audio instances and preloads them
+ */
+export const reloadSounds = () => {
+  createSounds()
+  Object.values(sounds).forEach(s => s.load())
   applyVolume()
 }

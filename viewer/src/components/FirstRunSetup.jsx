@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
-import { playSound } from '../utils/sounds'
+import { playSound, reloadSounds } from '../utils/sounds'
 import './FirstRunSetup.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
@@ -58,6 +58,8 @@ export default function FirstRunSetup({ onComplete }) {
       if (data.isoPath) {
         localStorage.setItem('vanilla_iso_path', data.isoPath)
       }
+      // Reload sounds now that they've been extracted from the ISO
+      reloadSounds()
     })
 
     newSocket.on('setup_error', (data) => {
@@ -445,7 +447,7 @@ export default function FirstRunSetup({ onComplete }) {
     <div className="first-run-overlay">
       <div className="first-run-modal">
         <div className="first-run-header">
-          <img src="/nucleuslogo.png" alt="SSBM Nucleus" className="first-run-logo" />
+          <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="first-run-logo" />
           <h1>First-Time Setup</h1>
         </div>
 

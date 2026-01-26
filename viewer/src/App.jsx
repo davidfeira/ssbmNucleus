@@ -207,7 +207,7 @@ function App() {
       {!skinCreatorOpen && (
         <header className="app-header">
           <div className="header-brand">
-            <img src="/nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
+            <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
             <h1>SSBM Nucleus</h1>
           </div>
           <nav className="app-tabs">

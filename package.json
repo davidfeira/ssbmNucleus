@@ -39,15 +39,26 @@
       {
         "from": "dist-backend/",
         "to": "utility/",
-        "filter": ["mex*/**"]
+        "filter": ["mex/**"]
       },
       {
-        "from": "utility/MexManager/MexCLI/bin/Release/net6.0/codes.gct",
-        "to": "utility/mex/codes.gct"
+        "from": "utility/assets/vanilla/Sheik",
+        "to": "utility/assets/vanilla/Sheik",
+        "filter": ["**/*.png"]
       },
       {
-        "from": "utility/assets",
-        "to": "utility/assets",
+        "from": "utility/assets/vanilla/sounds",
+        "to": "utility/assets/vanilla/sounds",
+        "filter": ["**/*.wav"]
+      },
+      {
+        "from": "utility/assets/buttons",
+        "to": "utility/assets/buttons",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows",
+        "to": "utility/HSDRawViewer",
         "filter": ["**/*"]
       },
       {
@@ -80,13 +91,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
-    "mac": null,
-    "linux": {
-      "target": "AppImage",
-      "icon": "viewer/public/icon.png",
-      "category": "Game",
-      "description": "MEX Costume and Stage Manager for Super Smash Bros. Melee",
-      "maintainer": "Melee Nexus Team"
-    }
+    "mac": null
   }
 }

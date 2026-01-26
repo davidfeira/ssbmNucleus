@@ -26,6 +26,17 @@ from werkzeug.utils import secure_filename
 import signal
 import atexit
 
+
+def get_subprocess_args():
+    """Get platform-specific args to hide subprocess windows on Windows."""
+    if os.name == 'nt':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return {'startupinfo': startupinfo, 'creationflags': subprocess.CREATE_NO_WINDOW}
+    return {}
+
+
 # Add scripts/tools to path for mex_bridge import
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "tools"))
@@ -88,7 +99,13 @@ sys.path.insert(0, str(SERVICES_DIR))
 from dat_processor import validate_for_slippi
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/api/*": {"origins": "*"},
+    r"/vanilla/*": {"origins": "*"},
+    r"/utility/*": {"origins": "*"},
+    r"/storage/*": {"origins": "*"},
+    r"/assets/*": {"origins": "*"}
+})
 
 # Configure SocketIO - let it auto-detect the best mode
 # Threading mode works in both dev and bundled
@@ -128,8 +145,8 @@ STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
 LOGS_PATH = PROJECT_ROOT / "logs"
 
-# Asset paths (bundled resources)
-VANILLA_ASSETS_DIR = BASE_PATH / "utility" / "assets" / "vanilla"
+# Asset paths (user-extracted assets, not bundled)
+VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 
 # Ensure directories exist
 STORAGE_PATH.mkdir(exist_ok=True)
@@ -497,15 +514,12 @@ def create_project():
 
         logger.info(f"Running command: {' '.join(cmd)}")
 
-        # Hide CMD window on Windows
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             cwd=PROJECT_ROOT,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         logger.info(f"MexCLI stdout:\n{result.stdout}")
@@ -789,7 +803,7 @@ def serve_vanilla(file_path):
     try:
         # Stage screenshots are in utility/assets/stages/, not utility/assets/vanilla/stages/
         if file_path.startswith('stages/'):
-            full_path = BASE_PATH / "utility" / "assets" / file_path
+            full_path = PROJECT_ROOT / "utility" / "assets" / file_path
         else:
             # Character assets are in utility/assets/vanilla/
             full_path = VANILLA_ASSETS_DIR / file_path
@@ -4125,7 +4139,7 @@ def das_install():
 
                 # Copy default screenshot for vanilla variant to storage
                 if stage_code in DAS_DEFAULT_SCREENSHOTS:
-                    default_screenshot = BASE_PATH / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
+                    default_screenshot = PROJECT_ROOT / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
                     if default_screenshot.exists():
                         storage_das_folder = STORAGE_PATH / 'das' / stage_info['folder']
                         storage_das_folder.mkdir(parents=True, exist_ok=True)
@@ -7246,15 +7260,12 @@ def run_xdelta_build(patch_id, patch_name, vanilla_iso_path, xdelta_path, output
             str(output_path)
         ]
 
-        # Hide CMD window on Windows
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-
         # Start the process
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Monitor progress by checking output file size
@@ -7435,15 +7446,12 @@ def run_xdelta_create(create_id, name, description, vanilla_iso_path, modded_iso
 
         logger.info(f"Creating xdelta patch: {' '.join(cmd)}")
 
-        # Hide CMD window on Windows
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-
         # Start the process
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # xdelta3 doesn't output progress, so we just show current output size
@@ -7882,12 +7890,11 @@ def run_bundle_export(export_id, name, description, build_name, vanilla_iso_path
 
         logger.info(f"Creating xdelta patch for bundle: {' '.join(cmd)}")
 
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Monitor progress
@@ -8316,12 +8323,11 @@ def run_bundle_import(import_id, bundle_path, slippi_path, vanilla_iso_path, del
 
         logger.info(f"Building ISO from bundle: {' '.join(cmd)}")
 
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Monitor progress by checking output file size
@@ -8726,12 +8732,11 @@ def start_viewer():
         logger.info(f"Starting viewer: {' '.join(cmd)}")
 
         # Start the viewer process
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         viewer_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Poll until server is ready (check HTTP health endpoint)
@@ -9170,12 +9175,11 @@ def start_viewer_vanilla():
         logger.info(f"Starting vanilla viewer: {' '.join(cmd)}")
 
         # Start the viewer process
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         viewer_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Poll until server is ready
@@ -9338,12 +9342,11 @@ def start_viewer_vault():
         logger.info(f"Starting vault viewer: {' '.join(cmd)}")
 
         # Start the viewer process
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         viewer_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=creation_flags
+            **get_subprocess_args()
         )
 
         # Poll until server is ready

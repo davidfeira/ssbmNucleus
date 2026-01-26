@@ -9,8 +9,10 @@ This module handles:
 """
 
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import logging
 import threading
@@ -116,8 +118,20 @@ class FirstRunSetup:
         self.vanilla_dir = project_root / "utility" / "assets" / "vanilla"
         self.stages_dir = project_root / "utility" / "assets" / "stages"
         self.sounds_dir = project_root / "utility" / "assets" / "vanilla" / "sounds"
-        self.csp_data_dir = project_root / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
-        self.hsdraw_path = project_root / "utility" / "website" / "backend" / "tools" / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows" / "HSDRawViewer.exe"
+
+        # Detect bundled resources directory (for production builds)
+        # Bundled Sheik PNGs need to be copied to PROJECT_ROOT since they're not in the ISO
+        if getattr(sys, 'frozen', False):
+            exe_path = Path(sys.executable)
+            self.bundled_resources_dir = exe_path.parent.parent  # resources/
+            # In production, tools are bundled in resources/
+            self.csp_data_dir = self.bundled_resources_dir / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
+            self.hsdraw_path = self.bundled_resources_dir / "utility" / "HSDRawViewer" / "HSDRawViewer.exe"
+        else:
+            self.bundled_resources_dir = None
+            # In development, tools are in project root
+            self.csp_data_dir = project_root / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
+            self.hsdraw_path = project_root / "utility" / "website" / "backend" / "tools" / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows" / "HSDRawViewer.exe"
 
     def check_setup_needed(self) -> dict:
         """
@@ -186,6 +200,77 @@ class FirstRunSetup:
             'details': 'All vanilla assets present'
         }
 
+    def _copy_bundled_sheik_assets(self) -> dict:
+        """
+        Copy bundled Sheik PNGs from resources to PROJECT_ROOT.
+
+        Sheik has custom CSPs since vanilla Melee doesn't have separate Sheik portraits.
+        These are bundled with the app and need to be copied to the user's writable
+        directory before ISO extraction (which skips Sheik CSPs via PRESERVE_CSP_CHARACTERS).
+        """
+        if not self.bundled_resources_dir:
+            # Not running as bundled exe, skip
+            return {'success': True}
+
+        bundled_sheik_dir = self.bundled_resources_dir / "utility" / "assets" / "vanilla" / "Sheik"
+        if not bundled_sheik_dir.exists():
+            logger.warning(f"Bundled Sheik assets not found at: {bundled_sheik_dir}")
+            return {'success': True}  # Not fatal, continue anyway
+
+        try:
+            dest_sheik_dir = self.vanilla_dir / "Sheik"
+            dest_sheik_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy all PNG files (CSPs, stock icons, css_icon)
+            copied_count = 0
+            for src_file in bundled_sheik_dir.rglob("*.png"):
+                # Preserve subdirectory structure (e.g., PlSkNr/csp.png)
+                rel_path = src_file.relative_to(bundled_sheik_dir)
+                dest_file = dest_sheik_dir / rel_path
+                dest_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dest_file)
+                copied_count += 1
+
+            logger.info(f"Copied {copied_count} bundled Sheik PNGs to {dest_sheik_dir}")
+            return {'success': True, 'copied': copied_count}
+
+        except Exception as e:
+            logger.error(f"Failed to copy bundled Sheik assets: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _copy_bundled_sounds(self) -> dict:
+        """
+        Copy bundled menu sounds from resources to PROJECT_ROOT.
+
+        Menu sounds are bundled with the app for reliability instead of
+        extracting them from the ISO at runtime.
+        """
+        if not self.bundled_resources_dir:
+            # Not running as bundled exe, skip
+            return {'success': True}
+
+        bundled_sounds_dir = self.bundled_resources_dir / "utility" / "assets" / "vanilla" / "sounds"
+        if not bundled_sounds_dir.exists():
+            logger.warning(f"Bundled sounds not found at: {bundled_sounds_dir}")
+            return {'success': True}  # Not fatal, continue anyway
+
+        try:
+            self.sounds_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy all WAV files
+            copied_count = 0
+            for src_file in bundled_sounds_dir.glob("*.wav"):
+                dest_file = self.sounds_dir / src_file.name
+                shutil.copy2(src_file, dest_file)
+                copied_count += 1
+
+            logger.info(f"Copied {copied_count} bundled sounds to {self.sounds_dir}")
+            return {'success': True, 'copied': copied_count}
+
+        except Exception as e:
+            logger.error(f"Failed to copy bundled sounds: {e}")
+            return {'success': False, 'error': str(e)}
+
     def run_setup(
         self,
         iso_path: str,
@@ -204,6 +289,12 @@ class FirstRunSetup:
         temp_dir = None
 
         try:
+            # Phase 0: Copy bundled assets (production only)
+            # Must happen before extraction since PRESERVE_CSP_CHARACTERS skips Sheik
+            self._copy_bundled_sheik_assets()
+            # Copy bundled sounds (more reliable than extracting from ISO)
+            self._copy_bundled_sounds()
+
             # Create temp directory for MEX project
             temp_dir = Path(tempfile.mkdtemp(prefix='nucleus_setup_'))
             logger.info(f"Created temp directory: {temp_dir}")

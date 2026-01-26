@@ -36,7 +36,7 @@ if exist "%~dp0__pycache__" (
 )
 
 echo.
-echo [1/4] Building Python Backend...
+echo [1/5] Building Python Backend...
 echo ----------------------------------------
 python -m PyInstaller "%~dp0mex_backend.spec" --clean --noconfirm --distpath "%PROJECT_ROOT%\dist"
 if %errorlevel% neq 0 (
@@ -46,7 +46,7 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/4] Building .NET MexCLI (self-contained)...
+echo [2/5] Building .NET MexCLI (self-contained)...
 echo ----------------------------------------
 if not exist "%PROJECT_ROOT%\utility\MexManager\MexCLI" (
     echo ERROR: Cannot find MexCLI directory at %PROJECT_ROOT%\utility\MexManager\MexCLI
@@ -70,7 +70,25 @@ xcopy /E /I /Y "%PROJECT_ROOT%\utility\assets\vanilla\Sheik" "%PROJECT_ROOT%\dis
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo [3/4] Building React Frontend...
+echo [3/5] Building HSDRawViewer...
+echo ----------------------------------------
+if not exist "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer" (
+    echo ERROR: Cannot find HSDRawViewer directory
+    pause
+    exit /b 1
+)
+cd /d "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer"
+dotnet build -c Release
+if %errorlevel% neq 0 (
+    echo ERROR: HSDRawViewer build failed
+    cd /d "%PROJECT_ROOT%"
+    pause
+    exit /b 1
+)
+cd /d "%PROJECT_ROOT%"
+
+echo.
+echo [4/5] Building React Frontend...
 echo ----------------------------------------
 if not exist "%PROJECT_ROOT%\viewer" (
     echo ERROR: Cannot find viewer directory at %PROJECT_ROOT%\viewer
@@ -88,7 +106,7 @@ if %errorlevel% neq 0 (
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo [4/4] Creating Electron Installer...
+echo [5/5] Creating Electron Installer...
 echo ----------------------------------------
 REM Clear electron-builder cache to avoid symlink issues
 if exist "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\" (
