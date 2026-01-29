@@ -22,6 +22,7 @@ export function useDownloadQueue() {
   const [phase, setPhase] = useState(DOWNLOAD_PHASES.IDLE)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
+  const [queueLength, setQueueLength] = useState(0)
 
   // Queue for pending downloads
   const queueRef = useRef([])
@@ -37,6 +38,7 @@ export function useDownloadQueue() {
 
     isProcessingRef.current = true
     const download = queueRef.current.shift()
+    setQueueLength(queueRef.current.length)
 
     setCurrentDownload(download)
     setPhase(DOWNLOAD_PHASES.DOWNLOADING)
@@ -83,6 +85,19 @@ export function useDownloadQueue() {
         return
       }
 
+      // Check for duplicate dialog (skin already exists)
+      if (importResult.type === 'duplicate_dialog') {
+        setResult({
+          ...importResult,
+          needsDuplicateChoice: true,
+          blob,
+          downloadName: download.name,
+          downloadTitle: download.title
+        })
+        setPhase(DOWNLOAD_PHASES.COMPLETE)
+        return
+      }
+
       if (importResult.success) {
         setResult({ success: true, message: `Successfully imported: ${download.title || download.name || 'mod'}` })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
@@ -102,6 +117,7 @@ export function useDownloadQueue() {
    */
   const queueDownload = useCallback((download) => {
     queueRef.current.push(download)
+    setQueueLength(queueRef.current.length)
     processNext()
   }, [processNext])
 
@@ -114,10 +130,29 @@ export function useDownloadQueue() {
     setError(null)
     setResult(null)
     isProcessingRef.current = false
+    setQueueLength(queueRef.current.length)
 
     // Process next in queue if any
     if (queueRef.current.length > 0) {
       setTimeout(processNext, 100)
+    }
+  }, [processNext])
+
+  /**
+   * Proceed to next download in queue (auto-continue without resetting to IDLE)
+   */
+  const proceedToNext = useCallback(() => {
+    setError(null)
+    setResult(null)
+    isProcessingRef.current = false
+
+    if (queueRef.current.length > 0) {
+      processNext()
+    } else {
+      // Queue empty, reset to idle
+      setCurrentDownload(null)
+      setPhase(DOWNLOAD_PHASES.IDLE)
+      setQueueLength(0)
     }
   }, [processNext])
 
@@ -143,12 +178,32 @@ export function useDownloadQueue() {
         formData.append('custom_title', result.downloadTitle)
       }
 
+      // Include duplicate_action if we already made that choice
+      if (result.duplicateAction) {
+        formData.append('duplicate_action', result.duplicateAction)
+      }
+
       const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
         method: 'POST',
         body: formData
       })
 
       const importResult = await importResponse.json()
+
+      // Check for duplicate dialog after slippi action (skin might also be a duplicate)
+      if (importResult.type === 'duplicate_dialog') {
+        setResult({
+          ...importResult,
+          needsDuplicateChoice: true,
+          blob: result.blob,
+          downloadName: result.downloadName,
+          downloadTitle: result.downloadTitle,
+          // Preserve slippi action for when we retry with duplicate action
+          slippiAction: action
+        })
+        setPhase(DOWNLOAD_PHASES.COMPLETE)
+        return importResult
+      }
 
       if (importResult.success) {
         setResult({ success: true, message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}` })
@@ -165,6 +220,71 @@ export function useDownloadQueue() {
     }
   }, [result])
 
+  /**
+   * Retry import with duplicate action (after user makes choice)
+   * @param {string} action - 'import_anyway'
+   * @returns {Promise<Object>} Import result
+   */
+  const retryWithDuplicateAction = useCallback(async (action) => {
+    if (!result?.blob) {
+      throw new Error('No pending import data')
+    }
+
+    setPhase(DOWNLOAD_PHASES.IMPORTING)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', result.blob, `${result.downloadName || 'mod'}.zip`)
+      formData.append('duplicate_action', action)
+
+      if (result.downloadTitle) {
+        formData.append('custom_title', result.downloadTitle)
+      }
+
+      // Include slippi_action if we already made that choice (skin was both unsafe AND duplicate)
+      if (result.slippiAction) {
+        formData.append('slippi_action', result.slippiAction)
+      }
+
+      const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
+        method: 'POST',
+        body: formData
+      })
+
+      const importResult = await importResponse.json()
+
+      // Check for slippi dialog after duplicate action (skin might also be slippi unsafe)
+      // This only happens if duplicate was detected first (before slippi check)
+      if (importResult.type === 'slippi_dialog') {
+        setResult({
+          ...importResult,
+          needsSlippiChoice: true,
+          blob: result.blob,
+          downloadName: result.downloadName,
+          downloadTitle: result.downloadTitle,
+          // Preserve duplicate action for when we retry with slippi action
+          duplicateAction: action
+        })
+        setPhase(DOWNLOAD_PHASES.COMPLETE)
+        return importResult
+      }
+
+      if (importResult.success) {
+        setResult({ success: true, message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}` })
+        setPhase(DOWNLOAD_PHASES.COMPLETE)
+        return importResult
+      } else {
+        throw new Error(importResult.error || 'Import failed')
+      }
+    } catch (err) {
+      console.error('[DownloadQueue] Duplicate retry error:', err)
+      setError(err.message)
+      setPhase(DOWNLOAD_PHASES.ERROR)
+      throw err
+    }
+  }, [result])
+
   return {
     // State
     currentDownload,
@@ -172,11 +292,13 @@ export function useDownloadQueue() {
     error,
     result,
     isDownloading: phase !== DOWNLOAD_PHASES.IDLE,
-    queueLength: queueRef.current.length,
+    queueLength,
 
     // Actions
     queueDownload,
     clearDownload,
-    retryWithSlippiAction
+    proceedToNext,
+    retryWithSlippiAction,
+    retryWithDuplicateAction
   }
 }

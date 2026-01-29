@@ -11,6 +11,7 @@ import json
 import zipfile
 import tempfile
 import logging
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify
@@ -29,6 +30,60 @@ import_bp = Blueprint('import', __name__)
 def sanitize_filename(name):
     """Sanitize filename by removing/replacing invalid characters."""
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+
+def compute_dat_hash(dat_data: bytes) -> str:
+    """Compute MD5 hash of DAT file data."""
+    return hashlib.md5(dat_data).hexdigest()
+
+
+def compute_hash_from_stored_skin(character: str, skin: dict) -> str:
+    """
+    Extract DAT from stored zip and compute its hash.
+    Used to backfill hashes for skins imported before this feature.
+    """
+    try:
+        zip_path = STORAGE_PATH / character / skin['filename']
+        if not zip_path.exists():
+            logger.warning(f"Zip file not found for hash computation: {zip_path}")
+            return None
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            # Find the .dat file in the zip
+            for name in zf.namelist():
+                if name.lower().endswith('.dat'):
+                    dat_data = zf.read(name)
+                    computed_hash = compute_dat_hash(dat_data)
+                    logger.info(f"Computed hash for existing skin {skin['id']}: {computed_hash}")
+                    return computed_hash
+        logger.warning(f"No DAT file found in zip for {skin['id']}")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to compute hash for {skin['id']}: {e}")
+        return None
+
+
+def check_duplicate_skin(character: str, dat_hash: str, metadata: dict) -> dict:
+    """
+    Check if a skin with this DAT hash already exists for the character.
+    Computes hash on-demand for skins missing dat_hash (backfill).
+
+    Returns the existing skin entry if found, None otherwise.
+    """
+    char_data = metadata.get('characters', {}).get(character, {})
+    for skin in char_data.get('skins', []):
+        existing_hash = skin.get('dat_hash')
+
+        # If skin doesn't have hash, compute it from stored zip (backfill)
+        if existing_hash is None:
+            existing_hash = compute_hash_from_stored_skin(character, skin)
+            if existing_hash:
+                # Cache the computed hash in metadata (will be saved later)
+                skin['dat_hash'] = existing_hash
+
+        if existing_hash == dat_hash:
+            return skin
+    return None
 
 
 def extract_custom_name_from_filename(filename: str, character_name: str) -> str:
@@ -220,9 +275,15 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
         # SLIPPI VALIDATION: Validate DAT before importing
         slippi_validation = None
+        dat_hash = None
         with zipfile.ZipFile(zip_path, 'r') as source_zip:
             # Extract DAT for validation
             dat_data = source_zip.read(char_info['dat_file'])
+
+            # Compute hash of original DAT for duplicate detection
+            dat_hash = compute_dat_hash(dat_data)
+            logger.info(f"Computed DAT hash: {dat_hash}")
+
             with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
                 tmp_dat.write(dat_data)
                 tmp_dat_path = tmp_dat.name
@@ -406,6 +467,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'csp_source': csp_source,
             'stock_source': stock_source if stock_data else None,
             'date_added': datetime.now().isoformat(),
+            # DAT hash for duplicate detection
+            'dat_hash': dat_hash,
             # Slippi safety metadata
             'slippi_safe': slippi_validation['slippi_safe'] if slippi_validation else False,
             'slippi_tested': True,
@@ -600,6 +663,9 @@ def import_file():
         # Get slippi_action parameter (can be "fix", "import_as_is", or None)
         slippi_action = request.form.get('slippi_action')
 
+        # Get duplicate_action parameter (can be "import_anyway" or None)
+        duplicate_action = request.form.get('duplicate_action')
+
         # Get custom_title parameter if provided (for nucleus:// imports)
         custom_title = request.form.get('custom_title')
         logger.info(f"[DEBUG] custom_title from form: '{custom_title}' (type: {type(custom_title).__name__})")
@@ -649,6 +715,49 @@ def import_file():
                             'type': 'slippi_dialog',
                             'unsafe_costumes': unsafe_costumes,
                             'message': 'This costume is not Slippi safe. Choose an action:'
+                        }), 200
+
+                # DUPLICATE DETECTION: Check if any costume already exists (by DAT hash)
+                if duplicate_action is None:
+                    # Load metadata for duplicate checking
+                    metadata_file = STORAGE_PATH / 'metadata.json'
+                    if metadata_file.exists():
+                        with open(metadata_file, 'r') as f:
+                            metadata = json.load(f)
+                    else:
+                        metadata = {'characters': {}, 'stages': {}}
+
+                    duplicate_skins = []
+                    with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                        for char_info in character_infos:
+                            dat_data = zip_ref.read(char_info['dat_file'])
+                            dat_hash = compute_dat_hash(dat_data)
+
+                            existing_skin = check_duplicate_skin(char_info['character'], dat_hash, metadata)
+                            if existing_skin:
+                                # Build CSP URL for preview
+                                csp_url = f"/storage/{char_info['character']}/{existing_skin['id']}_csp.png"
+                                duplicate_skins.append({
+                                    'character': char_info['character'],
+                                    'color': char_info['color'],
+                                    'existing_skin': {
+                                        'id': existing_skin['id'],
+                                        'name': f"{char_info['character']} - {existing_skin.get('color', existing_skin['id'])}",
+                                        'csp_url': csp_url
+                                    }
+                                })
+
+                    # Save metadata to cache any computed dat_hash values (backfill)
+                    with open(metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+
+                    # If any costume is a duplicate, ask user what to do
+                    if duplicate_skins:
+                        return jsonify({
+                            'success': False,
+                            'type': 'duplicate_dialog',
+                            'duplicate_skins': duplicate_skins,
+                            'message': 'You already have this skin!'
                         }), 200
 
                 # Sort Ice Climbers: Popo before Nana (Nana copies Popo's CSP)

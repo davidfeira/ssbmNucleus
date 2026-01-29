@@ -101,6 +101,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     dragOverIndex,
     previewOrder,
     reordering,
+    setReordering,
     dragTargetFolder,
     setDragTargetFolder,
     justDraggedRef,

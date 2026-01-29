@@ -242,6 +242,7 @@ export function useDragAndDrop({
     dragOverIndex,
     previewOrder,
     reordering,
+    setReordering,
     dragTargetFolder,
     justDraggedRef,
     isDraggingActive,

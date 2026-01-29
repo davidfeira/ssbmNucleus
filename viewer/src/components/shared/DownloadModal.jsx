@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { DOWNLOAD_PHASES } from '../../hooks/useDownloadQueue'
 import { playSound } from '../../utils/sounds'
 import './DownloadModal.css'
@@ -10,16 +11,22 @@ import './DownloadModal.css'
  * @param {string} props.phase - Current phase from DOWNLOAD_PHASES
  * @param {string} props.error - Error message if phase is ERROR
  * @param {Object} props.result - Result object if phase is COMPLETE
+ * @param {number} props.queueLength - Number of downloads remaining in queue
  * @param {Function} props.onClose - Callback when modal is dismissed
+ * @param {Function} props.onProceedToNext - Callback to proceed to next download
  * @param {Function} props.onSlippiChoice - Callback for slippi safety choice
+ * @param {Function} props.onDuplicateChoice - Callback for duplicate skin choice
  */
 export default function DownloadModal({
   download,
   phase,
   error,
   result,
+  queueLength,
   onClose,
-  onSlippiChoice
+  onProceedToNext,
+  onSlippiChoice,
+  onDuplicateChoice
 }) {
   // Don't render if idle
   if (phase === DOWNLOAD_PHASES.IDLE || !download) {
@@ -29,9 +36,18 @@ export default function DownloadModal({
   const isProcessing = phase === DOWNLOAD_PHASES.DOWNLOADING || phase === DOWNLOAD_PHASES.IMPORTING
   const canClose = phase === DOWNLOAD_PHASES.COMPLETE || phase === DOWNLOAD_PHASES.ERROR
   const needsSlippiChoice = result?.needsSlippiChoice
+  const needsDuplicateChoice = result?.needsDuplicateChoice
+  const needsUserChoice = needsSlippiChoice || needsDuplicateChoice
+
+  // Auto-proceed to next download if queue has more items
+  useEffect(() => {
+    if (phase === DOWNLOAD_PHASES.COMPLETE && !needsUserChoice && queueLength > 0) {
+      onProceedToNext()
+    }
+  }, [phase, needsUserChoice, queueLength, onProceedToNext])
 
   const handleOverlayClick = () => {
-    if (canClose && !needsSlippiChoice) {
+    if (canClose && !needsUserChoice && queueLength === 0) {
       playSound('back')
       onClose()
     }
@@ -55,6 +71,15 @@ export default function DownloadModal({
     }
   }
 
+  const handleDuplicateChoice = (choice) => {
+    if (choice === 'cancel') {
+      playSound('back')
+      onClose()
+    } else {
+      onDuplicateChoice(choice)
+    }
+  }
+
   const getStatusText = () => {
     switch (phase) {
       case DOWNLOAD_PHASES.DOWNLOADING:
@@ -62,7 +87,9 @@ export default function DownloadModal({
       case DOWNLOAD_PHASES.IMPORTING:
         return 'Importing...'
       case DOWNLOAD_PHASES.COMPLETE:
-        return needsSlippiChoice ? 'Slippi Safety Warning' : 'Complete!'
+        if (needsDuplicateChoice) return 'Duplicate Detected'
+        if (needsSlippiChoice) return 'Slippi Safety Warning'
+        return 'Complete!'
       case DOWNLOAD_PHASES.ERROR:
         return 'Error'
       default:
@@ -77,7 +104,7 @@ export default function DownloadModal({
       <div className="download-modal-content" onClick={handleContentClick}>
         {/* Header */}
         <div className="download-modal-header">
-          <h3>{needsSlippiChoice ? 'Slippi Safety Warning' : 'Importing Mod'}</h3>
+          <h3>{needsDuplicateChoice ? 'Duplicate Skin' : needsSlippiChoice ? 'Slippi Safety Warning' : 'Importing Mod'}</h3>
         </div>
 
         {/* Mod name */}
@@ -89,7 +116,7 @@ export default function DownloadModal({
             <div className="download-spinner" />
           )}
 
-          {phase === DOWNLOAD_PHASES.COMPLETE && !needsSlippiChoice && (
+          {phase === DOWNLOAD_PHASES.COMPLETE && !needsUserChoice && (
             <div className="download-success-icon">&#x2713;</div>
           )}
 
@@ -120,9 +147,43 @@ export default function DownloadModal({
           </div>
         )}
 
+        {/* Duplicate warning content */}
+        {needsDuplicateChoice && result?.duplicate_skins && (
+          <div className="download-duplicate-warning">
+            <p>You already have this skin!</p>
+            {result.duplicate_skins.map((dup, idx) => (
+              <div key={idx} className="download-duplicate-preview">
+                {dup.existing_skin?.csp_url && (
+                  <img
+                    src={`http://127.0.0.1:5000${dup.existing_skin.csp_url}`}
+                    alt="Existing skin"
+                    className="download-duplicate-csp"
+                  />
+                )}
+                <span className="download-duplicate-name">{dup.existing_skin?.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="download-modal-actions">
-          {needsSlippiChoice ? (
+          {needsDuplicateChoice ? (
+            <>
+              <button
+                className="download-btn download-btn-primary"
+                onClick={() => handleDuplicateChoice('import_anyway')}
+              >
+                Import Anyway
+              </button>
+              <button
+                className="download-btn download-btn-cancel"
+                onClick={() => handleDuplicateChoice('cancel')}
+              >
+                Cancel
+              </button>
+            </>
+          ) : needsSlippiChoice ? (
             <>
               <button
                 className="download-btn download-btn-primary"
@@ -143,7 +204,7 @@ export default function DownloadModal({
                 Cancel
               </button>
             </>
-          ) : canClose ? (
+          ) : canClose && queueLength === 0 ? (
             <button
               className="download-btn download-btn-close"
               onClick={handleClose}

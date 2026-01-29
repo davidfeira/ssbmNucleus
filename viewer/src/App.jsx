@@ -26,9 +26,12 @@ function App() {
     phase,
     error,
     result,
+    queueLength,
     queueDownload,
     clearDownload,
-    retryWithSlippiAction
+    proceedToNext,
+    retryWithSlippiAction,
+    retryWithDuplicateAction
   } = useDownloadQueue()
 
   // Check if first-run setup is needed
@@ -172,6 +175,17 @@ function App() {
     }
   };
 
+  // Handle duplicate choice from download modal
+  const handleDownloadDuplicateChoice = async (choice) => {
+    try {
+      await retryWithDuplicateAction(choice)
+      // Success - effect will handle refresh and sound
+    } catch (err) {
+      // Error state is already set by the hook
+      console.error('[Nucleus] Duplicate retry failed:', err)
+    }
+  };
+
   // Handle download modal close
   const handleDownloadClose = () => {
     clearDownload()
@@ -269,8 +283,11 @@ function App() {
         phase={phase}
         error={error}
         result={result}
+        queueLength={queueLength}
         onClose={handleDownloadClose}
+        onProceedToNext={proceedToNext}
         onSlippiChoice={handleDownloadSlippiChoice}
+        onDuplicateChoice={handleDownloadDuplicateChoice}
       />
     </div>
   )
