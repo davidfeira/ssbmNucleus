@@ -24,7 +24,7 @@ from core.config import (
     MEX_PROJECT_PATH, HSDRAW_EXE
 )
 from core.state import set_socketio, get_viewer_process, set_viewer_process
-from core.helpers import cleanup_output_folder, migrate_legacy_character_names
+from core.helpers import cleanup_output_folder, migrate_legacy_character_names, backfill_dat_hashes
 
 # Import all blueprints
 from blueprints import (
@@ -167,6 +167,10 @@ if __name__ == '__main__':
     # Run migration for legacy character names
     print("Checking for legacy character names to migrate...")
     migrate_legacy_character_names()
+
+    # Backfill dat_hash for duplicate detection
+    print("Checking for skins missing dat_hash...")
+    backfill_dat_hashes()
 
     # No auto-loading - user must select a project
     print(f"INFO: MEX Manager ready. Please open a project to get started.")

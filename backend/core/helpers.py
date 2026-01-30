@@ -4,6 +4,8 @@ Shared utility functions for the MEX API backend.
 
 import json
 import logging
+import hashlib
+import zipfile
 from pathlib import Path
 
 from .config import STORAGE_PATH, OUTPUT_PATH
@@ -145,3 +147,59 @@ def convert_windows_to_wsl_path(windows_path: str) -> str:
             rest_of_path = windows_path[2:].replace('\\', '/')
             return f'/mnt/{drive_letter}{rest_of_path}'
     return windows_path
+
+
+def backfill_dat_hashes():
+    """
+    Backfill dat_hash for any skins that are missing it.
+    This ensures duplicate detection works properly for all skins.
+    """
+    metadata_file = STORAGE_PATH / 'metadata.json'
+    if not metadata_file.exists():
+        return
+
+    try:
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        updated = 0
+        errors = 0
+
+        for char, data in metadata.get('characters', {}).items():
+            for skin in data.get('skins', []):
+                if skin.get('dat_hash'):
+                    continue  # Already has hash
+
+                # Get filename
+                filename = skin.get('filename')
+                if not filename:
+                    skin_id = skin.get('id')
+                    if skin_id:
+                        filename = f'{skin_id}.zip'
+                    else:
+                        continue
+
+                zip_path = STORAGE_PATH / char / filename
+                if not zip_path.exists():
+                    errors += 1
+                    continue
+
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                        for name in zf.namelist():
+                            if name.lower().endswith('.dat'):
+                                dat_data = zf.read(name)
+                                skin['dat_hash'] = hashlib.md5(dat_data).hexdigest()
+                                updated += 1
+                                break
+                except Exception:
+                    errors += 1
+
+        # Save metadata if we made updates
+        if updated > 0:
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            logger.info(f"Backfilled {updated} dat_hash values ({errors} errors)")
+
+    except Exception as e:
+        logger.error(f"Error during dat_hash backfill: {e}", exc_info=True)

@@ -9,6 +9,10 @@
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
 - [ ] Standardize buttons/toggles/modal styles and more sound polish
 
+
+pages support in vault/install
+better drag/drop - look into standard implementations
+right click --> send to folder
 ---
 
 ## PHASE 1.5: Code Cleanup
@@ -31,6 +35,7 @@
 - [ ] Fix Kirby
     - Write Kirby docs
     - Find where it could cause problems (probably just during installation - figure out Kirby hats)
+  Fix Red Falcon .usd bugs
 - [ ] Fix console errors
 - [ ] Fix xdelta constant server connection for progress updates
 - [ ] Fix HD CSP shadows and Ness/Fox bugs

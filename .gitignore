@@ -39,6 +39,7 @@ venv-*/
 # Game files (user-specific)
 *.iso
 ISO DUMPS/
+tools/
 
 # Vanilla assets (extracted from user's ISO during first-run setup)
 utility/assets/vanilla/*
