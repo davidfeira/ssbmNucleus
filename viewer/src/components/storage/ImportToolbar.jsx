@@ -30,6 +30,7 @@ export default function ImportToolbar({
             accept=".zip,.7z"
             onChange={onFileImport}
             disabled={importing}
+            multiple
             style={{ display: 'none' }}
           />
         </label>
