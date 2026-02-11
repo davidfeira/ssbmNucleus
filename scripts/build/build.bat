@@ -70,7 +70,7 @@ xcopy /E /I /Y "%PROJECT_ROOT%\utility\assets\vanilla\Sheik" "%PROJECT_ROOT%\dis
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo [3/5] Building HSDRawViewer...
+echo [3/5] Building HSDRawViewer (self-contained)...
 echo ----------------------------------------
 if not exist "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer" (
     echo ERROR: Cannot find HSDRawViewer directory
@@ -78,7 +78,7 @@ if not exist "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer" 
     exit /b 1
 )
 cd /d "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer"
-dotnet build -c Release
+dotnet publish -c Release -r win-x64 --self-contained true -o "%PROJECT_ROOT%\dist-backend\hsdraw"
 if %errorlevel% neq 0 (
     echo ERROR: HSDRawViewer build failed
     cd /d "%PROJECT_ROOT%"

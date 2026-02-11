@@ -1,6 +1,8 @@
 {
   "name": "ssbm-nucleus",
-  "version": "1.0.0",
+  "version": "0.2.0",
+  "author": "sc00p",
+  "license": "MIT",
   "description": "SSBM Nucleus - Costume and Stage Manager for Super Smash Bros. Melee",
   "main": "electron/main.js",
   "type": "commonjs",
@@ -57,7 +59,7 @@
         "filter": ["**/*"]
       },
       {
-        "from": "utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows",
+        "from": "dist-backend/hsdraw",
         "to": "utility/HSDRawViewer",
         "filter": ["**/*"]
       },

@@ -1,9 +1,9 @@
 @echo off
-echo Building HSDRawViewer...
+echo Building HSDRawViewer (self-contained)...
 echo.
 
 cd /d "%~dp0..\..\utility\website\backend\tools\HSDLib"
-dotnet build HSDRawViewer -c Release
+dotnet publish HSDRawViewer -c Release -r win-x64 --self-contained true -o "%~dp0..\..\dist-backend\hsdraw"
 
 if %errorlevel% neq 0 (
     echo.
