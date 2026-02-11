@@ -271,12 +271,14 @@ const EmbeddedModelViewer = forwardRef(({
     // outerHeight - innerHeight gives us the chrome height
     const chromeHeight = window.outerHeight - window.innerHeight
 
-    const x = Math.round(screenLeft + rect.left)
-    const y = Math.round(screenTop + chromeHeight + rect.top)
-    const width = Math.round(rect.width)
-    const height = Math.round(rect.height)
+    // All values above are CSS pixels - multiply by devicePixelRatio to get
+    // physical pixels for Win32 SetWindowPos used by HSDRawViewer
+    const x = Math.round((screenLeft + rect.left) * dpr)
+    const y = Math.round((screenTop + chromeHeight + rect.top) * dpr)
+    const width = Math.round(rect.width * dpr)
+    const height = Math.round(rect.height * dpr)
 
-    console.log('[EmbeddedViewer] Position:', { x, y, width, height, screenLeft, screenTop, chromeHeight })
+    console.log('[EmbeddedViewer] Position:', { x, y, width, height, dpr, screenLeft, screenTop, chromeHeight })
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
 

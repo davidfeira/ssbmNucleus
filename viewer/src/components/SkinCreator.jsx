@@ -498,6 +498,7 @@ export default function SkinCreator({
     if (!skinCreatorCanvasRef.current || !hasElectron) return
 
     const rect = skinCreatorCanvasRef.current.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
 
     // Screen position = window position + element offset within window
     // On Windows, screenX/Y may have negative values for window chrome, so we use screenLeft/Top
@@ -507,10 +508,12 @@ export default function SkinCreator({
     // Account for Electron window chrome (title bar height)
     const chromeHeight = window.outerHeight - window.innerHeight
 
-    const x = Math.round(screenLeft + rect.left)
-    const y = Math.round(screenTop + chromeHeight + rect.top)
-    const width = Math.round(rect.width)
-    const height = Math.round(rect.height)
+    // All values above are CSS pixels - multiply by devicePixelRatio to get
+    // physical pixels for Win32 SetWindowPos used by HSDRawViewer
+    const x = Math.round((screenLeft + rect.left) * dpr)
+    const y = Math.round((screenTop + chromeHeight + rect.top) * dpr)
+    const width = Math.round(rect.width * dpr)
+    const height = Math.round(rect.height * dpr)
 
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
