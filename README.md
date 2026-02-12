@@ -1,22 +1,34 @@
-# SSBM Nucleus Desktop
+# SSBM Nucleus
 
-install and manage your melee mods
+Mod manager for Super Smash Bros. Melee. Download, organize, and install character and stage skins.
 
-## features
+**Website:** [ssbmnucleus.net](https://ssbmnucleus.net)
+**Download:** [Releases](https://github.com/davidfeira/meleeNexus/releases)
+**Discord:** [Join](https://discord.gg/JeSy7Erv)
 
-- organize your skin collection
-- auto-generate missing CSPs from DATs
-- 1-click installation
-- batch import dozens of mods at once
-- slippi-safe costume validation
-- easily backup or share with friends
+## Features
 
-## download
+- One-click skin downloads from the website
+- Visual vault for organizing mods, CSPs, and stock icons
+- Automatic CSP generation from DAT files
+- Netplay safety validation
+- Batch install across characters — up to 256 skins each (MEX/Unclepunch)
+- CSP compression for Dolphin/Console memory limits
+- Skin creator with live paint, texture import/export, and 3D preview
+- Extras system — edit sword trails, lasers, shine, thunder, shadow ball, and more
+- Pose manager — create and batch generate custom CSP poses
+- Embedded 3D model and animation viewer
+- Auto-generate Dolphin texture packs for unlimited skins per ISO
+- Mod bundles (.ssbm) — one-click xdelta patches + texture packs
+- XDelta patch creation for sharing modpacks
+- First-run setup with auto-detection of Slippi and Melee ISO
 
-get the latest release from the [releases page](../../releases)
+## Credits
 
-## credits
+Built with [MexManager](https://github.com/Ploaj/MexManager) and [HSDRawViewer](https://github.com/Ploaj/HSDLib) by Ploaj
+Built on the [MEX system](https://github.com/akaneia/m-ex) and Dynamic Alternate Stages by Unclepunch
+Costume validation via [Costume Validator](https://ssbmtextures.com/other-mod-types/costume-validator-by-ploaj/) by Ploaj
 
-built with [MexManager](https://github.com/Ploaj/MexManager) and [HSDRawViewer](https://github.com/Ploaj/HSDLib) by Ploaj
+## License
 
-
+MIT
