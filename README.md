@@ -18,10 +18,9 @@ Mod manager for Super Smash Bros. Melee. Download, organize, and install charact
 - Visual vault for organizing mods, CSPs, and stock icons
 - Automatic CSP generation from DAT files
 - Netplay safety validation
-- Batch install across characters — up to 256 skins each (MEX/Unclepunch)
-- CSP compression for Dolphin/Console memory limits
+- Batch install skins
 - Skin creator with live paint, texture import/export, and 3D preview
-- Extras system — edit sword trails, lasers, shine, thunder, shadow ball, and more
+- Extras system — edit sword trails, lasers, shine, thunder, shadow ball, and other character specific effects
 - Pose manager — create and batch generate custom CSP poses
 - Embedded 3D model and animation viewer
 - Auto-generate Dolphin texture packs for unlimited skins per ISO
