@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="viewer/public/nucleuslogo.png" alt="SSBM Nucleus" width="200">
+</p>
+
 # SSBM Nucleus
 
 Mod manager for Super Smash Bros. Melee. Download, organize, and install character and stage skins.
