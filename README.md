@@ -31,11 +31,9 @@ Mod manager for Super Smash Bros. Melee. Download, organize, and install charact
 
 ## Credits
 
-Built with [MexManager](https://github.com/Ploaj/MexManager) and [HSDRawViewer](https://github.com/Ploaj/HSDLib) by Ploaj
+Built with [MexManager](https://github.com/Ploaj/MexManager), [HSDRawViewer](https://github.com/Ploaj/HSDLib), and [Costume Validator](https://ssbmtextures.com/other-mod-types/costume-validator-by-ploaj/)  by Ploaj
 
 Built on the [MEX system](https://github.com/akaneia/m-ex) and Dynamic Alternate Stages by Unclepunch
-
-Costume validation via [Costume Validator](https://ssbmtextures.com/other-mod-types/costume-validator-by-ploaj/) by Ploaj
 
 ## License
 
