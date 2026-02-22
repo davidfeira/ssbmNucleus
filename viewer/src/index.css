@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Folk Pro B';
+  src: url('/fonts/A-OTF-Folk-Pro-B.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ============================================
    SSBM NUCLEUS - Design Token System
    A premium dark theme for the Melee modding community

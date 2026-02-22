@@ -71,10 +71,10 @@ function App() {
     if (window.electron?.onNucleusImport) {
       const cleanup = window.electron.onNucleusImport((data) => {
         console.log('[Nucleus] Import triggered:', data);
-        const { url, name, title } = data;
+        const { url, name, title, type, effectType } = data;
 
         // Queue the download - the hook handles everything
-        queueDownload({ url, name, title });
+        queueDownload({ url, name, title, type, effectType });
       });
 
       // Cleanup listener on unmount
@@ -221,8 +221,8 @@ function App() {
       {!skinCreatorOpen && (
         <header className="app-header">
           <div className="header-brand">
-            <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
-            <h1>SSBM Nucleus</h1>
+            <img src="./nucleuslogo.png" alt="SSBM Vault" className="header-logo" />
+            <h1>SSBM <span className="vault-text">Vault</span></h1>
           </div>
           <nav className="app-tabs">
             <button

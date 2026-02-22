@@ -424,7 +424,7 @@ def composite_ice_climbers_csp(nana_csp_path, popo_csp_path, output_path):
         logger.error(f"Failed to composite Ice Climbers CSP: {e}", exc_info=True)
         return None
 
-def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1):
+def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False):
     """Internal function to generate a single CSP
 
     Used by both normal CSP generation and Ice Climbers composite generation.
@@ -465,6 +465,9 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     # Add scale argument if not 1x
     if scale > 1:
         cmd.extend(["--scale", str(scale)])
+
+    if no_shadow:
+        cmd.append("--no-shadow")
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -533,9 +536,9 @@ def generate_ice_climbers_composite_csp(popo_dat, nana_dat):
         logger.error("Failed to generate Nana CSP")
         return None
 
-    # Generate Popo CSP (foreground) - YML in anim_file slot for scene mode
-    logger.info("Generating Popo CSP (foreground layer)")
-    popo_csp = generate_single_csp_internal(popo_dat, 'Ice Climbers', popo_yml, None)
+    # Generate Popo CSP (foreground, no shadow) - YML in anim_file slot for scene mode
+    logger.info("Generating Popo CSP (foreground layer, no shadow)")
+    popo_csp = generate_single_csp_internal(popo_dat, 'Ice Climbers', popo_yml, None, no_shadow=True)
     if not popo_csp:
         logger.error("Failed to generate Popo CSP")
         return None

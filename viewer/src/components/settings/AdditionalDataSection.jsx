@@ -136,12 +136,8 @@ export default function AdditionalDataSection() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Clear Texture Pack?</h3>
             <p>
-              This will delete all files in the texture pack folder:
+              This will delete all Nucleus-managed textures ({textureStats?.fileCount || 0} files, {formatBytes(textureStats?.size || 0)}). Your other textures will not be affected.
             </p>
-            <ul>
-              <li>{textureStats?.fileCount || 0} texture files</li>
-              <li>{formatBytes(textureStats?.size || 0)} of data</li>
-            </ul>
             <p className="warning-text">
               Clear this when switching to a different base ISO, as texture offsets may not match.
             </p>

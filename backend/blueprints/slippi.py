@@ -244,8 +244,8 @@ def get_texture_pack_stats():
                 }
             })
 
-        # Texture pack folder is at <Slippi>/User/Load/Textures/GALE01
-        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01'
+        # Texture pack folder is at <Slippi>/User/Load/Textures/GALE01/ssbm-nucleus
+        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
 
         if not texture_path.exists():
             return jsonify({
@@ -296,8 +296,8 @@ def clear_texture_pack():
                 'error': 'slippiPath is required'
             }), 400
 
-        # Texture pack folder is at <Slippi>/User/Load/Textures/GALE01
-        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01'
+        # Only clear our subfolder — leave other user textures untouched
+        texture_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
 
         if not texture_path.exists():
             return jsonify({
@@ -380,7 +380,7 @@ def start_texture_listening():
         # Derive paths
         slippi_dir = Path(slippi_path)
         dump_path = slippi_dir / 'User' / 'Dump' / 'Textures' / 'GALE01'
-        load_path = slippi_dir / 'User' / 'Load' / 'Textures' / 'GALE01'
+        load_path = slippi_dir / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
 
         # Ensure directories exist
         dump_path.mkdir(parents=True, exist_ok=True)

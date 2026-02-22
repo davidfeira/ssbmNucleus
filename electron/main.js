@@ -359,16 +359,18 @@ const handleNucleusUrl = async (url) => {
   const downloadUrl = urlObj.searchParams.get('url');
   const modName = urlObj.searchParams.get('name');
   const modTitle = urlObj.searchParams.get('title');
+  const modType = urlObj.searchParams.get('type');
+  const effectType = urlObj.searchParams.get('effect_type');
 
   console.log('[Nucleus Protocol DEBUG] action:', action);
   console.log('[Nucleus Protocol DEBUG] downloadUrl:', downloadUrl);
   console.log('[Nucleus Protocol DEBUG] modName:', modName);
   console.log('[Nucleus Protocol DEBUG] modTitle:', modTitle);
-  console.log('[Nucleus Protocol DEBUG] modTitle type:', typeof modTitle);
-  console.log('[Nucleus Protocol DEBUG] modTitle length:', modTitle?.length);
+  console.log('[Nucleus Protocol DEBUG] modType:', modType);
+  console.log('[Nucleus Protocol DEBUG] effectType:', effectType);
 
   if (action === 'import' && downloadUrl) {
-    console.log('[Nucleus Protocol] Importing mod:', modName, 'title:', modTitle, 'from', downloadUrl);
+    console.log('[Nucleus Protocol] Importing mod:', modName, 'title:', modTitle, 'type:', modType, 'from', downloadUrl);
 
     // Show window if hidden
     if (mainWindow) {
@@ -379,7 +381,9 @@ const handleNucleusUrl = async (url) => {
       mainWindow.webContents.send('nucleus-import', {
         url: downloadUrl,
         name: modName,
-        title: modTitle
+        title: modTitle,
+        type: modType,
+        effectType: effectType
       });
     }
   }

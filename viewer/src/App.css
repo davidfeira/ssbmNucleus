@@ -82,18 +82,17 @@
 }
 
 .app-header h1 {
-  font-family: var(--font-display);
+  font-family: 'Folk Pro B', 'Exo 2', 'Segoe UI', sans-serif;
   font-size: var(--text-2xl);
   font-weight: var(--font-extrabold);
   letter-spacing: var(--tracking-tight);
   margin: 0;
-  background: var(--gradient-cyan);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: none;
-  position: relative;
+  color: var(--color-text-primary);
   filter: drop-shadow(0 0 20px rgba(125, 211, 232, 0.4));
+}
+
+.vault-text {
+  color: var(--color-cyan);
 }
 
 /* ─────────────────────────────────────────

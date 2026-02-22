@@ -63,6 +63,12 @@ export function useDownloadQueue() {
       if (download.title) {
         formData.append('custom_title', download.title)
       }
+      if (download.type) {
+        formData.append('mod_type', download.type)
+      }
+      if (download.effectType) {
+        formData.append('effect_type', download.effectType)
+      }
 
       // Call the import API
       const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
@@ -79,7 +85,9 @@ export function useDownloadQueue() {
           needsSlippiChoice: true,
           blob,
           downloadName: download.name,
-          downloadTitle: download.title
+          downloadTitle: download.title,
+          downloadType: download.type,
+          downloadEffectType: download.effectType
         })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
         return
@@ -92,7 +100,9 @@ export function useDownloadQueue() {
           needsDuplicateChoice: true,
           blob,
           downloadName: download.name,
-          downloadTitle: download.title
+          downloadTitle: download.title,
+          downloadType: download.type,
+          downloadEffectType: download.effectType
         })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
         return
@@ -177,6 +187,12 @@ export function useDownloadQueue() {
       if (result.downloadTitle) {
         formData.append('custom_title', result.downloadTitle)
       }
+      if (result.downloadType) {
+        formData.append('mod_type', result.downloadType)
+      }
+      if (result.downloadEffectType) {
+        formData.append('effect_type', result.downloadEffectType)
+      }
 
       // Include duplicate_action if we already made that choice
       if (result.duplicateAction) {
@@ -198,6 +214,8 @@ export function useDownloadQueue() {
           blob: result.blob,
           downloadName: result.downloadName,
           downloadTitle: result.downloadTitle,
+          downloadType: result.downloadType,
+          downloadEffectType: result.downloadEffectType,
           // Preserve slippi action for when we retry with duplicate action
           slippiAction: action
         })
@@ -241,6 +259,12 @@ export function useDownloadQueue() {
       if (result.downloadTitle) {
         formData.append('custom_title', result.downloadTitle)
       }
+      if (result.downloadType) {
+        formData.append('mod_type', result.downloadType)
+      }
+      if (result.downloadEffectType) {
+        formData.append('effect_type', result.downloadEffectType)
+      }
 
       // Include slippi_action if we already made that choice (skin was both unsafe AND duplicate)
       if (result.slippiAction) {
@@ -263,6 +287,8 @@ export function useDownloadQueue() {
           blob: result.blob,
           downloadName: result.downloadName,
           downloadTitle: result.downloadTitle,
+          downloadType: result.downloadType,
+          downloadEffectType: result.downloadEffectType,
           // Preserve duplicate action for when we retry with slippi action
           duplicateAction: action
         })

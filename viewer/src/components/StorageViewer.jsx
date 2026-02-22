@@ -5,6 +5,7 @@ import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 import EmbeddedModelViewer from './EmbeddedModelViewer'
 import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
+import DuplicateImportDialog from './shared/DuplicateImportDialog'
 import ConfirmDialog from './shared/ConfirmDialog'
 import EditModal from './storage/EditModal'
 import CspManagerModal from './storage/CspManagerModal'
@@ -153,8 +154,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setSlippiDialogData,
     pendingFile,
     setPendingFile,
+    showDuplicateDialog,
+    duplicateDialogData,
     handleFileImport,
-    handleSlippiChoice
+    handleSlippiChoice,
+    handleDuplicateChoice
   } = useFileImport({
     mode,
     API_URL,
@@ -1234,6 +1238,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         data={slippiDialogData}
         onChoice={retestingItem !== null ? handleRetestFixChoice : handleSlippiChoice}
         isRetest={retestingItem !== null}
+      />
+
+      <DuplicateImportDialog
+        show={showDuplicateDialog}
+        data={duplicateDialogData}
+        onChoice={handleDuplicateChoice}
       />
 
       <ConfirmDialog

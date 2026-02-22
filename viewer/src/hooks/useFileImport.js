@@ -4,6 +4,7 @@
  * Manages file import functionality including:
  * - File upload and detection
  * - Slippi safety dialog handling
+ * - Duplicate skin dialog handling
  * - Import success/error messages
  */
 
@@ -21,13 +22,14 @@ export function useFileImport({
   const [showSlippiDialog, setShowSlippiDialog] = useState(false)
   const [slippiDialogData, setSlippiDialogData] = useState(null)
   const [pendingFile, setPendingFile] = useState(null)
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
+  const [duplicateDialogData, setDuplicateDialogData] = useState(null)
 
-  const importSingleFile = async (file, slippiAction = null) => {
+  const importSingleFile = async (file, slippiAction = null, duplicateAction = null) => {
     const formData = new FormData()
     formData.append('file', file)
-    if (slippiAction) {
-      formData.append('slippi_action', slippiAction)
-    }
+    if (slippiAction) formData.append('slippi_action', slippiAction)
+    if (duplicateAction) formData.append('duplicate_action', duplicateAction)
 
     const response = await fetch(`${API_URL}/import/file`, {
       method: 'POST',
@@ -76,6 +78,7 @@ export function useFileImport({
     let successCount = 0
     let errorCount = 0
     let totalCostumes = 0
+    let skippedCount = 0
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -107,6 +110,23 @@ export function useFileImport({
           }
         }
 
+        // Check for duplicate dialog
+        if (data.type === 'duplicate_dialog') {
+          if (files.length === 1) {
+            setDuplicateDialogData(data)
+            setPendingFile(file)
+            setShowDuplicateDialog(true)
+            setImporting(false)
+            setImportMessage('')
+            if (event && event.target) event.target.value = null
+            return
+          } else {
+            // For batch import, auto-skip duplicates
+            skippedCount++
+            continue
+          }
+        }
+
         if (data.success) {
           successCount++
           totalCostumes += data.imported_count || 1
@@ -131,9 +151,12 @@ export function useFileImport({
       playSound('error')
     }
 
+    const skippedPart = skippedCount > 0 ? `, ${skippedCount} skipped, already owned` : ''
     const summary = errorCount > 0
-      ? `✓ Imported ${totalCostumes} costume(s) from ${successCount} files (${errorCount} failed)`
-      : `✓ Imported ${totalCostumes} costume(s) from ${successCount} files!`
+      ? `✓ Imported ${totalCostumes} costume(s) from ${successCount} files (${errorCount} failed${skippedPart})`
+      : skippedCount > 0
+        ? `✓ Imported ${totalCostumes} costume(s) from ${successCount} files (${skippedCount} skipped, already owned)`
+        : `✓ Imported ${totalCostumes} costume(s) from ${successCount} files!`
     setImportMessage(summary)
 
     setTimeout(() => {
@@ -155,6 +178,48 @@ export function useFileImport({
     handleFileImport(null, choice)
   }
 
+  const handleDuplicateChoice = async (choice) => {
+    setShowDuplicateDialog(false)
+    const file = pendingFile
+    setPendingFile(null)
+    setDuplicateDialogData(null)
+
+    if (choice === 'import_anyway') {
+      setImporting(true)
+      setImportMessage('Importing...')
+      try {
+        const data = await importSingleFile(file, null, 'import_anyway')
+        if (data.success) {
+          playSound('newSkin')
+          const typeMsg = data.type === 'character'
+            ? `${data.imported_count} costume(s)`
+            : `${data.stage} stage`
+          setImportMessage(`✓ Imported ${typeMsg}!`)
+          await onRefresh()
+          if (data.type === 'stage' && mode === 'stages') {
+            await fetchStageVariants()
+          }
+        } else {
+          playSound('error')
+          setImportMessage(`✗ Import failed: ${data.error}`)
+        }
+      } catch (err) {
+        playSound('error')
+        setImportMessage(`✗ Error: ${err.message}`)
+      }
+      setTimeout(() => {
+        setImporting(false)
+        setImportMessage('')
+      }, 2000)
+    } else {
+      // skip
+      setImportMessage('Skipped (already owned)')
+      setTimeout(() => {
+        setImportMessage('')
+      }, 2000)
+    }
+  }
+
   return {
     // State
     importing,
@@ -165,9 +230,12 @@ export function useFileImport({
     setSlippiDialogData,
     pendingFile,
     setPendingFile,
+    showDuplicateDialog,
+    duplicateDialogData,
 
     // Handlers
     handleFileImport,
-    handleSlippiChoice
+    handleSlippiChoice,
+    handleDuplicateChoice
   }
 }

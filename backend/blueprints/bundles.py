@@ -448,7 +448,7 @@ def run_bundle_import(import_id, bundle_path, slippi_path, vanilla_iso_path, del
         texture_count = 0
 
         if textures_src.exists():
-            load_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / build_name
+            load_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus' / build_name
             load_path.mkdir(parents=True, exist_ok=True)
 
             png_files = list(textures_src.glob('*.png'))
