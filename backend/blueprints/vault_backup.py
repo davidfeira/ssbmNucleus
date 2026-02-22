@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 vault_backup_bp = Blueprint('vault_backup', __name__)
 
 
+@vault_backup_bp.route('/api/mex/storage/stats', methods=['GET'])
+def get_storage_stats():
+    """Return total disk usage of the storage vault in bytes."""
+    total = sum(f.stat().st_size for f in STORAGE_PATH.rglob('*') if f.is_file())
+    return jsonify({'success': True, 'stats': {'storage': total}})
+
+
 @vault_backup_bp.route('/api/mex/storage/backup', methods=['POST'])
 def backup_vault():
     """Create a backup ZIP of the entire storage vault"""

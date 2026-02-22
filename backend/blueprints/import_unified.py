@@ -16,11 +16,15 @@ from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
+import uuid
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR
 from character_detector import detect_character_from_zip
 from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
 from generate_csp import generate_csp
+from blueprints.xdelta import load_xdelta_metadata, save_xdelta_metadata
+from extra_types import get_extra_type, get_storage_character
+from extras_api import extract_model_from_dat
 
 logger = logging.getLogger(__name__)
 
@@ -626,6 +630,156 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str, cu
         }
 
 
+def _import_effect_mod(zip_path, zip_filename, effect_type, custom_title=None):
+    """Import an effect/model mod using website-provided type info.
+
+    Routes through the existing extras model system so the effect
+    shows up in the Extras/Effects tab.
+
+    Args:
+        zip_path: Path to the uploaded ZIP file
+        zip_filename: Original filename of the uploaded ZIP
+        effect_type: Effect type ID from website tags (e.g. 'gun', 'laser')
+        custom_title: Optional display name
+
+    Returns:
+        dict with success/error info, or None if ZIP has no .dat files
+    """
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            dat_files = [n for n in zf.namelist()
+                         if n.lower().endswith('.dat')
+                         and not n.startswith('__MACOSX')]
+            image_exts = {'.png', '.jpg', '.jpeg', '.gif'}
+            image_files = [n for n in zf.namelist()
+                           if Path(n).suffix.lower() in image_exts
+                           and not n.startswith('__MACOSX')]
+
+            if not dat_files:
+                return None  # No .dat files, let normal detection handle it
+
+            # Use first .dat file
+            dat_name = dat_files[0]
+            dat_data = zf.read(dat_name)
+
+            # Derive character from ZIP filename (format: "Character_Color.zip")
+            # e.g. "Fox_Default.zip" -> "Fox"
+            name_stem = Path(zip_filename).stem
+            character = name_stem.split('_')[0] if '_' in name_stem else name_stem
+
+            # Normalize effect_type to lowercase (website tags are "Gun", desktop IDs are "gun")
+            effect_type = effect_type.lower()
+
+            # Validate effect type exists for this character
+            type_config = get_extra_type(character, effect_type)
+            if not type_config:
+                logger.warning(f"Effect type '{effect_type}' not defined for {character}")
+                return {
+                    'success': False,
+                    'error': f'Effect type "{effect_type}" not defined for {character}'
+                }
+
+            storage_char = get_storage_character(character, effect_type)
+            mod_id = f"{effect_type}_{uuid.uuid4().hex[:8]}"
+            effect_name = custom_title or Path(zip_filename).stem
+            effect_name = sanitize_filename(effect_name)
+
+            if type_config.get('type') == 'model':
+                # Model-type effect (e.g. gun) - extract .dae from .dat
+                models_dir = STORAGE_PATH / storage_char / 'models'
+                models_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save .dat temporarily for model extraction
+                temp_dat = models_dir / f"{mod_id}_temp.dat"
+                temp_dat.write_bytes(dat_data)
+
+                try:
+                    dae_path = models_dir / f"{mod_id}.dae"
+                    jobj_path = type_config.get('model_path')
+                    if not jobj_path:
+                        return {
+                            'success': False,
+                            'error': f'Model path not configured for {effect_type}'
+                        }
+
+                    extract_model_from_dat(temp_dat, jobj_path, dae_path)
+                    logger.info(f"Extracted model from .dat to {dae_path}")
+                finally:
+                    if temp_dat.exists():
+                        temp_dat.unlink()
+
+                model_file = f"models/{mod_id}.dae"
+            else:
+                # Non-model effect (color patches etc.) - store the .dat directly
+                models_dir = STORAGE_PATH / storage_char / 'models'
+                models_dir.mkdir(parents=True, exist_ok=True)
+                dat_path = models_dir / f"{mod_id}.dat"
+                dat_path.write_bytes(dat_data)
+                model_file = f"models/{mod_id}.dat"
+
+            # Save screenshot if present
+            screenshot_file = None
+            if image_files:
+                screenshots_dir = STORAGE_PATH / storage_char / 'models'
+                screenshots_dir.mkdir(parents=True, exist_ok=True)
+                screenshot_path = screenshots_dir / f"{mod_id}_preview.png"
+                screenshot_path.write_bytes(zf.read(image_files[0]))
+                screenshot_file = f"models/{mod_id}_preview.png"
+
+            # Update metadata
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+            else:
+                metadata = {'characters': {}}
+
+            if storage_char not in metadata.get('characters', {}):
+                metadata['characters'][storage_char] = {'skins': [], 'extras': {}}
+
+            char_data = metadata['characters'][storage_char]
+            if 'extras' not in char_data:
+                char_data['extras'] = {}
+            if effect_type not in char_data['extras']:
+                char_data['extras'][effect_type] = []
+
+            new_mod = {
+                'id': mod_id,
+                'name': effect_name,
+                'type': type_config.get('type', 'model'),
+                'date_added': datetime.now().isoformat(),
+                'source': 'nucleus',
+                'model_file': model_file
+            }
+            if screenshot_file:
+                new_mod['screenshot'] = screenshot_file
+
+            char_data['extras'][effect_type].append(new_mod)
+
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            logger.info(f"[OK] Imported effect '{effect_name}' ({effect_type}) for {storage_char}")
+
+            return {
+                'success': True,
+                'type': 'effect',
+                'imported_count': 1,
+                'character': storage_char,
+                'effect_type': effect_type,
+                'message': f"Imported {effect_name} ({effect_type} for {storage_char})"
+            }
+
+    except zipfile.BadZipFile:
+        return None  # Not a valid zip
+    except Exception as e:
+        logger.error(f"Effect import error: {e}", exc_info=True)
+        return {
+            'success': False,
+            'error': f'Effect import error: {str(e)}'
+        }
+
+
 @import_bp.route('/api/mex/import/file', methods=['POST'])
 def import_file():
     """
@@ -650,14 +804,16 @@ def import_file():
                 'error': 'No file selected'
             }), 400
 
-        # Check if file is a supported archive type
-        is_zip = file.filename.lower().endswith('.zip')
-        is_7z = file.filename.lower().endswith('.7z')
+        # Check if file is a supported type
+        fname_lower = file.filename.lower()
+        is_zip = fname_lower.endswith('.zip')
+        is_7z = fname_lower.endswith('.7z')
+        is_dat = fname_lower.endswith('.dat')
 
-        if not (is_zip or is_7z):
+        if not (is_zip or is_7z or is_dat):
             return jsonify({
                 'success': False,
-                'error': 'Only ZIP and 7z files are supported'
+                'error': 'Only ZIP, 7z, and DAT files are supported'
             }), 400
 
         # Get slippi_action parameter (can be "fix", "import_as_is", or None)
@@ -670,14 +826,34 @@ def import_file():
         custom_title = request.form.get('custom_title')
         logger.info(f"[DEBUG] custom_title from form: '{custom_title}' (type: {type(custom_title).__name__})")
 
-        # Save uploaded file to temp location with correct suffix
-        suffix = '.zip' if is_zip else '.7z'
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            file.save(tmp.name)
-            temp_zip_path = tmp.name
+        # Get mod type hints from nucleus:// protocol (set by website tags)
+        mod_type = request.form.get('mod_type')  # 'effect', 'patch', or None
+        effect_type = request.form.get('effect_type')  # e.g. 'gun', 'laser', 'sword'
+        logger.info(f"[DEBUG] mod_type: {mod_type}, effect_type: {effect_type}")
+
+        if is_dat:
+            # Wrap the raw .dat in a temp zip so the rest of the pipeline runs unchanged
+            dat_bytes = file.read()
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
+                temp_zip_path = tmp.name
+            with zipfile.ZipFile(temp_zip_path, 'w') as zf:
+                zf.writestr(file.filename, dat_bytes)
+        else:
+            suffix = '.zip' if is_zip else '.7z'
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                file.save(tmp.name)
+                temp_zip_path = tmp.name
 
         try:
             logger.info(f"=== UNIFIED IMPORT: {file.filename} ===")
+
+            # EXPLICIT EFFECT ROUTING: If website told us this is an effect mod,
+            # bypass auto-detection (which would misidentify the .dat as a costume)
+            if mod_type == 'effect' and effect_type:
+                logger.info(f"Explicit effect import: type={effect_type}")
+                result = _import_effect_mod(temp_zip_path, file.filename, effect_type, custom_title)
+                if result:
+                    return jsonify(result) if result.get('success') else (jsonify(result), 400)
 
             # PHASE 1: Try character detection first
             logger.info("Phase 1: Attempting character detection...")
@@ -828,11 +1004,68 @@ def import_file():
                     'message': f"Imported {len(results)} stage variant(s)"
                 })
 
-            # PHASE 3: Detection failed
-            logger.warning("Could not detect type - not a character costume or stage mod")
+            # PHASE 3: Try patch (xdelta) detection
+            logger.info("Phase 3: Attempting patch detection...")
+            try:
+                with zipfile.ZipFile(temp_zip_path, 'r') as zf:
+                    xdelta_files = [n for n in zf.namelist() if n.lower().endswith('.xdelta')]
+                    image_exts = {'.png', '.jpg', '.jpeg', '.gif'}
+                    image_files = [n for n in zf.namelist()
+                                   if Path(n).suffix.lower() in image_exts
+                                   and not n.startswith('__MACOSX')]
+
+                    if xdelta_files:
+                        logger.info(f"[OK] Detected {len(xdelta_files)} xdelta patch(es)")
+                        xdelta_dir = STORAGE_PATH / "xdelta"
+                        xdelta_dir.mkdir(exist_ok=True)
+
+                        patches = load_xdelta_metadata()
+                        results = []
+
+                        for xdelta_name in xdelta_files:
+                            patch_id = str(uuid.uuid4())[:8]
+
+                            # Save xdelta file
+                            xdelta_path = xdelta_dir / f"{patch_id}.xdelta"
+                            xdelta_path.write_bytes(zf.read(xdelta_name))
+
+                            # Save first image as screenshot
+                            if image_files:
+                                img_data = zf.read(image_files[0])
+                                img_path = xdelta_dir / f"{patch_id}.png"
+                                img_path.write_bytes(img_data)
+
+                            # Derive name from custom_title, xdelta filename, or zip filename
+                            patch_name = custom_title or Path(xdelta_name).stem or Path(file.filename).stem
+                            patch_name = sanitize_filename(patch_name)
+
+                            patches.append({
+                                'id': patch_id,
+                                'name': patch_name,
+                                'description': '',
+                                'filename': Path(xdelta_name).name,
+                                'created': datetime.now().isoformat()
+                            })
+                            results.append({'id': patch_id, 'name': patch_name})
+                            logger.info(f"  - Imported patch: {patch_name} ({patch_id})")
+
+                        save_xdelta_metadata(patches)
+
+                        return jsonify({
+                            'success': True,
+                            'type': 'patch',
+                            'imported_count': len(results),
+                            'patches': results,
+                            'message': f"Imported {len(results)} patch(es)"
+                        })
+            except zipfile.BadZipFile:
+                pass  # Not a valid zip, fall through to error
+
+            # PHASE 4: Detection failed
+            logger.warning("Could not detect mod type")
             return jsonify({
                 'success': False,
-                'error': 'Could not detect mod type. Make sure the ZIP contains a valid character costume (.dat with Ply symbols) or stage file (GrXx.dat/.usd)'
+                'error': 'Could not detect mod type. ZIP does not contain any recognized files (.dat, .xdelta, GrXx stage files)'
             }), 400
 
         finally:

@@ -44,6 +44,7 @@ from blueprints import (
     xdelta_bp,
     bundles_bp,
     viewer_bp,
+    settings_bp,
 )
 
 # Import extras API (existing blueprint)
@@ -105,6 +106,7 @@ app.register_blueprint(slippi_bp)
 app.register_blueprint(xdelta_bp)
 app.register_blueprint(bundles_bp)
 app.register_blueprint(viewer_bp)
+app.register_blueprint(settings_bp)
 
 
 # SocketIO connection handlers

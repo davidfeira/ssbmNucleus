@@ -1,6 +1,7 @@
 import './Settings.css'
 import BackupRestore from './settings/BackupRestore'
 import StorageStatsSection from './settings/StorageStatsSection'
+import StorageLocationSection from './settings/StorageLocationSection'
 import AdditionalDataSection from './settings/AdditionalDataSection'
 import IsoPathSection from './settings/IsoPathSection'
 import SlippiPathSection from './settings/SlippiPathSection'
@@ -38,6 +39,9 @@ export default function Settings({ metadata }) {
 
         {/* Storage Statistics */}
         <StorageStatsSection metadata={metadata} />
+
+        {/* Vault Location */}
+        <StorageLocationSection API_URL={API_URL} />
 
         {/* Additional Data (Texture Pack & ISO Output) */}
         <AdditionalDataSection />

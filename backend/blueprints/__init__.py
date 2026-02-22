@@ -20,6 +20,7 @@ from .slippi import slippi_bp
 from .xdelta import xdelta_bp
 from .bundles import bundles_bp
 from .viewer import viewer_bp
+from .settings import settings_bp
 
 __all__ = [
     'assets_bp',
@@ -38,4 +39,5 @@ __all__ = [
     'xdelta_bp',
     'bundles_bp',
     'viewer_bp',
+    'settings_bp',
 ]
