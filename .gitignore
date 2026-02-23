@@ -11,6 +11,7 @@ logs/
 *.log
 
 # User data
+user_settings.json
 /storage/
 intake/
 output/
