@@ -276,8 +276,16 @@ def update_costume_csp():
         if not zip_path.exists():
             return jsonify({'success': False, 'error': f'Costume zip not found: {skin_id}'}), 404
 
+        # Derive file extension from MIME type to preserve original format (e.g. GIF)
+        ext_map = {
+            'image/gif': '.gif', 'image/png': '.png', 'image/jpeg': '.jpg',
+            'image/webp': '.webp', 'image/bmp': '.bmp'
+        }
+        ext = ext_map.get(csp_file.content_type, '.png')
+
         if is_hd:
-            standalone_hd_csp = char_folder / f"{skin_id}_csp_hd.png"
+            hd_csp_filename = f"{skin_id}_csp_hd{ext}"
+            standalone_hd_csp = char_folder / hd_csp_filename
             with open(standalone_hd_csp, 'wb') as f:
                 f.write(csp_data)
 
@@ -291,6 +299,7 @@ def update_costume_csp():
                         if skin['id'] == skin_id:
                             skin['has_hd_csp'] = True
                             skin['hd_csp_source'] = 'custom'
+                            skin['hd_csp_filename'] = hd_csp_filename
                             break
 
                     with open(metadata_file, 'w') as f:
@@ -298,7 +307,8 @@ def update_costume_csp():
 
             logger.info(f"[OK] Updated HD CSP for {character} - {skin_id}")
         else:
-            standalone_csp = char_folder / f"{skin_id}_csp.png"
+            csp_filename = f"{skin_id}_csp{ext}"
+            standalone_csp = char_folder / csp_filename
             with open(standalone_csp, 'wb') as f:
                 f.write(csp_data)
 
@@ -324,6 +334,7 @@ def update_costume_csp():
                         if skin['id'] == skin_id:
                             skin['has_csp'] = True
                             skin['csp_source'] = 'custom'
+                            skin['csp_filename'] = csp_filename
                             break
 
                     with open(metadata_file, 'w') as f:
@@ -489,10 +500,17 @@ def manage_csp(character, skin_id):
             alt_csps = skin.get('alternate_csps', [])
             new_alt_id = f"alt_{int(time.time())}{'_hd' if is_hd_upload else ''}"
 
+            # Preserve original file extension (e.g. .gif for animated GIFs)
+            alt_ext_map = {
+                'image/gif': '.gif', 'image/png': '.png', 'image/jpeg': '.jpg',
+                'image/webp': '.webp', 'image/bmp': '.bmp'
+            }
+            alt_ext = alt_ext_map.get(file.content_type, '.png')
+
             if is_hd_upload:
-                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd.png"
+                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd{alt_ext}"
             else:
-                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}.png"
+                new_alt_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}{alt_ext}"
 
             new_alt_path = STORAGE_PATH / character / new_alt_filename
             file.save(new_alt_path)

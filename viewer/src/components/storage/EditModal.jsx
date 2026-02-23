@@ -73,7 +73,7 @@ export default function EditModal({
 
     // No active alt - use original CSP, prefer HD
     if (data.has_hd_csp) {
-      return data.cspUrl.replace('_csp.png', '_csp_hd.png')
+      return data.hdCspUrl || data.cspUrl.replace('_csp.png', '_csp_hd.png')
     }
     return data.cspUrl
   }

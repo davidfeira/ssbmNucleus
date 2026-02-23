@@ -80,19 +80,6 @@ STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
 LOGS_PATH = PROJECT_ROOT / "logs"
 
-# User settings file (persists custom paths across restarts)
-USER_SETTINGS_PATH = PROJECT_ROOT / "user_settings.json"
-
-# Override STORAGE_PATH if user has set a custom location
-if USER_SETTINGS_PATH.exists():
-    try:
-        import json as _json
-        _user_settings = _json.loads(USER_SETTINGS_PATH.read_text())
-        if 'storage_path' in _user_settings:
-            STORAGE_PATH = Path(_user_settings['storage_path'])
-    except Exception:
-        pass  # Fall back to default
-
 # Asset paths (user-extracted assets, not bundled)
 VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 

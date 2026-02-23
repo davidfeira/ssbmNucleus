@@ -40,7 +40,8 @@ export default function SkinCard({
         return `${baseUrl}/storage/${selectedCharacter}/${activeAlt.filename}`
       }
     }
-    return `${baseUrl}/storage/${selectedCharacter}/${skin.id}_csp.png`
+    const cspFilename = skin.csp_filename || `${skin.id}_csp.png`
+    return `${baseUrl}/storage/${selectedCharacter}/${cspFilename}`
   }
 
   const cspUrl = getCspUrl()
@@ -103,7 +104,10 @@ export default function SkinCard({
               color: skin.color,
               has_csp: skin.has_csp,
               has_stock: skin.has_stock,
-              cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_csp.png`,
+              cspUrl: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.csp_filename || `${skin.id}_csp.png`}`,
+              hdCspUrl: skin.has_hd_csp
+                ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.hd_csp_filename || `${skin.id}_csp_hd.png`}`
+                : null,
               stockUrl: skin.has_stock ? `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${skin.id}_stc.png` : null,
               slippi_safe: skin.slippi_safe,
               slippi_tested: skin.slippi_tested,

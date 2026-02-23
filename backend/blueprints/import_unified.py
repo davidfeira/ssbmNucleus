@@ -90,6 +90,31 @@ def check_duplicate_skin(character: str, dat_hash: str, metadata: dict) -> dict:
     return None
 
 
+def check_duplicate_stage(stage_folder: str, dat_hash: str, metadata: dict) -> dict:
+    """Return existing stage variant if DAT hash matches, else None."""
+    for variant in metadata.get('stages', {}).get(stage_folder, {}).get('variants', []):
+        if variant.get('dat_hash') == dat_hash:
+            return variant
+    return None
+
+
+def check_duplicate_patch(file_hash: str, patches: list) -> dict:
+    """Return existing xdelta patch if file hash matches, else None."""
+    for patch in patches:
+        if patch.get('file_hash') == file_hash:
+            return patch
+    return None
+
+
+def check_duplicate_effect(storage_char: str, effect_type: str, file_hash: str, metadata: dict) -> dict:
+    """Return existing effect entry if file hash matches, else None."""
+    extras = metadata.get('characters', {}).get(storage_char, {}).get('extras', {})
+    for entry in extras.get(effect_type, []):
+        if entry.get('file_hash') == file_hash:
+            return entry
+    return None
+
+
 def extract_custom_name_from_filename(filename: str, character_name: str) -> str:
     """
     Extract a custom name from the zip filename to use in costume ID.
@@ -604,6 +629,8 @@ def import_stage_mod(zip_path: str, stage_info: dict, original_filename: str, cu
             'name': display_name,
             'filename': f"{variant_id}.zip",
             'has_screenshot': has_screenshot,
+            'dat_hash': compute_dat_hash(stage_file_data),
+            'screenshot_filename': f"{variant_id}_screenshot{screenshot_ext}" if has_screenshot else None,
             'date_added': datetime.now().isoformat()
             # No default slippi status - will show as "Unknown" until manually set
         })
@@ -749,7 +776,8 @@ def _import_effect_mod(zip_path, zip_filename, effect_type, custom_title=None):
                 'type': type_config.get('type', 'model'),
                 'date_added': datetime.now().isoformat(),
                 'source': 'nucleus',
-                'model_file': model_file
+                'model_file': model_file,
+                'file_hash': compute_dat_hash(dat_data)
             }
             if screenshot_file:
                 new_mod['screenshot'] = screenshot_file
@@ -851,6 +879,51 @@ def import_file():
             # bypass auto-detection (which would misidentify the .dat as a costume)
             if mod_type == 'effect' and effect_type:
                 logger.info(f"Explicit effect import: type={effect_type}")
+
+                # DUPLICATE DETECTION for effects
+                if duplicate_action is None:
+                    try:
+                        with zipfile.ZipFile(temp_zip_path, 'r') as zf:
+                            dat_files = [n for n in zf.namelist()
+                                         if n.lower().endswith('.dat')
+                                         and not n.startswith('__MACOSX')]
+                            if dat_files:
+                                dat_data = zf.read(dat_files[0])
+                                file_hash = compute_dat_hash(dat_data)
+                                name_stem = Path(file.filename).stem
+                                character = name_stem.split('_')[0] if '_' in name_stem else name_stem
+                                effect_type_key = effect_type.lower()
+                                storage_char = get_storage_character(character, effect_type_key)
+                                metadata_file = STORAGE_PATH / 'metadata.json'
+                                if metadata_file.exists():
+                                    with open(metadata_file, 'r') as f:
+                                        metadata = json.load(f)
+                                else:
+                                    metadata = {'characters': {}}
+                                existing = check_duplicate_effect(storage_char, effect_type_key, file_hash, metadata)
+                                if existing:
+                                    screenshot_url = (
+                                        f"/storage/{storage_char}/{existing['screenshot']}"
+                                        if existing.get('screenshot') else None
+                                    )
+                                    return jsonify({
+                                        'success': False,
+                                        'type': 'duplicate_dialog',
+                                        'mod_type': 'effect',
+                                        'duplicate_skins': [{
+                                            'character': storage_char,
+                                            'color': existing['name'],
+                                            'existing_skin': {
+                                                'id': existing['id'],
+                                                'name': existing['name'],
+                                                'csp_url': screenshot_url
+                                            }
+                                        }],
+                                        'message': 'You already have this effect!'
+                                    }), 200
+                    except (zipfile.BadZipFile, KeyError):
+                        pass
+
                 result = _import_effect_mod(temp_zip_path, file.filename, effect_type, custom_title)
                 if result:
                     return jsonify(result) if result.get('success') else (jsonify(result), 400)
@@ -985,6 +1058,44 @@ def import_file():
             if stage_infos:
                 logger.info(f"[OK] Detected {len(stage_infos)} stage mod(s)")
 
+                # DUPLICATE DETECTION for stages
+                if duplicate_action is None:
+                    stage_metadata_file = STORAGE_PATH / 'metadata.json'
+                    if stage_metadata_file.exists():
+                        with open(stage_metadata_file, 'r') as f:
+                            stage_metadata = json.load(f)
+                    else:
+                        stage_metadata = {'characters': {}, 'stages': {}}
+
+                    duplicate_skins = []
+                    with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                        for stage_info in stage_infos:
+                            dat_data = zip_ref.read(stage_info['stage_file'])
+                            dat_hash = compute_dat_hash(dat_data)
+                            existing = check_duplicate_stage(stage_info['folder'], dat_hash, stage_metadata)
+                            if existing:
+                                screenshot_url = (
+                                    f"/storage/das/{stage_info['folder']}/{existing['screenshot_filename']}"
+                                    if existing.get('screenshot_filename') else None
+                                )
+                                duplicate_skins.append({
+                                    'character': stage_info['stage_name'],
+                                    'color': existing['name'],
+                                    'existing_skin': {
+                                        'id': existing['id'],
+                                        'name': f"{stage_info['stage_name']} - {existing['name']}",
+                                        'csp_url': screenshot_url
+                                    }
+                                })
+                    if duplicate_skins:
+                        return jsonify({
+                            'success': False,
+                            'type': 'duplicate_dialog',
+                            'mod_type': 'stage',
+                            'duplicate_skins': duplicate_skins,
+                            'message': 'You already have this stage!'
+                        }), 200
+
                 # Import each detected stage
                 results = []
                 for stage_info in stage_infos:
@@ -1023,11 +1134,36 @@ def import_file():
                         results = []
 
                         for xdelta_name in xdelta_files:
+                            # Read data first for duplicate check and writing
+                            xdelta_data = zf.read(xdelta_name)
+                            file_hash = compute_dat_hash(xdelta_data)
+
+                            # DUPLICATE DETECTION for patches
+                            if duplicate_action is None:
+                                existing = check_duplicate_patch(file_hash, patches)
+                                if existing:
+                                    screenshot_url = f"/storage/xdelta/{existing['id']}.png"
+                                    return jsonify({
+                                        'success': False,
+                                        'type': 'duplicate_dialog',
+                                        'mod_type': 'patch',
+                                        'duplicate_skins': [{
+                                            'character': 'Patch',
+                                            'color': existing['name'],
+                                            'existing_skin': {
+                                                'id': existing['id'],
+                                                'name': existing['name'],
+                                                'csp_url': screenshot_url
+                                            }
+                                        }],
+                                        'message': 'You already have this patch!'
+                                    }), 200
+
                             patch_id = str(uuid.uuid4())[:8]
 
                             # Save xdelta file
                             xdelta_path = xdelta_dir / f"{patch_id}.xdelta"
-                            xdelta_path.write_bytes(zf.read(xdelta_name))
+                            xdelta_path.write_bytes(xdelta_data)
 
                             # Save first image as screenshot
                             if image_files:
@@ -1044,7 +1180,8 @@ def import_file():
                                 'name': patch_name,
                                 'description': '',
                                 'filename': Path(xdelta_name).name,
-                                'created': datetime.now().isoformat()
+                                'created': datetime.now().isoformat(),
+                                'file_hash': file_hash
                             })
                             results.append({'id': patch_id, 'name': patch_name})
                             logger.info(f"  - Imported patch: {patch_name} ({patch_id})")

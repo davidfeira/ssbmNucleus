@@ -24,11 +24,19 @@ export default function DuplicateImportDialog({ show, data, onChoice }) {
   return (
     <div className="edit-modal-overlay" onClick={handleOverlayClick}>
       <div className="edit-modal-content" onClick={handleContentClick} style={{ maxWidth: '500px' }}>
-        <h2>Duplicate Skin</h2>
+        <h2>
+          {data.mod_type === 'stage' ? 'Duplicate Stage'
+            : data.mod_type === 'patch' ? 'Duplicate Patch'
+            : data.mod_type === 'effect' ? 'Duplicate Effect'
+            : 'Duplicate Skin'}
+        </h2>
 
         <div style={{ padding: '1rem 0' }}>
           <p style={{ marginBottom: '1rem' }}>
-            You already own this skin. What would you like to do?
+            {data.mod_type === 'stage' ? 'You already have this stage.'
+              : data.mod_type === 'patch' ? 'You already have this patch.'
+              : data.mod_type === 'effect' ? 'You already have this effect.'
+              : 'You already own this skin.'} What would you like to do?
           </p>
 
           {data.duplicate_skins && (
