@@ -36,6 +36,33 @@ export function useXdeltaProgress({
 }) {
   const socketRef = useRef(null)
 
+  // Keep latest values in refs so the socket handlers always see current state
+  // without needing to reconnect
+  const callbacksRef = useRef({})
+  callbacksRef.current = {
+    xdeltaBuildPatch,
+    setXdeltaBuildProgress,
+    setXdeltaBuildMessage,
+    setXdeltaBuildFilename,
+    setXdeltaBuildState,
+    setXdeltaBuildError,
+    xdeltaCreateId,
+    setXdeltaCreateProgress,
+    setXdeltaCreateMessage,
+    setXdeltaCreateResult,
+    setXdeltaCreateState,
+    setXdeltaCreateError,
+    fetchXdeltaPatches,
+    bundleImportId,
+    setBundleProgress,
+    setBundleMessage,
+    setBundleComplete,
+    setBundleResult,
+    setBundleImporting,
+    setBundleError,
+    fetchBundles
+  }
+
   useEffect(() => {
     const socket = io(BACKEND_URL)
     socketRef.current = socket
@@ -46,105 +73,89 @@ export function useXdeltaProgress({
 
     // XDelta build progress events
     socket.on('xdelta_progress', (data) => {
-      if (xdeltaBuildPatch && data.patch_id === xdeltaBuildPatch.id) {
-        setXdeltaBuildProgress(data.percentage)
-        setXdeltaBuildMessage(data.message)
+      const c = callbacksRef.current
+      if (c.xdeltaBuildPatch && data.patch_id === c.xdeltaBuildPatch.id) {
+        c.setXdeltaBuildProgress(data.percentage)
+        c.setXdeltaBuildMessage(data.message)
       }
     })
 
     socket.on('xdelta_complete', (data) => {
-      if (xdeltaBuildPatch && data.patch_id === xdeltaBuildPatch.id) {
-        setXdeltaBuildProgress(100)
-        setXdeltaBuildFilename(data.filename)
-        setXdeltaBuildState('complete')
+      const c = callbacksRef.current
+      if (c.xdeltaBuildPatch && data.patch_id === c.xdeltaBuildPatch.id) {
+        c.setXdeltaBuildProgress(100)
+        c.setXdeltaBuildFilename(data.filename)
+        c.setXdeltaBuildState('complete')
       }
     })
 
     socket.on('xdelta_error', (data) => {
-      if (xdeltaBuildPatch && data.patch_id === xdeltaBuildPatch.id) {
-        setXdeltaBuildError(data.error)
-        setXdeltaBuildState('error')
+      const c = callbacksRef.current
+      if (c.xdeltaBuildPatch && data.patch_id === c.xdeltaBuildPatch.id) {
+        c.setXdeltaBuildError(data.error)
+        c.setXdeltaBuildState('error')
       }
     })
 
     // XDelta create progress events
     socket.on('xdelta_create_progress', (data) => {
-      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
-        setXdeltaCreateProgress(data.percentage)
-        setXdeltaCreateMessage(data.message)
+      const c = callbacksRef.current
+      if (c.xdeltaCreateId && data.create_id === c.xdeltaCreateId) {
+        c.setXdeltaCreateProgress(data.percentage)
+        c.setXdeltaCreateMessage(data.message)
       }
     })
 
     socket.on('xdelta_create_complete', (data) => {
-      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
-        setXdeltaCreateProgress(100)
-        setXdeltaCreateResult(data)
-        setXdeltaCreateState('complete')
-        // Refresh patches list
-        fetchXdeltaPatches()
+      const c = callbacksRef.current
+      if (c.xdeltaCreateId && data.create_id === c.xdeltaCreateId) {
+        c.setXdeltaCreateProgress(100)
+        c.setXdeltaCreateResult(data)
+        c.setXdeltaCreateState('complete')
+        c.fetchXdeltaPatches()
       }
     })
 
     socket.on('xdelta_create_error', (data) => {
-      if (xdeltaCreateId && data.create_id === xdeltaCreateId) {
-        setXdeltaCreateError(data.error)
-        setXdeltaCreateState('error')
+      const c = callbacksRef.current
+      if (c.xdeltaCreateId && data.create_id === c.xdeltaCreateId) {
+        c.setXdeltaCreateError(data.error)
+        c.setXdeltaCreateState('error')
       }
     })
 
     // Bundle import progress events
     socket.on('bundle_import_progress', (data) => {
-      if (bundleImportId && data.import_id === bundleImportId) {
-        setBundleProgress?.(data.percentage)
-        setBundleMessage?.(data.message)
+      const c = callbacksRef.current
+      if (c.bundleImportId && data.import_id === c.bundleImportId) {
+        c.setBundleProgress?.(data.percentage)
+        c.setBundleMessage?.(data.message)
       }
     })
 
     socket.on('bundle_import_complete', (data) => {
-      if (bundleImportId && data.import_id === bundleImportId) {
-        setBundleProgress?.(100)
-        setBundleComplete?.(true)
-        setBundleResult?.(data)
-        setBundleImporting?.(false)
-        // Refresh bundles list
-        fetchBundles?.()
+      const c = callbacksRef.current
+      if (c.bundleImportId && data.import_id === c.bundleImportId) {
+        c.setBundleProgress?.(100)
+        c.setBundleComplete?.(true)
+        c.setBundleResult?.(data)
+        c.setBundleImporting?.(false)
+        c.fetchBundles?.()
       }
     })
 
     socket.on('bundle_import_error', (data) => {
-      if (bundleImportId && data.import_id === bundleImportId) {
-        setBundleError?.(data.error)
-        setBundleImporting?.(false)
+      const c = callbacksRef.current
+      if (c.bundleImportId && data.import_id === c.bundleImportId) {
+        c.setBundleError?.(data.error)
+        c.setBundleImporting?.(false)
       }
     })
 
     return () => {
       socket.disconnect()
     }
-  }, [
-    BACKEND_URL,
-    xdeltaBuildPatch,
-    xdeltaCreateId,
-    bundleImportId,
-    setXdeltaBuildProgress,
-    setXdeltaBuildMessage,
-    setXdeltaBuildFilename,
-    setXdeltaBuildState,
-    setXdeltaBuildError,
-    setXdeltaCreateProgress,
-    setXdeltaCreateMessage,
-    setXdeltaCreateResult,
-    setXdeltaCreateState,
-    setXdeltaCreateError,
-    fetchXdeltaPatches,
-    setBundleProgress,
-    setBundleMessage,
-    setBundleComplete,
-    setBundleResult,
-    setBundleImporting,
-    setBundleError,
-    fetchBundles
-  ])
+  }, [BACKEND_URL])
 
   return { socketRef }
 }

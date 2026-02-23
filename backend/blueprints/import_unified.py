@@ -23,7 +23,7 @@ from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
 from generate_csp import generate_csp
 from blueprints.xdelta import load_xdelta_metadata, save_xdelta_metadata
-from extra_types import get_extra_type, get_storage_character
+from extra_types import get_extra_type, get_extra_types, get_storage_character
 from extras_api import extract_model_from_dat
 
 logger = logging.getLogger(__name__)
@@ -696,9 +696,21 @@ def _import_effect_mod(zip_path, zip_filename, effect_type, custom_title=None):
 
             # Normalize effect_type to lowercase (website tags are "Gun", desktop IDs are "gun")
             effect_type = effect_type.lower()
+            # Normalize separators (website sends "shadow ball", IDs use "shadow_ball")
+            effect_type = effect_type.replace(' ', '_').replace('-', '_')
 
             # Validate effect type exists for this character
             type_config = get_extra_type(character, effect_type)
+
+            # Fallback: match by name (website often sends the display name, not the ID)
+            if not type_config:
+                for t in get_extra_types(character):
+                    normalized_name = t["name"].lower().replace(' ', '_').replace('-', '_')
+                    if normalized_name == effect_type:
+                        effect_type = t["id"]
+                        type_config = t
+                        break
+
             if not type_config:
                 logger.warning(f"Effect type '{effect_type}' not defined for {character}")
                 return {

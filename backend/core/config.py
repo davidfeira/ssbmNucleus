@@ -28,14 +28,15 @@ if getattr(sys, 'frozen', False):
     EXE_PATH = Path(sys.executable)
     RESOURCES_DIR = EXE_PATH.parent.parent  # resources/
 
-    # For user data, detect if running in AppImage (Linux read-only mount)
+    # For user data, use writable locations outside the install directory
     if os.name != 'nt' and '/tmp/.mount_' in str(EXE_PATH):
         # AppImage: Use home directory for writable data
         PROJECT_ROOT = Path.home() / '.melee-nexus'
-        PROJECT_ROOT.mkdir(exist_ok=True)
     else:
-        # Windows installer: Use the app's installation root
-        PROJECT_ROOT = RESOURCES_DIR.parent  # Melee Nexus/
+        # Windows: Use LocalAppData for writable user data
+        appdata = os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local'))
+        PROJECT_ROOT = Path(appdata) / 'SSBM Nucleus'
+    PROJECT_ROOT.mkdir(exist_ok=True)
 else:
     # Running as Python script (development)
     PROJECT_ROOT = Path(__file__).parent.parent.parent
