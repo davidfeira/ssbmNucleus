@@ -211,8 +211,9 @@ namespace HSDRawViewer
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Embedded server error: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.Error.WriteLine($"Embedded server error: {ex.Message}");
+                Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.Error.Flush();
                 Environment.Exit(1);
             }
         }

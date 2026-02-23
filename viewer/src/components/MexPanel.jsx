@@ -5,6 +5,7 @@ import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
 import CharacterMode from './mex/CharacterMode'
 import StageMode from './mex/StageMode'
+import { API_URL } from '../config'
 
 const MexPanel = () => {
   const [mode, setMode] = useState('characters')
@@ -18,8 +19,6 @@ const MexPanel = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [showIsoBuilder, setShowIsoBuilder] = useState(false)
   const [showProjectModal, setShowProjectModal] = useState(false)
-
-  const API_URL = 'http://127.0.0.1:5000/api/mex'
 
   useEffect(() => {
     fetchMexStatus()

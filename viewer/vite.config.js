@@ -2,27 +2,31 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const backendPort = process.env.VITE_BACKEND_PORT || 5000
+const backendTarget = `http://127.0.0.1:${backendPort}`
+
 export default defineConfig({
   plugins: [react()],
   // Use relative base path for Electron compatibility
   base: './',
   server: {
     port: 3000,
+    strictPort: false, // Auto-increment if 3000 is taken
     open: false, // Don't auto-open browser in Electron mode
     proxy: {
       // Proxy /api requests to Flask backend
       '/api': {
-        target: 'http://127.0.0.1:5000',
+        target: backendTarget,
         changeOrigin: true
       },
       // Proxy /storage requests to Flask backend (single source of truth)
       '/storage': {
-        target: 'http://127.0.0.1:5000',
+        target: backendTarget,
         changeOrigin: true
       },
       // Proxy /vanilla requests to Flask backend for vanilla assets
       '/vanilla': {
-        target: 'http://127.0.0.1:5000',
+        target: backendTarget,
         changeOrigin: true
       }
     },

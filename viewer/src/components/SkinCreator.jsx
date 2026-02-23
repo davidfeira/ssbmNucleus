@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePanelResize } from '../hooks/usePanelResize'
 import { playSound, playHoverSound } from '../utils/sounds'
+import { API_URL, BACKEND_URL } from '../config'
 import './SkinCreator.css'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
-const BACKEND_URL = 'http://127.0.0.1:5000'
 
 export default function SkinCreator({
   isOpen,

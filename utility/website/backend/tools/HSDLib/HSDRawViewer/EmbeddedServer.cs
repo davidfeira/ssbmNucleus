@@ -165,7 +165,6 @@ namespace HSDRawViewer
             Log("Initializing MainForm...");
             MainForm.Init();
             MainForm.Instance.OpenFile(datFilePath);
-            Thread.Sleep(500);
 
             // Load the DAT file
             Log("Opening DAT file...");
@@ -209,7 +208,6 @@ namespace HSDRawViewer
             // Select and open editor
             MainForm.SelectedDataNode = characterJobjNode;
             MainForm.Instance.OpenEditor();
-            Thread.Sleep(1000);
 
             // Create viewport
             Log("Creating ViewportControl...");
@@ -336,6 +334,10 @@ namespace HSDRawViewer
                     LogError("Failed to load AJ file", ex);
                 }
             }
+
+            // Signal to Electron that we're about to create the pipe
+            Console.WriteLine("PIPE_READY");
+            Console.Out.Flush();
 
             // Start named pipe server
             Log($"Starting named pipe server: {_pipeName}");

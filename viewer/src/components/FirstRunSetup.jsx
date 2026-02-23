@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
 import { playSound, reloadSounds } from '../utils/sounds'
+import { API_URL, BACKEND_URL } from '../config'
 import './FirstRunSetup.css'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
 
 export default function FirstRunSetup({ onComplete }) {
   const [step, setStep] = useState('welcome') // welcome, select-iso, verifying, extracting, copying, complete, error
@@ -22,7 +21,7 @@ export default function FirstRunSetup({ onComplete }) {
 
   // Connect to WebSocket for progress updates
   useEffect(() => {
-    const newSocket = io('http://127.0.0.1:5000', {
+    const newSocket = io(BACKEND_URL, {
       transports: ['websocket', 'polling']
     })
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { playSound } from '../utils/sounds';
+import { API_URL, BACKEND_URL } from '../config';
 import './IsoBuilder.css';
 
 // CSS screen order for scanning - matches the character select screen layout
@@ -74,11 +75,9 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [bundleError, setBundleError] = useState(null);
   const [bundleResult, setBundleResult] = useState(null);
 
-  const API_URL = 'http://127.0.0.1:5000';
-
   useEffect(() => {
     // Connect to WebSocket for progress updates
-    const newSocket = io(API_URL);
+    const newSocket = io(BACKEND_URL);
 
     newSocket.on('connect', () => {
       console.log('Connected to WebSocket');
@@ -103,7 +102,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         setTextureProgress({ matched: 0, total: data.totalCostumes, percentage: 0 });
 
         try {
-          const response = await fetch(`${API_URL}/api/mex/texture-pack/start-listening`, {
+          const response = await fetch(`${API_URL}/texture-pack/start-listening`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -245,7 +244,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
 
   // Fetch recommended compression on mount
   useEffect(() => {
-    fetch(`${API_URL}/api/mex/recommended-compression`)
+    fetch(`${API_URL}/recommended-compression`)
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -277,7 +276,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     const finalColorSmash = colorSmashOverride !== null ? colorSmashOverride : useColorSmash;
 
     try {
-      const response = await fetch(`${API_URL}/api/mex/export/start`, {
+      const response = await fetch(`${API_URL}/export/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -333,7 +332,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
 
   const handleStopListening = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/mex/texture-pack/stop-listening`, {
+      const response = await fetch(`${API_URL}/texture-pack/stop-listening`, {
         method: 'POST'
       });
 
@@ -365,7 +364,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     playSound('start');
     // Create a temporary anchor element to trigger download without opening new window
     const link = document.createElement('a');
-    link.href = `${API_URL}/api/mex/export/download/${filename}`;
+    link.href = `${API_URL}/export/download/${filename}`;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
@@ -420,7 +419,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       // First, stop listening to finalize the texture pack and get the path
       let finalTexturePackPath = texturePackPath;
       if (listeningMode) {
-        const stopResponse = await fetch(`${API_URL}/api/mex/texture-pack/stop-listening`, {
+        const stopResponse = await fetch(`${API_URL}/texture-pack/stop-listening`, {
           method: 'POST'
         });
         const stopData = await stopResponse.json();
@@ -447,7 +446,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         formData.append('image', bundleImage);
       }
 
-      const response = await fetch(`${API_URL}/api/mex/bundle/export`, {
+      const response = await fetch(`${API_URL}/bundle/export`, {
         method: 'POST',
         body: formData
       });
@@ -472,7 +471,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     if (!bundleResult?.bundle_id) return;
     playSound('start');
     const link = document.createElement('a');
-    link.href = `${API_URL}/api/mex/bundle/download/${bundleResult.bundle_id}`;
+    link.href = `${API_URL}/bundle/download/${bundleResult.bundle_id}`;
     link.download = bundleResult.filename || 'bundle.ssbm';
     document.body.appendChild(link);
     link.click();
@@ -504,7 +503,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     setPatchResult(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/mex/xdelta/create`, {
+      const response = await fetch(`${API_URL}/xdelta/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -532,7 +531,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const handleDownloadPatch = () => {
     if (!patchResult?.patch_id) return;
     const link = document.createElement('a');
-    link.href = `${API_URL}/api/mex/xdelta/download-patch/${patchResult.patch_id}`;
+    link.href = `${API_URL}/xdelta/download-patch/${patchResult.patch_id}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

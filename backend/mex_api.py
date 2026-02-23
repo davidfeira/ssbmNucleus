@@ -7,6 +7,7 @@ and handles startup/shutdown.
 
 import os
 import sys
+import socket
 import signal
 import atexit
 import logging
@@ -146,6 +147,22 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 
+def find_free_port(preferred=5000):
+    """Try the preferred port first; fall back to an OS-assigned free port."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(('127.0.0.1', preferred))
+        sock.close()
+        return preferred
+    except OSError:
+        sock.close()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        return port
+
+
 if __name__ == '__main__':
     print(f"Starting MEX API Backend...")
     print(f"MexCLI: {MEXCLI_PATH}")
@@ -196,5 +213,10 @@ if __name__ == '__main__':
     # No auto-loading - user must select a project
     print(f"INFO: MEX Manager ready. Please open a project to get started.")
 
+    # Pick a free port (prefer 5000, fall back to OS-assigned)
+    port = find_free_port(preferred=5000)
+    # Electron parses this line to discover the backend port
+    print(f"BACKEND_PORT:{port}", flush=True)
+
     # Run the Flask app
-    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
+    socketio.run(app, host='127.0.0.1', port=port, debug=True, use_reloader=False)

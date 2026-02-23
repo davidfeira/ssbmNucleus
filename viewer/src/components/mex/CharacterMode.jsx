@@ -14,8 +14,7 @@ import { getExtraTypes, hasExtras } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
-
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { BACKEND_URL } from '../../config'
 
 export default function CharacterMode({
   mode,

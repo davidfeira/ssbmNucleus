@@ -119,7 +119,7 @@ const groupAnimations = (animList) => {
   return sorted
 }
 
-const API_URL = 'http://127.0.0.1:5000'
+import { API_URL, BACKEND_URL } from '../config'
 
 let viewerStarting = false
 
@@ -187,7 +187,7 @@ const EmbeddedModelViewer = forwardRef(({
       if (character && skinId && !datFile) {
         // Load custom skin from storage
         console.log('[EmbeddedViewer] Fetching paths for:', character, skinId)
-        const response = await fetch(`${API_URL}/api/viewer/paths`, {
+        const response = await fetch(`${BACKEND_URL}/api/viewer/paths`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ character, skinId })
@@ -208,7 +208,7 @@ const EmbeddedModelViewer = forwardRef(({
       } else if (character && costumeCode && !datFile) {
         // Load vanilla costume
         console.log('[EmbeddedViewer] Fetching vanilla paths for:', character, costumeCode)
-        const response = await fetch(`${API_URL}/api/mex/viewer/paths-vanilla`, {
+        const response = await fetch(`${API_URL}/viewer/paths-vanilla`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ character, costumeCode })

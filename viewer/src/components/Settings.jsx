@@ -1,4 +1,5 @@
 import './Settings.css'
+import { API_URL } from '../config'
 import BackupRestore from './settings/BackupRestore'
 import StorageStatsSection from './settings/StorageStatsSection'
 import AdditionalDataSection from './settings/AdditionalDataSection'
@@ -8,8 +9,6 @@ import HdCspSection from './settings/HdCspSection'
 import ClearStorageSection from './settings/ClearStorageSection'
 import DiscordSection from './settings/DiscordSection'
 import VolumeSection from './settings/VolumeSection'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
 
 export default function Settings({ metadata }) {
 

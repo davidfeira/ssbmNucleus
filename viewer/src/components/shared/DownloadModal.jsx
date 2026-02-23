@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { DOWNLOAD_PHASES } from '../../hooks/useDownloadQueue'
 import { playSound } from '../../utils/sounds'
+import { BACKEND_URL } from '../../config'
 import './DownloadModal.css'
 
 /**
@@ -155,7 +156,7 @@ export default function DownloadModal({
               <div key={idx} className="download-duplicate-preview">
                 {dup.existing_skin?.csp_url && (
                   <img
-                    src={`http://127.0.0.1:5000${dup.existing_skin.csp_url}`}
+                    src={`${BACKEND_URL}${dup.existing_skin.csp_url}`}
                     alt="Existing skin"
                     className="download-duplicate-csp"
                   />

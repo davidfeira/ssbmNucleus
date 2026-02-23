@@ -7,8 +7,7 @@
  * - Shows disk space usage
  */
 import { useState, useEffect } from 'react'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
+import { API_URL } from '../../config'
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B'

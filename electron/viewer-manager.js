@@ -17,6 +17,9 @@ class ViewerManager {
     this.messageHandlers = new Map();
     this.isConnected = false;
     this.hwnd = null;
+    // Track process state for fail-fast during pipe connection
+    this._processExited = false;
+    this._stderrChunks = [];
   }
 
   /**
@@ -66,6 +69,10 @@ class ViewerManager {
       await this.stop();
     }
 
+    // Reset state
+    this._processExited = false;
+    this._stderrChunks = [];
+
     // Get viewer path
     const viewerPath = this.getViewerPath(isDev);
     console.log('[ViewerManager] Viewer path:', viewerPath);
@@ -97,20 +104,26 @@ class ViewerManager {
     });
 
     this.process.stderr.on('data', (data) => {
-      console.error('[HSDViewer Error]', data.toString().trim());
+      const text = data.toString().trim();
+      console.error('[HSDViewer Error]', text);
+      this._stderrChunks.push(text);
     });
 
     this.process.on('close', (code) => {
       console.log('[ViewerManager] Viewer process exited with code:', code);
+      this._processExited = true;
       this.cleanup();
     });
 
     this.process.on('error', (err) => {
       console.error('[ViewerManager] Failed to start viewer:', err);
+      this._processExited = true;
+      this._stderrChunks.push(err.message);
       this.cleanup();
     });
 
-    // Wait for the viewer to start and connect via named pipe
+    // Wait for PIPE_READY signal from stdout, then connect
+    await this.waitForPipeReady();
     await this.connectToPipe();
 
     return {
@@ -121,7 +134,65 @@ class ViewerManager {
   }
 
   /**
-   * Connect to the named pipe
+   * Wait for the C# viewer to signal that it's created the named pipe.
+   * Fails fast if the process exits before signaling.
+   */
+  waitForPipeReady() {
+    return new Promise((resolve, reject) => {
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          const stderr = this._stderrChunks.join('\n').trim();
+          reject(new Error(
+            `HSDRawViewer did not become ready within 30 seconds` +
+            (stderr ? `\n\nViewer output:\n${stderr}` : '')
+          ));
+        }
+      }, 30000);
+
+      // Listen for PIPE_READY on stdout
+      const onData = (data) => {
+        if (resolved) return;
+        const text = data.toString();
+        if (text.includes('PIPE_READY')) {
+          resolved = true;
+          clearTimeout(timeout);
+          // Remove this specific listener (keep the logging one)
+          this.process?.stdout?.removeListener('data', onData);
+          resolve();
+        }
+      };
+      this.process.stdout.on('data', onData);
+
+      // Fail fast if process exits before signaling
+      const onClose = (code) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          const stderr = this._stderrChunks.join('\n').trim();
+          reject(new Error(
+            `HSDRawViewer crashed during startup (exit code ${code})` +
+            (stderr ? `\n\nViewer output:\n${stderr}` : '')
+          ));
+        }
+      };
+      this.process.on('close', onClose);
+
+      const onError = (err) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(new Error(`HSDRawViewer failed to launch: ${err.message}`));
+        }
+      };
+      this.process.on('error', onError);
+    });
+  }
+
+  /**
+   * Connect to the named pipe (called only after PIPE_READY)
    */
   async connectToPipe() {
     return new Promise((resolve, reject) => {
@@ -129,30 +200,50 @@ class ViewerManager {
       console.log('[ViewerManager] Connecting to pipe:', pipePath);
 
       let attempts = 0;
-      const maxAttempts = 30; // 30 * 500ms = 15 seconds timeout
+      const maxAttempts = 10; // Only need a few retries since we know the pipe exists
+      let settled = false;
 
       const tryConnect = () => {
-        attempts++;
+        if (settled) return;
 
+        // Fail fast if process died
+        if (this._processExited) {
+          settled = true;
+          const stderr = this._stderrChunks.join('\n').trim();
+          reject(new Error(
+            'HSDRawViewer process exited before pipe connection could be established' +
+            (stderr ? `\n\nViewer output:\n${stderr}` : '')
+          ));
+          return;
+        }
+
+        attempts++;
         this.pipeClient = net.connect(pipePath, () => {
-          console.log('[ViewerManager] Connected to pipe!');
-          this.isConnected = true;
-          this.setupPipeHandlers();
-          resolve();
+          if (!settled) {
+            settled = true;
+            console.log('[ViewerManager] Connected to pipe!');
+            this.isConnected = true;
+            this.setupPipeHandlers();
+            resolve();
+          }
         });
 
         this.pipeClient.on('error', (err) => {
+          if (settled) return;
           if (attempts < maxAttempts) {
-            // Pipe not ready yet, retry
-            setTimeout(tryConnect, 500);
+            setTimeout(tryConnect, 200);
           } else {
-            reject(new Error(`Failed to connect to viewer pipe after ${maxAttempts} attempts: ${err.message}`));
+            settled = true;
+            const stderr = this._stderrChunks.join('\n').trim();
+            reject(new Error(
+              `Failed to connect to viewer pipe after ${maxAttempts} attempts: ${err.message}` +
+              (stderr ? `\n\nViewer output:\n${stderr}` : '')
+            ));
           }
         });
       };
 
-      // Start trying to connect after a brief delay
-      setTimeout(tryConnect, 500);
+      tryConnect();
     });
   }
 

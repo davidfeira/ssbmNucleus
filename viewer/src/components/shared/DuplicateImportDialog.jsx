@@ -1,6 +1,5 @@
 import { playSound } from '../../utils/sounds'
-
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { BACKEND_URL } from '../../config'
 
 /**
  * Dialog shown when an imported skin already exists in the library.

@@ -5,6 +5,7 @@ const fs = require('fs');
 
 let pythonProcess = null;
 let mainWindow = null;
+let backendPort = null;
 
 // Determine if we're in development or production
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -20,69 +21,105 @@ function getResourcePath(relativePath) {
 }
 
 function startFlaskServer() {
-  console.log('[Electron] Starting Flask backend...');
+  return new Promise((resolve, reject) => {
+    console.log('[Electron] Starting Flask backend...');
 
-  let backendCmd, backendArgs, backendCwd;
+    let backendCmd, backendArgs, backendCwd;
 
-  if (isDev) {
-    // Development: Run Python script directly
-    const backendPath = getResourcePath('backend/mex_api.py');
-    console.log('[Electron] Dev mode - Backend path:', backendPath);
+    if (isDev) {
+      // Development: Run Python script directly
+      const backendPath = getResourcePath('backend/mex_api.py');
+      console.log('[Electron] Dev mode - Backend path:', backendPath);
 
-    if (!fs.existsSync(backendPath)) {
-      console.error('[Electron] Backend file not found:', backendPath);
-      return;
+      if (!fs.existsSync(backendPath)) {
+        console.error('[Electron] Backend file not found:', backendPath);
+        reject(new Error('Backend file not found'));
+        return;
+      }
+
+      // Use venv Python in development
+      const venvPython = getResourcePath('venv/Scripts/python.exe');
+      backendCmd = venvPython;
+      backendArgs = [backendPath];
+      backendCwd = path.dirname(backendPath);
+    } else {
+      // Production: Use bundled executable (platform-aware)
+      const backendName = process.platform === 'win32' ? 'mex_backend.exe' : 'mex_backend';
+      const backendExe = path.join(process.resourcesPath, 'backend', backendName);
+      console.log('[Electron] Production mode - Backend exe:', backendExe);
+
+      if (!fs.existsSync(backendExe)) {
+        console.error('[Electron] Backend executable not found:', backendExe);
+        reject(new Error('Backend executable not found'));
+        return;
+      }
+
+      backendCmd = backendExe;
+      backendArgs = [];
+      backendCwd = path.join(process.resourcesPath, 'backend');
     }
 
-    // Use venv Python in development
-    const venvPython = getResourcePath('venv/Scripts/python.exe');
-    backendCmd = venvPython;
-    backendArgs = [backendPath];
-    backendCwd = path.dirname(backendPath);
-  } else {
-    // Production: Use bundled executable (platform-aware)
-    const backendName = process.platform === 'win32' ? 'mex_backend.exe' : 'mex_backend';
-    const backendExe = path.join(process.resourcesPath, 'backend', backendName);
-    console.log('[Electron] Production mode - Backend exe:', backendExe);
+    // Spawn options with hidden window
+    const spawnOptions = {
+      cwd: backendCwd,
+      stdio: ['ignore', 'pipe', 'pipe']
+    };
 
-    if (!fs.existsSync(backendExe)) {
-      console.error('[Electron] Backend executable not found:', backendExe);
-      return;
+    // Hide CMD window on Windows
+    if (process.platform === 'win32') {
+      spawnOptions.windowsHide = true;
     }
 
-    backendCmd = backendExe;
-    backendArgs = [];
-    backendCwd = path.join(process.resourcesPath, 'backend');
-  }
+    pythonProcess = spawn(backendCmd, backendArgs, spawnOptions);
 
-  // Spawn options with hidden window
-  const spawnOptions = {
-    cwd: backendCwd,
-    stdio: ['ignore', 'pipe', 'pipe']
-  };
+    let resolved = false;
 
-  // Hide CMD window on Windows
-  if (process.platform === 'win32') {
-    spawnOptions.windowsHide = true;
-  }
+    // Timeout: if we don't see BACKEND_PORT within 15s, reject
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.error('[Electron] Timed out waiting for Flask backend port');
+        reject(new Error('Flask backend did not report port within 15 seconds'));
+      }
+    }, 15000);
 
-  pythonProcess = spawn(backendCmd, backendArgs, spawnOptions);
+    pythonProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      console.log(`[Flask] ${output.trim()}`);
 
-  pythonProcess.stdout.on('data', (data) => {
-    console.log(`[Flask] ${data.toString().trim()}`);
-  });
+      // Parse the port announcement from Flask
+      const match = output.match(/BACKEND_PORT:(\d+)/);
+      if (match && !resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        backendPort = parseInt(match[1], 10);
+        console.log(`[Electron] Flask backend running on port ${backendPort}`);
+        resolve(backendPort);
+      }
+    });
 
-  pythonProcess.stderr.on('data', (data) => {
-    console.error(`[Flask Error] ${data.toString().trim()}`);
-  });
+    pythonProcess.stderr.on('data', (data) => {
+      console.error(`[Flask Error] ${data.toString().trim()}`);
+    });
 
-  pythonProcess.on('close', (code) => {
-    console.log(`[Flask] Process exited with code ${code}`);
-    pythonProcess = null;
-  });
+    pythonProcess.on('close', (code) => {
+      console.log(`[Flask] Process exited with code ${code}`);
+      pythonProcess = null;
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        reject(new Error(`Flask process exited with code ${code} before reporting port`));
+      }
+    });
 
-  pythonProcess.on('error', (err) => {
-    console.error('[Flask] Failed to start:', err);
+    pythonProcess.on('error', (err) => {
+      console.error('[Flask] Failed to start:', err);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        reject(err);
+      }
+    });
   });
 }
 
@@ -100,7 +137,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      additionalArguments: [`--backend-port=${backendPort || 5000}`]
     },
     icon: path.join(__dirname, '../viewer/public/icon.png')
   });
@@ -417,16 +455,20 @@ if (!gotTheLock) {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log('[Electron] App ready');
 
-  // Start Flask backend
-  startFlaskServer();
+  // Start Flask backend and wait for port
+  try {
+    await startFlaskServer();
+    console.log(`[Electron] Backend ready on port ${backendPort}`);
+  } catch (err) {
+    console.error('[Electron] Failed to start Flask backend:', err.message);
+    // Fall back to default port so the app can still attempt to load
+    backendPort = 5000;
+  }
 
-  // Wait a bit for Flask to start, then create window
-  setTimeout(() => {
-    createWindow();
-  }, 2000);
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -438,7 +480,7 @@ app.whenReady().then(() => {
   if (process.platform === 'win32') {
     const url = process.argv.find(arg => arg.startsWith('nucleus://'));
     if (url) {
-      setTimeout(() => handleNucleusUrl(url), 3000); // Wait for Flask + window
+      setTimeout(() => handleNucleusUrl(url), 1000);
     }
   }
 });
@@ -464,7 +506,7 @@ app.on('before-quit', async (event) => {
       await new Promise((resolve) => {
         const req = http.request({
           hostname: '127.0.0.1',
-          port: 5000,
+          port: backendPort || 5000,
           path: '/api/mex/shutdown',
           method: 'POST',
           timeout: 2000

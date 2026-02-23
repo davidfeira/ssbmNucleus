@@ -178,21 +178,13 @@ REM ----------------------------------------
 if not exist logs mkdir logs
 
 REM ----------------------------------------
-REM  Kill stale processes on our ports
+REM  Kill stale processes by name
 REM ----------------------------------------
-echo [CLEANUP] Stopping any existing processes on ports 5000 and 3000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do taskkill /F /PID %%a 2>nul
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do taskkill /F /PID %%a 2>nul
+echo [CLEANUP] Stopping any existing Nucleus processes...
+taskkill /F /IM mex_backend.exe 2>nul
 taskkill /F /FI "WINDOWTITLE eq MEX Manager*" 2>nul
 timeout /t 2 /nobreak >nul
-
-REM Verify port 5000 is actually free
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do (
-    echo [ERROR] Port 5000 is still in use by PID %%a. Kill it manually and try again.
-    pause
-    exit /b 1
-)
-echo [OK] Ports 5000 and 3000 are free.
+echo [OK] Stale processes cleaned up.
 echo.
 
 REM ----------------------------------------
@@ -216,7 +208,7 @@ echo ========================================
 echo  SSBM Nucleus is starting!
 echo ========================================
 echo.
-echo  Backend:  http://127.0.0.1:5000 (managed by Electron)
+echo  Backend:  Port assigned dynamically (managed by Electron)
 echo  Frontend: http://localhost:3000
 echo  Electron: Desktop app window
 echo.

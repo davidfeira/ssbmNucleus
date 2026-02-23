@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { API_URL } from '../config'
 
 /**
  * Download phases for the state machine
@@ -71,7 +72,7 @@ export function useDownloadQueue() {
       }
 
       // Call the import API
-      const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
+      const importResponse = await fetch(`${API_URL}/import/file`, {
         method: 'POST',
         body: formData
       })
@@ -199,7 +200,7 @@ export function useDownloadQueue() {
         formData.append('duplicate_action', result.duplicateAction)
       }
 
-      const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
+      const importResponse = await fetch(`${API_URL}/import/file`, {
         method: 'POST',
         body: formData
       })
@@ -271,7 +272,7 @@ export function useDownloadQueue() {
         formData.append('slippi_action', result.slippiAction)
       }
 
-      const importResponse = await fetch('http://127.0.0.1:5000/api/mex/import/file', {
+      const importResponse = await fetch(`${API_URL}/import/file`, {
         method: 'POST',
         body: formData
       })

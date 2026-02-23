@@ -32,9 +32,7 @@ import { useXdeltaProgress } from '../hooks/useXdeltaProgress'
 import { useCspManager } from '../hooks/useCspManager'
 import { useEditModal } from '../hooks/useEditModal'
 import { buildDisplayList, countSkinsInFolder, getFolderIdAtPosition } from '../utils/storageViewerUtils'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { API_URL, BACKEND_URL } from '../config'
 
 // Skeleton loading components
 const SkeletonCard = () => (

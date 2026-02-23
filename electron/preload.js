@@ -1,7 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Parse backend port from Electron's additionalArguments
+const backendPortArg = process.argv.find(arg => arg.startsWith('--backend-port='));
+const backendPort = backendPortArg ? parseInt(backendPortArg.split('=')[1], 10) : 5000;
+
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld('electron', {
+  /**
+   * The port the Flask backend is running on (dynamic)
+   */
+  backendPort,
+
   /**
    * Open a native file picker dialog to select a .mexproj file
    * @returns {Promise<string|null>} Full file path or null if canceled

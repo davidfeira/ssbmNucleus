@@ -7,9 +7,8 @@ import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
 import DownloadModal from './components/shared/DownloadModal'
 import { useDownloadQueue, DOWNLOAD_PHASES } from './hooks/useDownloadQueue'
 import { playSound, playHoverSound } from './utils/sounds'
+import { API_URL } from './config'
 import './App.css'
-
-const API_URL = 'http://127.0.0.1:5000/api/mex'
 
 function App() {
   const [activeTab, setActiveTab] = useState('storage');

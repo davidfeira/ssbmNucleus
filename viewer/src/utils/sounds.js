@@ -2,6 +2,7 @@
  * Melee Menu Sound Effects
  * Preloads and plays menu sounds from vanilla Melee assets
  */
+import { BACKEND_URL } from '../config'
 
 // Default volume (0.0 to 1.0)
 const DEFAULT_VOLUME = 0.3
@@ -11,9 +12,6 @@ let masterVolume = (() => {
   const saved = localStorage.getItem('settings_master_volume')
   return saved !== null ? parseFloat(saved) : DEFAULT_VOLUME
 })()
-
-// Backend URL for sound files (production loads via file://, needs full URL)
-const BACKEND_URL = 'http://127.0.0.1:5000'
 
 // Sound file names mapping
 const SOUND_FILES = {

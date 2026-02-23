@@ -9,8 +9,7 @@
  * - Click to select stage
  */
 import { playSound, playHoverSound } from '../../utils/sounds'
-
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { BACKEND_URL } from '../../config'
 
 const DAS_STAGES = [
   { code: 'GrOp', name: 'Dreamland', folder: 'dreamland', vanillaImage: `${BACKEND_URL}/vanilla/stages/dreamland.png` },
