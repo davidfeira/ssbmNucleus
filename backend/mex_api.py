@@ -158,6 +158,25 @@ if __name__ == '__main__':
         print("Please build it first: cd utility/MexManager/MexCLI && dotnet build -c Release")
         sys.exit(1)
 
+    # Verify optional exe dependencies and warn if missing
+    _missing_deps = []
+    if not HSDRAW_EXE.exists():
+        _missing_deps.append(f"HSDRawViewer not found at {HSDRAW_EXE}")
+    # Check xdelta3
+    from blueprints.xdelta import get_xdelta_exe
+    _xdelta = get_xdelta_exe()
+    if isinstance(_xdelta, Path) and not _xdelta.exists():
+        _missing_deps.append(f"xdelta3 not found at {_xdelta}")
+    elif isinstance(_xdelta, str):
+        import shutil
+        if not shutil.which(_xdelta):
+            _missing_deps.append(f"xdelta3 not found on system PATH")
+    if _missing_deps:
+        for dep in _missing_deps:
+            logger.warning(f"MISSING DEPENDENCY: {dep}")
+        print(f"WARNING: {len(_missing_deps)} optional dependency(ies) missing. Some features may not work.")
+        print("  " + "\n  ".join(_missing_deps))
+
     # Register cleanup handlers
     atexit.register(cleanup_on_exit)
     signal.signal(signal.SIGINT, signal_handler)

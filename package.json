@@ -74,6 +74,11 @@
         "filter": ["**/*"]
       },
       {
+        "from": "utility/xdelta",
+        "to": "utility/xdelta",
+        "filter": ["xdelta3*"]
+      },
+      {
         "from": "scripts/tools/clear_storage.py",
         "to": "scripts/tools/clear_storage.py"
       }
