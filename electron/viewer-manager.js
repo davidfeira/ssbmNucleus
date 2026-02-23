@@ -42,11 +42,10 @@ class ViewerManager {
         'HSDRawViewer.exe'
       );
     } else {
-      // Production: bundled in resources
+      // Production: use the self-contained publish in resources
       return path.join(
         process.resourcesPath,
-        'utility', 'website', 'backend', 'tools',
-        'HSDLib', 'HSDRawViewer', 'bin', 'Release', 'net6.0-windows',
+        'utility', 'HSDRawViewer',
         'HSDRawViewer.exe'
       );
     }
