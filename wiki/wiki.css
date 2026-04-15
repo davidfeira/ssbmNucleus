@@ -577,6 +577,10 @@ img {
   overflow: hidden;
 }
 
+.editor-pane[hidden] {
+  display: none !important;
+}
+
 .editor-pane-header,
 .editor-pane-footer {
   padding: 0.95rem 1rem;
