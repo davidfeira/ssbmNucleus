@@ -192,6 +192,23 @@
   font-weight: var(--font-medium);
 }
 
+.app-panel-loading {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-8);
+  gap: var(--space-4);
+}
+
+.app-panel-loading p {
+  font-size: var(--text-md);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-medium);
+}
+
 .app-error h2 {
   font-size: var(--text-3xl);
   color: var(--color-text-primary);
