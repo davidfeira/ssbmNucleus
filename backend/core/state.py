@@ -94,6 +94,13 @@ def set_project_path(path):
     _mex_manager = None  # Reset manager so it reinitializes with new path
 
 
+def clear_project_path():
+    """Clear the current project and reset manager state."""
+    global _mex_manager, _current_project_path
+    _current_project_path = None
+    _mex_manager = None
+
+
 def reload_mex_manager():
     """Force reload of MEX manager to pick up file changes."""
     global _mex_manager

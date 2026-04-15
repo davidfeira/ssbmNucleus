@@ -7,6 +7,7 @@ Handles MEX project status, open, create, and fighter listing.
 import json
 import subprocess
 import logging
+import shutil
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
@@ -15,7 +16,7 @@ from core.config import (
     PROJECT_ROOT, PROJECTS_PATH, MEXCLI_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
 )
 from core.state import (
-    get_mex_manager, set_project_path, get_current_project_path
+    get_mex_manager, set_project_path, get_current_project_path, clear_project_path
 )
 from core.constants import VANILLA_COSTUME_COUNT
 from core.helpers import calculate_auto_compression
@@ -283,6 +284,71 @@ def create_project():
 
     except Exception as e:
         logger.error(f"Create project error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@project_bp.route('/api/mex/project/delete', methods=['POST'])
+def delete_project():
+    """Delete an app-managed MEX project directory."""
+    try:
+        data = request.json or {}
+        project_path = data.get('projectPath')
+
+        if not project_path:
+            return jsonify({
+                'success': False,
+                'error': 'No project path provided'
+            }), 400
+
+        project_file = Path(project_path)
+        if project_file.suffix != '.mexproj':
+            return jsonify({
+                'success': False,
+                'error': 'File must be a .mexproj file'
+            }), 400
+
+        project_dir = project_file.parent
+        if not is_managed_project_directory(project_dir):
+            return jsonify({
+                'success': False,
+                'error': 'Only app-managed projects can be deleted from Nucleus.'
+            }), 403
+
+        managed_root = PROJECTS_PATH.resolve()
+        resolved_project_dir = project_dir.resolve()
+        if resolved_project_dir == managed_root:
+            return jsonify({
+                'success': False,
+                'error': 'Refusing to delete the managed projects root.'
+            }), 400
+
+        current_project_path = get_current_project_path()
+        current_project_closed = False
+        if current_project_path is not None:
+            current_project_closed = current_project_path.resolve() == project_file.resolve()
+            if current_project_closed:
+                clear_project_path()
+
+        if resolved_project_dir.exists():
+            shutil.rmtree(resolved_project_dir)
+            logger.info(f"[OK] Deleted managed project directory: {resolved_project_dir}")
+        else:
+            logger.info(f"Managed project directory already missing: {resolved_project_dir}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Project deleted successfully',
+            'deleted': True,
+            'projectPath': str(project_file),
+            'projectDirectory': str(resolved_project_dir),
+            'currentProjectClosed': current_project_closed
+        })
+
+    except Exception as e:
+        logger.error(f"Delete project error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

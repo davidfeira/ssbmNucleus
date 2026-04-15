@@ -30,6 +30,13 @@ contextBridge.exposeInMainWorld('electron', {
   selectDirectory: () => ipcRenderer.invoke('select-directory-dialog'),
 
   /**
+   * Open the containing folder for a project path.
+   * @param {string} projectPath
+   * @returns {Promise<{success: boolean, path?: string, error?: string}>}
+   */
+  openProjectFolder: (projectPath) => ipcRenderer.invoke('open-project-folder', projectPath),
+
+  /**
    * Check if running in Electron
    * @returns {boolean} Always returns true
    */
