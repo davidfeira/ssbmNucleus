@@ -17,7 +17,6 @@ get the latest release from the [releases page](../../releases)
 
 ## documentation
 
-- [app docs](docs/README.md)
 - [melee modding wiki](wiki/README.md)
 
 local browser preview: `npm run wiki`

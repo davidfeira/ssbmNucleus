@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -195,6 +195,31 @@ ipcMain.handle('select-directory-dialog', async () => {
   }
 
   return result.filePaths[0];
+});
+
+ipcMain.handle('open-project-folder', async (event, projectPath) => {
+  if (!projectPath || typeof projectPath !== 'string') {
+    return { success: false, error: 'No project path provided' };
+  }
+
+  try {
+    let targetPath = projectPath;
+
+    if (!fs.existsSync(targetPath)) {
+      targetPath = path.dirname(targetPath);
+    } else if (fs.statSync(targetPath).isFile()) {
+      targetPath = path.dirname(targetPath);
+    }
+
+    const errorMessage = await shell.openPath(targetPath);
+    if (errorMessage) {
+      return { success: false, error: errorMessage };
+    }
+
+    return { success: true, path: targetPath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 // ============================================

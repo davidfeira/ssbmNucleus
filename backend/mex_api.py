@@ -125,6 +125,7 @@ else:
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
 STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
+PROJECTS_PATH = PROJECT_ROOT / "projects"
 LOGS_PATH = PROJECT_ROOT / "logs"
 
 # Asset paths (bundled resources)
@@ -133,6 +134,7 @@ VANILLA_ASSETS_DIR = BASE_PATH / "utility" / "assets" / "vanilla"
 # Ensure directories exist
 STORAGE_PATH.mkdir(exist_ok=True)
 OUTPUT_PATH.mkdir(exist_ok=True)
+PROJECTS_PATH.mkdir(exist_ok=True)
 LOGS_PATH.mkdir(exist_ok=True)
 MEX_PROJECT_PATH.parent.mkdir(exist_ok=True)  # Create build/ directory
 
@@ -209,6 +211,61 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def get_managed_projects_path():
+    """Return the app-managed directory where new projects are created."""
+    PROJECTS_PATH.mkdir(exist_ok=True)
+    return PROJECTS_PATH
+
+
+def get_next_project_directory(requested_name=None):
+    """Pick a unique subdirectory under the managed projects folder."""
+    projects_root = get_managed_projects_path()
+    base_name = secure_filename((requested_name or '').strip()) or 'MexProject'
+    candidate = projects_root / base_name
+    suffix = 2
+
+    while candidate.exists():
+        candidate = projects_root / f"{base_name}-{suffix}"
+        suffix += 1
+
+    return candidate
+
+
+def clear_project_path():
+    """Clear the current project and reset the cached manager."""
+    global mex_manager, current_project_path
+    current_project_path = None
+    mex_manager = None
+
+
+def is_path_within_directory(target_path, parent_directory):
+    """Return True when target_path is inside parent_directory."""
+    try:
+        Path(target_path).resolve().relative_to(Path(parent_directory).resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def is_managed_project_directory(project_dir):
+    """Return True when the project directory lives under the managed projects root."""
+    return is_path_within_directory(project_dir, get_managed_projects_path())
+
+
+def build_project_response(project_path, info):
+    """Build consistent project metadata for API responses."""
+    project_file = Path(project_path)
+    project_dir = project_file.parent
+
+    return {
+        'name': info['build']['name'],
+        'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
+        'path': str(project_file),
+        'projectDirectory': str(project_dir),
+        'isManagedProject': is_managed_project_directory(project_dir)
+    }
+
 # Global MEX manager instance and current project path
 mex_manager = None
 current_project_path = None
@@ -278,11 +335,7 @@ def get_status():
             'success': True,
             'connected': True,
             'projectLoaded': True,
-            'project': {
-                'name': info['build']['name'],
-                'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
-                'path': str(current_project_path)
-            },
+            'project': build_project_response(current_project_path, info),
             'counts': info['counts']
         })
     except Exception as e:
@@ -334,11 +387,7 @@ def open_project():
         return jsonify({
             'success': True,
             'message': 'Project opened successfully',
-            'project': {
-                'name': info['build']['name'],
-                'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
-                'path': str(project_path)
-            }
+            'project': build_project_response(project_path, info)
         })
     except Exception as e:
         logger.error(f"Failed to open project: {str(e)}", exc_info=True)
@@ -352,20 +401,22 @@ def open_project():
 def create_project():
     """Create a new MEX project from a vanilla ISO"""
     try:
-        data = request.json
+        data = request.json or {}
         iso_path = data.get('isoPath')
-        project_dir = data.get('projectDir')
-        project_name = data.get('projectName', 'MexProject')
+        requested_project_name = (data.get('projectName') or '').strip()
+        proj_dir = get_next_project_directory(requested_project_name)
+        project_name = requested_project_name or proj_dir.name
 
         logger.info(f"=== CREATE PROJECT REQUEST ===")
         logger.info(f"ISO Path: {iso_path}")
-        logger.info(f"Project Dir: {project_dir}")
+        logger.info(f"Projects Root: {get_managed_projects_path()}")
+        logger.info(f"Project Dir: {proj_dir}")
         logger.info(f"Project Name: {project_name}")
 
-        if not iso_path or not project_dir:
+        if not iso_path:
             return jsonify({
                 'success': False,
-                'error': 'Missing isoPath or projectDir parameter'
+                'error': 'Missing isoPath parameter'
             }), 400
 
         # Validate ISO exists
@@ -374,14 +425,6 @@ def create_project():
             return jsonify({
                 'success': False,
                 'error': f'ISO file not found: {iso_path}'
-            }), 404
-
-        # Validate project directory exists
-        proj_dir = Path(project_dir)
-        if not proj_dir.exists():
-            return jsonify({
-                'success': False,
-                'error': f'Project directory not found: {project_dir}'
             }), 404
 
         # Call MexCLI create command
@@ -413,7 +456,7 @@ def create_project():
                 'error': f'Failed to create project: {error_message}'
             }), 500
 
-        # The created project file should be at projectDir/project.mexproj
+        # The created project file should be inside the managed project directory.
         created_project_path = proj_dir / "project.mexproj"
 
         if not created_project_path.exists():
@@ -429,11 +472,80 @@ def create_project():
         return jsonify({
             'success': True,
             'message': 'Project created successfully',
-            'projectPath': str(created_project_path)
+            'projectPath': str(created_project_path),
+            'projectDirectory': str(proj_dir),
+            'projectsDirectory': str(get_managed_projects_path()),
+            'isManagedProject': True
         })
 
     except Exception as e:
         logger.error(f"Create project error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/mex/project/delete', methods=['POST'])
+def delete_project():
+    """Delete an app-managed MEX project directory."""
+    global current_project_path
+
+    try:
+        data = request.json or {}
+        project_path = data.get('projectPath')
+
+        if not project_path:
+            return jsonify({
+                'success': False,
+                'error': 'No project path provided'
+            }), 400
+
+        project_file = Path(project_path)
+        if project_file.suffix != '.mexproj':
+            return jsonify({
+                'success': False,
+                'error': 'File must be a .mexproj file'
+            }), 400
+
+        project_dir = project_file.parent
+        if not is_managed_project_directory(project_dir):
+            return jsonify({
+                'success': False,
+                'error': 'Only app-managed projects can be deleted from Nucleus.'
+            }), 403
+
+        managed_root = get_managed_projects_path().resolve()
+        resolved_project_dir = project_dir.resolve()
+        if resolved_project_dir == managed_root:
+            return jsonify({
+                'success': False,
+                'error': 'Refusing to delete the managed projects root.'
+            }), 400
+
+        current_project_closed = False
+        if current_project_path is not None:
+            current_project_closed = current_project_path.resolve() == project_file.resolve()
+            if current_project_closed:
+                clear_project_path()
+
+        if resolved_project_dir.exists():
+            shutil.rmtree(resolved_project_dir)
+            logger.info(f"[OK] Deleted managed project directory: {resolved_project_dir}")
+        else:
+            logger.info(f"Managed project directory already missing: {resolved_project_dir}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Project deleted successfully',
+            'deleted': True,
+            'projectPath': str(project_file),
+            'projectDirectory': str(resolved_project_dir),
+            'currentProjectClosed': current_project_closed
+        })
+
+    except Exception as e:
+        logger.error(f"Delete project error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

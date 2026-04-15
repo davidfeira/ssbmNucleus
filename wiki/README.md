@@ -2,8 +2,6 @@
 
 General Melee modding context and Nucleus workflow notes.
 
-App-specific setup and build docs live in [docs](../docs/README.md).
-
 ## Local Browser View
 
 Run `npm run wiki` from the repo root, then open `http://127.0.0.1:4173/wiki/`.

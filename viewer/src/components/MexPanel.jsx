@@ -82,6 +82,32 @@ const MexPanel = () => {
     setSelectedFighter(null)
   }
 
+  const handleProjectDeleted = async () => {
+    await fetchMexStatus()
+    setSelectedFighter(null)
+    setShowProjectModal(false)
+  }
+
+  const handleOpenProjectFolder = async () => {
+    if (!mexStatus?.project?.path) {
+      return
+    }
+
+    if (!window.electron?.openProjectFolder) {
+      alert('Electron API not available. Please run this app in Electron mode.')
+      return
+    }
+
+    try {
+      const result = await window.electron.openProjectFolder(mexStatus.project.path)
+      if (!result?.success) {
+        alert(`Failed to open project folder: ${result?.error || 'Unknown error'}`)
+      }
+    } catch (err) {
+      alert(`Error opening project folder: ${err.message}`)
+    }
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await Promise.all([
@@ -112,6 +138,7 @@ const MexPanel = () => {
       <ProjectSelector
         showModal={false}
         onProjectOpened={handleProjectOpened}
+        onProjectDeleted={handleProjectDeleted}
         API_URL={API_URL}
       />
     )
@@ -133,6 +160,12 @@ const MexPanel = () => {
               onClick={() => setShowIsoBuilder(true)}
             >
               Export ISO
+            </button>
+            <button
+              className="action-btn"
+              onClick={handleOpenProjectFolder}
+            >
+              Open Folder
             </button>
             <button
               className="action-btn"
@@ -198,6 +231,7 @@ const MexPanel = () => {
           showModal={true}
           onClose={() => setShowProjectModal(false)}
           onProjectOpened={handleProjectOpened}
+          onProjectDeleted={handleProjectDeleted}
           API_URL={API_URL}
         />
       )}

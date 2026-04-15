@@ -1004,6 +1004,11 @@
   box-shadow: var(--shadow-md), 0 0 20px rgba(125, 211, 232, 0.15);
 }
 
+.recent-project-details {
+  min-width: 0;
+  flex: 1;
+}
+
 .recent-project-name {
   font-family: var(--font-display);
   font-size: var(--text-md);
@@ -1019,6 +1024,43 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recent-project-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.recent-project-action {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.recent-project-action:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.recent-project-open {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.recent-project-open:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-cyan);
+  color: var(--color-text-primary);
 }
 
 /* Project Options */
@@ -1220,12 +1262,8 @@
 }
 
 .recent-project-remove {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
   font-size: 20px;
   line-height: 1;
-  cursor: pointer;
   padding: 0;
   width: 28px;
   height: 28px;
@@ -1233,14 +1271,12 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
   flex-shrink: 0;
 }
 
-.recent-project-remove:hover {
+.recent-project-remove:hover:not(:disabled) {
   background: var(--color-danger-muted);
+  border-color: rgba(255, 107, 107, 0.3);
   color: var(--color-danger);
 }
 
