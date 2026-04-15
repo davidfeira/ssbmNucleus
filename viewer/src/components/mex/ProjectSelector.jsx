@@ -38,7 +38,7 @@ export default function ProjectSelector({
     }
   }
 
-  const addToRecentProjects = (projectPath, projectName) => {
+  const addToRecentProjects = (projectPath, projectName, projectMeta = {}) => {
     try {
       const stored = localStorage.getItem('mex_recent_projects')
       let projects = stored ? JSON.parse(stored) : []
@@ -50,6 +50,10 @@ export default function ProjectSelector({
       projects.unshift({
         path: projectPath,
         name: projectName,
+        projectDirectory: projectMeta.projectDirectory || projectPath?.replace(/[\\/][^\\/]+$/, ''),
+        isManagedProject: typeof projectMeta.isManagedProject === 'boolean'
+          ? projectMeta.isManagedProject
+          : false,
         timestamp: Date.now()
       })
 
@@ -93,8 +97,9 @@ export default function ProjectSelector({
       const data = await response.json()
 
       if (data.success) {
+        console.log('Managed project directory:', data.projectDirectory)
         console.log('✓ Project opened:', data.project.name)
-        addToRecentProjects(projectPath, data.project.name)
+        addToRecentProjects(projectPath, data.project.name, data.project)
         onProjectOpened()
         if (onClose) onClose()
       } else {
@@ -135,7 +140,7 @@ export default function ProjectSelector({
 
       if (data.success) {
         console.log('✓ Project opened:', data.project.name)
-        addToRecentProjects(filePath, data.project.name)
+        addToRecentProjects(filePath, data.project.name, data.project)
         onProjectOpened()
         if (onClose) onClose()
       } else {
@@ -154,6 +159,19 @@ export default function ProjectSelector({
       return
     }
 
+    const createProjectRequest = async (selectedIsoPath) => {
+      const response = await fetch(`${API_URL}/project/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isoPath: selectedIsoPath
+        })
+      })
+
+      const data = await response.json()
+      return { response, data }
+    }
+
     // Step 1: Check for saved vanilla ISO path
     let isoPath = localStorage.getItem('vanilla_iso_path')
 
@@ -169,36 +187,26 @@ export default function ProjectSelector({
 
     console.log('Selected ISO:', isoPath)
 
-    // Step 2: Select project folder
-    const projectDir = await window.electron.selectDirectory()
-
-    if (!projectDir) {
-      return
-    }
-
-    console.log('Selected project directory:', projectDir)
-    playSound('start') // Folder selected - play start sound
-
     // Show loading
     setCreatingProject(true)
     setCreateProjectStatus('Creating project...')
 
     try {
-      const projectName = 'MexProject'
-      console.log('Project name:', projectName)
+      let { response, data } = await createProjectRequest(isoPath)
 
-      // Step 3: Create project
-      const response = await fetch(`${API_URL}/project/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          isoPath: isoPath,
-          projectDir: projectDir,
-          projectName: projectName
-        })
-      })
+      if (!data.success && response.status === 404 && data.error?.includes('ISO file not found')) {
+        localStorage.removeItem('vanilla_iso_path')
+        setCreateProjectStatus('Saved ISO path is missing. Select your ISO again...')
 
-      const data = await response.json()
+        const replacementIsoPath = await window.electron.openIsoDialog()
+        if (!replacementIsoPath) {
+          return
+        }
+
+        isoPath = replacementIsoPath
+        setCreateProjectStatus('Creating project...')
+        ;({ response, data } = await createProjectRequest(isoPath))
+      }
 
       if (data.success) {
         console.log('✓ Project created:', data.projectPath)
@@ -207,7 +215,7 @@ export default function ProjectSelector({
         localStorage.setItem('vanilla_iso_path', isoPath)
         console.log('✓ Saved vanilla ISO path:', isoPath)
 
-        // Step 4: Auto-open the project
+        // Step 2: Auto-open the project
         setCreateProjectStatus('Opening project...')
         const openResponse = await fetch(`${API_URL}/project/open`, {
           method: 'POST',
@@ -219,9 +227,12 @@ export default function ProjectSelector({
 
         if (openData.success) {
           console.log('✓ Project opened:', openData.project.name)
-          addToRecentProjects(data.projectPath, openData.project.name)
+          addToRecentProjects(data.projectPath, openData.project.name, {
+            projectDirectory: data.projectDirectory,
+            isManagedProject: data.isManagedProject
+          })
 
-          // Step 5: Auto-install DAS framework
+          // Step 3: Auto-install DAS framework
           setCreateProjectStatus('Installing stage variants...')
           console.log('Installing DAS framework...')
           try {
@@ -314,7 +325,7 @@ export default function ProjectSelector({
             {/* Create new project */}
             <div className="project-option">
               <h3>Create New Project</h3>
-              <p>Provide a vanilla Melee ISO to create a new project</p>
+              <p>Select your clean vanilla Melee ISO once. Nucleus will build and manage the project folder for you.</p>
               <button
                 className="project-btn"
                 onMouseEnter={playHoverSound}
@@ -403,7 +414,7 @@ export default function ProjectSelector({
           {/* Create new project */}
           <div className="project-option-modal">
             <h3>Create New Project</h3>
-            <p>Provide a vanilla Melee ISO to create a new project</p>
+              <p>Select your clean vanilla Melee ISO once. Nucleus will build and manage the project folder for you.</p>
             <button
               className="project-btn"
               onMouseEnter={playHoverSound}

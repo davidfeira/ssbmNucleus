@@ -79,6 +79,7 @@ else:
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
 STORAGE_PATH = PROJECT_ROOT / "storage"
 OUTPUT_PATH = PROJECT_ROOT / "output"
+PROJECTS_PATH = PROJECT_ROOT / "projects"
 LOGS_PATH = PROJECT_ROOT / "logs"
 
 # Asset paths (user-extracted assets, not bundled)
@@ -102,5 +103,6 @@ sys.path.insert(0, str(BACKEND_DIR))
 # Ensure directories exist
 STORAGE_PATH.mkdir(exist_ok=True)
 OUTPUT_PATH.mkdir(exist_ok=True)
+PROJECTS_PATH.mkdir(exist_ok=True)
 LOGS_PATH.mkdir(exist_ok=True)
 MEX_PROJECT_PATH.parent.mkdir(exist_ok=True)  # Create build/ directory

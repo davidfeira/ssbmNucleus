@@ -9,9 +9,10 @@ import subprocess
 import logging
 from pathlib import Path
 from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 
 from core.config import (
-    PROJECT_ROOT, MEXCLI_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
+    PROJECT_ROOT, PROJECTS_PATH, MEXCLI_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
 )
 from core.state import (
     get_mex_manager, set_project_path, get_current_project_path
@@ -22,6 +23,42 @@ from core.helpers import calculate_auto_compression
 logger = logging.getLogger(__name__)
 
 project_bp = Blueprint('project', __name__)
+
+
+def get_next_project_directory(requested_name=None):
+    """Pick a unique subdirectory under the app-managed projects folder."""
+    base_name = secure_filename((requested_name or '').strip()) or 'MexProject'
+    candidate = PROJECTS_PATH / base_name
+    suffix = 2
+
+    while candidate.exists():
+        candidate = PROJECTS_PATH / f"{base_name}-{suffix}"
+        suffix += 1
+
+    return candidate
+
+
+def is_managed_project_directory(project_dir):
+    """Return True when a project directory lives under the managed projects root."""
+    try:
+        Path(project_dir).resolve().relative_to(PROJECTS_PATH.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def build_project_response(project_path, info):
+    """Build consistent project metadata for API responses."""
+    project_file = Path(project_path)
+    project_dir = project_file.parent
+
+    return {
+        'name': info['build']['name'],
+        'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
+        'path': str(project_file),
+        'projectDirectory': str(project_dir),
+        'isManagedProject': is_managed_project_directory(project_dir)
+    }
 
 
 def find_fighter_json_by_name(fighter_name):
@@ -104,11 +141,7 @@ def get_status():
             'success': True,
             'connected': True,
             'projectLoaded': True,
-            'project': {
-                'name': info['build']['name'],
-                'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
-                'path': str(current_project_path)
-            },
+            'project': build_project_response(current_project_path, info),
             'counts': info['counts']
         })
     except Exception as e:
@@ -160,11 +193,7 @@ def open_project():
         return jsonify({
             'success': True,
             'message': 'Project opened successfully',
-            'project': {
-                'name': info['build']['name'],
-                'version': f"{info['build']['majorVersion']}.{info['build']['minorVersion']}.{info['build']['patchVersion']}",
-                'path': str(project_path)
-            }
+            'project': build_project_response(project_path, info)
         })
     except Exception as e:
         logger.error(f"Failed to open project: {str(e)}", exc_info=True)
@@ -178,20 +207,22 @@ def open_project():
 def create_project():
     """Create a new MEX project from a vanilla ISO"""
     try:
-        data = request.json
+        data = request.json or {}
         iso_path = data.get('isoPath')
-        project_dir = data.get('projectDir')
-        project_name = data.get('projectName', 'MexProject')
+        requested_project_name = (data.get('projectName') or '').strip()
+        proj_dir = get_next_project_directory(requested_project_name)
+        project_name = requested_project_name or proj_dir.name
 
         logger.info(f"=== CREATE PROJECT REQUEST ===")
         logger.info(f"ISO Path: {iso_path}")
-        logger.info(f"Project Dir: {project_dir}")
+        logger.info(f"Projects Root: {PROJECTS_PATH}")
+        logger.info(f"Project Dir: {proj_dir}")
         logger.info(f"Project Name: {project_name}")
 
-        if not iso_path or not project_dir:
+        if not iso_path:
             return jsonify({
                 'success': False,
-                'error': 'Missing isoPath or projectDir parameter'
+                'error': 'Missing isoPath parameter'
             }), 400
 
         # Validate ISO exists
@@ -200,14 +231,6 @@ def create_project():
             return jsonify({
                 'success': False,
                 'error': f'ISO file not found: {iso_path}'
-            }), 404
-
-        # Validate project directory exists
-        proj_dir = Path(project_dir)
-        if not proj_dir.exists():
-            return jsonify({
-                'success': False,
-                'error': f'Project directory not found: {project_dir}'
             }), 404
 
         # Call MexCLI create command
@@ -252,7 +275,10 @@ def create_project():
         return jsonify({
             'success': True,
             'message': 'Project created successfully',
-            'projectPath': str(created_project_path)
+            'projectPath': str(created_project_path),
+            'projectDirectory': str(proj_dir),
+            'projectsDirectory': str(PROJECTS_PATH),
+            'isManagedProject': True
         })
 
     except Exception as e:
