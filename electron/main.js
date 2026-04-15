@@ -1,11 +1,18 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const { spawn, exec } = require('child_process');
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const { autoDetectFirstRunPaths } = require('./first-run-autodetect');
 
 let pythonProcess = null;
 let mainWindow = null;
+
+const BACKEND_HOST = '127.0.0.1';
+const BACKEND_PORT = 5000;
+const BACKEND_STATUS_PATH = '/api/mex/status';
+const BACKEND_READY_TIMEOUT_MS = 30000;
+const BACKEND_READY_POLL_INTERVAL_MS = 250;
 
 // Determine if we're in development or production
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -20,6 +27,54 @@ function getResourcePath(relativePath) {
   }
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function probeBackendStatus() {
+  return new Promise((resolve) => {
+    const req = http.request({
+      hostname: BACKEND_HOST,
+      port: BACKEND_PORT,
+      path: BACKEND_STATUS_PATH,
+      method: 'GET',
+      timeout: 1000
+    }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+
+    req.end();
+  });
+}
+
+async function waitForBackendReady(timeoutMs = BACKEND_READY_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (!pythonProcess) {
+      console.error('[Electron] Backend process exited before becoming ready');
+      return false;
+    }
+
+    if (await probeBackendStatus()) {
+      console.log('[Electron] Flask backend is ready');
+      return true;
+    }
+
+    await delay(BACKEND_READY_POLL_INTERVAL_MS);
+  }
+
+  console.warn(`[Electron] Flask backend did not become ready within ${timeoutMs}ms`);
+  return false;
+}
+
 function startFlaskServer() {
   console.log('[Electron] Starting Flask backend...');
 
@@ -32,7 +87,7 @@ function startFlaskServer() {
 
     if (!fs.existsSync(backendPath)) {
       console.error('[Electron] Backend file not found:', backendPath);
-      return;
+      return false;
     }
 
     // Use venv Python in development
@@ -48,7 +103,7 @@ function startFlaskServer() {
 
     if (!fs.existsSync(backendExe)) {
       console.error('[Electron] Backend executable not found:', backendExe);
-      return;
+      return false;
     }
 
     backendCmd = backendExe;
@@ -85,6 +140,8 @@ function startFlaskServer() {
   pythonProcess.on('error', (err) => {
     console.error('[Flask] Failed to start:', err);
   });
+
+  return true;
 }
 
 function createWindow() {
@@ -443,16 +500,18 @@ if (!gotTheLock) {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log('[Electron] App ready');
 
   // Start Flask backend
-  startFlaskServer();
+  const backendStarted = startFlaskServer();
+  const backendReady = backendStarted ? await waitForBackendReady() : false;
 
-  // Wait a bit for Flask to start, then create window
-  setTimeout(() => {
-    createWindow();
-  }, 2000);
+  if (!backendReady) {
+    console.warn('[Electron] Opening window before backend reported ready');
+  }
+
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

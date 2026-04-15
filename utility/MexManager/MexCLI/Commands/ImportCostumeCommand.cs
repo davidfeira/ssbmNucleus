@@ -7,6 +7,28 @@ namespace MexCLI.Commands
 {
     public static class ImportCostumeCommand
     {
+        private static void ApplyOriginalCostumeIndex(MexFighter fighter, MexCostume costume, StringBuilder log)
+        {
+            string jointSymbol = costume.File.JointSymbol;
+            if (string.IsNullOrEmpty(jointSymbol))
+            {
+                return;
+            }
+
+            foreach (MexCostume existingCostume in fighter.Costumes)
+            {
+                if (!string.Equals(existingCostume.File.JointSymbol, jointSymbol, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                costume.File.VisibilityIndex = existingCostume.File.VisibilityIndex;
+                log.AppendLine(
+                    $"Matched original costume index {costume.File.VisibilityIndex} from \"{existingCostume.File.FileName}\" using joint \"{jointSymbol}\"");
+                return;
+            }
+        }
+
         public static int Execute(string[] args)
         {
             if (args.Length < 4)
@@ -111,6 +133,7 @@ namespace MexCLI.Commands
                 // Add costumes to fighter
                 foreach (var costume in costumes)
                 {
+                    ApplyOriginalCostumeIndex(fighter, costume, log);
                     fighter.Costumes.Add(costume);
                 }
 

@@ -33,6 +33,7 @@ const NAV_SECTIONS = [
         path: "wiki/Character-Mod-Workflow.md",
         children: [
           { label: "Ice Climbers Pairing", path: "wiki/Ice-Climbers-Pairing.md" },
+          { label: "Captain Falcon Red Costume", path: "wiki/Captain-Falcon-Red-Costume.md" },
           { label: "CSPs And Poses", path: "wiki/CSP-And-Pose-Workflow.md" },
         ],
       },

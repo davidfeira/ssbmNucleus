@@ -79,6 +79,14 @@ Important consequences:
 
 For the full explanation, see [Ice Climbers Pairing](Ice-Climbers-Pairing.md).
 
+## Captain Falcon Red Costume
+
+Captain Falcon has a different kind of exception.
+
+The red costume is a special file-format case and may show up as `.usd` instead of a normal costume `.dat`.
+
+For the full explanation, see [Captain Falcon Red Costume](Captain-Falcon-Red-Costume.md).
+
 ## Summary
 
 A normal character mod is basically three files:
