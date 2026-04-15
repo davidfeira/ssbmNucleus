@@ -12,6 +12,7 @@
     "dev:frontend": "cd viewer && npm run dev",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev:backend\" \"npm run electron\"",
+    "wiki": "python scripts/wiki/serve.py",
     "build": "cd viewer && npm run build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win",

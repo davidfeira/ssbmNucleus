@@ -1,0 +1,89 @@
+diff --git a/Source/Core/IPC/HTTPServer.cpp b/Source/Core/IPC/HTTPServer.cpp
+--- a/Source/Core/IPC/HTTPServer.cpp
++++ b/Source/Core/IPC/HTTPServer.cpp
+@@ -13,7 +13,12 @@ HTTPServer& HTTPServer::GetInstance() {
+ }
+ 
+ HTTPServer::HTTPServer(MainWindow* window) : m_window(std::make_optional(window)) {
+-	m_firestore_client = std::make_unique<GcpClient>("emubench-459802");
++	const char* test_id = std::getenv("TEST_ID");
++	if (test_id && *test_id) {
++		m_firestore_client = std::make_unique<GcpClient>("emubench-459802");
++	} else {
++		NOTICE_LOG_FMT(CORE, "IPC: TEST_ID not set; running without Firestore/GCS integration");
++	}
+ }
+ 
+ HTTPServer::~HTTPServer() {
+@@ -483,7 +488,11 @@ void HTTPServer::SetupTest() {
+     {"endStateMemWatchValues", m_initial_end_state_watches}
+ 	};
+ 	nlohmann::json documentUpdate = {{"emulatorState", emulatorStateData}};
+-	m_firestore_client->writeDocument("TESTS", testId, m_firestore_client->createFirestorePayload(documentUpdate));
++	if (m_firestore_client && testId && *testId) {
++		m_firestore_client->writeDocument("TESTS", testId, m_firestore_client->createFirestorePayload(documentUpdate));
++	} else {
++		NOTICE_LOG_FMT(CORE, "IPC: Skipping Firestore booting write in local mode");
++	}
+ 
+ 	File::CreateDir(File::GetUserPath(D_USER_IDX) + "ScreenShots");
+ 	IPC::MemWatcher::GetInstance().GetFramesStartedFuture().wait();
+@@ -497,15 +506,19 @@ void HTTPServer::SetupTest() {
+ 	m_context_watch_names = {};
+ 
+ 	const char* value = std::getenv("MEMWATCHES");
+-	std::optional<nlohmann::json_abi_v3_12_0::json> json_data = ParseJson(value);
+-	if (json_data && json_data->contains("endStateMemWatches") && json_data->contains("contextMemWatches")) {
+-		// json_data["watches"].items()
+-		m_end_state_watch_names = SetupMemWatchesFromJSON((*json_data)["endStateMemWatches"]);
+-		NOTICE_LOG_FMT(CORE, "IPC: Loaded {} endStateMemWatches from MEMWATCHES", m_end_state_watch_names.size());
+-		m_context_watch_names = SetupMemWatchesFromJSON((*json_data)["contextMemWatches"]);
+-		NOTICE_LOG_FMT(CORE, "IPC: Loaded {} contextMemWatches from MEMWATCHES", m_context_watch_names.size());
++	if (value && *value) {
++		std::optional<nlohmann::json_abi_v3_12_0::json> json_data = ParseJson(value);
++		if (json_data && json_data->contains("endStateMemWatches") && json_data->contains("contextMemWatches")) {
++			// json_data["watches"].items()
++			m_end_state_watch_names = SetupMemWatchesFromJSON((*json_data)["endStateMemWatches"]);
++			NOTICE_LOG_FMT(CORE, "IPC: Loaded {} endStateMemWatches from MEMWATCHES", m_end_state_watch_names.size());
++			m_context_watch_names = SetupMemWatchesFromJSON((*json_data)["contextMemWatches"]);
++			NOTICE_LOG_FMT(CORE, "IPC: Loaded {} contextMemWatches from MEMWATCHES", m_context_watch_names.size());
++		} else {
++			NOTICE_LOG_FMT(CORE, "IPC: No endStateMemWatches and contextMemWatches found in MEMWATCHES");
++		}
+ 	} else {
+-		NOTICE_LOG_FMT(CORE, "IPC: No endStateMemWatches and contextMemWatches found in MEMWATCHES");
++		NOTICE_LOG_FMT(CORE, "IPC: MEMWATCHES not set; skipping memwatch setup");
+ 	}
+ 
+ 	Core::SetState(system, Core::State::Running);
+@@ -532,7 +545,11 @@ void HTTPServer::SetupTest() {
+     {"endStateMemWatchValues", m_initial_end_state_watches}
+ 	};
+ 	nlohmann::json lastDocumentUpdate = {{"emulatorState", readyEmulatorStateData}};
+-	m_firestore_client->writeDocument("TESTS", testId, m_firestore_client->createFirestorePayload(lastDocumentUpdate));
++	if (m_firestore_client && testId && *testId) {
++		m_firestore_client->writeDocument("TESTS", testId, m_firestore_client->createFirestorePayload(lastDocumentUpdate));
++	} else {
++		NOTICE_LOG_FMT(CORE, "IPC: Skipping Firestore ready write in local mode");
++	}
+ }
+ 
+ std::string HTTPServer::SaveNextScreenshot() {
+@@ -576,7 +593,7 @@ std::string HTTPServer::SaveNextScreenshot() {
+ 
+ bool HTTPServer::UploadScreenshotToGcp(std::string screenshot_name) {
+ 	const char* testId = std::getenv("TEST_ID");
+-	if (testId) {
++	if (m_firestore_client && testId && *testId) {
+ 		std::string screenshot_path = File::GetUserPath(D_SCREENSHOTS_IDX) + screenshot_name + ".png";
+ 		bool upload_success = m_firestore_client->postScreenshot(screenshot_path, testId);
+ 		if (upload_success) {
+@@ -586,7 +603,7 @@ bool HTTPServer::UploadScreenshotToGcp(std::string screenshot_name) {
+ 		}
+ 		return upload_success;
+ 	} else {
+-		NOTICE_LOG_FMT(CORE, "IPC: TEST_ID environment variable not set, skipping GCS upload");
++		NOTICE_LOG_FMT(CORE, "IPC: TEST_ID not set or Firestore disabled; skipping GCS upload");
+ 		return false;
+ 	}
+ }

@@ -16,6 +16,7 @@ user_settings.json
 intake/
 output/
 output/temp_bundle_*
+/projects/
 
 # Build outputs
 dist/
@@ -30,6 +31,8 @@ node_modules/
 venv/
 venv-*/
 /testing/
+/tests/artifacts/
+/tests/external/
 
 # Environment
 .env
@@ -57,7 +60,11 @@ utility/website/backend/tools/processor/csp_data/**/Pl*.dat
 # Reference files (large vanilla dumps)
 reference/vanilla-dump/
 reference/costume-examples/
+zzzMoreExtras/
 
 # Test sound dumps
 **/testsounds/
 scripts/build/build/
+
+# Local screenshots
+/Screenshot 2026-01-21 150635.png
