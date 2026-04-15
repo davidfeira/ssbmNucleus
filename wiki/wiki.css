@@ -85,9 +85,9 @@ pre {
   margin: 0 0 0.55rem;
   color: var(--muted);
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 400;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 
 .nav-list {
@@ -115,10 +115,6 @@ pre {
   margin-top: 0.22rem;
 }
 
-.nav-item-level-0 > .nav-link {
-  font-weight: 600;
-}
-
 .nav-link {
   display: block;
   padding: 0.5rem 0.7rem;
@@ -126,11 +122,13 @@ pre {
   border-radius: 0.65rem;
   color: var(--text);
   text-decoration: none;
+  font-weight: 400;
 }
 
 .nav-link.branch-active {
   background: rgba(240, 224, 197, 0.46);
   border-color: rgba(176, 77, 28, 0.14);
+  color: #5b2d14;
 }
 
 .nav-link-parent {
@@ -193,7 +191,7 @@ pre {
   background: var(--accent-soft);
   border-color: rgba(176, 77, 28, 0.25);
   color: #6d2404;
-  font-weight: 700;
+  box-shadow: inset 3px 0 0 rgba(176, 77, 28, 0.48);
 }
 
 .sidebar-footer {

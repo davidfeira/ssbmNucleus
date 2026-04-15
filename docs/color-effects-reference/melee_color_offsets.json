@@ -265,7 +265,7 @@
     "Link": {
       "PlLk.dat": {
         "random": [
-          {"offset": "0x35E0", "data": "FF 00 00 FF FF 00 FF FF FF", "desc": "Sword Swing"}
+          {"offset": "0x35EC", "data": "FF 00 00 FF FF 00 FF FF FF", "desc": "Sword Swing", "note": "Older notes sometimes cite 0x35E0 as the line start, but the editable color bytes begin at 0x35EC"}
         ]
       }
     },
@@ -533,7 +533,7 @@
         ]
       },
       "MnSlMap.usd": {
-        "note": "070707 effects are often constrained by adjacent 4248 effects. Color 2 of the 4248 effect limits the values of both colors in the 070707 effect. Setting 4248 color 2 to FFFFFF gives full control to the 070707 effect.",
+        "note": "070707 effects are often constrained by adjacent 4248 effects. Color 2 of the 4248 effect limits both 070707 colors, and setting 4248 color 2 to FFFFFF gives full control. For the 3D preview entries, color 1 only slightly nudges color 2 and is constrained by it.",
         "07_07_07": [
           {"offset": "0x95A00", "data": "07 07 07 07 7F 7F 7F 00 7F 7F 7F", "desc": "STAGE SELECT text (color 1) and outline (color 2)", "note": "constrained by 42_48 at 95A70"},
           {"offset": "0x95B78", "data": "07 07 07 04 66 66 66 00 66 66 66", "desc": "Wires around screen (color 1) and outline (color 2)", "note": "constrained by 42_48 at 95BE8"},
@@ -541,11 +541,11 @@
           {"offset": "0x9784C", "data": "07 07 07 04 00 00 00 00 00 00 00", "desc": "RANDOM text (color 1) and outline (color 2)"}
         ],
         "42_48": [
-          {"offset": "0x6D1B0", "data": "80 80 80 FF FD FB FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Blue background texture", "note": "Set alpha to 00 to remove background texture"},
-          {"offset": "0x6D250", "data": "80 80 80 FF B3 B3 B3 FF FF FF FF FF 3E 99 99 9A 42 48", "desc": "Background images on SSS", "note": "Set alpha to 00 to remove images"},
+          {"offset": "0x6D1B0", "data": "80 80 80 FF FD FB FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Blue background texture layer", "note": "Set alpha to 00 to remove the blue background texture"},
+          {"offset": "0x6D250", "data": "80 80 80 FF B3 B3 B3 FF FF FF FF FF 3E 99 99 9A 42 48", "desc": "Background images on stage select", "note": "Set alpha to 00 to remove the background images"},
           {"offset": "0x6D2F0", "data": "66 80 80 FF 99 B3 B3 FF E6 FF FF FF 3F 00 00 00 42 48", "desc": "Square grid in background (color 2)", "note": "Change 3F to 00 to hide grid"},
           {"offset": "0x6EE1C", "data": "80 80 80 FF 99 B3 B3 FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Stage select cursor (color 2)"},
-          {"offset": "0x6F0FC", "data": "FF FF FF FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Flashing outline around hovered stage icon (color 2)", "note": "Flash 1 (red) uses only red channel; Flash 2 (white) uses full RGB. e.g. 00FF00 = black flash, green flash"},
+          {"offset": "0x6F0FC", "data": "FF FF FF FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Flashing outline around hovered stage icon (color 2)", "note": "Flash 1 uses only the red channel from color 2. Flash 2 uses the full color 2 value. Example: 00FF00 gives a black first flash and green second flash"},
           {"offset": "0x78B24", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Kongo Jungle wooden poles 3D preview"},
           {"offset": "0x78BC4", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Kongo Jungle platforms 3D preview"},
           {"offset": "0x78C64", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Kongo Jungle floor 3D preview"},
@@ -588,16 +588,16 @@
           {"offset": "0x7A3A4", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Poke Floats 3D preview"},
           {"offset": "0x7A444", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Battlefield 3D preview"},
           {"offset": "0x7A4E4", "data": "00 33 99 FF 00 4C B3 FF 80 CC FF FF 3F 80 00 00 42 48", "desc": "Final Destination 3D preview"},
-          {"offset": "0x95A70", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 00 00 00 00 42 48", "desc": "STAGE SELECT text constraint", "note": "Set color 2 to FFFFFF for full 070707 control at 95A00"},
+          {"offset": "0x95A70", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 00 00 00 00 42 48", "desc": "STAGE SELECT text constraint", "note": "Set color 2 to FFFFFF, then use 95A00 for separate text and outline control"},
           {"offset": "0x95B1C", "data": "80 80 80 FF CC CC CC FF FF FF FF FF 00 00 00 00 42 48", "desc": "Circular STAGE SELECT"},
-          {"offset": "0x95BE8", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Wires around screen constraint", "note": "Set color 2 to FFFFFF for full 070707 control at 95B78"},
+          {"offset": "0x95BE8", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Wires around screen constraint", "note": "Set color 2 to FFFFFF, then use 95B78 for separate inner and outer wire control"},
           {"offset": "0x960D4", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Stage icon rows 2 and 4", "note": "Set alpha to 00000000 to gray out rows 2 and 4"},
           {"offset": "0x96174", "data": "80 80 80 FF CC CC CC FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Some stage portrait outlines"},
           {"offset": "0x96234", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Stage icon rows 1 and 3", "note": "Set alpha to 00000000 to gray out rows 1 and 3"},
           {"offset": "0x96CB4", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Stage name color"},
           {"offset": "0x97404", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Bottom row icons", "note": "Set alpha to 00000000 to gray out bottom row"},
           {"offset": "0x974A4", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Unknown"},
-          {"offset": "0x978BC", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "RANDOM text constraint", "note": "Constrains 070707 at 9784C"},
+          {"offset": "0x978BC", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "RANDOM text constraint", "note": "Constrains the 070707 text and outline colors at 9784C"},
           {"offset": "0x9795C", "data": "80 80 80 FF FF CC CC FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "RANDOM box color"},
           {"offset": "0x97C04", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Icicle Mountain/Flat Zone icons", "note": "Set alpha to 00000000 to gray out"},
           {"offset": "0x97CA4", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Unknown"},
@@ -605,7 +605,8 @@
           {"offset": "0x981F0", "data": "80 80 80 FF FF FF FF FF FF FF FF FF 3F 7F BE 77 42 48", "desc": "Unknown"}
         ],
         "85_80_08": [
-          {"offset": "0x7A1F0", "data": "85 80 08 0F 07", "desc": "Unknown - needs investigation", "note": "TODO: investigate this format"}
+          {"offset": "0x7A1F0", "data": "85 80 08 0F 07 43 04 07 96 96 96 FF 96 96 96", "desc": "Loading logo 3D preview brightness", "note": "Both colors affect the brightness of the loading logo 3D preview at 7A264"},
+          {"offset": "0x98180", "data": "85 80 08 0F 44 43 04 07 FF CC 33 FF 00 00 00", "desc": "NOW LOADING text (color 1) and text box (color 2)"}
         ]
       }
     },

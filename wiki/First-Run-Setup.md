@@ -1,6 +1,6 @@
 # First-Run Setup
 
-This is the workflow that creates Nucleus's baseline data from a clean Melee ISO.
+First-run setup builds Nucleus's baseline data from a clean Melee ISO.
 
 ## What It Needs
 

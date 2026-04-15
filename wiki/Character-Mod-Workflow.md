@@ -1,6 +1,6 @@
 # Character Mod Workflow
 
-This page explains what Nucleus treats as a character mod and what happens when you import or install one.
+Character mods are mainly costume DATs plus the menu assets around them.
 
 ## What Makes Up A Character Mod
 
@@ -26,6 +26,8 @@ At a high level, import does this:
 4. Copies in an included CSP if one exists, or generates one if it does not.
 5. Copies in an included stock if one exists, or falls back to a matching vanilla stock when possible.
 6. Stores the result as a reusable vault item with previews and status info.
+
+For the broader import flow and mexTool ZIP compatibility, see [Manual Import](Manual-Import.md).
 
 ## What Gets Stored
 
@@ -77,7 +79,7 @@ Important consequences:
 
 For the full explanation, see [Ice Climbers Pairing](Ice-Climbers-Pairing.md).
 
-## Good Mental Model
+## Summary
 
 A normal character mod is basically three files:
 

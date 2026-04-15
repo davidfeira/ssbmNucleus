@@ -17,8 +17,8 @@ That is the most important distinction to keep in mind.
 
 The pair is built around two costume DATs:
 
-- `PlPpYy.dat` for Popo
-- `PlNnYy.dat` for Nana
+- `PlPp__.dat` for Popo
+- `PlNn__.dat` for Nana
 
 Those two DATs are the real gameplay and model assets for the pair.
 
@@ -112,7 +112,7 @@ That means an exported Ice Climbers costume ZIP is expected to look more like:
 
 That is a better mental model than expecting two totally separate costume packages.
 
-## Good Mental Model
+## Summary
 
 For Ice Climbers:
 
@@ -126,4 +126,4 @@ If you keep those three rules straight, the rest of the behavior makes much more
 
 - [Character Mod Workflow](Character-Mod-Workflow.md)
 - [CSP And Pose Workflow](CSP-And-Pose-Workflow.md)
-- [Character Files And Ownership](Character-Files-And-Ownership.md)
+- [Melee Files Reference](../docs/new-414/Melee-Files.md)

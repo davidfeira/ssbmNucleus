@@ -1,93 +1,88 @@
 # CSP And Pose Workflow
 
-Nucleus treats portraits as their own workflow, not just a side effect of costume import.
+Nucleus has extra CSP tools on top of normal costume import.
 
-## CSPs In The Normal Costume Workflow
+## What The App Can Do
 
-When a costume is imported:
+- generate a missing CSP on import from the default vanilla pose
+- let you make and save custom poses in the app
+- batch-generate CSPs for many costumes with a saved pose
+- capture HD CSPs from either the default pose or a saved pose for [Texture Pack Mode](Texture-Pack-Mode.md)
+
+## Missing CSPs On Import
+
+When you import a costume ZIP:
 
 - an included CSP can be reused
-- a missing CSP can be generated from the DAT
-- a normal CSP is stored both as a vault preview and inside the costume ZIP
+- if the ZIP is missing a CSP, Nucleus can generate one from the DAT
+- that generated CSP uses the character's normal default pose workflow rather than requiring you to pose it first
 
-That gives the costume a usable portrait immediately, even if the original archive did not include one.
+This gives the costume a usable portrait immediately, even if the original mod archive did not include one.
 
-Ice Climbers are the main exception to the "one DAT generates one portrait" rule:
+## Custom Poses
 
-- the pair uses one shared portrait workflow
-- Nana does not need a separate CSP asset
+A pose is a reusable scene setup for one character.
 
-## Stocks
+In practice, that means you can use the app to make your own CSP poses instead of being locked to the default one.
 
-Stock icons are closely related but separate from CSPs.
+Saved poses are useful because:
 
-If the imported costume does not include a stock icon, Nucleus can fall back to the matching vanilla stock when available.
+- they can be reused across multiple costumes of the same character
+- they give you a consistent portrait style across a whole costume set
+- they can be used later for both normal CSP generation and HD CSP capture
 
-For Ice Climbers, the same rule applies to stocks: the pair should use one shared stock set rather than separate Nana stock assets.
+When possible, Nucleus also generates a thumbnail for the saved pose so it is easy to pick again later.
 
-## Editing CSPs
+## Batch Generation
 
-Normal CSP updates are treated as part of the costume package:
+Once you have a saved pose, you can use it to mass-generate CSPs for your costumes.
 
-- the standalone preview file is updated
-- the costume ZIP is updated so the CSP travels with the stored mod
+This is one of the strongest portrait workflows in the app:
 
-HD CSPs are different. They are stored as standalone files rather than being written back into the costume ZIP.
+- pick a saved pose
+- select multiple skins for that character
+- generate matching CSPs for the whole set
 
-## HD CSP Capture
+That is the easiest way to give a full costume library a consistent look without posing every skin from scratch.
 
-The HD capture flow renders a higher-resolution CSP from the costume DAT at a chosen scale.
+## HD CSPs
 
-This is useful when the standard CSP is good enough for normal UI but you also want a cleaner source image for packaging, previews, or texture-pack-related workflows.
+Nucleus can also capture HD CSPs at a higher resolution.
 
-## Alternate CSPs
+The important distinction is:
 
-Nucleus also treats alternate CSPs as managed assets.
+- normal CSPs are the regular portrait assets the skin uses in the app
+- HD CSPs are higher-resolution portrait images stored separately for HD-oriented workflows
 
-That means a skin can have:
+You can generate HD CSPs from:
 
-- a main CSP
-- alternate CSPs
-- an active selection that chooses which portrait is currently in use
+- the default vanilla pose
+- a saved custom pose
 
-## Poses
+That makes HD capture useful whether you want a cleaner version of the normal portrait or a full custom posed set.
 
-Saved poses are reusable scene files for generating CSPs.
+## Texture Pack Mode
 
-In the current workflow, a pose is a saved camera and scene setup rather than a property of one single skin.
+HD CSPs can also be generated for use with [Texture Pack Mode](Texture-Pack-Mode.md).
 
-That makes poses reusable across multiple costumes of the same character.
+That workflow can use the HD portrait files instead of only relying on the normal in-project CSPs, which is what makes it useful for Dolphin texture-pack output.
 
-## What A Pose Save Contains
+## Ice Climbers Note
 
-At a high level, a saved pose captures things like:
+Ice Climbers are still the main exception.
 
-- animation symbol
-- camera position and scale
-- frame selection
-- hidden node settings
-- CSP-mode display settings
+Their portrait workflow is treated as a paired Popo/Nana portrait problem rather than two totally separate single-character portraits.
 
-Pose files are stored as YAML scene files under the vanilla-assets area, because they act more like reusable templates than vault-specific skin files.
+In practice, Nucleus handles the pairing automatically. You select Popo, and the app fills in the rest of the pair behavior for you.
 
-## Pose Thumbnails
+The main current limitation is custom poses: they do not work properly for Ice Climbers yet, because their portrait setup is more complicated than a normal one-character pose workflow.
 
-When possible, Nucleus generates a thumbnail for the saved pose using vanilla costume and animation data.
+For that special case, see [Ice Climbers Pairing](Ice-Climbers-Pairing.md).
 
-That gives the pose library a preview image without tying the pose to a specific custom skin.
+## Summary
 
-## Batch CSP Generation
+A normal CSP is your skin's standard portrait.
 
-One of the strongest workflows here is using a saved pose to batch-generate CSPs for multiple skins.
+A pose is a reusable recipe for making portraits.
 
-That turns a reusable pose scene into a consistent portrait set across a whole character's library.
-
-## Good Mental Model
-
-A CSP is a portrait asset for a skin.
-
-A pose is a reusable scene recipe for generating portraits.
-
-For Ice Climbers, the portrait asset is usually best thought of as a **pair portrait** rather than two unrelated single-character portraits.
-
-See [Ice Climbers Pairing](Ice-Climbers-Pairing.md).
+An HD CSP is a higher-resolution version of that portrait workflow, mainly useful for HD presentation and texture-pack export.

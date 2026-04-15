@@ -271,12 +271,14 @@ const EmbeddedModelViewer = forwardRef(({
     // outerHeight - innerHeight gives us the chrome height
     const chromeHeight = window.outerHeight - window.innerHeight
 
-    const x = Math.round(screenLeft + rect.left)
-    const y = Math.round(screenTop + chromeHeight + rect.top)
-    const width = Math.round(rect.width)
-    const height = Math.round(rect.height)
+    // Apply DPR scaling for correct positioning on high-DPI displays
+    // JavaScript APIs return CSS pixels, but WinForms expects physical pixels
+    const x = Math.round((screenLeft + rect.left) * dpr)
+    const y = Math.round((screenTop + chromeHeight + rect.top) * dpr)
+    const width = Math.round(rect.width * dpr)
+    const height = Math.round(rect.height * dpr)
 
-    console.log('[EmbeddedViewer] Position:', { x, y, width, height, screenLeft, screenTop, chromeHeight })
+    console.log('[EmbeddedViewer] Position:', { x, y, width, height, dpr })
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
 

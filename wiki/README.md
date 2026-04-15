@@ -1,20 +1,8 @@
 # Melee Modding Wiki
 
-This folder is for general Super Smash Bros. Melee modding knowledge and background context. Think of it as a local wiki: short, linked pages that explain how the game data is laid out, what the important terms mean, and what has or has not been reverse-engineered.
+General Melee modding context and Nucleus workflow notes.
 
-## Scope
-
-The wiki should answer questions like:
-
-- what files control costumes, effects, stages, and CSPs
-- where color data usually lives
-- what patterns or structures matter when editing DAT files
-- what parts of the modding workflow are well understood
-- what areas are still poorly documented
-
-## Does Not Belong Here
-
-Nucleus setup, build instructions, release steps, and app-specific usage docs belong in [docs](../docs/README.md).
+App-specific setup and build docs live in [docs](../docs/README.md).
 
 ## Local Browser View
 
@@ -24,39 +12,21 @@ On Windows, you can also run `open_wiki.bat` from the repo root. It starts the w
 
 ## Start Here
 
-- [Workflow Map](Workflows.md)
-- [Vault Vs Project](Vault-Vs-Project.md)
-- [Melee File Map](Melee-File-Map.md)
-- [Color And Effect Modding](Color-And-Effect-Modding.md)
-- [Research Sources](Research-Sources.md)
-- [Open Questions](Open-Questions.md)
-
-## Workflow Pages
-
 - [First-Run Setup](First-Run-Setup.md)
+- [Vault Vs Project](Vault-Vs-Project.md)
+- [Manual Import](Manual-Import.md)
 - [Character Mod Workflow](Character-Mod-Workflow.md)
 - [Stage Mod Workflow](Stage-Mod-Workflow.md)
-- [Dynamic Alternate Stages](Dynamic-Alternate-Stages.md)
-- [Extras And Effects Workflow](Extras-And-Effects-Workflow.md)
-- [Fox And Falco Shared Extras](Fox-And-Falco-Shared-Extras.md)
-- [CSP And Pose Workflow](CSP-And-Pose-Workflow.md)
-- [Texture Pack Mode](Texture-Pack-Mode.md)
-- [Vault And Distribution Workflow](Vault-And-Distribution-Workflow.md)
-- [Ice Climbers Pairing](Ice-Climbers-Pairing.md)
 
-## Technical Pages
+## Importing Mods
 
-- [DAT File Structure](DAT-File-Structure.md)
+- [One-Click Imports](One-Click-Imports.md)
 - [Slippi Safety](Slippi-Safety.md)
-- [Character Files And Ownership](Character-Files-And-Ownership.md)
+- [Slippi Validation Internals](Slippi-Validation-Internals.md)
 
-## Writing Style
+## Reference
 
-- prefer short pages over giant reference dumps
-- keep one topic per page
-- link raw research material instead of copying it wholesale
-- call out assumptions when a detail is inferred rather than proven
+- [Melee Files Reference](../docs/new-414/Melee-Files.md)
+- [Effect Offsets Reference](../docs/color-effects-reference/Effect-Offsets-Reference.md)
 
-## Current Raw Sources
-
-Some of the strongest existing source material still lives under [docs/color-effects-reference](../docs/color-effects-reference/). Treat that folder as source material and this wiki as the cleaned-up version.
+These are the main reference pages for file families and effect offsets.

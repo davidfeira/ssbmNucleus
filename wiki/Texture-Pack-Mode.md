@@ -1,148 +1,89 @@
 # Texture Pack Mode
 
-Texture-pack mode is an export workflow that turns the current build's character portraits into a Dolphin texture pack.
+Texture-pack mode is the export path you use when you want **HD character portraits in Dolphin**, not just a normal playable ISO.
 
-The important practical detail is that this is mainly a **CSP texture-pack pipeline**, not a generic "dump every texture in the game" system.
-
-## What It Does
-
-In normal ISO export, Nucleus writes the current M-EX project to a playable ISO.
-
-In texture-pack mode, Nucleus does extra work around the project's CSP files:
-
-1. backs up the project's current CSPs
-2. replaces them with encoded placeholder images
-3. exports the ISO
-4. restores the original project CSPs
-5. watches Slippi Dolphin's dump folder
-6. swaps dumped placeholder textures with the real CSPs in Dolphin's load folder
-
-That produces a Dolphin texture-pack result from the current build without permanently changing the project.
+The important practical detail is that this is mainly a **CSP pipeline**. It is not a general-purpose "turn the whole build into a texture pack" system.
 
 ## What It Is For
 
-This mode exists so the exported build can use high-resolution CSP-style textures in Dolphin, where normal in-ISO size limits do not apply the same way.
+Normal ISO export writes the current project into a playable build.
 
-The current implementation is centered on:
+Texture-pack mode goes a step further:
 
-- character select portraits
-- per-costume matching on the CSS
-- preferring HD CSPs from storage when they are available
+- it still exports the ISO
+- it also helps build a Dolphin texture-pack folder for the build's portraits
 
-## Requirements
+Use it when you want the build to keep normal in-game behavior but show higher-resolution CSS portraits through Dolphin's texture loading.
 
-Texture-pack mode depends on a few things being true:
+## The Actual Flow
 
-- you need an active M-EX project to export
-- you need a valid Slippi Dolphin path in Settings
-- Dolphin needs to be dumping textures into `User/Dump/Textures/GALE01`
-- the build needs costumes with CSP entries to match against
+The real user flow is:
 
-If no textures are being dumped, the watcher has nothing to match.
+1. export the current project with texture-pack mode enabled
+2. Nucleus temporarily swaps the project's portrait files with small placeholders just for the export
+3. Nucleus restores the normal project portraits after export, so the project itself is not left in that placeholder state
+4. open the exported ISO in Slippi Dolphin
+5. scroll through the costumes on the character select screen
+6. as Dolphin dumps those placeholder portraits, Nucleus matches them back to the correct costumes
+7. Nucleus writes the real portrait images into Dolphin's load folder
+8. when you are done matching costumes, stop listening and keep the generated texture-pack folder
 
-## Export Flow
+So the mode is really:
 
-When texture-pack mode is enabled during ISO export, the backend:
+- export an ISO
+- let Dolphin reveal which portrait texture belongs to which costume
+- replace those dumped placeholders with the real images
 
-1. creates a `buildId` for the export
-2. backs up `assets/csp` to `assets/csp_backup`
-3. walks the fighters and costumes in the current M-EX project
-4. records a mapping from a global placeholder index to each costume's real CSP
-5. replaces each project CSP with a small encoded placeholder PNG
-6. exports the ISO
-7. restores the original CSPs back into the project
+## Where The Real Portraits Come From
 
-It also writes supporting files into the output area:
+Texture-pack mode uses the portrait files Nucleus already knows about.
 
-- a mapping file like `<buildId>_texture_mapping.json`
-- a `debug_placeholder_sample.png` image for inspection
+In practice, that means:
 
-The project should end the export with its normal CSPs restored.
+- if a costume has an HD CSP, Nucleus can use that
+- otherwise it can fall back to the normal CSP
 
-## Listening Flow
+That is why this mode pairs naturally with the portrait tools on [CSP And Pose Workflow](CSP-And-Pose-Workflow.md).
 
-After the ISO finishes exporting, Nucleus can start a watcher for that `buildId`.
+## The Main Tradeoff
 
-The watcher:
+This workflow is powerful, but it is also kind of annoying.
 
-- loads the saved mapping file
-- derives Dolphin paths under `User/Dump/Textures/GALE01` and `User/Load/Textures/GALE01`
-- polls the dump folder for new `tex*.png` files
-- decodes any placeholder texture it recognizes
-- maps that decoded index back to a specific character costume
-- copies the real CSP into the load folder using the dumped texture's filename
+The slow part is that you still have to scroll through the costumes yourself so Nucleus can see each dumped placeholder and learn the correct Dolphin load filename for that portrait.
 
-The intended user flow is:
+So the more costumes you have, the more this process pays off, but also the more manual it feels.
 
-1. export with texture-pack mode enabled
-2. start listening
-3. open the exported ISO in Dolphin
-4. scroll through each character's costumes on the CSS
-5. let Nucleus match the dumped textures as they appear
-6. stop listening when the matches are done
+That is why texture-pack mode makes the most sense for:
 
-## How Matching Works
+- finished builds
+- large costume libraries
+- situations where the extra portrait quality is actually worth the setup time
 
-The placeholder system is not random.
+This may get automated later, but right now the registration step is still manual.
 
-Nucleus generates a 16x16 image with:
+## Quick Exports Vs Finished Builds
 
-- four finder markers
-- seven data cells
-- a base-4 encoded costume index
+If you just want to test a few skins, do a quick build, or check whether something basically works, normal ISO export is usually better.
 
-When Dolphin dumps that image, the watcher samples the dumped PNG, verifies the finder markers, decodes the index, and looks up the costume in the saved mapping.
+In that case, use [CSP Compression](CSP-Compression.md) instead.
 
-That is why the workflow depends on seeing the placeholders on the CSS first. The watcher is matching dumped portrait textures, not guessing from filenames alone.
+That path just downsizes the portraits a bit so the build stays lighter in memory, which is much less work than running the full texture-pack flow.
 
-## HD CSP Preference
+Texture-pack mode is the nicer-looking option, but it is usually only worth the extra effort once the build is more finished.
 
-When a dumped placeholder is matched, Nucleus tries to use the best real image it can find.
+## What You Get At The End
 
-The current order is:
+The result is not just an ISO.
 
-1. try to find an HD CSP in storage using perceptual-hash matching
-2. if no HD match is found, fall back to the backed-up project CSP
+You end up with:
 
-So texture-pack mode benefits from the CSP and HD-CSP workflows, but it does not require every costume to already have a custom HD file.
+- the exported ISO
+- a build-specific portrait texture-pack folder under Dolphin's `Load/Textures/GALE01` path
 
-## Output Layout
-
-Matched textures are written into Dolphin's load path under a build-specific subfolder:
-
-- `User/Load/Textures/GALE01/<build_name>/`
-
-Each copied file keeps the dumped Dolphin texture filename so Dolphin can load it correctly.
-
-When listening stops, Nucleus saves the updated mapping again and reports the final texture-pack path.
-
-## What It Does Not Do
-
-Texture-pack mode does not currently behave like a general texture-modding lab.
-
-It is not:
-
-- a generic stage-texture pack builder
-- a character model texture dumper
-- an automatic in-game texture crawler
-- a substitute for the normal ISO export path
-
-Its current job is much narrower: derive loadable CSP textures from the current build by using Dolphin's dump/load system.
-
-## Common Failure Cases
-
-If the workflow feels stuck, the usual problems are:
-
-- the Slippi Dolphin path is missing or wrong
-- the mapping file for the build was not found
-- Dolphin is not producing dumped `tex*.png` files
-- the relevant costumes were never visited on the CSS
-- the costume has no usable CSP entry to map from
-
-The fastest sanity check is whether the dump folder is receiving new texture PNGs while you browse costumes.
+That folder is what lets Dolphin show the higher-resolution portraits for the build.
 
 ## Related Pages
 
 - [CSP And Pose Workflow](CSP-And-Pose-Workflow.md)
-- [Vault And Distribution Workflow](Vault-And-Distribution-Workflow.md)
+- [CSP Compression](CSP-Compression.md)
 - [Character Mod Workflow](Character-Mod-Workflow.md)

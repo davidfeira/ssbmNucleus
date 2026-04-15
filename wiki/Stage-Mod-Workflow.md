@@ -1,6 +1,6 @@
 # Stage Mod Workflow
 
-Nucleus currently handles stage mods as **DAS variants** for a fixed set of competitive stages.
+Nucleus currently handles stage mods through **Dynamic Alternate Stages** for a fixed set of competitive stages.
 
 ## What Makes Up A Stage Mod
 
@@ -16,7 +16,7 @@ A screenshot is optional, but useful because Nucleus can use it as the preview i
 
 Importing a stage archive puts it into the **vault** as a stage variant.
 
-At a high level, import does this:
+Import does this:
 
 1. Detects the stage file in the uploaded archive.
 2. Figures out which supported stage bucket it belongs to.
@@ -25,6 +25,8 @@ At a high level, import does this:
 5. Adds the variant to the stage library.
 
 The stored stage variant is a library item, not yet an active project file.
+
+For the broader import flow, see [Manual Import](Manual-Import.md).
 
 ## Current Scope
 
@@ -37,29 +39,41 @@ The live stage workflow is not a generic all-stage browser. It is built around D
 - Pokemon Stadium
 - Fountain of Dreams
 
-## Official DAS Constraints
+## Dynamic Alternate Stages Setup
 
-Stage mods in Nucleus only make sense inside the DAS workflow.
+Stage mods in Nucleus are installed into the stage folders in the active project.
 
-The important user-facing rule is that DAS installs the replacement layer, and the actual stage alts live alongside it.
+Nucleus handles the base setup for you, including keeping the original stage as a `vanilla` variant.
 
-For the official rules and install details, see [Dynamic Alternate Stages](Dynamic-Alternate-Stages.md).
+That means the active project ends up with:
+
+- the stage root file replaced with the stage-variant setup
+- a per-stage alt folder such as `GrSt`, `GrOp`, or `GrPs`
+- the original stage copied into that folder as `vanilla.dat` or `vanilla.usd`
 
 ## Variant Names
 
-Imported stage variants get a sanitized ID and display name. In the current import path, names are intentionally kept short, because long stage filenames can cause problems.
+Imported stage variants get a sanitized ID and display name. In the current import path, names are intentionally kept short because the filename is also used as the key that keeps the stored preview image tied to that variant.
 
-That means stage naming is not just cosmetic. It affects the actual filename written into the project.
+So stage naming is not just cosmetic. It affects the actual filename written into the project, and right now it is also part of the preview-image lookup. That coupling is a little jank and could be improved later, but that is why the naming rules are stricter than they should ideally be.
 
-## What Installing DAS Does
+## Folder Layout
 
-The DAS framework must exist in the active MEX project before stage variant management works the intended way.
+In the active project, alts live in folders named after the stage code.
 
-Installing DAS prepares the active project so supported stages can use alt folders and button-triggered variants.
+Examples:
 
-For the exact folder names and replacement-file setup, see [Dynamic Alternate Stages](Dynamic-Alternate-Stages.md).
+- `GrSt` for Yoshi's Story
+- `GrOp` for Dreamland
+- `GrPs` for Pokemon Stadium
 
-## What Importing A DAS Variant To The Project Does
+The alt files themselves can be named freely as long as they use the right stage extension:
+
+- `.dat` for most supported stages
+- Pokemon Stadium may use either `.dat` or `.usd`
+- for Stadium, Nucleus should preserve the original extension instead of changing it
+
+## What Importing A Stage Variant To The Project Does
 
 Once a stage variant is in the vault, you can import it into the active MEX project.
 
@@ -74,11 +88,14 @@ So, just like character mods, the vault copy is your source item and the project
 
 ## Button Tokens
 
-Inside the project, DAS variants can use button-token suffixes like `(B)`, `(X)`, `(Y)`, `(L)`, `(R)`, and `(Z)`.
+Inside the project, stage variants can use button-token suffixes like `(B)`, `(X)`, `(Y)`, `(L)`, `(R)`, and `(Z)`.
 
 Those tokens are part of the variant filename and represent button-selected stage variants.
 
-For the exact naming convention, see [Dynamic Alternate Stages](Dynamic-Alternate-Stages.md).
+Examples:
+
+- `My Yoshi Alt (L).dat`
+- `Frozen Stadium (X).usd`
 
 ## Slippi Status
 
@@ -88,8 +105,6 @@ Right now, stage Slippi status is a manual flag rather than an automated validat
 
 For the full distinction, see [Slippi Safety](Slippi-Safety.md).
 
-## Good Mental Model
+## Summary
 
-A stage mod in Nucleus is "a vault variant that can be copied into one of the DAS-managed stage buckets in the current project."
-
-For the lower-level details and official install conventions, see [Dynamic Alternate Stages](Dynamic-Alternate-Stages.md).
+A stage mod in Nucleus is a vault variant that can be copied into one of the stage folders in the current project.

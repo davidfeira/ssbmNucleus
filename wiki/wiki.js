@@ -5,11 +5,22 @@ const NAV_SECTIONS = [
     title: "General Info",
     items: [
       { label: "Home", path: "wiki/README.md" },
-      { label: "Workflow Map", path: "wiki/Workflows.md" },
-      { label: "Vault Vs Project", path: "wiki/Vault-Vs-Project.md" },
       { label: "First-Run Setup", path: "wiki/First-Run-Setup.md" },
-      { label: "Slippi Safety", path: "wiki/Slippi-Safety.md" },
-      { label: "Open Questions", path: "wiki/Open-Questions.md" },
+      { label: "Vault Vs Project", path: "wiki/Vault-Vs-Project.md" },
+    ],
+  },
+  {
+    title: "Importing Mods",
+    items: [
+      { label: "Manual Import", path: "wiki/Manual-Import.md" },
+      { label: "One-Click Imports", path: "wiki/One-Click-Imports.md" },
+      {
+        label: "Slippi Safety",
+        path: "wiki/Slippi-Safety.md",
+        children: [
+          { label: "Validation Internals", path: "wiki/Slippi-Validation-Internals.md" },
+        ],
+      },
     ],
   },
   {
@@ -26,15 +37,12 @@ const NAV_SECTIONS = [
       {
         label: "Stage Mods",
         path: "wiki/Stage-Mod-Workflow.md",
-        children: [
-          { label: "Dynamic Alternate Stages", path: "wiki/Dynamic-Alternate-Stages.md" },
-        ],
       },
       {
         label: "Effect Mods",
         path: "wiki/Extras-And-Effects-Workflow.md",
         children: [
-          { label: "Fox And Falco Shared Extras", path: "wiki/Fox-And-Falco-Shared-Extras.md" },
+          { label: "Fox And Falco Shared Effects", path: "wiki/Fox-And-Falco-Shared-Extras.md" },
         ],
       },
     ],
@@ -42,39 +50,22 @@ const NAV_SECTIONS = [
   {
     title: "Build And Sharing",
     items: [
-      {
-        label: "Vault And Distribution",
-        path: "wiki/Vault-And-Distribution-Workflow.md",
-        children: [
-          { label: "Texture Pack Mode", path: "wiki/Texture-Pack-Mode.md" },
-        ],
-      },
+      { label: "Vault Backup And Restore", path: "wiki/Vault-And-Distribution-Workflow.md" },
+      { label: "CSP Compression", path: "wiki/CSP-Compression.md" },
+      { label: "Patches", path: "wiki/Patches.md" },
+      { label: "Texture Pack Mode", path: "wiki/Texture-Pack-Mode.md" },
     ],
   },
   {
     title: "Reference",
     items: [
-      { label: "Melee File Map", path: "wiki/Melee-File-Map.md" },
-      { label: "Character Files And Ownership", path: "wiki/Character-Files-And-Ownership.md" },
-      { label: "DAT File Structure", path: "wiki/DAT-File-Structure.md" },
-      { label: "Color And Effect Modding", path: "wiki/Color-And-Effect-Modding.md" },
-      { label: "Research Sources", path: "wiki/Research-Sources.md" },
-    ],
-  },
-  {
-    title: "Source Material",
-    items: [
       {
-        label: "Offsets Reference",
-        path: "docs/color-effects-reference/smashboards_offsets_reference.md",
+        label: "Melee Files Reference",
+        path: "docs/new-414/Melee-Files.md",
       },
       {
-        label: "Extras Expansion Notes",
-        path: "docs/color-effects-reference/extras_expansion_notes.md",
-      },
-      {
-        label: "Extracted Thread",
-        path: "docs/color-effects-reference/smashboards_thread_extracted.txt",
+        label: "Effect Offsets Reference",
+        path: "docs/color-effects-reference/Effect-Offsets-Reference.md",
       },
     ],
   },
@@ -414,6 +405,19 @@ async function loadPage() {
   pageTitleElement.textContent = "Loading...";
   pageContentElement.innerHTML = "<p>Loading wiki page...</p>";
 
+  if (path.toLowerCase().endsWith(".pdf")) {
+    const fileUrl = buildFileUrl(path);
+    pageTitleElement.textContent = path.split("/").at(-1);
+    pageContentElement.innerHTML = `
+      <div class="error-card">
+        <p><strong>PDF files are opened directly</strong> instead of being rendered in the wiki viewer.</p>
+        <p><a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">Open PDF</a></p>
+      </div>
+    `;
+    document.title = `${path.split("/").at(-1)} | Melee Modding Wiki`;
+    return;
+  }
+
   try {
     const response = await fetch(buildFileUrl(path), { cache: "no-store" });
     if (!response.ok) {
@@ -427,6 +431,15 @@ async function loadPage() {
     pageTitleElement.textContent = title;
     if (path.endsWith(".txt")) {
       pageContentElement.innerHTML = `<pre><code>${escapeHtml(source)}</code></pre>`;
+    } else if (path.endsWith(".json")) {
+      try {
+        const parsed = JSON.parse(source);
+        pageContentElement.innerHTML = `<pre><code class="language-json">${escapeHtml(
+          JSON.stringify(parsed, null, 2)
+        )}</code></pre>`;
+      } catch {
+        pageContentElement.innerHTML = `<pre><code class="language-json">${escapeHtml(source)}</code></pre>`;
+      }
     } else {
       pageContentElement.innerHTML = renderMarkdown(source, path);
     }

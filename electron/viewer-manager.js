@@ -144,8 +144,10 @@ class ViewerManager {
         this.pipeClient.on('error', (err) => {
           if (attempts < maxAttempts) {
             // Pipe not ready yet, retry
+            console.log(`[ViewerManager] Connection attempt ${attempts}/${maxAttempts} failed: ${err.code || err.message}, retrying...`);
             setTimeout(tryConnect, 500);
           } else {
+            console.error(`[ViewerManager] All ${maxAttempts} connection attempts failed`);
             reject(new Error(`Failed to connect to viewer pipe after ${maxAttempts} attempts: ${err.message}`));
           }
         });

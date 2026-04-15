@@ -27,6 +27,8 @@ node_modules/
 venv/
 venv-*/
 /testing/
+/tests/artifacts/
+/tests/external/
 
 # Environment
 .env
@@ -49,3 +51,8 @@ utility/website/backend/tools/processor/csp_data/**/Pl*.dat
 
 # Extras reference files
 zzzMoreExtras/
+
+# Local screenshots and generated test assets
+/Screenshot 2026-01-21 150635.png
+/utility/assets/vanilla/Sheik/*.dat
+/utility/assets/vanilla/Sheik/*/*.dat
