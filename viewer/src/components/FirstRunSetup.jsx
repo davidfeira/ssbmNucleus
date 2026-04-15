@@ -3,6 +3,13 @@ import { io } from 'socket.io-client'
 import './FirstRunSetup.css'
 
 const API_URL = 'http://127.0.0.1:5000/api/mex'
+const AUTO_DETECT_REASON_MESSAGES = {
+  no_slippi_install_found: 'No default Slippi Dolphin install was found in AppData.',
+  no_dolphin_ini_found: 'Found Slippi Dolphin, but no Dolphin.ini was available to read.',
+  no_iso_locations_in_dolphin_ini: 'Found Slippi Dolphin, but Dolphin.ini did not list any ISO folders.',
+  no_iso_candidates_found: 'Found Slippi Dolphin, but no nearby .iso or .gcm files looked like Melee candidates.',
+  no_matching_vanilla_iso_found: 'Found ISO candidates, but none matched the vanilla Melee 1.02 hash.'
+}
 
 export default function FirstRunSetup({ onComplete }) {
   const [step, setStep] = useState('welcome') // welcome, select-iso, verifying, extracting, copying, complete, error
@@ -16,9 +23,21 @@ export default function FirstRunSetup({ onComplete }) {
   })
   const [error, setError] = useState(null)
   const [socket, setSocket] = useState(null)
+  const [autoDetect, setAutoDetect] = useState({
+    status: 'idle',
+    message: '',
+    details: null
+  })
 
   // Connect to WebSocket for progress updates
   useEffect(() => {
+    const savedIsoPath = localStorage.getItem('vanilla_iso_path')
+    if (savedIsoPath) {
+      setIsoPath(savedIsoPath)
+    }
+
+    runAutoDetect({ allowIsoOverride: !savedIsoPath, showSearchingState: false })
+
     const newSocket = io('http://127.0.0.1:5000', {
       transports: ['websocket', 'polling']
     })
@@ -66,6 +85,71 @@ export default function FirstRunSetup({ onComplete }) {
     }
   }, [])
 
+  const persistDetectedPaths = (result) => {
+    if (!result) {
+      return
+    }
+
+    if (result.isoPath) {
+      localStorage.setItem('vanilla_iso_path', result.isoPath)
+    }
+
+    if (result.slippiPath && !localStorage.getItem('slippi_dolphin_path')) {
+      localStorage.setItem('slippi_dolphin_path', result.slippiPath)
+    }
+  }
+
+  const runAutoDetect = async (options = {}) => {
+    const allowIsoOverride = options.allowIsoOverride ?? true
+    const showSearchingState = options.showSearchingState ?? true
+
+    if (!window.electron?.autoDetectFirstRunPaths) {
+      return
+    }
+
+    if (showSearchingState) {
+      setAutoDetect({
+        status: 'searching',
+        message: 'Checking common Slippi Dolphin folders and Dolphin.ini for a vanilla ISO...',
+        details: null
+      })
+    }
+
+    try {
+      const result = await window.electron.autoDetectFirstRunPaths()
+
+      if (result.success) {
+        if (allowIsoOverride) {
+          setIsoPath(result.isoPath)
+        }
+
+        persistDetectedPaths(result)
+        setAutoDetect({
+          status: 'found',
+          message: 'Auto-detected a valid vanilla Melee 1.02 ISO from your Slippi/Dolphin setup.',
+          details: result
+        })
+        return
+      }
+
+      if (result.slippiPath && !localStorage.getItem('slippi_dolphin_path')) {
+        localStorage.setItem('slippi_dolphin_path', result.slippiPath)
+      }
+
+      setAutoDetect({
+        status: 'not_found',
+        message: AUTO_DETECT_REASON_MESSAGES[result.reason] || 'Auto-detect could not find a valid vanilla ISO.',
+        details: result
+      })
+    } catch (err) {
+      setAutoDetect({
+        status: 'error',
+        message: `Auto-detect failed: ${err.message}`,
+        details: null
+      })
+    }
+  }
+
   const handleBrowseIso = async () => {
     if (!window.electron) {
       setError('Electron API not available')
@@ -76,6 +160,10 @@ export default function FirstRunSetup({ onComplete }) {
       const selectedPath = await window.electron.openIsoDialog()
       if (selectedPath) {
         setIsoPath(selectedPath)
+        setAutoDetect((current) => ({
+          ...current,
+          status: current.status === 'found' ? 'manual_override' : current.status
+        }))
       }
     } catch (err) {
       setError(`Error selecting file: ${err.message}`)
@@ -105,6 +193,11 @@ export default function FirstRunSetup({ onComplete }) {
         setStep('error')
         setError(data.error || 'Setup failed')
         return
+      }
+
+      localStorage.setItem('vanilla_iso_path', isoPath)
+      if (autoDetect.details?.slippiPath && !localStorage.getItem('slippi_dolphin_path')) {
+        localStorage.setItem('slippi_dolphin_path', autoDetect.details.slippiPath)
       }
 
       // Setup started, progress will come via WebSocket
@@ -166,7 +259,7 @@ export default function FirstRunSetup({ onComplete }) {
     <div className="setup-step">
       <h2>Select Your Melee ISO</h2>
       <p className="setup-description">
-        Browse to your vanilla Melee 1.02 (NTSC) ISO file.
+        Browse to your vanilla Melee 1.02 (NTSC) ISO file, or let Nucleus look through your Slippi Dolphin setup for it.
       </p>
 
       <div className="iso-selector">
@@ -181,6 +274,35 @@ export default function FirstRunSetup({ onComplete }) {
           Browse...
         </button>
       </div>
+
+      <div className="setup-autodetect-actions">
+        <button
+          className="btn-secondary"
+          onClick={() => runAutoDetect({ allowIsoOverride: true, showSearchingState: true })}
+          disabled={autoDetect.status === 'searching'}
+        >
+          {autoDetect.status === 'searching' ? 'Searching...' : 'Auto-Detect'}
+        </button>
+      </div>
+
+      {autoDetect.status !== 'idle' && (
+        <div className={`setup-note ${autoDetect.status === 'not_found' || autoDetect.status === 'error' ? 'setup-note-warning' : ''}`}>
+          <strong>
+            {autoDetect.status === 'found' || autoDetect.status === 'manual_override' ? 'Auto-detect:' : autoDetect.status === 'searching' ? 'Searching:' : 'Auto-detect result:'}
+          </strong>{' '}
+          {autoDetect.message}
+          {autoDetect.details?.slippiPath && (
+            <div className="setup-note-line">
+              Slippi folder: <code>{autoDetect.details.slippiPath}</code>
+            </div>
+          )}
+          {autoDetect.details?.configPath && (
+            <div className="setup-note-line">
+              Dolphin.ini: <code>{autoDetect.details.configPath}</code>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="setup-error">

@@ -20,6 +20,13 @@ STAGE_MAPPING = {
 }
 
 
+def get_allowed_stage_extensions(stage_code: str) -> Set[str]:
+    """Return the valid archive extensions for a stage code."""
+    if stage_code == 'GrPs':
+        return {'.usd', '.dat'}
+    return {'.dat'}
+
+
 def extract_stage_code_from_filename(filename: str) -> Optional[str]:
     """
     Extract stage code (GrNBa, GrPs, etc.) from a filename.
@@ -148,15 +155,8 @@ def detect_stage_from_zip(zip_path: str) -> List[Dict]:
                 # Check for stage patterns
                 for stage_code, stage_info in STAGE_MAPPING.items():
                     if stage_code.upper() in name_upper:
-                        # Validate extension based on stage
-                        # Pokemon Stadium (GrPs) uses .usd files
-                        # All other stages use .dat files
-                        if stage_code == 'GrPs':
-                            if file_ext != '.usd':
-                                continue
-                        else:
-                            if file_ext != '.dat':
-                                continue
+                        if file_ext not in get_allowed_stage_extensions(stage_code):
+                            continue
 
                         stage_files.append({
                             'filename': filename,
@@ -368,11 +368,6 @@ def is_stage_file(filename: str) -> bool:
     # Check for stage codes and validate extension
     for stage_code in STAGE_MAPPING.keys():
         if stage_code.upper() in name_upper:
-            # Pokemon Stadium (GrPs) uses .usd files
-            # All other stages use .dat files
-            if stage_code == 'GrPs':
-                return ext == '.usd'
-            else:
-                return ext == '.dat'
+            return ext in get_allowed_stage_extensions(stage_code)
 
     return False

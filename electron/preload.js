@@ -15,6 +15,12 @@ contextBridge.exposeInMainWorld('electron', {
   openIsoDialog: () => ipcRenderer.invoke('open-iso-dialog'),
 
   /**
+   * Try to auto-detect the user's Slippi folder and vanilla ISO.
+   * @returns {Promise<object>} Detection result
+   */
+  autoDetectFirstRunPaths: () => ipcRenderer.invoke('auto-detect-first-run-paths'),
+
+  /**
    * Open a native directory picker dialog
    * @returns {Promise<string|null>} Full directory path or null if canceled
    */

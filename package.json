@@ -10,6 +10,8 @@
     "dev:frontend": "cd viewer && npm run dev",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev:backend\" \"npm run electron\"",
+    "wiki": "python scripts/wiki/serve.py",
+    "test:unit": "node --test tests/unit/first-run-autodetect.test.js",
     "build": "cd viewer && npm run build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win",
@@ -34,12 +36,16 @@
       {
         "from": "dist/",
         "to": "backend/",
-        "filter": ["mex_backend*"]
+        "filter": [
+          "mex_backend*"
+        ]
       },
       {
         "from": "dist-backend/",
         "to": "utility/",
-        "filter": ["mex*/**"]
+        "filter": [
+          "mex*/**"
+        ]
       },
       {
         "from": "utility/MexManager/MexCLI/bin/Release/net6.0/codes.gct",
@@ -48,17 +54,23 @@
       {
         "from": "utility/assets",
         "to": "utility/assets",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "utility/DynamicAlternateStages",
         "to": "utility/DynamicAlternateStages",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "utility/website/backend/tools",
         "to": "utility/website/backend/tools",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "scripts/tools/clear_storage.py",
@@ -89,5 +101,8 @@
       "description": "MEX Costume and Stage Manager for Super Smash Bros. Melee",
       "maintainer": "Melee Nexus Team"
     }
+  },
+  "dependencies": {
+    "claude": "^0.1.1"
   }
 }

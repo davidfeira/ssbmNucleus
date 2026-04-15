@@ -15,6 +15,14 @@ install and manage your melee mods
 
 get the latest release from the [releases page](../../releases)
 
+## documentation
+
+- [app docs](docs/README.md)
+- [melee modding wiki](wiki/README.md)
+
+local browser preview: `npm run wiki`
+windows shortcut: `open_wiki.bat`
+
 ## credits
 
 built with [MexManager](https://github.com/Ploaj/MexManager) and [HSDRawViewer](https://github.com/Ploaj/HSDLib) by Ploaj

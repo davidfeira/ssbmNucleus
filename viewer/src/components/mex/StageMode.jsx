@@ -265,6 +265,7 @@ export default function StageMode({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stageCode: variant.stageCode,
+          oldFilename: variant.filename,
           oldName: variantNameWithoutExt,
           newName: newVariantName
         })
@@ -297,6 +298,7 @@ export default function StageMode({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stageCode: variant.stageCode,
+          oldFilename: variant.filename,
           oldName: variantNameWithoutExt,
           newName: variantNameWithoutButton
         })
@@ -316,10 +318,12 @@ export default function StageMode({
     }
   }
 
-  const handleRemoveVariant = async (stageCode, variantName) => {
+  const handleRemoveVariant = async (variant) => {
     if (removing) return
 
-    if (!confirm(`Are you sure you want to remove "${variantName}"?`)) {
+    const variantName = variant.name
+
+    if (!confirm(`Are you sure you want to remove "${variant.name}"?`)) {
       return
     }
 
@@ -330,8 +334,9 @@ export default function StageMode({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stageCode: stageCode,
-          variantName: variantName
+          stageCode: selectedStage.code,
+          variantName: variant.name,
+          variantFilename: variant.filename
         })
       })
 
@@ -477,7 +482,7 @@ export default function StageMode({
                               className="btn-remove"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleRemoveVariant(selectedStage.code, variant.name)
+                                handleRemoveVariant(variant)
                               }}
                               disabled={removing}
                               title="Remove variant"

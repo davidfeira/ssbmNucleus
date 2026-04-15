@@ -2807,13 +2807,9 @@ def export_stage():
         stage_info = DAS_STAGES[stage_code]
         stage_folder = stage_info['folder']
 
-        # Get stage file extension (.usd for Pokemon Stadium, .dat for others)
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
-
         # Paths in storage
         storage_stage_path = STORAGE_PATH / 'das' / stage_folder
         stage_zip_path = storage_stage_path / f"{variant_id}.zip"
-        screenshot_path = storage_stage_path / f"{variant_id}_screenshot.png"
 
         if not stage_zip_path.exists():
             return jsonify({
@@ -2833,18 +2829,27 @@ def export_stage():
 
         # Create ZIP with stage file and screenshot
         with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as export_zip:
-            # Extract and add stage .dat/.usd file from storage ZIP
+            # Extract and add stage file(s) from storage ZIP, preserving original extension.
+            stage_added = False
             with zipfile.ZipFile(stage_zip_path, 'r') as source_zip:
                 for item in source_zip.namelist():
-                    if item.lower().endswith(file_ext):
+                    if Path(item).suffix.lower() in get_stage_variant_extensions(stage_code):
                         stage_data = source_zip.read(item)
                         export_zip.writestr(item, stage_data)
                         logger.info(f"  Added: {item}")
+                        stage_added = True
+
+            if not stage_added:
+                return jsonify({
+                    'success': False,
+                    'error': f'No stage file found in storage ZIP for {stage_code}'
+                }), 400
 
             # Add screenshot if exists
-            if screenshot_path.exists():
-                export_zip.write(screenshot_path, 'screenshot.png')
-                logger.info(f"  Added: screenshot.png")
+            has_screenshot, screenshot_path, screenshot_ext = find_stage_screenshot(storage_stage_path, variant_id)
+            if has_screenshot and screenshot_path:
+                export_zip.write(screenshot_path, f"screenshot{screenshot_ext}")
+                logger.info(f"  Added: screenshot{screenshot_ext}")
 
         logger.info(f"[OK] Stage exported: {export_filename}")
 
@@ -3664,6 +3669,60 @@ def sanitize_filename(name):
     return sanitized
 
 
+def get_stage_loader_extension(stage_code):
+    """Return the root-stage loader extension for a DAS stage."""
+    return '.usd' if stage_code == 'GrPs' else '.dat'
+
+
+def get_stage_variant_extensions(stage_code):
+    """Return supported variant extensions for a DAS stage."""
+    if stage_code == 'GrPs':
+        return ('.usd', '.dat')
+    return ('.dat',)
+
+
+def list_stage_variant_files(stage_folder: Path, stage_code: str):
+    """List stage variant files in a DAS folder, preserving mixed Stadium extensions."""
+    variant_files = []
+    for ext in get_stage_variant_extensions(stage_code):
+        variant_files.extend(stage_folder.glob(f'*{ext}'))
+    return sorted(variant_files, key=lambda path: path.name.lower())
+
+
+def resolve_stage_variant_path(stage_folder: Path, stage_code: str, variant_name: str = None, variant_filename: str = None):
+    """
+    Resolve a stage variant path from either a full filename or a stem.
+
+    Supports Pokemon Stadium variants stored as either .dat or .usd.
+    Returns a tuple of (path, error_message).
+    """
+    allowed_exts = set(get_stage_variant_extensions(stage_code))
+
+    if variant_filename:
+        candidate = stage_folder / os.path.basename(variant_filename)
+        if candidate.suffix.lower() not in allowed_exts:
+            return None, f'Unsupported variant extension: {candidate.suffix}'
+        if not candidate.exists():
+            return None, f'Variant not found: {candidate.name}'
+        return candidate, None
+
+    if not variant_name:
+        return None, 'Missing variant name'
+
+    candidates = [stage_folder / f"{variant_name}{ext}" for ext in get_stage_variant_extensions(stage_code)]
+    existing = [path for path in candidates if path.exists()]
+
+    if not existing:
+        preferred_ext = get_stage_loader_extension(stage_code)
+        return None, f'Variant not found: {variant_name}{preferred_ext}'
+
+    if len(existing) > 1:
+        options = ', '.join(path.name for path in existing)
+        return None, f'Ambiguous variant name "{variant_name}". Matches: {options}'
+
+    return existing[0], None
+
+
 def find_stage_screenshot(folder_path: Path, variant_id: str):
     """
     Find a stage screenshot with any image extension.
@@ -3703,7 +3762,7 @@ def das_get_status():
         installed_stages = []
 
         for stage_code, stage_info in DAS_STAGES.items():
-            loader_path = project_files_path / f"{stage_code}.dat"
+            loader_path = project_files_path / f"{stage_code}{get_stage_loader_extension(stage_code)}"
             folder_path = project_files_path / stage_code
 
             if loader_path.exists() and folder_path.exists():
@@ -3836,9 +3895,6 @@ def das_get_stage_variants(stage_code):
         variants = []
 
         if stage_folder.exists() and stage_folder.is_dir():
-            # Pokemon Stadium uses .usd, others use .dat
-            file_pattern = '*.usd' if stage_code == 'GrPs' else '*.dat'
-
             # Load metadata to get slippi status and other info
             metadata_file = STORAGE_PATH / 'metadata.json'
             metadata = {}
@@ -3850,7 +3906,7 @@ def das_get_stage_variants(stage_code):
             stage_metadata = metadata.get('stages', {}).get(stage_folder_name, {})
             metadata_variants = {v['id']: v for v in stage_metadata.get('variants', [])}
 
-            for stage_file in stage_folder.glob(file_pattern):
+            for stage_file in list_stage_variant_files(stage_folder, stage_code):
                 filename_stem = stage_file.stem  # e.g., "Autumn Dreamland" or "Autumn Dreamland(B)"
 
                 # Extract button indicator (e.g., "Autumn Dreamland(B)" -> "B")
@@ -4035,21 +4091,22 @@ def das_import_variant():
         stage_folder = project_files / stage_code
         stage_folder.mkdir(exist_ok=True)
 
-        # Pokemon Stadium uses .usd, others use .dat
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
-
         with zipfile.ZipFile(full_variant_path, 'r') as zip_ref:
-            # Find the stage file in the zip (.dat or .usd)
-            stage_files = [f for f in zip_ref.namelist() if f.endswith(file_ext) or f.endswith('.dat')]
+            # Find the stage file in the zip and preserve its original extension.
+            stage_files = [
+                f for f in zip_ref.namelist()
+                if Path(f).suffix.lower() in get_stage_variant_extensions(stage_code)
+            ]
             if not stage_files:
                 return jsonify({
                     'success': False,
-                    'error': f'No {file_ext} file found in ZIP'
+                    'error': f'No supported stage file found in ZIP for {stage_code}'
                 }), 400
 
             # Read the stage file data
             stage_file = stage_files[0]
             stage_data = zip_ref.read(stage_file)
+            stage_ext = Path(stage_file).suffix.lower()
 
             # Get variant_id from ZIP filename
             variant_id = Path(full_variant_path).stem  # e.g., "autumn-dreamland"
@@ -4074,14 +4131,14 @@ def das_import_variant():
 
             # Use sanitized display name for filename
             final_name = sanitize_filename(display_name)
-            final_path = stage_folder / f"{final_name}{file_ext}"
+            final_path = stage_folder / f"{final_name}{stage_ext}"
 
             # If file already exists, append suffix to avoid conflicts
             if final_path.exists():
                 count = 1
                 while True:
                     final_name = f"{sanitize_filename(display_name)}_{count}"
-                    final_path = stage_folder / f"{final_name}{file_ext}"
+                    final_path = stage_folder / f"{final_name}{stage_ext}"
                     if not final_path.exists():
                         break
                     count += 1
@@ -4116,15 +4173,16 @@ def das_remove_variant():
         data = request.json
         stage_code = data.get('stageCode')
         variant_name = data.get('variantName')
+        variant_filename = data.get('variantFilename')
 
         logger.info(f"=== DAS REMOVE REQUEST ===")
         logger.info(f"Stage Code: {stage_code}")
         logger.info(f"Variant Name: {variant_name}")
 
-        if not stage_code or not variant_name:
+        if not stage_code or (not variant_name and not variant_filename):
             return jsonify({
                 'success': False,
-                'error': 'Missing stageCode or variantName parameter'
+                'error': 'Missing stageCode or variant identifier parameter'
             }), 400
 
         if stage_code not in DAS_STAGES:
@@ -4133,18 +4191,21 @@ def das_remove_variant():
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # Find and remove the variant file
-        # Pokemon Stadium uses .usd, others use .dat
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
         project_files = get_project_files_dir()
         stage_folder = project_files / stage_code
-        variant_path = stage_folder / f"{variant_name}{file_ext}"
+        variant_path, path_error = resolve_stage_variant_path(
+            stage_folder,
+            stage_code,
+            variant_name=variant_name,
+            variant_filename=variant_filename
+        )
 
-        if not variant_path.exists():
+        if not variant_path:
+            status_code = 409 if path_error.startswith('Ambiguous variant name') else 404
             return jsonify({
                 'success': False,
-                'error': f'Variant not found: {variant_name}{file_ext}'
-            }), 404
+                'error': path_error
+            }), status_code
 
         variant_path.unlink()
         logger.info(f"DAS variant removed: {variant_path}")
@@ -4177,14 +4238,15 @@ def das_rename_variant():
         data = request.json
         stage_code = data.get('stageCode')
         old_name = data.get('oldName')
+        old_filename = data.get('oldFilename')
         new_name = data.get('newName')
 
         logger.info(f"DAS Rename Request - Stage: {stage_code}, Old: {old_name}, New: {new_name}")
 
-        if not stage_code or not old_name or not new_name:
+        if not stage_code or (not old_name and not old_filename) or not new_name:
             return jsonify({
                 'success': False,
-                'error': 'Missing stageCode, oldName, or newName parameter'
+                'error': 'Missing stageCode, existing variant identifier, or newName parameter'
             }), 400
 
         if stage_code not in DAS_STAGES:
@@ -4193,26 +4255,29 @@ def das_rename_variant():
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # Pokemon Stadium uses .usd, others use .dat
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
         project_files = get_project_files_dir()
         stage_folder = project_files / stage_code
+        old_path, path_error = resolve_stage_variant_path(
+            stage_folder,
+            stage_code,
+            variant_name=old_name,
+            variant_filename=old_filename
+        )
 
-        old_path = stage_folder / f"{old_name}{file_ext}"
-        new_path = stage_folder / f"{new_name}{file_ext}"
-
-        # Check if old file exists
-        if not old_path.exists():
+        if not old_path:
+            status_code = 409 if path_error.startswith('Ambiguous variant name') else 404
             return jsonify({
                 'success': False,
-                'error': f'Source file not found: {old_name}{file_ext}'
-            }), 404
+                'error': path_error
+            }), status_code
+
+        new_path = stage_folder / f"{new_name}{old_path.suffix}"
 
         # Check if new file already exists (prevent overwriting)
         if new_path.exists():
             return jsonify({
                 'success': False,
-                'error': f'Target file already exists: {new_name}{file_ext}'
+                'error': f'Target file already exists: {new_path.name}'
             }), 409
 
         # Rename the file

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { autoDetectFirstRunPaths } = require('./first-run-autodetect');
 
 let pythonProcess = null;
 let mainWindow = null;
@@ -177,6 +178,10 @@ ipcMain.handle('open-iso-dialog', async () => {
   }
 
   return result.filePaths[0];
+});
+
+ipcMain.handle('auto-detect-first-run-paths', async () => {
+  return autoDetectFirstRunPaths();
 });
 
 ipcMain.handle('select-directory-dialog', async () => {
