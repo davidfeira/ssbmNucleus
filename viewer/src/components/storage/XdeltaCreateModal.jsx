@@ -9,12 +9,15 @@
  */
 
 import { playSound, playHoverSound } from '../../utils/sounds'
+import HexagonLoader from '../shared/HexagonLoader'
+import { getProgressMessage } from '../shared/progressText'
 
 export default function XdeltaCreateModal({
   show,
   xdeltaCreateState,
   xdeltaCreateData,
   setXdeltaCreateData,
+  xdeltaCreateProgress,
   xdeltaCreateMessage,
   xdeltaCreateError,
   xdeltaCreateResult,
@@ -102,16 +105,19 @@ export default function XdeltaCreateModal({
           )}
 
           {xdeltaCreateState === 'creating' && (
-            <div className="export-progress" style={{ textAlign: 'center' }}>
-              <div className="export-spinner">
-                <div className="spinner"></div>
+            <div className="export-progress">
+              <HexagonLoader
+                className="progress-loader"
+                size={120}
+                label="Creating patch"
+                progress={xdeltaCreateProgress > 0 ? xdeltaCreateProgress : null}
+              />
+              <div className="hexagon-progress-copy">
+                <h3>Creating Patch...</h3>
+                <p className="progress-message">
+                  {getProgressMessage(xdeltaCreateMessage, 'Comparing ISOs...')}
+                </p>
               </div>
-
-              <h3 style={{ marginTop: '1rem' }}>Creating Patch...</h3>
-
-              <p className="progress-message">
-                {xdeltaCreateMessage || 'Comparing ISOs...'}
-              </p>
             </div>
           )}
 

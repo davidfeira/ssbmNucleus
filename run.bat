@@ -181,8 +181,12 @@ REM ----------------------------------------
 REM  Kill stale processes by name
 REM ----------------------------------------
 echo [CLEANUP] Stopping any existing Nucleus processes...
+taskkill /F /T /FI "WINDOWTITLE eq MEX Manager*" 2>nul
+taskkill /F /T /FI "WINDOWTITLE eq Vite Dev Server*" 2>nul
+taskkill /F /T /IM electron.exe 2>nul
 taskkill /F /IM mex_backend.exe 2>nul
-taskkill /F /FI "WINDOWTITLE eq MEX Manager*" 2>nul
+REM Kill any python running the Flask dev backend (targeted by command line)
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -like '*mex_api.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
 timeout /t 2 /nobreak >nul
 echo [OK] Stale processes cleaned up.
 echo.

@@ -7,11 +7,13 @@
    ───────────────────────────────────────── */
 
 .app {
-  min-height: 100vh;
+  min-height: var(--viewport-height);
+  height: var(--viewport-height);
   background: var(--color-bg-base);
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 /* Subtle background texture */
@@ -40,7 +42,7 @@
       var(--color-bg-base) 100%
     );
   border-bottom: 1px solid var(--color-border-subtle);
-  padding: var(--space-4) var(--space-6);
+  padding: var(--page-block-padding) var(--page-inline-padding);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -151,14 +153,40 @@
 
 .app-content {
   flex: 1;
+  min-height: 0;
+  display: flex;
   overflow: hidden;
   position: relative;
   z-index: var(--z-base);
 }
 
-/* Tab content panels with fade transition */
-.app-content > div {
+.app-panel {
+  flex: 1;
+  min-height: 0;
   animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.app-panel--hidden {
+  display: none;
+}
+
+.app-panel--scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.app-panel--fill {
+  display: flex;
+  overflow: hidden;
+}
+
+.app-panel.app-panel--hidden {
+  display: none;
+}
+
+.app-panel--fill > * {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ─────────────────────────────────────────
@@ -167,7 +195,7 @@
 
 .app-loading,
 .app-error {
-  min-height: 100vh;
+  min-height: var(--viewport-height);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -187,6 +215,23 @@
 }
 
 .app-loading p {
+  font-size: var(--text-md);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-medium);
+}
+
+.app-panel-loading {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-8);
+  gap: var(--space-4);
+}
+
+.app-panel-loading p {
   font-size: var(--text-md);
   color: var(--color-text-tertiary);
   font-weight: var(--font-medium);
@@ -255,9 +300,9 @@
     );
   border-radius: var(--radius-xl);
   padding: var(--space-8);
-  max-width: 500px;
+  max-width: min(100%, 32rem);
   width: 100%;
-  max-height: 90vh;
+  max-height: var(--modal-max-height);
   overflow-y: auto;
   box-shadow:
     var(--shadow-xl),
@@ -593,14 +638,12 @@
   justify-content: center;
   z-index: var(--z-modal);
   animation: fadeIn var(--duration-fast) var(--ease-out);
-  padding: var(--space-6);
+  padding: var(--modal-inline-padding);
 }
 
 .edit-modal-fullscreen {
-  width: 65vw;
-  height: 80vh;
-  max-width: 1000px;
-  max-height: 900px;
+  width: var(--modal-max-width);
+  height: min(100%, var(--modal-max-height));
   background: linear-gradient(
     165deg,
     var(--color-bg-elevated) 0%,
@@ -619,28 +662,6 @@
   position: relative;
   overflow: visible;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
-}
-
-/* Scale modals for larger screens */
-@media (min-width: 1440px) {
-  .edit-modal-fullscreen {
-    max-width: 1100px;
-    max-height: 1000px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .edit-modal-fullscreen {
-    max-width: 1250px;
-    max-height: 1100px;
-  }
-}
-
-@media (min-width: 2560px) {
-  .edit-modal-fullscreen {
-    max-width: 1500px;
-    max-height: 1300px;
-  }
 }
 
 @keyframes modalSlideUp {
@@ -794,25 +815,7 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  width: clamp(200px, 30vw, 400px);
-}
-
-@media (min-width: 1440px) {
-  .edit-modal-csp-section {
-    width: clamp(280px, 35vw, 500px);
-  }
-}
-
-@media (min-width: 1920px) {
-  .edit-modal-csp-section {
-    width: clamp(320px, 38vw, 600px);
-  }
-}
-
-@media (min-width: 2560px) {
-  .edit-modal-csp-section {
-    width: clamp(400px, 40vw, 750px);
-  }
+  width: clamp(14rem, 42%, 24rem);
 }
 
 .edit-modal-csp-container {
@@ -932,7 +935,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  width: clamp(80px, 10vw, 120px);
+  width: clamp(5.5rem, 14%, 7.5rem);
 }
 
 .edit-modal-stock-container {
@@ -1431,4 +1434,87 @@
   color: var(--color-text-secondary);
   margin: 0;
   font-weight: var(--font-regular);
+}
+
+@media (max-width: 1080px) {
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .app-tabs {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .edit-modal-body {
+    flex-wrap: wrap;
+    overflow-y: auto;
+  }
+
+  .edit-modal-csp-section {
+    width: clamp(16rem, 100%, 24rem);
+  }
+
+  .edit-modal-controls-section {
+    max-width: none;
+    min-width: min(100%, 18rem);
+    flex-basis: 16rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .header-brand {
+    justify-content: center;
+  }
+
+  .app-tabs {
+    width: 100%;
+  }
+
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .edit-modal-overlay,
+  .edit-modal-fullscreen-overlay {
+    padding: var(--space-3);
+  }
+
+  .edit-modal-content {
+    padding: var(--space-5);
+  }
+
+  .edit-modal-fullscreen {
+    width: 100%;
+    height: min(100%, calc(var(--viewport-height) - (2 * var(--space-3))));
+    border-radius: var(--radius-xl);
+  }
+
+  .edit-modal-body {
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .edit-modal-csp-section,
+  .edit-modal-stock-section,
+  .edit-modal-controls-section,
+  .edit-modal-controls-section--wide {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .edit-modal-actions {
+    flex-wrap: wrap;
+    padding: var(--space-3);
+  }
+
+  .edit-modal-action-btn {
+    min-width: calc(50% - (var(--space-2) / 2));
+  }
 }

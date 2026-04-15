@@ -5,6 +5,7 @@ import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
 import CharacterMode from './mex/CharacterMode'
 import StageMode from './mex/StageMode'
+import HexagonLoader from './shared/HexagonLoader'
 import { API_URL } from '../config'
 
 const MexPanel = () => {
@@ -19,6 +20,12 @@ const MexPanel = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [showIsoBuilder, setShowIsoBuilder] = useState(false)
   const [showProjectModal, setShowProjectModal] = useState(false)
+  const [createProjectOverlay, setCreateProjectOverlay] = useState({
+    active: false,
+    title: 'Creating Project',
+    status: '',
+    progress: 0
+  })
 
   useEffect(() => {
     fetchMexStatus()
@@ -72,8 +79,27 @@ const MexPanel = () => {
   }
 
   const handleProjectOpened = async () => {
+    setCreateProjectOverlay((currentState) => currentState.active
+      ? {
+          ...currentState,
+          title: 'Loading Project Data',
+          status: 'Refreshing project status and opening the new workspace...',
+          progress: Math.max(currentState.progress, 97)
+        }
+      : currentState)
+
     await fetchMexStatus()
     setRefreshing(true)
+
+    setCreateProjectOverlay((currentState) => currentState.active
+      ? {
+          ...currentState,
+          title: 'Loading Fighters and Assets',
+          status: 'Fetching fighters and available costumes for the new project...',
+          progress: Math.max(currentState.progress, 99)
+        }
+      : currentState)
+
     await Promise.all([
       fetchFighters(),
       fetchStorageCostumes()
@@ -86,6 +112,27 @@ const MexPanel = () => {
     await fetchMexStatus()
     setSelectedFighter(null)
     setShowProjectModal(false)
+  }
+
+  const handleCloseProject = async () => {
+    try {
+      const response = await fetch(`${API_URL}/project/close`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+
+      if (!data.success) {
+        alert(`Failed to close project: ${data.error}`)
+        return
+      }
+
+      await fetchMexStatus()
+      setSelectedFighter(null)
+      setShowProjectModal(false)
+      setShowIsoBuilder(false)
+    } catch (err) {
+      alert(`Error closing project: ${err.message}`)
+    }
   }
 
   const handleOpenProjectFolder = async () => {
@@ -117,6 +164,27 @@ const MexPanel = () => {
     setRefreshing(false)
   }
 
+  const renderCreateProjectOverlay = () => {
+    if (!createProjectOverlay.active) {
+      return null
+    }
+
+    return (
+      <div className="import-overlay">
+        <div className="import-modal import-modal--hexagon">
+          <HexagonLoader
+            size={116}
+            className="import-loader"
+            progress={createProjectOverlay.progress}
+            label={`Creating project. ${createProjectOverlay.status || 'Working...'}`}
+          />
+          <h3>{createProjectOverlay.title}</h3>
+          <p className="import-status">{createProjectOverlay.status}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return <div className="mex-panel loading">Loading MEX Manager...</div>
   }
@@ -135,90 +203,106 @@ const MexPanel = () => {
   // Show project selection screen if no project is loaded
   if (!projectLoaded) {
     return (
-      <ProjectSelector
-        showModal={false}
-        onProjectOpened={handleProjectOpened}
-        onProjectDeleted={handleProjectDeleted}
-        API_URL={API_URL}
-      />
+      <>
+        <ProjectSelector
+          showModal={false}
+          onProjectOpened={handleProjectOpened}
+          onProjectDeleted={handleProjectDeleted}
+          onCreateProjectOverlayChange={setCreateProjectOverlay}
+          API_URL={API_URL}
+        />
+        {renderCreateProjectOverlay()}
+      </>
     )
   }
 
   return (
-    <div className="mex-panel">
-      <div className="mex-header">
-        <div className="header-left">
-          {mexStatus?.connected && (
-            <div className="mex-status connected">
-              <span className="status-dot"></span>
-              <span>{mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}</span>
+    <>
+      <div className="mex-panel">
+        <div className="mex-header">
+          <div className="header-left">
+            {mexStatus?.connected && (
+              <div className="mex-status connected">
+                <span className="status-dot"></span>
+                <span>{mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}</span>
+              </div>
+            )}
+            <div className="action-buttons-group">
+              <button
+                className="action-btn export-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); setShowIsoBuilder(true); }}
+              >
+                Export ISO
+              </button>
+              <button
+                className="action-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); handleOpenProjectFolder() }}
+              >
+                Open Folder
+              </button>
+              <button
+                className="action-btn close-project-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('back'); handleCloseProject() }}
+              >
+                Close Project
+              </button>
+              <button
+                className="action-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); setShowProjectModal(true); }}
+              >
+                Switch Project
+              </button>
             </div>
-          )}
-          <div className="action-buttons-group">
-            <button
-              className="action-btn export-btn"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('start'); setShowIsoBuilder(true); }}
-            >
-              Export ISO
-            </button>
-            <button
-              className="action-btn"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('start'); handleOpenProjectFolder() }}
-            >
-              Open Folder
-            </button>
-            <button
-              className="action-btn"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('start'); setShowProjectModal(true); }}
-            >
-              Switch Project
-            </button>
           </div>
         </div>
+
+        {mode === 'characters' ? (
+          <CharacterMode
+            mode={mode}
+            onModeChange={setMode}
+            fighters={fighters}
+            selectedFighter={selectedFighter}
+            onSelectFighter={setSelectedFighter}
+            storageCostumes={storageCostumes}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            API_URL={API_URL}
+          />
+        ) : (
+          <StageMode
+            mode={mode}
+            onModeChange={setMode}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            API_URL={API_URL}
+          />
+        )}
+
+        {showIsoBuilder && (
+          <IsoBuilder
+            onClose={() => setShowIsoBuilder(false)}
+            projectName={mexStatus?.project?.path?.split(/[/\\]/).slice(-2, -1)[0] || 'game'}
+          />
+        )}
+
+        {showProjectModal && (
+          <ProjectSelector
+            showModal={true}
+            onClose={() => setShowProjectModal(false)}
+            onProjectOpened={handleProjectOpened}
+            onProjectDeleted={handleProjectDeleted}
+            onCreateProjectOverlayChange={setCreateProjectOverlay}
+            API_URL={API_URL}
+          />
+        )}
       </div>
 
-      {mode === 'characters' ? (
-        <CharacterMode
-          mode={mode}
-          onModeChange={setMode}
-          fighters={fighters}
-          selectedFighter={selectedFighter}
-          onSelectFighter={setSelectedFighter}
-          storageCostumes={storageCostumes}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-          API_URL={API_URL}
-        />
-      ) : (
-        <StageMode
-          mode={mode}
-          onModeChange={setMode}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-          API_URL={API_URL}
-        />
-      )}
-
-      {showIsoBuilder && (
-        <IsoBuilder
-          onClose={() => setShowIsoBuilder(false)}
-          projectName={mexStatus?.project?.path?.split(/[/\\]/).slice(-2, -1)[0] || 'game'}
-        />
-      )}
-
-      {showProjectModal && (
-        <ProjectSelector
-          showModal={true}
-          onClose={() => setShowProjectModal(false)}
-          onProjectOpened={handleProjectOpened}
-          onProjectDeleted={handleProjectDeleted}
-          API_URL={API_URL}
-        />
-      )}
-    </div>
+      {renderCreateProjectOverlay()}
+    </>
   )
 }
 

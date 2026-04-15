@@ -5,6 +5,7 @@ import Settings from './components/Settings'
 import FirstRunSetup from './components/FirstRunSetup'
 import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
 import DownloadModal from './components/shared/DownloadModal'
+import HexagonLoader from './components/shared/HexagonLoader'
 import { useDownloadQueue, DOWNLOAD_PHASES } from './hooks/useDownloadQueue'
 import { playSound, playHoverSound } from './utils/sounds'
 import { API_URL } from './config'
@@ -193,18 +194,10 @@ function App() {
   // Show loading state while checking setup status
   if (setupNeeded === null) {
     return (
-      <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-        <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-          <div className="setup-spinner" style={{
-            width: '48px',
-            height: '48px',
-            border: '3px solid var(--color-border)',
-            borderTopColor: 'var(--color-cyan)',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px'
-          }}></div>
-          Loading...
+      <div className="app">
+        <div className="app-loading">
+          <HexagonLoader size={88} decorative />
+          <p>Checking setup status...</p>
         </div>
       </div>
     );
@@ -251,18 +244,19 @@ function App() {
 
       <main className="app-content">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '48px', color: '#888' }}>
-            Loading...
+          <div className="app-panel-loading">
+            <HexagonLoader size={72} decorative />
+            <p>Loading your vault...</p>
           </div>
         ) : (
           <>
-            <div style={{ display: activeTab === 'storage' ? 'block' : 'none' }}>
+            <div className={`app-panel app-panel--scroll ${activeTab === 'storage' ? '' : 'app-panel--hidden'}`}>
               <StorageViewer metadata={metadata} onRefresh={fetchMetadata} onSkinCreatorChange={setSkinCreatorOpen} />
             </div>
-            <div style={{ display: activeTab === 'mex' ? 'block' : 'none', height: '100%' }}>
+            <div className={`app-panel app-panel--fill ${activeTab === 'mex' ? '' : 'app-panel--hidden'}`}>
               <MexPanel />
             </div>
-            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+            <div className={`app-panel app-panel--scroll ${activeTab === 'settings' ? '' : 'app-panel--hidden'}`}>
               <Settings metadata={metadata} />
             </div>
           </>

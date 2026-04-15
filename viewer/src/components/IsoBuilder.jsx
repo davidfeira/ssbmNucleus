@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { playSound } from '../utils/sounds';
 import { API_URL, BACKEND_URL } from '../config';
+import HexagonLoader from './shared/HexagonLoader';
+import { getProgressMessage } from './shared/progressText';
 import './IsoBuilder.css';
 
 // CSS screen order for scanning - matches the character select screen layout
@@ -85,7 +87,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
 
     newSocket.on('export_progress', (data) => {
       setProgress(data.percentage);
-      setMessage(data.message || `Exporting... ${data.percentage}%`);
+      setMessage(data.message || 'Exporting assets...');
     });
 
     newSocket.on('export_complete', async (data) => {
@@ -537,6 +539,30 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
+  const renderProgressPanel = ({
+    title,
+    label,
+    progressValue = null,
+    messageText,
+    metaText = null,
+    size = 120,
+    className = ''
+  }) => (
+    <div className={['export-progress', className].filter(Boolean).join(' ')}>
+      <HexagonLoader
+        className="progress-loader"
+        size={size}
+        label={label}
+        progress={progressValue}
+      />
+      <div className="hexagon-progress-copy">
+        <h3>{title}</h3>
+        {metaText && <p className="hexagon-progress-meta">{metaText}</p>}
+        <p className="progress-message">{messageText}</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="iso-builder-overlay">
       <div className="iso-builder-modal">
@@ -683,25 +709,12 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
           )}
 
           {exporting && (
-            <div className="export-progress">
-              <div className="progress-header">
-                <h3>Exporting ISO...</h3>
-                <span className="progress-percentage">{progress}%</span>
-              </div>
-
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-
-              <p className="progress-message">{message}</p>
-
-              <div className="export-spinner">
-                <div className="spinner"></div>
-              </div>
-            </div>
+            renderProgressPanel({
+              title: 'Exporting ISO...',
+              label: 'ISO export progress',
+              progressValue: progress > 0 ? progress : null,
+              messageText: getProgressMessage(message, 'Preparing export pipeline...')
+            })
           )}
 
           {complete && !creatingPatch && !patchComplete && !patchError && !listeningMode && (
@@ -795,17 +808,12 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
           )}
 
           {creatingPatch && (
-            <div className="export-progress" style={{ textAlign: 'center' }}>
-              <div className="export-spinner">
-                <div className="spinner"></div>
-              </div>
-
-              <h3 style={{ marginTop: '1rem' }}>Creating Patch...</h3>
-
-              <p className="progress-message">
-                {patchMessage || 'Comparing ISOs...'}
-              </p>
-            </div>
+            renderProgressPanel({
+              title: 'Creating Patch...',
+              label: 'Patch creation progress',
+              progressValue: patchProgress > 0 ? patchProgress : null,
+              messageText: getProgressMessage(patchMessage, 'Comparing ISOs...')
+            })
           )}
 
           {patchComplete && patchResult && (
@@ -853,22 +861,16 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
 
           {listeningMode && (
             <div className="listening-mode">
-              <div className="listening-header">
-                <div className="pulse-icon"></div>
-                <h3>Texture Pack Mode</h3>
-              </div>
-
-              <div className="texture-progress">
-                <div className="progress-bar">
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${textureProgress.percentage}%` }}
-                  ></div>
-                </div>
-                <span className="progress-text">
-                  {textureProgress.matched} / {textureProgress.total} textures matched
-                </span>
-              </div>
+              {renderProgressPanel({
+                title: 'Texture Pack Mode',
+                label: 'Texture pack scan progress',
+                progressValue: textureProgress.percentage > 0 ? textureProgress.percentage : null,
+                messageText: `${textureProgress.matched} / ${textureProgress.total} textures matched`,
+                metaText: characters.length > 0 && currentCharIndex < characters.length
+                  ? `Current focus: ${characters[currentCharIndex]?.name}`
+                  : 'Preparing scan targets...',
+                className: 'listening-progress-shell'
+              })}
 
               {/* Current Character Focus */}
               {characters.length > 0 && currentCharIndex < characters.length && (
@@ -1019,25 +1021,12 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
 
           {/* Bundle export in progress */}
           {bundleExporting && (
-            <div className="export-progress">
-              <div className="progress-header">
-                <h3>Creating Bundle...</h3>
-                <span className="progress-percentage">{bundleProgress}%</span>
-              </div>
-
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${bundleProgress}%` }}
-                ></div>
-              </div>
-
-              <p className="progress-message">{bundleMessage}</p>
-
-              <div className="export-spinner">
-                <div className="spinner"></div>
-              </div>
-            </div>
+            renderProgressPanel({
+              title: 'Creating Bundle...',
+              label: 'Bundle export progress',
+              progressValue: bundleProgress > 0 ? bundleProgress : null,
+              messageText: getProgressMessage(bundleMessage, 'Preparing bundle assets...')
+            })
           )}
 
           {/* Bundle export complete */}

@@ -62,6 +62,33 @@ def build_project_response(project_path, info):
     }
 
 
+def build_project_listing_entry(project_file, current_project_path=None):
+    """Build lightweight metadata for a managed project without opening it."""
+    project_file = Path(project_file)
+    project_dir = project_file.parent
+
+    try:
+        last_modified_at = int(project_file.stat().st_mtime)
+    except OSError:
+        last_modified_at = 0
+
+    is_current_project = False
+    if current_project_path is not None:
+        try:
+            is_current_project = current_project_path.resolve() == project_file.resolve()
+        except OSError:
+            is_current_project = False
+
+    return {
+        'name': project_dir.name,
+        'path': str(project_file),
+        'projectDirectory': str(project_dir),
+        'isManagedProject': True,
+        'isCurrentProject': is_current_project,
+        'lastModifiedAt': last_modified_at
+    }
+
+
 def find_fighter_json_by_name(fighter_name):
     """Find fighter JSON file by scanning data/fighters/ directory.
     Returns (path, data) tuple or (None, None) if not found.
@@ -198,6 +225,79 @@ def open_project():
         })
     except Exception as e:
         logger.error(f"Failed to open project: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@project_bp.route('/api/mex/project/list', methods=['GET'])
+def list_projects():
+    """List all app-managed MEX projects."""
+    try:
+        current_project_path = get_current_project_path()
+        projects = []
+
+        if PROJECTS_PATH.exists():
+            for project_dir in PROJECTS_PATH.iterdir():
+                if not project_dir.is_dir():
+                    continue
+
+                default_project_file = project_dir / 'project.mexproj'
+                if default_project_file.exists():
+                    project_file = default_project_file
+                else:
+                    mexproj_files = sorted(project_dir.glob('*.mexproj'))
+                    if not mexproj_files:
+                        continue
+                    project_file = mexproj_files[0]
+
+                projects.append(build_project_listing_entry(project_file, current_project_path))
+
+        projects.sort(key=lambda project: (
+            not project.get('isCurrentProject', False),
+            -project.get('lastModifiedAt', 0),
+            project.get('name', '').lower()
+        ))
+
+        return jsonify({
+            'success': True,
+            'projects': projects,
+            'projectsDirectory': str(PROJECTS_PATH)
+        })
+    except Exception as e:
+        logger.error(f"List projects error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@project_bp.route('/api/mex/project/close', methods=['POST'])
+def close_project():
+    """Close the currently loaded MEX project without deleting it."""
+    try:
+        current_project_path = get_current_project_path()
+
+        if current_project_path is None:
+            return jsonify({
+                'success': True,
+                'closed': False,
+                'message': 'No project is currently loaded'
+            })
+
+        closed_project_path = str(current_project_path)
+        clear_project_path()
+        logger.info(f"[OK] Closed MEX project: {closed_project_path}")
+
+        return jsonify({
+            'success': True,
+            'closed': True,
+            'message': 'Project closed successfully',
+            'projectPath': closed_project_path
+        })
+    except Exception as e:
+        logger.error(f"Close project error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

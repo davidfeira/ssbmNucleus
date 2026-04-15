@@ -18,6 +18,7 @@
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  padding: var(--page-block-padding) var(--page-inline-padding);
 }
 
 /* ─────────────────────────────────────────
@@ -28,13 +29,15 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-cyan);
   border-radius: 16px;
-  width: 100%;
-  max-width: 520px;
+  width: min(100%, 34rem);
   box-shadow:
     0 24px 48px rgba(0, 0, 0, 0.5),
     0 0 24px rgba(125, 211, 232, 0.12);
   overflow: visible;
   position: relative;
+  max-height: var(--modal-max-height);
+  display: flex;
+  flex-direction: column;
 }
 
 /* Traveling LED border effect (runs constantly, slow) */
@@ -137,10 +140,12 @@
 
 .first-run-content {
   padding: var(--space-6);
-  min-height: 320px;
+  min-height: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
 }
 
 .first-run-footer {
@@ -333,20 +338,15 @@
    SPINNER
    ───────────────────────────────────────── */
 
-.setup-spinner {
-  width: 48px;
-  height: 48px;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-cyan);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.setup-loader {
   margin: 0 auto var(--space-4);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.setup-progress-meta {
+  margin-top: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
 }
 
 /* ─────────────────────────────────────────

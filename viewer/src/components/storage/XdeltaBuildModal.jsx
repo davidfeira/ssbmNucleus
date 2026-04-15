@@ -8,6 +8,8 @@
  */
 
 import { playSound, playHoverSound } from '../../utils/sounds'
+import HexagonLoader from '../shared/HexagonLoader'
+import { getProgressMessage } from '../shared/progressText'
 
 export default function XdeltaBuildModal({
   show,
@@ -35,24 +37,17 @@ export default function XdeltaBuildModal({
         <div className="modal-body">
           {xdeltaBuildState === 'building' && (
             <div className="export-progress">
-              <div className="progress-header">
+              <HexagonLoader
+                className="progress-loader"
+                size={120}
+                label="Building ISO"
+                progress={xdeltaBuildProgress > 0 ? xdeltaBuildProgress : null}
+              />
+              <div className="hexagon-progress-copy">
                 <h3>Building ISO...</h3>
-                <span className="progress-percentage">{xdeltaBuildProgress}%</span>
-              </div>
-
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${xdeltaBuildProgress}%` }}
-                ></div>
-              </div>
-
-              <p className="progress-message">
-                {xdeltaBuildMessage || `Applying patch: ${xdeltaBuildPatch?.name}`}
-              </p>
-
-              <div className="export-spinner">
-                <div className="spinner"></div>
+                <p className="progress-message">
+                  {getProgressMessage(xdeltaBuildMessage, `Applying patch: ${xdeltaBuildPatch?.name}`)}
+                </p>
               </div>
             </div>
           )}

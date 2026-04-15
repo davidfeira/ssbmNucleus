@@ -1185,6 +1185,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         xdeltaCreateState={xdeltaCreateState}
         xdeltaCreateData={xdeltaCreateData}
         setXdeltaCreateData={setXdeltaCreateData}
+        xdeltaCreateProgress={xdeltaCreateProgress}
         xdeltaCreateMessage={xdeltaCreateMessage}
         xdeltaCreateError={xdeltaCreateError}
         xdeltaCreateResult={xdeltaCreateResult}

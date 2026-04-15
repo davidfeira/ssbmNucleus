@@ -14,6 +14,7 @@ import { getExtraTypes, hasExtras } from '../../config/extraTypes'
 import { rgbyToHex } from '../../utils/rgbyColor'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import HexagonLoader from '../shared/HexagonLoader'
 import { BACKEND_URL } from '../../config'
 
 export default function CharacterMode({
@@ -504,7 +505,12 @@ export default function CharacterMode({
 
     let successCount = 0
     let failCount = 0
+    let completedCount = 0
     const importedNanas = new Set()
+    const markBatchStepComplete = () => {
+      completedCount += 1
+      setBatchProgress({ current: completedCount, total })
+    }
 
     for (let i = 0; i < costumesToImport.length; i++) {
       const zipPath = costumesToImport[i]
@@ -512,15 +518,15 @@ export default function CharacterMode({
 
       if (!costume) {
         failCount++
+        markBatchStepComplete()
         continue
       }
 
       // Skip if this is a Nana that was already imported as part of a Popo pair
       if (importedNanas.has(zipPath)) {
+        markBatchStepComplete()
         continue
       }
-
-      setBatchProgress({ current: i + 1, total })
 
       try {
         // Ice Climbers: Auto-import paired Nana when Popo is selected
@@ -612,6 +618,8 @@ export default function CharacterMode({
       } catch (err) {
         console.error(`Import error for ${costume.name}:`, err)
         failCount++
+      } finally {
+        markBatchStepComplete()
       }
     }
 
@@ -1465,10 +1473,10 @@ export default function CharacterMode({
         {/* Import Loading Overlay */}
         {importingExtra && (
           <div className="import-overlay">
-            <div className="import-modal">
-              <div className="import-spinner"></div>
+            <div className="import-modal import-modal--hexagon">
+              <HexagonLoader className="import-loader" size={104} label="Importing extra" />
               <h3>Importing...</h3>
-              <p>Please wait...</p>
+              <p className="import-status">Please wait...</p>
             </div>
           </div>
         )}
@@ -1480,6 +1488,9 @@ export default function CharacterMode({
   // Hide non-playable characters
   const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag']
   const playableFighters = fighters.filter(f => !hiddenCharacters.includes(f.name))
+  const batchImportProgress = batchImporting && batchProgress.total > 0
+    ? (batchProgress.current / batchProgress.total) * 100
+    : null
 
   return (
     <div className="mex-content">
@@ -1639,7 +1650,7 @@ export default function CharacterMode({
               </div>
               {reordering && (
                 <div className="reorder-overlay">
-                  <div className="reorder-spinner"></div>
+                  <HexagonLoader className="reorder-loader" size={46} decorative />
                   <span>Reordering...</span>
                 </div>
               )}
@@ -1761,20 +1772,16 @@ export default function CharacterMode({
       {/* Import Loading Overlay */}
       {(importing || batchImporting) && (
         <div className="import-overlay">
-          <div className="import-modal">
-            <div className="import-spinner"></div>
+          <div className="import-modal import-modal--hexagon">
+            <HexagonLoader
+              className="import-loader"
+              size={112}
+              label="Importing costumes"
+              progress={batchImportProgress}
+              minimumVisibleProgress={6}
+            />
             <h3>Importing...</h3>
-            {batchImporting && batchProgress.total > 0 && (
-              <div className="import-progress">
-                <div
-                  className="import-progress-bar"
-                  style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
-                />
-              </div>
-            )}
-            <p>{batchImporting && batchProgress.total > 0
-              ? `${batchProgress.current} of ${batchProgress.total} costumes`
-              : 'Please wait...'}</p>
+            <p className="import-status">Please wait...</p>
           </div>
         </div>
       )}

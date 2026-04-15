@@ -3,6 +3,8 @@
  */
 import { useState, useEffect } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import HexagonLoader from '../shared/HexagonLoader'
+import { getProgressMessage } from '../shared/progressText'
 
 export default function XdeltaImportModal({
   show,
@@ -101,22 +103,19 @@ export default function XdeltaImportModal({
         <div className="edit-modal-content" onClick={handleContentClick}>
           <h2>{isInstalling ? 'Installing Mod Bundle' : 'Importing Bundle'}</h2>
 
-          <div className="bundle-progress-section">
-            <div className="progress-bar-container" style={{ marginBottom: '1rem' }}>
-              <div
-                className="progress-bar-fill"
-                style={{
-                  width: `${bundleProgress}%`,
-                  height: '8px',
-                  background: 'var(--gradient-primary)',
-                  borderRadius: '4px',
-                  transition: 'width 0.3s ease'
-                }}
-              />
+          <div className="export-progress" style={{ paddingBottom: 0 }}>
+            <HexagonLoader
+              className="progress-loader"
+              size={112}
+              label={isInstalling ? 'Installing bundle' : 'Importing bundle'}
+              progress={bundleProgress > 0 ? bundleProgress : null}
+            />
+            <div className="hexagon-progress-copy">
+              <h3>{isInstalling ? 'Installing files...' : 'Importing bundle...'}</h3>
+              <p className="progress-message">
+                {getProgressMessage(bundleMessage, isInstalling ? 'Installing...' : 'Importing...')}
+              </p>
             </div>
-            <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-              {bundleMessage || (isInstalling ? 'Installing...' : 'Importing...')}
-            </p>
           </div>
         </div>
       </div>

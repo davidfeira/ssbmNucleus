@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
 import { playSound, reloadSounds } from '../utils/sounds'
 import { API_URL, BACKEND_URL } from '../config'
+import HexagonLoader from './shared/HexagonLoader'
+import { getProgressMessage } from './shared/progressText'
 import './FirstRunSetup.css'
 
 export default function FirstRunSetup({ onComplete }) {
@@ -189,13 +191,15 @@ export default function FirstRunSetup({ onComplete }) {
     })
   }
 
+  const progressPercentage = Math.max(0, Math.min(Number(progress.percentage) || 0, 100))
+
   // Render different steps
   const renderWelcome = () => {
     // Show loading spinner while auto-detecting
     if (autoDetecting) {
       return (
         <div className="setup-step">
-          <div className="setup-spinner"></div>
+          <HexagonLoader size={72} className="setup-loader" decorative />
           <h2>Welcome to SSBM Nucleus</h2>
           <p className="setup-description">
             Detecting your Slippi Dolphin installation...
@@ -358,7 +362,7 @@ export default function FirstRunSetup({ onComplete }) {
 
   const renderVerifying = () => (
     <div className="setup-step">
-      <div className="setup-spinner"></div>
+      <HexagonLoader size={72} className="setup-loader" decorative />
       <h2>Verifying ISO</h2>
       <p className="setup-description">
         Checking that this is a valid vanilla Melee 1.02 ISO...
@@ -368,39 +372,31 @@ export default function FirstRunSetup({ onComplete }) {
 
   const renderExtracting = () => (
     <div className="setup-step">
+      <HexagonLoader
+        size={104}
+        className="setup-loader"
+        progress={progressPercentage}
+        label="Extracting ISO"
+      />
       <h2>Extracting ISO</h2>
       <p className="setup-description">
-        {progress.message || 'Extracting game files... This may take 1-2 minutes.'}
+        {getProgressMessage(progress.message, 'Extracting game files... This may take 1-2 minutes.')}
       </p>
-      <div className="progress-container">
-        <div className="progress-bar">
-          <div
-            className="progress-fill"
-            style={{ width: `${progress.percentage}%` }}
-          ></div>
-        </div>
-        <div className="progress-text">{progress.percentage}%</div>
-      </div>
     </div>
   )
 
   const renderCopying = () => (
     <div className="setup-step">
+      <HexagonLoader
+        size={104}
+        className="setup-loader"
+        progress={progressPercentage}
+        label="Copying assets"
+      />
       <h2>Copying Assets</h2>
       <p className="setup-description">
-        {progress.message || 'Copying character and stage assets...'}
+        {getProgressMessage(progress.message, 'Copying character and stage assets...')}
       </p>
-      <div className="progress-container">
-        <div className="progress-bar">
-          <div
-            className="progress-fill"
-            style={{ width: `${progress.percentage}%` }}
-          ></div>
-        </div>
-        <div className="progress-text">
-          {progress.completed} / {progress.total}
-        </div>
-      </div>
     </div>
   )
 

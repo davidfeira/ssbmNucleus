@@ -205,6 +205,25 @@
   --z-modal: 1100;
   --z-toast: 1200;
   --z-tooltip: 1300;
+
+  /* Layout tokens */
+  --viewport-height: 100vh;
+  --page-shell-max-width: 88rem;
+  --page-shell-max-width-wide: 96rem;
+  --page-shell-max-width-narrow: 64rem;
+  --page-inline-padding: clamp(var(--space-4), 2.2vw, var(--space-8));
+  --page-block-padding: clamp(var(--space-4), 2.8vh, var(--space-8));
+  --panel-block-padding: clamp(var(--space-4), 2vh, var(--space-6));
+  --modal-inline-padding: clamp(var(--space-3), 2vw, var(--space-6));
+  --modal-max-height: min(calc(var(--viewport-height) - (2 * var(--space-6))), 60rem);
+  --modal-max-width: min(100%, 68rem);
+  --modal-medium-width: min(100%, 54rem);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height: 100dvh;
+  }
 }
 
 /* ============================================
@@ -253,10 +272,16 @@
 }
 
 html {
+  height: 100%;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
@@ -266,7 +291,7 @@ body {
   line-height: var(--leading-normal);
   color: var(--color-text-primary);
   background: var(--color-bg-base);
-  min-height: 100vh;
+  min-height: var(--viewport-height);
   overflow-x: hidden;
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import HexagonLoader from '../shared/HexagonLoader'
 
 /**
  * Pose Skin Selector Modal
@@ -67,7 +68,6 @@ export default function PoseSkinSelectorModal({
   const [hdResolution, setHdResolution] = useState('1x')
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [progress, setProgress] = useState({ current: 0, total: 0, currentSkin: '' })
   const [results, setResults] = useState(null)
 
   // Fetch skins for this character
@@ -123,7 +123,6 @@ export default function PoseSkinSelectorModal({
     if (selectedSkins.size === 0) return
 
     setGenerating(true)
-    setProgress({ current: 0, total: selectedSkins.size, currentSkin: '' })
     setResults(null)
 
     try {
@@ -213,7 +212,10 @@ export default function PoseSkinSelectorModal({
         {/* Skins Grid */}
         <div className="pss-skins-grid">
           {loading ? (
-            <div className="pss-loading">Loading skins...</div>
+            <div className="pss-loading-shell">
+              <HexagonLoader size={96} label="Loading skins" />
+              <div className="pss-loading">Loading skins...</div>
+            </div>
           ) : skins.length === 0 ? (
             <div className="pss-empty">No skins found for {character}</div>
           ) : (
@@ -233,13 +235,8 @@ export default function PoseSkinSelectorModal({
         <div className="pss-footer">
           {generating ? (
             <div className="pss-progress">
-              <div className="pss-progress-bar">
-                <div
-                  className="pss-progress-fill"
-                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                />
-              </div>
-              <span>Generating CSPs... {progress.current}/{progress.total}</span>
+              <HexagonLoader size={92} label="Generating CSPs" />
+              <span>Generating {selectedSkins.size} CSP{selectedSkins.size !== 1 ? 's' : ''}...</span>
             </div>
           ) : results ? (
             <div className={`pss-results ${results.error ? 'pss-error' : 'pss-success'}`}>
@@ -465,11 +462,20 @@ export default function PoseSkinSelectorModal({
           align-content: start;
         }
 
-        .pss-loading, .pss-empty {
+        .pss-loading-shell,
+        .pss-loading,
+        .pss-empty {
           grid-column: 1 / -1;
           text-align: center;
           color: #666;
           padding: 40px;
+        }
+
+        .pss-loading-shell {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
         }
 
         .pss-skin-card {
@@ -583,20 +589,8 @@ export default function PoseSkinSelectorModal({
         .pss-progress {
           display: flex;
           flex-direction: column;
-          gap: 8px;
-        }
-
-        .pss-progress-bar {
-          height: 8px;
-          background: #2a2a4a;
-          border-radius: 4px;
-          overflow: hidden;
-        }
-
-        .pss-progress-fill {
-          height: 100%;
-          background: #6c8cff;
-          transition: width 0.3s ease;
+          align-items: center;
+          gap: 12px;
         }
 
         .pss-progress span {

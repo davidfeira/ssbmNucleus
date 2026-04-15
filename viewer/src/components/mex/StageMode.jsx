@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import HexagonLoader from '../shared/HexagonLoader'
 import { BACKEND_URL } from '../../config'
 
 const DAS_STAGES = [
@@ -204,6 +205,11 @@ export default function StageMode({
 
     let successCount = 0
     let failCount = 0
+    let completedCount = 0
+    const markBatchStepComplete = () => {
+      completedCount += 1
+      setBatchProgress({ current: completedCount, total })
+    }
 
     for (let i = 0; i < variantsToImport.length; i++) {
       const zipPath = variantsToImport[i]
@@ -211,10 +217,9 @@ export default function StageMode({
 
       if (!variant) {
         failCount++
+        markBatchStepComplete()
         continue
       }
-
-      setBatchProgress({ current: i + 1, total })
 
       try {
         const response = await fetch(`${API_URL}/das/import`, {
@@ -237,6 +242,8 @@ export default function StageMode({
       } catch (err) {
         console.error(`Import error for ${variant.name}:`, err)
         failCount++
+      } finally {
+        markBatchStepComplete()
       }
     }
 
@@ -427,6 +434,10 @@ export default function StageMode({
       </div>
     )
   }
+
+  const batchImportProgress = batchImporting && batchProgress.total > 0
+    ? (batchProgress.current / batchProgress.total) * 100
+    : null
 
   return (
     <div className="mex-content">
@@ -664,20 +675,16 @@ export default function StageMode({
           {/* Import Loading Overlay */}
           {(importing || batchImporting) && (
             <div className="import-overlay">
-              <div className="import-modal">
-                <div className="import-spinner"></div>
+              <div className="import-modal import-modal--hexagon">
+                <HexagonLoader
+                  className="import-loader"
+                  size={112}
+                  label="Importing stage variants"
+                  progress={batchImportProgress}
+                  minimumVisibleProgress={6}
+                />
                 <h3>Importing...</h3>
-                {batchImporting && batchProgress.total > 0 && (
-                  <div className="import-progress">
-                    <div
-                      className="import-progress-bar"
-                      style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
-                    />
-                  </div>
-                )}
-                <p>{batchImporting && batchProgress.total > 0
-                  ? `${batchProgress.current} of ${batchProgress.total} variants`
-                  : 'Please wait...'}</p>
+                <p className="import-status">Installing selected variants...</p>
               </div>
             </div>
           )}
