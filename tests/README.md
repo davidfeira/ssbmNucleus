@@ -40,6 +40,12 @@ The cloned fork lives under `tests/external/emubench-dolphin` and can be built i
 tests/external/emubench-dolphin/build-wsl/Binaries/dolphin-emu-nogui
 ```
 
+For local WSL use, apply the included patch before building. It disables the fork's hard dependency on cloud-only `TEST_ID` / `MEMWATCHES` env vars when running outside emubench's Firestore/GCS setup:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/david/projects/NucleusDesktop/tests/external/emubench-dolphin && git apply /mnt/c/Users/david/projects/NucleusDesktop/tests/dolphin/patches/emubench-dolphin-local-mode.patch"
+```
+
 Two WSL smoke scripts are included:
 
 ```powershell
