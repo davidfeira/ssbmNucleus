@@ -102,9 +102,9 @@ pre {
 
 .nav-sublist {
   display: none;
-  margin: 0.3rem 0 0 0.85rem;
-  padding: 0 0 0 0.7rem;
-  border-left: 1px solid rgba(215, 198, 164, 0.85);
+  margin: 0.38rem 0 0.2rem 1.15rem;
+  padding: 0 0 0 0.95rem;
+  border-left: 2px solid rgba(176, 77, 28, 0.22);
 }
 
 .nav-sublist-expanded {
@@ -155,12 +155,31 @@ pre {
 }
 
 .nav-link-child {
-  padding: 0.38rem 0.62rem;
-  font-size: 0.96rem;
+  position: relative;
+  margin-left: 0.1rem;
+  padding: 0.34rem 0.62rem 0.34rem 1.15rem;
+  font-size: 0.94rem;
+  border-radius: 0.55rem;
 }
 
 .nav-link-child:not(.active):not(.branch-active) {
   color: var(--muted);
+}
+
+.nav-link-child::before {
+  content: "";
+  position: absolute;
+  left: 0.35rem;
+  top: 50%;
+  width: 0.5rem;
+  height: 1px;
+  background: rgba(176, 77, 28, 0.38);
+  transform: translateY(-50%);
+}
+
+.nav-link-child.active,
+.nav-link-child.branch-active {
+  margin-left: 0;
 }
 
 .nav-link:hover,
