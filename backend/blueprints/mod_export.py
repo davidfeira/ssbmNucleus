@@ -11,6 +11,7 @@ import logging
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
 from core.config import STORAGE_PATH, OUTPUT_PATH
+from core.costume_files import is_costume_archive_filename
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def export_costume():
         with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as export_zip:
             with zipfile.ZipFile(zip_path, 'r') as source_zip:
                 for item in source_zip.namelist():
-                    if item.lower().endswith('.dat'):
+                    if is_costume_archive_filename(item):
                         dat_data = source_zip.read(item)
                         export_zip.writestr(item, dat_data)
                         logger.info(f"  Added: {item}")
@@ -94,7 +95,7 @@ def export_costume():
                 if nana_zip_path.exists():
                     with zipfile.ZipFile(nana_zip_path, 'r') as nana_zip:
                         for item in nana_zip.namelist():
-                            if item.lower().endswith('.dat'):
+                            if is_costume_archive_filename(item):
                                 nana_dat_data = nana_zip.read(item)
                                 export_zip.writestr(item, nana_dat_data)
                                 logger.info(f"  Added Nana: {item}")

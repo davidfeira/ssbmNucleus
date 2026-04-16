@@ -19,6 +19,8 @@ from PIL import Image
 # Make character_detector importable from this test file location
 BACKEND_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
+PROCESSOR_DIR = BACKEND_DIR.parent / 'utility' / 'website' / 'backend' / 'tools' / 'processor'
+sys.path.insert(0, str(PROCESSOR_DIR))
 
 from character_detector import (
     _strip_csp_suffixes,
@@ -33,7 +35,9 @@ from character_detector import (
     _extract_character_color_from_filename,
     _build_image_indexes,
     _match_images,
+    detect_character_from_zip,
 )
+from detect_character import DATParser as UtilityDATParser
 
 
 # ── Test Helpers ──────────────────────────────────────────────────────────────
@@ -246,6 +250,14 @@ class TestExtractCharacterColorFromFilename:
         char, color = _extract_character_color_from_filename('PlFxGr.dat')
         assert char == 'Fox' and color == 'Green'
 
+    def test_plxxyy_usd_format(self):
+        char, color = _extract_character_color_from_filename('PlCaRe.usd')
+        assert char == 'Captain Falcon' and color == 'Red'
+
+    def test_falcon_red_rd_alias(self):
+        char, color = _extract_character_color_from_filename('PlCaRd.usd')
+        assert char == 'Captain Falcon' and color == 'Red'
+
     def test_plxxyy_in_csp(self):
         char, color = _extract_character_color_from_filename('PlFxGr_csp.png')
         assert char == 'Fox' and color == 'Green'
@@ -257,6 +269,15 @@ class TestExtractCharacterColorFromFilename:
     def test_case_insensitive(self):
         char, color = _extract_character_color_from_filename('PLFXGR.png')
         assert char == 'Fox' and color == 'Green'
+
+
+class TestUtilityDatParserAliases:
+    def test_falcon_red_rd_alias_normalizes_to_re_slot(self):
+        parser = UtilityDATParser(str(BACKEND_DIR / 'PlCaRd.usd'))
+        parser.root_nodes = [{'symbol': 'PlyCaptain5KRd_Share_joint'}]
+
+        assert parser.detect_costume_color() == 'Red'
+        assert parser.get_character_filename() == 'PlCaRe'
 
     def test_underscore_format(self):
         char, color = _extract_character_color_from_filename('fox_green.png')
@@ -342,6 +363,52 @@ class TestBuildImageIndexes:
         zf = _make_zip({'PlFxGr.dat': b'not an image', 'csp.png': CSP_BYTES})
         cn, cp, sn, sp = _build_image_indexes(zf, ['PlFxGr.dat', 'csp.png'])
         assert 'PlFxGr.dat' not in cp
+
+
+class TestDetectCharacterFromZip:
+    def test_detects_falcon_red_usd_costume(self, monkeypatch):
+        import character_detector as detector_module
+
+        class FakeParser:
+            def __init__(self, filepath):
+                self.filepath = filepath
+                self.root_nodes = []
+
+            def read_dat(self):
+                marker = Path(self.filepath).read_text()
+                if marker == 'falcon_red_usd':
+                    self.root_nodes = [{'symbol': 'PlyCaptain5KRd_Share_joint'}]
+                else:
+                    self.root_nodes = [{'symbol': 'ftDataFox'}]
+
+            def detect_character(self):
+                return ('C. Falcon', 'PlyCaptain5KRd_Share_joint')
+
+            def detect_costume_color(self):
+                return 'Red'
+
+            def get_character_filename(self):
+                return 'PlCaRe'
+
+        monkeypatch.setattr(detector_module, 'DATParser', FakeParser)
+
+        zip_path = BACKEND_DIR / 'tests' / '_falcon_red_detector.zip'
+        try:
+            with zipfile.ZipFile(zip_path, 'w') as zf:
+                zf.writestr('PlCaRd.usd', 'falcon_red_usd')
+                zf.writestr('csp.png', CSP_BYTES)
+
+            results = detect_character_from_zip(str(zip_path))
+
+            assert len(results) == 1
+            assert results[0]['character'] == 'C. Falcon'
+            assert results[0]['color'] == 'Red'
+            assert results[0]['costume_code'] == 'PlCaRe'
+            assert results[0]['dat_file'] == 'PlCaRd.usd'
+            assert results[0]['csp_file'] == 'csp.png'
+        finally:
+            if zip_path.exists():
+                zip_path.unlink()
 
     def test_csp_key_stripping(self):
         """CSP filename prefix/suffix is stripped in the name index."""

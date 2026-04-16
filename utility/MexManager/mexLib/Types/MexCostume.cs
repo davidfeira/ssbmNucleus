@@ -1,4 +1,5 @@
 ﻿using mexLib.AssetTypes;
+using System;
 using mexLib.Utilties;
 using System.ComponentModel;
 using System.IO.Compression;
@@ -96,7 +97,8 @@ namespace mexLib.Types
                     fstream.Close();
 
                     // dat assets
-                    if (entry.Name.EndsWith(".dat"))
+                    if (entry.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) ||
+                        entry.Name.EndsWith(".usd", StringComparison.OrdinalIgnoreCase))
                     {
                         // file
                         if (entry.Name.StartsWith("PlKb"))

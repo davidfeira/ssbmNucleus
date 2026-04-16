@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .config import STORAGE_PATH, OUTPUT_PATH
 from .constants import VANILLA_COSTUME_COUNT
+from .costume_files import find_costume_archive_name
 
 logger = logging.getLogger(__name__)
 
@@ -186,12 +187,11 @@ def backfill_dat_hashes():
 
                 try:
                     with zipfile.ZipFile(zip_path, 'r') as zf:
-                        for name in zf.namelist():
-                            if name.lower().endswith('.dat'):
-                                dat_data = zf.read(name)
-                                skin['dat_hash'] = hashlib.md5(dat_data).hexdigest()
-                                updated += 1
-                                break
+                        archive_name = find_costume_archive_name(zf.namelist())
+                        if archive_name:
+                            dat_data = zf.read(archive_name)
+                            skin['dat_hash'] = hashlib.md5(dat_data).hexdigest()
+                            updated += 1
                 except Exception:
                     errors += 1
 

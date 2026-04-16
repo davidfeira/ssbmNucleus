@@ -20,6 +20,7 @@ from flask import Blueprint, request, jsonify
 
 from core.config import PROJECT_ROOT, STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR, SERVICES_DIR
 from core.constants import get_char_prefix
+from core.costume_files import find_costume_archive_name, find_extracted_costume_archive
 
 import sys
 sys.path.insert(0, str(PROCESSOR_DIR))
@@ -372,11 +373,10 @@ def capture_hd_csp(character, skin_id):
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 zf.extractall(temp_path)
 
-            dat_files = list(temp_path.glob('*.dat'))
-            if not dat_files:
-                return jsonify({'success': False, 'error': 'No DAT file found in costume zip'}), 400
+            dat_file = find_extracted_costume_archive(temp_path)
+            if not dat_file:
+                return jsonify({'success': False, 'error': 'No costume archive found in costume zip'}), 400
 
-            dat_file = dat_files[0]
             hd_csp_path = generate_csp(str(dat_file), scale=scale)
 
             if not hd_csp_path or not Path(hd_csp_path).exists():
@@ -577,17 +577,9 @@ def manage_csp(character, skin_id):
                 with zipfile.ZipFile(zip_path, 'r') as zf:
                     zf.extractall(temp_dir)
 
-                dat_file = None
-                for root, dirs, files in os.walk(temp_dir):
-                    for file_name in files:
-                        if file_name.endswith('.dat') and file_name.startswith('Pl'):
-                            dat_file = Path(root) / file_name
-                            break
-                    if dat_file:
-                        break
-
+                dat_file = find_extracted_costume_archive(Path(temp_dir))
                 if not dat_file:
-                    return jsonify({'success': False, 'error': 'No DAT file found in ZIP'}), 400
+                    return jsonify({'success': False, 'error': 'No costume archive found in ZIP'}), 400
 
                 csp_output = generate_single_csp_internal(str(dat_file), character, anim_file, camera_file, scale)
 
@@ -727,11 +719,10 @@ def retest_costume_slippi():
             return jsonify({'success': False, 'error': f'Costume zip not found: {skin_id}'}), 404
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            dat_files = [f for f in zip_ref.namelist() if f.lower().endswith('.dat')]
-            if not dat_files:
-                return jsonify({'success': False, 'error': 'No DAT file found in costume ZIP'}), 400
+            dat_filename = find_costume_archive_name(zip_ref.namelist())
+            if not dat_filename:
+                return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 400
 
-            dat_filename = dat_files[0]
             dat_data = zip_ref.read(dat_filename)
 
         with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
@@ -749,7 +740,7 @@ def retest_costume_slippi():
                 with zipfile.ZipFile(zip_path, 'r') as source_zip:
                     with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
                         for item in source_zip.infolist():
-                            if item.filename.lower().endswith('.dat'):
+                            if item.filename == dat_filename:
                                 dest_zip.writestr(item.filename, fixed_dat_data)
                             else:
                                 data = source_zip.read(item.filename)
@@ -993,24 +984,22 @@ def create_folder():
         if not character:
             return jsonify({'success': False, 'error': 'Missing character parameter'}), 400
 
+        STORAGE_PATH.mkdir(parents=True, exist_ok=True)
         metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
-            return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        else:
+            metadata = {'characters': {}}
 
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-
-        if character not in metadata.get('characters', {}):
-            return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
-
-        character_data = metadata['characters'][character]
-        skins = character_data.get('skins', [])
+        characters = metadata.setdefault('characters', {})
+        character_data = characters.setdefault(character, {})
+        skins = character_data.setdefault('skins', [])
 
         folder_id = f"folder_{uuid.uuid4().hex[:8]}"
         new_folder = {'type': 'folder', 'id': folder_id, 'name': name, 'expanded': True}
 
         skins.append(new_folder)
-        character_data['skins'] = skins
 
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)

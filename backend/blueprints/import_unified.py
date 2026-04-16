@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify
 
 import uuid
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR
+from core.costume_files import find_costume_archive_name, get_costume_archive_extension
 from character_detector import detect_character_from_zip
 from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
@@ -53,14 +54,13 @@ def compute_hash_from_stored_skin(character: str, skin: dict) -> str:
             return None
 
         with zipfile.ZipFile(zip_path, 'r') as zf:
-            # Find the .dat file in the zip
-            for name in zf.namelist():
-                if name.lower().endswith('.dat'):
-                    dat_data = zf.read(name)
-                    computed_hash = compute_dat_hash(dat_data)
-                    logger.info(f"Computed hash for existing skin {skin['id']}: {computed_hash}")
-                    return computed_hash
-        logger.warning(f"No DAT file found in zip for {skin['id']}")
+            archive_name = find_costume_archive_name(zf.namelist())
+            if archive_name:
+                dat_data = zf.read(archive_name)
+                computed_hash = compute_dat_hash(dat_data)
+                logger.info(f"Computed hash for existing skin {skin['id']}: {computed_hash}")
+                return computed_hash
+        logger.warning(f"No costume archive found in zip for {skin['id']}")
         return None
     except Exception as e:
         logger.warning(f"Failed to compute hash for {skin['id']}: {e}")
@@ -301,6 +301,7 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
         # Copy files from uploaded ZIP to final ZIP with correct structure
         csp_source = 'imported'
+        archive_ext = get_costume_archive_extension(char_info['dat_file'])
 
         # SLIPPI VALIDATION: Validate DAT before importing
         slippi_validation = None
@@ -331,8 +332,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
         with zipfile.ZipFile(zip_path, 'r') as source_zip:
             with zipfile.ZipFile(final_zip, 'w') as dest_zip:
-                # Copy DAT file (potentially fixed version)
-                dest_zip.writestr(f"{char_info['costume_code']}Mod.dat", dat_data)
+                # Copy the costume archive (potentially fixed version), preserving .usd when present.
+                dest_zip.writestr(f"{char_info['costume_code']}Mod{archive_ext}", dat_data)
 
                 # Handle CSP - copy if found, generate if missing
                 csp_data = None
@@ -851,11 +852,12 @@ def import_file():
         is_zip = fname_lower.endswith('.zip')
         is_7z = fname_lower.endswith('.7z')
         is_dat = fname_lower.endswith('.dat')
+        is_usd = fname_lower.endswith('.usd')
 
-        if not (is_zip or is_7z or is_dat):
+        if not (is_zip or is_7z or is_dat or is_usd):
             return jsonify({
                 'success': False,
-                'error': 'Only ZIP, 7z, and DAT files are supported'
+                'error': 'Only ZIP, 7z, DAT, and USD files are supported'
             }), 400
 
         # Get slippi_action parameter (can be "fix", "import_as_is", or None)
@@ -873,8 +875,8 @@ def import_file():
         effect_type = request.form.get('effect_type')  # e.g. 'gun', 'laser', 'sword'
         logger.info(f"[DEBUG] mod_type: {mod_type}, effect_type: {effect_type}")
 
-        if is_dat:
-            # Wrap the raw .dat in a temp zip so the rest of the pipeline runs unchanged
+        if is_dat or is_usd:
+            # Wrap raw costume archives in a temp zip so the rest of the pipeline runs unchanged.
             dat_bytes = file.read()
             with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
                 temp_zip_path = tmp.name

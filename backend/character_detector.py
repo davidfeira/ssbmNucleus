@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 import zipfile
 
+from core.costume_files import list_costume_archive_names
+
 # Try to import py7zr for 7z support
 try:
     import py7zr
@@ -174,7 +176,7 @@ def _extract_character_color_from_filename(filename):
         'ca': 'Captain Falcon', 'nn': 'Ness', 'pp': 'Ice Climbers',
     }
     _COLOR_CODES = {
-        'nr': 'Default', 're': 'Red', 'bu': 'Blue', 'gr': 'Green', 'wh': 'White',
+        'nr': 'Default', 're': 'Red', 'rd': 'Red', 'bu': 'Blue', 'gr': 'Green', 'wh': 'White',
         'ye': 'Yellow', 'bk': 'Black', 'pi': 'Pink', 'aq': 'Aqua', 'la': 'Lavender',
         'or': 'Orange', 'cy': 'Cyan', 'pu': 'Purple', 'vi': 'Violet', 'br': 'Brown',
         'gy': 'Grey', 'dg': 'Dark Green',
@@ -186,7 +188,7 @@ def _extract_character_color_from_filename(filename):
             .replace('_csp', '').replace('_stock', '')
             .replace(' csp', '').replace(' stock', '')
             .replace('csp_', '').replace('stock_', '')
-            .replace('.png', '').replace('.dat', '')
+            .replace('.png', '').replace('.dat', '').replace('.usd', '')
             .replace('.jpg', '').replace('.jpeg', ''))
 
     # Try PlXxYy pattern anywhere in the name
@@ -833,7 +835,7 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
             archive = zipfile.ZipFile(zip_path, 'r')
             filenames = archive.namelist()
 
-        dat_files = [f for f in filenames if f.lower().endswith('.dat')]
+        dat_files = list_costume_archive_names(filenames)
         if not dat_files:
             if not is_7z:
                 archive.close()
@@ -844,7 +846,7 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
         # --- Pass 1: Parse all DATs, compute hashes, detect char/color ---
         dat_results = []
         for dat_filename in dat_files:
-            with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=os.path.splitext(dat_filename)[1] or '.dat', delete=False) as tmp:
                 if is_7z:
                     file_data = archive.read([dat_filename])
                     dat_bytes = file_data[dat_filename].read()

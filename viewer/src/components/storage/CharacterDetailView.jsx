@@ -9,7 +9,7 @@
  * - Skin creator integration
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import { playSound, playHoverSound } from '../../utils/sounds'
@@ -139,6 +139,7 @@ export default function CharacterDetailView({
   const charData = allCharacters[selectedCharacter]
   const allSkins = charData?.skins || []
   const skinCount = allSkins.filter(s => s.type !== 'folder' && s.visible !== false).length
+  const hasCharacterExtras = hasExtras(selectedCharacter)
   // Use previewOrder during drag for live reordering visual
   const itemsForDisplay = previewOrder || allSkins
   const displayList = buildDisplayList(itemsForDisplay, expandedFolders)
@@ -158,24 +159,6 @@ export default function CharacterDetailView({
 
   // Extras page state
   const [showExtrasPage, setShowExtrasPage] = useState(false)
-
-  // More dropdown menu state
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
-  const moreMenuRef = useRef(null)
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!showMoreMenu) return
-
-    const handleClickOutside = (e) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
-        setShowMoreMenu(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showMoreMenu])
 
   // Helper to delete a folder
   const handleDeleteFolder = async (folderId) => {
@@ -221,110 +204,101 @@ export default function CharacterDetailView({
             onClick={() => { playSound('back'); onBack(); }}
             className="back-button"
           >
-            ← Back to Characters
+            &larr; Back to Characters
           </button>
-          <div
-            className={`more-dropdown ${hasExtras(selectedCharacter) ? 'has-extras' : ''}`}
-            ref={moreMenuRef}
-          >
-            <button
-              className="more-button"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('boop'); setShowMoreMenu(!showMoreMenu); }}
-            >
-              More <span className="more-arrow">▼</span>
-            </button>
-            {showMoreMenu && (
-              <div className="more-menu">
-                <button onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); handleCreateFolder(); setShowMoreMenu(false); }}>
-                  New Folder
-                </button>
-                <button onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); setShowPoseManager(true); setShowMoreMenu(false); }}>
-                  Poses
-                </button>
-                {hasExtras(selectedCharacter) && (
-                  <button className="extras-item" onMouseEnter={playHoverSound} onClick={() => { playSound('boop'); setShowExtrasPage(true); setShowMoreMenu(false); }}>
-                    Extras
-                  </button>
-                )}
-              </div>
+          <div className="character-header-actions">
+            {hasCharacterExtras && (
+              <button
+                className="character-action-button character-action-button--extras"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); setShowExtrasPage(true); }}
+              >
+                Extras
+              </button>
             )}
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); handleCreateFolder(); }}
+            >
+              New Folder
+            </button>
           </div>
         </div>
 
         <div className="skins-grid" ref={animateRef}>
           {displayList.map((item, idx) => {
-              if (item.type === 'folder') {
-                const folderId = item.folder.id
-                return (
-                  <FolderCard
-                    key={folderId}
-                    folder={item.folder}
-                    isExpanded={item.isExpanded}
-                    displayIdx={idx}
-                    arrayIdx={item.arrayIndex}
-                    isDragging={draggedItem && draggedItem.id === folderId}
-                    isDropTarget={false}
-                    isJustDropped={justDroppedId === folderId}
-                    isEditing={editingFolderId === folderId}
-                    editingFolderName={editingFolderName}
-                    folderSkinCount={countSkinsInFolder(folderId, allSkins)}
-                    reordering={reordering}
-                    onToggle={toggleFolder}
-                    onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
-                    onDragOver={handleDragOver}
-                    onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleSkinDrop}
-                    onDragEnd={handleDragEnd}
-                    onEditingFolderNameChange={setEditingFolderName}
-                    onSaveFolderName={saveFolderName}
-                    onCancelEdit={() => setEditingFolderId(null)}
-                    onStartEditing={startEditingFolder}
-                    onDelete={handleDeleteFolder}
-                    justDraggedRef={justDraggedRef}
-                  />
-                )
-              } else {
-                const skinId = item.skin.id
-                return (
-                  <SkinCard
-                    key={skinId}
-                    skin={item.skin}
-                    selectedCharacter={selectedCharacter}
-                    folderId={item.folderId}
-                    displayIdx={idx}
-                    arrayIdx={item.arrayIndex}
-                    isDragging={draggedItem && skinId === draggedItem.id}
-                    isDropTarget={false}
-                    isJustDropped={justDroppedId === skinId}
-                    reordering={reordering}
-                    lastImageUpdate={lastImageUpdate}
-                    onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
-                    onDragOver={handleDragOver}
-                    onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleSkinDrop}
-                    onDragEnd={handleDragEnd}
-                    onContextMenu={handleSkinContextMenu}
-                    onEditClick={handleEditClick}
-                    API_URL={API_URL}
-                  />
-                )
-              }
-            })}
-            <div
-              className="create-mod-card"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('start'); openSkinCreator(); }}
-            >
-              <div className="create-mod-image-area">
-                <span className="create-mod-icon">+</span>
-              </div>
-              <div className="create-mod-info">
-                <span className="create-mod-label">Create New Mod</span>
-              </div>
+            if (item.type === 'folder') {
+              const folderId = item.folder.id
+              return (
+                <FolderCard
+                  key={folderId}
+                  folder={item.folder}
+                  isExpanded={item.isExpanded}
+                  displayIdx={idx}
+                  arrayIdx={item.arrayIndex}
+                  isDragging={draggedItem && draggedItem.id === folderId}
+                  isDropTarget={false}
+                  isJustDropped={justDroppedId === folderId}
+                  isEditing={editingFolderId === folderId}
+                  editingFolderName={editingFolderName}
+                  folderSkinCount={countSkinsInFolder(folderId, allSkins)}
+                  reordering={reordering}
+                  onToggle={toggleFolder}
+                  onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
+                  onDragOver={handleDragOver}
+                  onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleSkinDrop}
+                  onDragEnd={handleDragEnd}
+                  onEditingFolderNameChange={setEditingFolderName}
+                  onSaveFolderName={saveFolderName}
+                  onCancelEdit={() => setEditingFolderId(null)}
+                  onStartEditing={startEditingFolder}
+                  onDelete={handleDeleteFolder}
+                  justDraggedRef={justDraggedRef}
+                />
+              )
+            } else {
+              const skinId = item.skin.id
+              return (
+                <SkinCard
+                  key={skinId}
+                  skin={item.skin}
+                  selectedCharacter={selectedCharacter}
+                  folderId={item.folderId}
+                  displayIdx={idx}
+                  arrayIdx={item.arrayIndex}
+                  isDragging={draggedItem && skinId === draggedItem.id}
+                  isDropTarget={false}
+                  isJustDropped={justDroppedId === skinId}
+                  reordering={reordering}
+                  lastImageUpdate={lastImageUpdate}
+                  onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
+                  onDragOver={handleDragOver}
+                  onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === skinId), itemsForDisplay)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleSkinDrop}
+                  onDragEnd={handleDragEnd}
+                  onContextMenu={handleSkinContextMenu}
+                  onEditClick={handleEditClick}
+                  API_URL={API_URL}
+                />
+              )
+            }
+          })}
+          <div
+            className="create-mod-card"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); openSkinCreator(); }}
+          >
+            <div className="create-mod-image-area">
+              <span className="create-mod-icon">+</span>
             </div>
+            <div className="create-mod-info">
+              <span className="create-mod-label">Create New Mod</span>
+            </div>
+          </div>
         </div>
       </div>
       <EditModal

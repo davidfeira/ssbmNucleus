@@ -278,13 +278,13 @@ public partial class FighterView : UserControl
             [
                 new ("Supported Formats")
                 {
-                    Patterns = [ "*.zip", "*.dat" ],
+                    Patterns = [ "*.zip", "*.dat", "*.usd" ],
                 },
             ]);
 
             if (zipPath == null) return;
 
-            switch (Path.GetExtension(zipPath))
+            switch (Path.GetExtension(zipPath).ToLowerInvariant())
             {
                 case ".zip":
                     {
@@ -300,6 +300,7 @@ public partial class FighterView : UserControl
                     }
                     break;
                 case ".dat":
+                case ".usd":
                     {
                         MexCostume? costume = MexCostume.FromDATFile(Global.Workspace, zipPath, out string log);
 

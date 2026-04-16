@@ -27,7 +27,7 @@ export default function ImportToolbar({
           {importing ? 'Importing...' : 'Import File'}
           <input
             type="file"
-            accept=".zip,.7z,.dat"
+            accept=".zip,.7z,.dat,.usd"
             onChange={onFileImport}
             disabled={importing}
             multiple

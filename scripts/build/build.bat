@@ -15,6 +15,8 @@ popd
 REM Disable code signing to avoid symlink issues on Windows
 set CSC_IDENTITY_AUTO_DISCOVERY=false
 set DEBUG=electron-builder
+set "PACKAGE_STAGE=%PROJECT_ROOT%\build-package-staging"
+set "PACKAGE_OUTPUT=%PROJECT_ROOT%\dist-electron"
 
 REM Check if PyInstaller is installed
 python -c "import PyInstaller" 2>nul
@@ -108,12 +110,110 @@ cd /d "%PROJECT_ROOT%"
 echo.
 echo [5/5] Creating Electron Installer...
 echo ----------------------------------------
+set "ELECTRON_VERSION="
+for /f %%I in ('node -p "require(\"./node_modules/electron/package.json\").version"') do set "ELECTRON_VERSION=%%I"
+if not defined ELECTRON_VERSION (
+    echo ERROR: Unable to determine installed Electron version
+    pause
+    exit /b 1
+)
+
 REM Clear electron-builder cache to avoid symlink issues
 if exist "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\" (
     echo Clearing electron-builder cache...
     rmdir /s /q "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign"
 )
-call npm run package -- --win
+
+echo Preparing clean packaging stage...
+if exist "%PACKAGE_STAGE%" (
+    rmdir /s /q "%PACKAGE_STAGE%"
+)
+mkdir "%PACKAGE_STAGE%"
+mkdir "%PACKAGE_STAGE%\node_modules"
+
+call :CopyFile "%PROJECT_ROOT%\package.json" "%PACKAGE_STAGE%\package.json" "package.json"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\electron" "%PACKAGE_STAGE%\electron" "Electron app files"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\viewer\dist" "%PACKAGE_STAGE%\viewer\dist" "built frontend"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\viewer\public" "%PACKAGE_STAGE%\viewer\public" "viewer public assets"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\dist" "%PACKAGE_STAGE%\dist" "Python backend bundle"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\dist-backend" "%PACKAGE_STAGE%\dist-backend" ".NET backend bundle"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\assets\vanilla\Sheik" "%PACKAGE_STAGE%\utility\assets\vanilla\Sheik" "Sheik assets"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\assets\vanilla\sounds" "%PACKAGE_STAGE%\utility\assets\vanilla\sounds" "menu sounds"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\assets\buttons" "%PACKAGE_STAGE%\utility\assets\buttons" "button assets"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\DynamicAlternateStages" "%PACKAGE_STAGE%\utility\DynamicAlternateStages" "Dynamic Alternate Stages assets"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\website\backend\tools" "%PACKAGE_STAGE%\utility\website\backend\tools" "backend tools"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyDir "%PROJECT_ROOT%\utility\xdelta" "%PACKAGE_STAGE%\utility\xdelta" "xdelta binaries"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+call :CopyFile "%PROJECT_ROOT%\scripts\tools\clear_storage.py" "%PACKAGE_STAGE%\scripts\tools\clear_storage.py" "clear_storage.py"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
+if exist "%PACKAGE_OUTPUT%" (
+    rmdir /s /q "%PACKAGE_OUTPUT%"
+)
+
+call "%PROJECT_ROOT%\node_modules\.bin\electron-builder.cmd" --win --projectDir "%PACKAGE_STAGE%" "--config.directories.output=%PACKAGE_OUTPUT%" "--config.electronVersion=%ELECTRON_VERSION%"
 if %errorlevel% neq 0 (
     echo ERROR: Electron packaging failed
     pause
@@ -129,6 +229,9 @@ echo Cleaning up build artifacts...
 rmdir /s /q "%PROJECT_ROOT%\dist"
 rmdir /s /q "%PROJECT_ROOT%\dist-backend"
 rmdir /s /q "%PROJECT_ROOT%\dist-electron"
+if exist "%PACKAGE_STAGE%" (
+    rmdir /s /q "%PACKAGE_STAGE%"
+)
 
 echo.
 echo ========================================
@@ -138,3 +241,31 @@ echo.
 dir /b "%PROJECT_ROOT%\*.exe" 2>nul
 echo.
 pause
+goto :eof
+
+:CopyDir
+if not exist "%~1" (
+    echo ERROR: Missing %~3 at %~1
+    exit /b 1
+)
+robocopy "%~1" "%~2" /E /NFL /NDL /NJH /NJS /NC /NS >nul
+if %errorlevel% geq 8 (
+    echo ERROR: Failed to copy %~3
+    exit /b 1
+)
+exit /b 0
+
+:CopyFile
+if not exist "%~1" (
+    echo ERROR: Missing %~3 at %~1
+    exit /b 1
+)
+for %%I in ("%~2") do (
+    if not exist "%%~dpI" mkdir "%%~dpI"
+)
+copy /Y "%~1" "%~2" >nul
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to copy %~3
+    exit /b 1
+)
+exit /b 0

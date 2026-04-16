@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, HSDRAW_EXE, LOGS_PATH, PROCESSOR_DIR, get_subprocess_args
+from core.costume_files import find_costume_archive_name, find_vanilla_costume_archive
 from core.state import get_viewer_process, set_viewer_process, get_viewer_port, set_viewer_port
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,41 @@ def find_aj_file(character):
         if aj_path.exists():
             return aj_path
     return None
+
+
+def find_vanilla_costume_file(character, costume_code):
+    """Find a vanilla costume archive, tolerating both .dat/.usd and legacy folder names."""
+    character_dir = VANILLA_ASSETS_DIR / character
+    direct_path = find_vanilla_costume_archive(character_dir / costume_code, costume_code)
+    if direct_path:
+        return direct_path
+
+    if not character_dir.exists():
+        return None
+
+    for folder in sorted(character_dir.iterdir()):
+        if not folder.is_dir() or not folder.name.startswith('Pl'):
+            continue
+        if Path(folder.name).stem != costume_code:
+            continue
+
+        archive_path = find_vanilla_costume_archive(folder, costume_code)
+        if archive_path:
+            return archive_path
+
+    return None
+
+
+def extract_costume_archive(zip_path, temp_prefix):
+    """Extract the primary costume archive from a storage ZIP into a temp directory."""
+    temp_dir = Path(tempfile.mkdtemp(prefix=temp_prefix))
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        archive_name = find_costume_archive_name(zf.namelist())
+        if not archive_name:
+            return temp_dir, None
+
+        zf.extract(archive_name, temp_dir)
+        return temp_dir, temp_dir / archive_name
 
 
 def stop_existing_viewer():
@@ -164,20 +200,10 @@ def start_viewer():
         if not zip_path.exists():
             return jsonify({'success': False, 'error': f'Costume file not found: {zip_path}'}), 404
 
-        # Extract DAT file to temp location
-        temp_dir = Path(tempfile.mkdtemp(prefix='viewer_'))
-        dat_path = None
-
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            for name in zf.namelist():
-                if name.lower().endswith('.dat'):
-                    zf.extract(name, temp_dir)
-                    dat_path = temp_dir / name
-                    break
-
+        temp_dir, dat_path = extract_costume_archive(zip_path, 'viewer_')
         if dat_path is None or not dat_path.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            return jsonify({'success': False, 'error': 'No DAT file found in costume'}), 404
+            return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 404
 
         # Check if HSDRawViewer exists
         if not HSDRAW_EXE.exists():
@@ -283,20 +309,10 @@ def get_viewer_paths():
         if not zip_path.exists():
             return jsonify({'success': False, 'error': f'Costume file not found: {zip_path}'}), 404
 
-        # Extract DAT file to temp location
-        temp_dir = Path(tempfile.mkdtemp(prefix='viewer_'))
-        dat_path = None
-
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            for name in zf.namelist():
-                if name.lower().endswith('.dat'):
-                    zf.extract(name, temp_dir)
-                    dat_path = temp_dir / name
-                    break
-
+        temp_dir, dat_path = extract_costume_archive(zip_path, 'viewer_')
         if dat_path is None or not dat_path.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            return jsonify({'success': False, 'error': 'No DAT file found in costume'}), 404
+            return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 404
 
         # Convert paths
         dat_windows_path = to_windows_path(dat_path)
@@ -335,9 +351,8 @@ def get_viewer_paths_vanilla():
         if not character or not costume_code:
             return jsonify({'success': False, 'error': 'Missing character or costumeCode'}), 400
 
-        # Find the DAT file in vanilla assets
-        dat_path = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
-        if not dat_path.exists():
+        dat_path = find_vanilla_costume_file(character, costume_code)
+        if not dat_path or not dat_path.exists():
             return jsonify({'success': False, 'error': f'Vanilla costume not found: {dat_path}'}), 404
 
         dat_windows_path = to_windows_path(dat_path)
@@ -382,20 +397,10 @@ def get_viewer_paths_vault():
         if not zip_path.exists():
             return jsonify({'success': False, 'error': f'Costume not found in vault: {costume_id}'}), 404
 
-        # Extract DAT file to temp location
-        temp_dir = Path(tempfile.mkdtemp(prefix='viewer_vault_'))
-        dat_path = None
-
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            for name in zf.namelist():
-                if name.endswith('.dat'):
-                    zf.extract(name, temp_dir)
-                    dat_path = temp_dir / name
-                    break
-
+        temp_dir, dat_path = extract_costume_archive(zip_path, 'viewer_vault_')
         if not dat_path or not dat_path.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            return jsonify({'success': False, 'error': 'No DAT file found in costume archive'}), 400
+            return jsonify({'success': False, 'error': 'No costume archive found in vault costume ZIP'}), 400
 
         dat_windows_path = to_windows_path(dat_path)
         logs_windows_path = to_windows_path(LOGS_PATH)
@@ -436,9 +441,8 @@ def start_viewer_vanilla():
         # Stop any existing viewer
         stop_existing_viewer()
 
-        # Find the DAT file in vanilla assets
-        dat_path = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
-        if not dat_path.exists():
+        dat_path = find_vanilla_costume_file(character, costume_code)
+        if not dat_path or not dat_path.exists():
             return jsonify({'success': False, 'error': f'Vanilla costume not found: {dat_path}'}), 404
 
         # Check if HSDRawViewer exists
@@ -525,19 +529,9 @@ def start_viewer_vault():
         if not zip_path.exists():
             return jsonify({'success': False, 'error': f'Costume not found in vault: {costume_id}'}), 404
 
-        # Extract DAT file to temp location
-        temp_dir = Path(tempfile.mkdtemp())
-        dat_path = None
-
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            for name in zf.namelist():
-                if name.endswith('.dat'):
-                    zf.extract(name, temp_dir)
-                    dat_path = temp_dir / name
-                    break
-
+        temp_dir, dat_path = extract_costume_archive(zip_path, 'viewer_vault_')
         if not dat_path or not dat_path.exists():
-            return jsonify({'success': False, 'error': 'No DAT file found in costume archive'}), 400
+            return jsonify({'success': False, 'error': 'No costume archive found in vault costume ZIP'}), 400
 
         # Check if HSDRawViewer exists
         if not HSDRAW_EXE.exists():
@@ -641,19 +635,19 @@ def get_vanilla_costumes(character):
         costumes = []
         for folder in sorted(char_dir.iterdir()):
             if folder.is_dir() and folder.name.startswith('Pl'):
-                # Check if DAT file exists
-                dat_file = folder / f"{folder.name}.dat"
-                if dat_file.exists():
+                costume_code = Path(folder.name).stem
+                archive_file = find_vanilla_costume_archive(folder, costume_code)
+                if archive_file:
                     # Get color code from folder name (last 2 chars)
-                    color_code = folder.name[-2:]
+                    color_code = costume_code[-2:]
                     color_names = {
-                        'Nr': 'Default', 'Bu': 'Blue', 'Re': 'Red', 'Gr': 'Green',
+                        'Nr': 'Default', 'Bu': 'Blue', 'Re': 'Red', 'Rd': 'Red', 'Gr': 'Green',
                         'Ye': 'Yellow', 'Bk': 'Black', 'Wh': 'White', 'Pi': 'Pink',
                         'Or': 'Orange', 'La': 'Lavender', 'Aq': 'Aqua', 'Gy': 'Grey',
                         'Cy': 'Cyan', 'Pr': 'Purple', 'Br': 'Brown'
                     }
                     costumes.append({
-                        'code': folder.name,
+                        'code': costume_code,
                         'colorCode': color_code,
                         'colorName': color_names.get(color_code, color_code),
                         'hasCsp': (folder / 'csp.png').exists(),

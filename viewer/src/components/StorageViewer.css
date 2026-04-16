@@ -3110,6 +3110,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
   margin-bottom: var(--space-4);
 }
 
@@ -3118,11 +3120,16 @@
    Replaces individual folder/poses/extras buttons with a single dropdown
    ───────────────────────────────────────────────────────────────────────────── */
 
-.more-dropdown {
-  position: relative;
+.character-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  margin-left: auto;
 }
 
-.more-button {
+.character-action-button {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
@@ -3140,85 +3147,29 @@
     box-shadow var(--transition-fast);
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
 }
 
-.more-button:hover {
+.character-action-button:hover {
   color: var(--color-text-primary);
   border-color: var(--color-border-hover);
   background: var(--color-bg-surface);
 }
 
-.more-button:active {
+.character-action-button:active {
   transform: scale(0.98);
 }
 
-.more-arrow {
-  font-size: 0.7em;
-  opacity: 0.7;
-  transition: transform var(--transition-fast);
-}
-
-/* Gold variant when character has extras */
-.more-dropdown.has-extras .more-button {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+.character-action-button--extras {
+  background: var(--gradient-gold);
   color: #fff;
   border-color: transparent;
+  box-shadow: var(--glow-gold-sm);
 }
 
-.more-dropdown.has-extras .more-button:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-/* Dropdown menu */
-.more-menu {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  right: 0;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: 100;
-  min-width: 140px;
-  overflow: hidden;
-  animation: fadeIn var(--duration-fast) var(--ease-out);
-}
-
-.more-menu button {
-  display: block;
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.more-menu button:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-}
-
-.more-menu button:active {
-  background: var(--color-bg-deep);
-}
-
-.more-menu button.extras-item {
-  color: #f59e0b;
-}
-
-.more-menu button.extras-item:hover {
-  background: rgba(245, 158, 11, 0.1);
-  color: #fbbf24;
+.character-action-button--extras:hover {
+  background: var(--gradient-gold-hover);
+  color: #fff;
+  box-shadow: var(--shadow-md), var(--glow-gold-sm);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

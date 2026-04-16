@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR
 from core.constants import CHAR_PREFIXES
+from core.costume_files import find_extracted_costume_archive
 from generate_csp import generate_single_csp_internal, apply_character_specific_layers
 
 logger = logging.getLogger(__name__)
@@ -330,21 +331,13 @@ def batch_generate_pose_csps():
                 with zipfile.ZipFile(zip_path, 'r') as zf:
                     zf.extractall(temp_dir)
 
-                # Find DAT file in extraction
-                dat_file = None
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        if file.endswith('.dat') and file.startswith('Pl'):
-                            dat_file = Path(root) / file
-                            break
-                    if dat_file:
-                        break
+                dat_file = find_extracted_costume_archive(Path(temp_dir))
 
                 if not dat_file or not dat_file.exists():
                     results.append({
                         'skinId': skin_id,
                         'success': False,
-                        'error': 'No DAT file found in ZIP'
+                        'error': 'No costume archive found in ZIP'
                     })
                     failed += 1
                     continue

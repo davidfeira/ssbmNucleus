@@ -333,7 +333,7 @@ def extract_character_color_from_filename(filename):
     filename_lower = filename_lower.replace('_csp', '').replace('_stock', '')
     filename_lower = filename_lower.replace(' csp', '').replace(' stock', '')
     filename_lower = filename_lower.replace('csp_', '').replace('stock_', '')
-    filename_lower = filename_lower.replace('.png', '').replace('.dat', '').replace('.jpg', '').replace('.jpeg', '')
+    filename_lower = filename_lower.replace('.png', '').replace('.dat', '').replace('.usd', '').replace('.jpg', '').replace('.jpeg', '')
 
     # Character code mapping (PlFxGr -> Fox Green)
     char_codes = {
@@ -348,7 +348,7 @@ def extract_character_color_from_filename(filename):
 
     # Color codes
     color_codes = {
-        'nr': 'Default', 're': 'Red', 'bu': 'Blue', 'gr': 'Green', 'wh': 'White',
+        'nr': 'Default', 're': 'Red', 'rd': 'Red', 'bu': 'Blue', 'gr': 'Green', 'wh': 'White',
         'ye': 'Yellow', 'bk': 'Black', 'pi': 'Pink', 'aq': 'Aqua', 'la': 'Lavender',
         'or': 'Orange', 'cy': 'Cyan', 'pu': 'Purple', 'vi': 'Violet', 'br': 'Brown',
         'gy': 'Grey', 'dg': 'Dark Green'

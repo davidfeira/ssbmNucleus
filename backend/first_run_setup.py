@@ -570,7 +570,7 @@ class FirstRunSetup:
                         continue
 
                     # Create costume folder (e.g., PlMrNr)
-                    costume_code = costume_file.replace('.dat', '')
+                    costume_code = Path(costume_file).stem
                     costume_dir = char_dir / costume_code
                     costume_dir.mkdir(parents=True, exist_ok=True)
 
@@ -684,10 +684,17 @@ class FirstRunSetup:
 
                 for mapping in mappings:
                     vanilla_char, costume_code = mapping
-                    src_path = self.vanilla_dir / vanilla_char / costume_code / f"{costume_code}.dat"
+                    src_dir = self.vanilla_dir / vanilla_char / costume_code
+                    src_path = None
+                    for ext in ('.dat', '.usd'):
+                        candidate = src_dir / f"{costume_code}{ext}"
+                        if candidate.exists():
+                            src_path = candidate
+                            break
+
                     dest_path = dest_folder / f"{costume_code}.dat"
 
-                    if src_path.exists():
+                    if src_path and src_path.exists():
                         shutil.copy2(src_path, dest_path)
                         logger.debug(f"Copied {costume_code}.dat to csp_data/{csp_folder}/")
                     else:

@@ -148,7 +148,8 @@ class DATParser:
             # Standard color codes (appear after character code)
             'Nr': 'Default',
             'Bu': 'Blue',
-            'Re': 'Red', 
+            'Re': 'Red',
+            'Rd': 'Red',
             'Gr': 'Green',
             'Ye': 'Yellow',
             'Bk': 'Black',
