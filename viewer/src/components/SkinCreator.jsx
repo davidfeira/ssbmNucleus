@@ -1369,13 +1369,15 @@ export default function SkinCreator({
         throw new Error(errorData.error || 'Import failed')
       }
 
+      const result = await response.json()
+
       setShowSaveModal(false)
       setIsDirty(false)
       setSkinName('')
 
       onRefresh?.()
 
-      playSound('newSkin')
+      playSound(result.camera_sound ? 'camera' : 'newSkin')
       alert(`Skin "${skinName}" saved to vault!`)
     } catch (error) {
       console.error('Save error:', error)
@@ -1851,7 +1853,7 @@ export default function SkinCreator({
                                     <div className="color-editor-header">
                                       <div className="color-editor-swatches">
                                         <div className="color-swatch-original" style={{ background: group.displayColor }} />
-                                        <span className="color-arrow">-></span>
+                                        <span className="color-arrow">{'->'}</span>
                                         <div
                                           className="color-swatch"
                                           style={{

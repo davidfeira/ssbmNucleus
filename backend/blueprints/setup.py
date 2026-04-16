@@ -24,6 +24,68 @@ setup_bp = Blueprint('setup', __name__)
 # Global state for setup process
 _setup_in_progress = False
 _setup_instance = None
+_iso_verification_cache = {}
+
+
+# Vanilla Melee 1.02 disc size in bytes.
+VANILLA_ISO_EXPECTED_SIZE = 1459978240
+
+# Cache a small number of recent ISO verifications so auto-detect and setup/start
+# do not re-hash the same unchanged file back-to-back.
+ISO_VERIFICATION_CACHE_LIMIT = 16
+
+
+def _get_iso_cache_key(iso_path: str | Path) -> tuple[str, int, int, int]:
+    """Build a cache key from the resolved path plus file metadata."""
+    iso_file = Path(iso_path).resolve()
+    stat = iso_file.stat()
+    return (
+        str(iso_file).lower(),
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+    )
+
+
+def clear_iso_verification_cache():
+    """Clear the in-memory ISO verification cache."""
+    _iso_verification_cache.clear()
+
+
+def verify_iso_file(iso_path: str | Path) -> dict:
+    """Verify a Melee ISO, reusing cached results when the file is unchanged."""
+    iso_file = Path(iso_path).resolve()
+    cache_key = _get_iso_cache_key(iso_file)
+    cached_result = _iso_verification_cache.get(cache_key)
+    if cached_result is not None:
+        logger.info(f"Using cached ISO verification: {iso_file}")
+        return {
+            **cached_result,
+            'cached': True
+        }
+
+    logger.info(f"Calculating MD5 for: {iso_file}")
+    md5_hash = hashlib.md5()
+
+    with open(iso_file, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192 * 1024), b''):
+            md5_hash.update(chunk)
+
+    calculated_md5 = md5_hash.hexdigest()
+    result = {
+        'valid': calculated_md5.lower() == VANILLA_ISO_MD5.lower(),
+        'md5': calculated_md5,
+        'expected': VANILLA_ISO_MD5
+    }
+
+    _iso_verification_cache[cache_key] = result
+    while len(_iso_verification_cache) > ISO_VERIFICATION_CACHE_LIMIT:
+        _iso_verification_cache.pop(next(iter(_iso_verification_cache)))
+
+    return {
+        **result,
+        'cached': False
+    }
 
 
 def verify_slippi_structure(slippi_path: str) -> bool:
@@ -109,20 +171,13 @@ def find_vanilla_melee_iso(folder: str) -> str:
         try:
             # Check file size first (vanilla Melee is ~1.36GB)
             file_size = iso_file.stat().st_size
-            expected_size = 1459978240  # Vanilla Melee 1.02 size
-            if file_size != expected_size:
+            if file_size != VANILLA_ISO_EXPECTED_SIZE:
                 continue
 
             logger.info(f"Checking ISO: {iso_file}")
 
-            # Calculate MD5 hash
-            md5_hash = hashlib.md5()
-            with open(iso_file, 'rb') as f:
-                for chunk in iter(lambda: f.read(8192 * 1024), b''):
-                    md5_hash.update(chunk)
-
-            calculated_md5 = md5_hash.hexdigest()
-            if calculated_md5.lower() == VANILLA_ISO_MD5.lower():
+            verification = verify_iso_file(iso_file)
+            if verification['valid']:
                 logger.info(f"Found vanilla Melee ISO: {iso_file}")
                 return str(iso_file)
         except Exception as e:
@@ -179,20 +234,16 @@ def start_first_run_setup():
                 'error': 'ISO file not found'
             }), 404
 
-        # Verify ISO hash first
+        # Verify ISO hash first. This reuses the cached result from auto-detect
+        # or /verify-iso when the file metadata has not changed.
         logger.info(f"Verifying ISO before setup: {iso_path}")
-        md5_hash = hashlib.md5()
-        with open(iso_file, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192 * 1024), b''):
-                md5_hash.update(chunk)
-
-        calculated_md5 = md5_hash.hexdigest()
-        if calculated_md5.lower() != VANILLA_ISO_MD5.lower():
+        verification = verify_iso_file(iso_file)
+        if not verification['valid']:
             return jsonify({
                 'success': False,
                 'error': 'Invalid ISO file. Please provide a vanilla Melee 1.02 ISO.',
-                'md5': calculated_md5,
-                'expected': VANILLA_ISO_MD5
+                'md5': verification['md5'],
+                'expected': verification['expected']
             }), 400
 
         # Start setup in background thread
@@ -333,25 +384,14 @@ def verify_vanilla_iso():
                 'error': 'ISO file not found'
             }), 404
 
-        # Calculate MD5 hash
-        logger.info(f"Calculating MD5 for: {iso_path}")
-        md5_hash = hashlib.md5()
-
-        with open(iso_file, 'rb') as f:
-            # Read in chunks to handle large files
-            for chunk in iter(lambda: f.read(8192 * 1024), b''):  # 8MB chunks
-                md5_hash.update(chunk)
-
-        calculated_md5 = md5_hash.hexdigest()
-        is_valid = calculated_md5.lower() == VANILLA_ISO_MD5.lower()
-
-        logger.info(f"ISO MD5: {calculated_md5} (valid: {is_valid})")
+        verification = verify_iso_file(iso_file)
+        logger.info(f"ISO MD5: {verification['md5']} (valid: {verification['valid']}, cached: {verification['cached']})")
 
         return jsonify({
             'success': True,
-            'valid': is_valid,
-            'md5': calculated_md5,
-            'expected': VANILLA_ISO_MD5
+            'valid': verification['valid'],
+            'md5': verification['md5'],
+            'expected': verification['expected']
         })
     except Exception as e:
         logger.error(f"Verify ISO error: {str(e)}", exc_info=True)

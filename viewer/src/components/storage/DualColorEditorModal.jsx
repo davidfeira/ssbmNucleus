@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * DualColorEditorModal - Color picker UI for creating/editing 2-color effect mods
@@ -299,7 +301,7 @@ export default function DualColorEditorModal({
     }
   }
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -407,4 +409,7 @@ export default function DualColorEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

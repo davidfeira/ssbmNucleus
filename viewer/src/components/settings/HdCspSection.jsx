@@ -97,8 +97,16 @@ export default function HdCspSection({ metadata, API_URL }) {
     setHdCspProgress({ current: 0, total: 0 })
 
     if (failCount === 0) {
+      if (successCount > 0) {
+        playSound('camera')
+      }
       setHdCspMessage({ text: `Generated ${successCount} HD CSPs successfully!`, type: 'success' })
     } else {
+      if (successCount > 0) {
+        playSound('camera')
+      } else {
+        playSound('error')
+      }
       setHdCspMessage({ text: `Generated ${successCount} HD CSPs, ${failCount} failed`, type: 'error' })
     }
 

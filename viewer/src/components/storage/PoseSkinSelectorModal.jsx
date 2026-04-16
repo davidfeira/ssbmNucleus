@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import HexagonLoader from '../shared/HexagonLoader'
+import { getAppContentPortalTarget } from './appContentPortal'
+import { playSound } from '../../utils/sounds'
 
 /**
  * Pose Skin Selector Modal
@@ -61,6 +64,7 @@ export default function PoseSkinSelectorModal({
   poseThumbnail,
   onClose,
   onRefresh,
+  onCostumesUpdated,
   API_URL
 }) {
   const [skins, setSkins] = useState([])
@@ -140,22 +144,35 @@ export default function PoseSkinSelectorModal({
       const data = await response.json()
 
       if (data.success) {
+        if (data.generated > 0) {
+          playSound('camera')
+        } else {
+          playSound('error')
+        }
         setResults({
           generated: data.generated,
           failed: data.failed,
           details: data.results
         })
-        // Refresh parent metadata so new CSPs show up
-        if (onRefresh) {
-          onRefresh()
+        if (data.generated > 0) {
+          if (onCostumesUpdated) {
+            await onCostumesUpdated({
+              character,
+              skinIds: Array.from(selectedSkins)
+            })
+          } else if (onRefresh) {
+            await onRefresh()
+          }
         }
       } else {
+        playSound('error')
         setResults({
           error: data.error || 'Generation failed'
         })
       }
     } catch (err) {
       console.error('[PoseSkinSelector] Generate error:', err)
+      playSound('error')
       setResults({
         error: err.message || 'Network error'
       })
@@ -164,7 +181,7 @@ export default function PoseSkinSelectorModal({
     }
   }
 
-  return (
+  const modal = (
     <div className="pss-overlay" onClick={(e) => e.target === e.currentTarget && !generating && onClose()}>
       <div className="pss-modal">
         {/* Header */}
@@ -262,48 +279,45 @@ export default function PoseSkinSelectorModal({
 
       <style>{`
         .pss-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          position: absolute;
+          inset: 0;
           background: rgba(0, 0, 0, 0.85);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1100;
+          z-index: calc(var(--z-modal) + 50);
+          padding: var(--page-block-padding) var(--modal-inline-padding);
+          overflow: auto;
+          overscroll-behavior: contain;
         }
 
         .pss-modal {
           background: #1a1a2e;
           border-radius: 12px;
-          width: 65vw;
-          max-width: 900px;
-          max-height: 80vh;
+          width: min(100%, 60rem);
+          max-height: min(100%, var(--modal-max-height));
           display: flex;
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          margin: auto;
         }
 
         @media (min-width: 1440px) {
           .pss-modal {
             max-width: 1000px;
-            max-height: 1000px;
           }
         }
 
         @media (min-width: 1920px) {
           .pss-modal {
             max-width: 1150px;
-            max-height: 1100px;
           }
         }
 
         @media (min-width: 2560px) {
           .pss-modal {
             max-width: 1400px;
-            max-height: 1300px;
           }
         }
 
@@ -632,7 +646,16 @@ export default function PoseSkinSelectorModal({
           background: #3a3a5a;
           color: #fff;
         }
+
+        @media (max-width: 960px) {
+          .pss-modal {
+            width: 100%;
+          }
+        }
       `}</style>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

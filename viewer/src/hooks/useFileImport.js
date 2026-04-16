@@ -46,7 +46,7 @@ export function useFileImport({
       try {
         const data = await importSingleFile(pendingFile, slippiAction)
         if (data.success) {
-          playSound('newSkin')
+          playSound(data.camera_sound ? 'camera' : 'newSkin')
           const typeMsg = data.type === 'character'
             ? `${data.imported_count} costume(s)`
             : `${data.stage} stage`
@@ -79,6 +79,7 @@ export function useFileImport({
     let errorCount = 0
     let totalCostumes = 0
     let skippedCount = 0
+    let cameraSoundCount = 0
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -103,6 +104,9 @@ export function useFileImport({
             if (fixData.success) {
               successCount++
               totalCostumes += fixData.imported_count || 1
+              if (fixData.camera_sound) {
+                cameraSoundCount++
+              }
             } else {
               errorCount++
             }
@@ -130,6 +134,9 @@ export function useFileImport({
         if (data.success) {
           successCount++
           totalCostumes += data.imported_count || 1
+          if (data.camera_sound) {
+            cameraSoundCount++
+          }
           if (data.type === 'stage' && mode === 'stages') {
             await fetchStageVariants()
           }
@@ -145,7 +152,7 @@ export function useFileImport({
     await onRefresh()
 
     if (successCount > 0) {
-      playSound('newSkin')
+      playSound(cameraSoundCount > 0 ? 'camera' : 'newSkin')
     }
     if (errorCount > 0 && successCount === 0) {
       playSound('error')
@@ -190,7 +197,7 @@ export function useFileImport({
       try {
         const data = await importSingleFile(file, null, 'import_anyway')
         if (data.success) {
-          playSound('newSkin')
+          playSound(data.camera_sound ? 'camera' : 'newSkin')
           const typeMsg = data.type === 'character'
             ? `${data.imported_count} costume(s)`
             : `${data.stage} stage`

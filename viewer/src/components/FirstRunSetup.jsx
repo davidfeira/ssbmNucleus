@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
-import { playSound, reloadSounds } from '../utils/sounds'
+import { playSound, playHoverSound, reloadSounds } from '../utils/sounds'
 import { API_URL, BACKEND_URL } from '../config'
 import HexagonLoader from './shared/HexagonLoader'
 import { getProgressMessage } from './shared/progressText'
 import './FirstRunSetup.css'
 
-export default function FirstRunSetup({ onComplete }) {
+export default function FirstRunSetup({ onComplete, onCancel = null }) {
   const [step, setStep] = useState('welcome') // welcome, select-iso, verifying, extracting, copying, complete, error
   const [isoPath, setIsoPath] = useState('')
   const [progress, setProgress] = useState({
@@ -189,6 +189,15 @@ export default function FirstRunSetup({ onComplete }) {
       completed: 0,
       total: 0
     })
+  }
+
+  const handleCancel = () => {
+    if (!onCancel) {
+      return
+    }
+
+    playSound('back')
+    onCancel()
   }
 
   const progressPercentage = Math.max(0, Math.min(Number(progress.percentage) || 0, 100))
@@ -442,29 +451,43 @@ export default function FirstRunSetup({ onComplete }) {
   return (
     <div className="first-run-overlay">
       <div className="first-run-modal">
-        <div className="first-run-header">
-          <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="first-run-logo" />
-          <h1>First-Time Setup</h1>
-        </div>
+        <div className="first-run-modal-surface">
+          <div className="first-run-header">
+            <div className="first-run-header-brand">
+              <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="first-run-logo" />
+              <h1>First-Time Setup</h1>
+            </div>
+            {onCancel && (
+              <button
+                type="button"
+                className="btn-secondary first-run-cancel-button"
+                onMouseEnter={playHoverSound}
+                onClick={handleCancel}
+              >
+                Back to Settings
+              </button>
+            )}
+          </div>
 
-        <div className="first-run-content">
-          {step === 'welcome' && renderWelcome()}
-          {step === 'select-iso' && renderSelectIso()}
-          {step === 'verifying' && renderVerifying()}
-          {step === 'extracting' && renderExtracting()}
-          {step === 'copying' && renderCopying()}
-          {step === 'complete' && renderComplete()}
-          {step === 'error' && renderError()}
-        </div>
+          <div className="first-run-content">
+            {step === 'welcome' && renderWelcome()}
+            {step === 'select-iso' && renderSelectIso()}
+            {step === 'verifying' && renderVerifying()}
+            {step === 'extracting' && renderExtracting()}
+            {step === 'copying' && renderCopying()}
+            {step === 'complete' && renderComplete()}
+            {step === 'error' && renderError()}
+          </div>
 
-        <div className="first-run-footer">
-          <div className="step-indicator">
-            <div className={`step-dot ${['welcome', 'select-iso', 'verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
-            <div className={`step-dot ${['select-iso', 'verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
-            <div className={`step-dot ${['verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
-            <div className={`step-dot ${['extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
-            <div className={`step-dot ${['copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
-            <div className={`step-dot ${step === 'complete' ? 'active' : ''}`}></div>
+          <div className="first-run-footer">
+            <div className="step-indicator">
+              <div className={`step-dot ${['welcome', 'select-iso', 'verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
+              <div className={`step-dot ${['select-iso', 'verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
+              <div className={`step-dot ${['verifying', 'extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
+              <div className={`step-dot ${['extracting', 'copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
+              <div className={`step-dot ${['copying', 'complete'].indexOf(step) >= 0 ? 'active' : ''}`}></div>
+              <div className={`step-dot ${step === 'complete' ? 'active' : ''}`}></div>
+            </div>
           </div>
         </div>
       </div>

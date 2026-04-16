@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { hexToRgby, rgbyToHex, RGBY_PRESETS, formatRgby } from '../../utils/rgbyColor'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * LaserEditorModal - Color picker UI for creating/editing laser mods
@@ -232,7 +234,7 @@ export default function LaserEditorModal({
     })
   }
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -358,4 +360,7 @@ export default function LaserEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

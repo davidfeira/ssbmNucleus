@@ -11,8 +11,9 @@ import { useEffect, useRef, useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import HexagonLoader from '../shared/HexagonLoader'
 
-const PROJECTS_STORAGE_KEY = 'mex_known_projects'
+const EXTERNAL_PROJECTS_STORAGE_KEY = 'mex_external_projects'
 const LEGACY_PROJECTS_STORAGE_KEY = 'mex_recent_projects'
+const LEGACY_KNOWN_PROJECTS_STORAGE_KEY = 'mex_known_projects'
 
 export default function ProjectSelector({
   showModal,
@@ -134,10 +135,10 @@ export default function ProjectSelector({
     return getProjectDisplayName(left).localeCompare(getProjectDisplayName(right), undefined, { sensitivity: 'base' })
   }
 
-  function mergeProjectCollections(savedProjects, managedProjects) {
+  function mergeProjectCollections(externalProjects, managedProjects) {
     const projectMap = new Map()
 
-    savedProjects
+    externalProjects
       .map(normalizeProjectRecord)
       .filter(Boolean)
       .forEach((project) => {
@@ -161,11 +162,36 @@ export default function ProjectSelector({
     return Array.from(projectMap.values()).sort(compareProjects)
   }
 
+  function writeStoredProjects(projectEntries) {
+    try {
+      const normalizedProjects = projectEntries
+        .map(normalizeProjectRecord)
+        .filter(Boolean)
+        .filter((project) => !isManagedProject(project))
+        .sort(compareProjects)
+        .map((project) => ({
+          path: project.path,
+          name: project.name,
+          projectDirectory: project.projectDirectory,
+          isManagedProject: false,
+          lastOpenedAt: project.lastOpenedAt,
+          lastModifiedAt: project.lastModifiedAt
+        }))
+
+      localStorage.setItem(EXTERNAL_PROJECTS_STORAGE_KEY, JSON.stringify(normalizedProjects))
+      localStorage.removeItem(LEGACY_KNOWN_PROJECTS_STORAGE_KEY)
+      localStorage.removeItem(LEGACY_PROJECTS_STORAGE_KEY)
+    } catch (err) {
+      console.error('Failed to save external projects:', err)
+    }
+  }
+
   function readStoredProjects() {
     try {
-      const storedProjects = localStorage.getItem(PROJECTS_STORAGE_KEY)
+      const storedProjects = localStorage.getItem(EXTERNAL_PROJECTS_STORAGE_KEY)
+      const legacyKnownProjects = localStorage.getItem(LEGACY_KNOWN_PROJECTS_STORAGE_KEY)
       const legacyProjects = localStorage.getItem(LEGACY_PROJECTS_STORAGE_KEY)
-      const rawProjects = storedProjects || legacyProjects
+      const rawProjects = storedProjects || legacyKnownProjects || legacyProjects
 
       if (!rawProjects) {
         return []
@@ -179,51 +205,42 @@ export default function ProjectSelector({
       const normalizedProjects = parsedProjects
         .map(normalizeProjectRecord)
         .filter(Boolean)
+        .filter((project) => !isManagedProject(project))
         .sort(compareProjects)
 
-      if (!storedProjects && legacyProjects) {
+      const shouldRewriteStorage = !storedProjects
+        || Boolean(legacyKnownProjects)
+        || Boolean(legacyProjects)
+        || normalizedProjects.length !== parsedProjects.length
+
+      if (shouldRewriteStorage) {
         writeStoredProjects(normalizedProjects)
       }
 
       return normalizedProjects
     } catch (err) {
-      console.error('Failed to load saved projects:', err)
+      console.error('Failed to load saved external projects:', err)
       return []
     }
   }
 
-  function writeStoredProjects(projectEntries) {
-    try {
-      const normalizedProjects = projectEntries
-        .map(normalizeProjectRecord)
-        .filter(Boolean)
-        .sort(compareProjects)
-        .map((project) => ({
-          path: project.path,
-          name: project.name,
-          projectDirectory: project.projectDirectory,
-          isManagedProject: project.isManagedProject,
-          lastOpenedAt: project.lastOpenedAt,
-          lastModifiedAt: project.lastModifiedAt
-        }))
-
-      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(normalizedProjects))
-      localStorage.removeItem(LEGACY_PROJECTS_STORAGE_KEY)
-    } catch (err) {
-      console.error('Failed to save projects:', err)
-    }
-  }
-
   function rememberProject(projectPath, projectName, projectMeta = {}) {
+    const projectIsManaged = typeof projectMeta.isManagedProject === 'boolean'
+      ? projectMeta.isManagedProject
+      : inferManagedProjectFromPath(projectPath)
+
+    if (projectIsManaged) {
+      forgetProject(projectPath)
+      return
+    }
+
     const storedProjects = readStoredProjects().filter((project) => project.path !== projectPath)
 
     storedProjects.unshift({
       path: projectPath,
       name: projectName,
       projectDirectory: projectMeta.projectDirectory || projectPath?.replace(/[\\/][^\\/]+$/, ''),
-      isManagedProject: typeof projectMeta.isManagedProject === 'boolean'
-        ? projectMeta.isManagedProject
-        : inferManagedProjectFromPath(projectPath),
+      isManagedProject: false,
       lastOpenedAt: Date.now(),
       lastModifiedAt: projectMeta.lastModifiedAt || 0
     })
@@ -256,7 +273,7 @@ export default function ProjectSelector({
       setProjects(mergeProjectCollections(storedProjects, []))
       setProjectsError(
         storedProjects.length > 0
-          ? 'Could not refresh managed projects. Showing saved projects only.'
+          ? 'Could not refresh managed projects. Showing saved external projects only.'
           : 'Could not load the project list.'
       )
     } finally {

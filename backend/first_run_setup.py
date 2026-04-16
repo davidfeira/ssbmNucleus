@@ -20,6 +20,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from core.config import get_subprocess_args
+
 logger = logging.getLogger(__name__)
 
 
@@ -756,7 +758,8 @@ class FirstRunSetup:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
+                **get_subprocess_args()
             )
 
             if result.returncode != 0:

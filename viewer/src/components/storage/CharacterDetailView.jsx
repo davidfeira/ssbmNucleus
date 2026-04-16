@@ -131,6 +131,7 @@ export default function CharacterDetailView({
   openSkinCreator,
   onSkinCreatorChange,
   onRefresh,
+  onCostumesUpdated,
   skinCreatorInitialCostume,
   // API
   API_URL
@@ -383,6 +384,7 @@ export default function CharacterDetailView({
         onCaptureHdCsp={handleCaptureHdCsp}
         onRegenerateAltHd={handleRegenerateAltHd}
         onResetToOriginal={handleResetToOriginal}
+        onOpenPoseManager={() => { playSound('boop'); setShowPoseManager(true); }}
         onSave={handleSaveCspManager}
         onUploadMainCsp={handleUploadMainCsp}
         onUploadAltCsp={handleUploadAltCsp}
@@ -420,6 +422,7 @@ export default function CharacterDetailView({
         character={selectedCharacter}
         onClose={() => setShowPoseManager(false)}
         onRefresh={onRefresh}
+        onCostumesUpdated={onCostumesUpdated}
         API_URL={API_URL}
       />
     </div>

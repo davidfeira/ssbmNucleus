@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * UpBEditorModal - Color picker UI for creating/editing Firefox/Firebird flame mods
@@ -403,7 +405,7 @@ export default function UpBEditorModal({
     return prop?.format || 'RGBY'
   }
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -587,4 +589,7 @@ export default function UpBEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

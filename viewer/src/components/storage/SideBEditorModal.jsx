@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * SideBEditorModal - Color picker UI for creating/editing side-B mods
@@ -232,7 +234,7 @@ export default function SideBEditorModal({
   const secondaryHex = rgbaToHex(colors.secondary)
   const tertiaryHex = rgbaToHex(colors.tertiary)
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -358,4 +360,7 @@ export default function SideBEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

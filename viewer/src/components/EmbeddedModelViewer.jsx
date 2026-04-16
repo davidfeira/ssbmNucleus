@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { createPortal } from 'react-dom'
 import './StorageViewer.css'
+import { getAppContentPortalTarget } from './storage/appContentPortal'
 
 /**
  * Embedded 3D Model Viewer Component
@@ -137,7 +139,8 @@ const EmbeddedModelViewer = forwardRef(({
   showGrid = true,
   showBackground = true,
   // Callback when scene is exported (for pose manager)
-  onSceneExported = null
+  onSceneExported = null,
+  inline = false
 }, ref) => {
   const placeholderRef = useRef(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -461,8 +464,15 @@ const EmbeddedModelViewer = forwardRef(({
   }
 
   // Render fallback for non-Electron
+  const renderModal = (content) => {
+    if (inline) return content
+    const portalTarget = getAppContentPortalTarget()
+    return portalTarget ? createPortal(content, portalTarget) : content
+  }
+
+  // Render fallback for non-Electron
   if (!hasElectron) {
-    return (
+    const fallback = (
       <div className="mv-overlay" onClick={onClose}>
         <div className="mv-container" onClick={(e) => e.stopPropagation()}>
           <div className="mv-header">
@@ -482,9 +492,11 @@ const EmbeddedModelViewer = forwardRef(({
         </div>
       </div>
     )
+
+    return renderModal(fallback)
   }
 
-  return (
+  const modal = (
     <div className="mv-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="mv-container" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
@@ -617,6 +629,8 @@ const EmbeddedModelViewer = forwardRef(({
       </div>
     </div>
   )
+
+  return renderModal(modal)
 })
 
 export default EmbeddedModelViewer

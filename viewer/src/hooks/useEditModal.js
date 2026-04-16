@@ -122,6 +122,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     }
 
     setSaving(true)
+    let shouldPlayCameraSound = false
 
     try {
       // Save name change
@@ -176,6 +177,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
           setSaving(false)
           return
         }
+
+        shouldPlayCameraSound = true
       }
 
       // If this is a stage and slippi status changed, save it
@@ -220,6 +223,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
           setSaving(false)
           return
         }
+
+        shouldPlayCameraSound = true
       }
 
       // If this is a character costume and there's a new stock icon, upload it
@@ -255,6 +260,10 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
       // If we uploaded a CSP or stock, update cache-busting timestamp to force image reload
       if (newCsp || newStock) {
         setLastImageUpdate(Date.now())
+      }
+
+      if (shouldPlayCameraSound) {
+        playSound('camera')
       }
 
       setShowEditModal(false)

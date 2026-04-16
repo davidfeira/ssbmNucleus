@@ -23,6 +23,43 @@ const DAS_STAGES = [
   { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: `${BACKEND_URL}/vanilla/stages/final destination.png` }
 ]
 
+const BUTTON_TOKEN_REGEX = /\s*\(([ABXYLRZ])\)$/i
+
+function normalizeWhitespace(name) {
+  return name.replace(/\s+/g, ' ').trim()
+}
+
+function toProjectVariantBaseName(name) {
+  const words = normalizeWhitespace(name)
+    .match(/[A-Za-z0-9]+/g)
+
+  if (!words || words.length === 0) {
+    return normalizeWhitespace(name).replace(/\s+/g, '')
+  }
+
+  return words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('')
+}
+
+function stripButtonIndicator(name) {
+  return normalizeWhitespace(name.replace(BUTTON_TOKEN_REGEX, ''))
+}
+
+function addButtonIndicator(name, button) {
+  return `${toProjectVariantBaseName(stripButtonIndicator(name))}(${button})`
+}
+
+function normalizeProjectVariantName(name) {
+  const normalized = normalizeWhitespace(name)
+  const match = normalized.match(BUTTON_TOKEN_REGEX)
+  const baseName = toProjectVariantBaseName(stripButtonIndicator(normalized))
+
+  if (match) {
+    return `${baseName}(${match[1].toUpperCase()})`
+  }
+
+  return baseName
+}
+
 export default function StageMode({
   mode,
   onModeChange,
@@ -284,8 +321,7 @@ export default function StageMode({
 
     const buttonToAdd = selectedButton
     const variantNameWithoutExt = variant.name
-    const variantNameWithoutButton = variantNameWithoutExt.replace(/\([ABXYLRZ]\)$/i, '')
-    const newVariantName = `${variantNameWithoutButton}(${buttonToAdd})`
+    const newVariantName = addButtonIndicator(variantNameWithoutExt, buttonToAdd)
 
     try {
       const response = await fetch(`${API_URL}/das/rename`, {
@@ -317,7 +353,7 @@ export default function StageMode({
     if (!variant.button) return
 
     const variantNameWithoutExt = variant.name
-    const variantNameWithoutButton = variantNameWithoutExt.replace(/\([ABXYLRZ]\)$/i, '')
+    const variantNameWithoutButton = normalizeProjectVariantName(stripButtonIndicator(variantNameWithoutExt))
 
     try {
       const response = await fetch(`${API_URL}/das/rename`, {

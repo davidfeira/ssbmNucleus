@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * LaserRingEditorModal - Color picker UI for creating/editing laser ring mods
@@ -236,7 +238,7 @@ export default function LaserRingEditorModal({
   const displayHex1 = toDisplayHex(color1)
   const displayHex2 = toDisplayHex(color2)
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -385,4 +387,7 @@ export default function LaserRingEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

@@ -2269,15 +2269,18 @@
    ===================================================== */
 
 .mv-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(10, 20, 32, 0.92);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal);
+  z-index: calc(var(--z-modal) + 30);
   animation: mvFadeIn 0.2s ease-out;
+  padding: var(--page-block-padding) var(--modal-inline-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 @keyframes mvFadeIn {
@@ -2289,10 +2292,9 @@
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
-  width: 65vw;
-  height: 80vh;
-  max-width: 1000px;
-  max-height: 900px;
+  width: min(100%, 65rem);
+  height: min(100%, var(--modal-max-height));
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2301,6 +2303,7 @@
     0 24px 80px rgba(0, 0, 0, 0.6),
     0 0 120px rgba(125, 211, 232, 0.05);
   animation: mvSlideUp 0.25s var(--ease-out);
+  margin: auto;
 }
 
 /* Scale animation viewer for larger screens */
@@ -4088,18 +4091,17 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 .laser-editor-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: absolute;
+  inset: 0;
   background: rgba(0, 0, 0, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1100;
   animation: fadeIn 0.2s ease;
-  padding: var(--modal-inline-padding);
+  padding: var(--page-block-padding) var(--modal-inline-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .laser-editor-modal {
@@ -4107,7 +4109,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   width: min(100%, 32rem);
-  max-height: var(--modal-max-height);
+  max-height: min(100%, var(--modal-max-height));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4115,6 +4117,7 @@
     0 25px 50px -12px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.05);
   animation: slideUp 0.3s ease;
+  margin: auto;
 }
 
 .laser-editor-header {
@@ -5049,7 +5052,7 @@
    ───────────────────────────────────────── */
 
 .csp-manager-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(6, 12, 20, 0.95);
   backdrop-filter: blur(16px);
@@ -5059,12 +5062,15 @@
   justify-content: center;
   z-index: calc(var(--z-modal) + 10);
   animation: fadeIn var(--duration-fast) var(--ease-out);
-  padding: var(--modal-inline-padding);
+  padding: var(--page-block-padding) var(--modal-inline-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .csp-manager-modal {
-  width: var(--modal-max-width);
+  width: min(100%, var(--modal-max-width));
   height: min(100%, var(--modal-max-height));
+  max-height: 100%;
   background: linear-gradient(
     165deg,
     var(--color-bg-elevated) 0%,
@@ -5083,6 +5089,7 @@
   position: relative;
   overflow: hidden;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
+  margin: auto;
 }
 
 .csp-manager-modal::before {
@@ -5141,7 +5148,38 @@
   border-bottom: 1px solid var(--color-border-subtle);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
+}
+
+.csp-manager-header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.csp-manager-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.csp-manager-header-btn:hover {
+  background: var(--color-cyan);
+  border-color: var(--color-cyan);
+  color: var(--color-bg-deep);
 }
 
 .csp-manager-header h2 {
@@ -5159,17 +5197,19 @@
   color: var(--color-text-secondary);
   font-size: var(--text-md);
   opacity: 0.8;
+  min-width: 0;
 }
 
 /* Body - Two Column Layout */
 .csp-manager-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
-  padding: var(--space-6);
+  grid-template-columns: minmax(0, clamp(14rem, 24vw, 18rem)) minmax(0, 1fr);
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   min-height: 0;
+  align-items: stretch;
 }
 
 /* Main CSP Section */
@@ -5177,6 +5217,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-height: 0;
 }
 
 .csp-manager-main-label {
@@ -5220,6 +5261,8 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-xl);
   aspect-ratio: 3 / 4;
+  width: 100%;
+  max-width: 18rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5231,12 +5274,13 @@
     linear-gradient(-45deg, transparent 75%, var(--color-bg-surface) 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  margin: 0 auto;
 }
 
 .csp-manager-main-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.4));
 }
 
@@ -5398,6 +5442,7 @@
 .csp-manager-alternatives-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   font-family: var(--font-display);
   font-size: var(--text-sm);
@@ -5815,15 +5860,17 @@
    CSP Upload Modal (sub-modal for Normal/HD)
    =========================================== */
 .csp-upload-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1100;
+  z-index: calc(var(--z-modal) + 20);
   animation: fadeIn var(--transition-base);
-  padding: var(--modal-inline-padding);
+  padding: var(--page-block-padding) var(--modal-inline-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .csp-upload-modal {
@@ -5832,11 +5879,12 @@
   border: 1px solid var(--color-border-subtle);
   box-shadow: var(--shadow-xl);
   width: min(100%, 38rem);
-  max-height: var(--modal-max-height);
+  max-height: min(100%, var(--modal-max-height));
   overflow: hidden;
   display: flex;
   flex-direction: column;
   animation: modalSlideIn var(--transition-base);
+  margin: auto;
 }
 
 .csp-upload-header {
@@ -6060,6 +6108,21 @@
   .csp-manager-body {
     grid-template-columns: 1fr;
     padding: var(--space-4);
+    overflow-y: auto;
+  }
+
+  .csp-manager-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .csp-manager-header-title {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .csp-manager-main-container {
+    max-width: 16rem;
   }
 
   .csp-manager-alternatives-grid {

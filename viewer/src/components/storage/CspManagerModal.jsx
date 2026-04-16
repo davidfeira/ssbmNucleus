@@ -9,6 +9,8 @@
  * - Upload modal for Normal/HD slot selection
  */
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 // Sub-modal for uploading CSPs with Normal/HD slot selection
 function CspUploadModal({
@@ -62,7 +64,7 @@ function CspUploadModal({
 
   const hasAnyFile = normalFile || hdFile
 
-  return (
+  const modal = (
     <div className="csp-upload-overlay" onClick={handleCancel}>
       <div className="csp-upload-modal" onClick={(e) => e.stopPropagation()}>
         <div className="csp-upload-header">
@@ -202,6 +204,9 @@ function CspUploadModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }
 
 export default function CspManagerModal({
@@ -224,6 +229,7 @@ export default function CspManagerModal({
   onCaptureHdCsp,
   onRegenerateAltHd,
   onResetToOriginal,
+  onOpenPoseManager,
   onSave,
   onUploadMainCsp,    // ({ normalFile, hdFile }) => void
   onUploadAltCsp,     // ({ normalFile, hdFile }) => void
@@ -329,7 +335,7 @@ export default function CspManagerModal({
     ? !!activeGroup?.hd
     : hdCspInfo?.exists
 
-  return (
+  const modal = (
     <div className="csp-manager-overlay" onClick={onClose}>
       <div className="csp-manager-modal" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
@@ -342,8 +348,27 @@ export default function CspManagerModal({
 
         {/* Header */}
         <div className="csp-manager-header">
-          <h2>CSP Manager</h2>
-          <span className="csp-manager-skin-name">{cspManagerSkin.color}</span>
+          <div className="csp-manager-header-title">
+            <h2>CSP Manager</h2>
+            <span className="csp-manager-skin-name">{cspManagerSkin.color}</span>
+          </div>
+          {onOpenPoseManager && (
+            <button
+              className="csp-manager-header-btn"
+              onClick={onOpenPoseManager}
+              title="Open pose manager"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="5" r="2"></circle>
+                <path d="M12 7v5"></path>
+                <path d="M9 22l3-6 3 6"></path>
+                <path d="M7 12l5 2 5-2"></path>
+                <path d="M5 10l4 2"></path>
+                <path d="M19 10l-4 2"></path>
+              </svg>
+              Manage Poses
+            </button>
+          )}
         </div>
 
         {/* Body - Two Column Layout */}
@@ -604,4 +629,7 @@ export default function CspManagerModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

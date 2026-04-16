@@ -1005,3 +1005,21 @@
   color: var(--color-text-quaternary);
   font-weight: var(--font-normal);
 }
+
+.setup-section-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.setup-rerun-button {
+  flex: 0 0 auto;
+}
+
+.setup-section-note {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-quaternary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}

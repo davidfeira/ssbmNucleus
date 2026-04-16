@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * SwordEditorModal - Color picker UI for creating/editing sword trail mods
@@ -243,7 +245,7 @@ export default function SwordEditorModal({
   const secondaryHex = toDisplayHex(colors.secondary)
   const tertiaryHex = toDisplayHex(colors.tertiary)
 
-  return (
+  const modal = (
     <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
@@ -386,4 +388,7 @@ export default function SwordEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

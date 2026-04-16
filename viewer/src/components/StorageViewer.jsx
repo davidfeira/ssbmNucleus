@@ -324,6 +324,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     handleCaptureHdCsp,
     handleRegenerateAltHd,
     handleResetToOriginal,
+    refreshManagedSkinState,
     handleUploadMainCsp,
     handleUploadAltCsp
   } = useCspManager({
@@ -351,6 +352,23 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             active_csp_id: activeCspId
           }
         } : prev)
+      }
+    },
+    onUpdateEditingItemData: (updatedData) => {
+      if (setEditingItemRef.current) {
+        setEditingItemRef.current(prev => (
+          prev?.type === 'costume' &&
+          prev.data.id === updatedData.id &&
+          prev.data.character === updatedData.character
+            ? {
+                ...prev,
+                data: {
+                  ...prev.data,
+                  ...updatedData
+                }
+              }
+            : prev
+        ))
       }
     }
   })
@@ -391,6 +409,37 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
   // Store setEditingItem in ref for CSP manager callback
   setEditingItemRef.current = setEditingItem
+
+  const handleCostumeAssetsUpdated = useCallback(async ({ character, skinIds }) => {
+    const targetIds = [...new Set((skinIds || []).filter(Boolean))]
+    if (!character || targetIds.length === 0) return
+
+    setLastImageUpdate(Date.now())
+
+    if (onRefresh) {
+      await onRefresh()
+    }
+
+    const shouldSyncEditingItem = editingItem?.type === 'costume' &&
+      editingItem.data.character === character &&
+      targetIds.includes(editingItem.data.id)
+
+    const shouldSyncCspManager = cspManagerSkin?.character === character &&
+      targetIds.includes(cspManagerSkin.id)
+
+    if (!shouldSyncEditingItem && !shouldSyncCspManager) {
+      return
+    }
+
+    const syncTargets = [
+      shouldSyncEditingItem ? editingItem.data.id : null,
+      shouldSyncCspManager ? cspManagerSkin.id : null
+    ].filter((value, index, array) => value && array.indexOf(value) === index)
+
+    for (const skinId of syncTargets) {
+      await refreshManagedSkinState(character, skinId, { refreshParent: false })
+    }
+  }, [cspManagerSkin, editingItem, onRefresh, refreshManagedSkinState, setLastImageUpdate])
 
   // Fetch stage variants when in stages mode or when metadata changes
   useEffect(() => {
@@ -1068,6 +1117,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         openSkinCreator={openSkinCreator}
         onSkinCreatorChange={onSkinCreatorChange}
         onRefresh={onRefresh}
+        onCostumesUpdated={handleCostumeAssetsUpdated}
         skinCreatorInitialCostume={skinCreatorInitialCostume}
         // API
         API_URL={API_URL}

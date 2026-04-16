@@ -9,8 +9,9 @@ import HdCspSection from './settings/HdCspSection'
 import ClearStorageSection from './settings/ClearStorageSection'
 import DiscordSection from './settings/DiscordSection'
 import VolumeSection from './settings/VolumeSection'
+import SetupSection from './settings/SetupSection'
 
-export default function Settings({ metadata }) {
+export default function Settings({ metadata, onOpenFirstRunSetup }) {
 
   return (
     <div className="settings-container">
@@ -28,6 +29,9 @@ export default function Settings({ metadata }) {
 
         {/* Slippi Dolphin Path */}
         <SlippiPathSection API_URL={API_URL} />
+
+        {/* First-Run Setup Wizard */}
+        <SetupSection onOpenFirstRunSetup={onOpenFirstRunSetup} />
 
         {/* HD CSP Generation Section */}
         <HdCspSection metadata={metadata} API_URL={API_URL} />

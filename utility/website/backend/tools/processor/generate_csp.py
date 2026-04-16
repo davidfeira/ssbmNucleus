@@ -19,6 +19,20 @@ from app.utils.logging_config import get_csp_logger
 
 logger = get_csp_logger()
 
+
+def get_windows_subprocess_args():
+    """Hide subprocess windows on Windows while keeping stdout/stderr capturable."""
+    if os.name != 'nt':
+        return {}
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        'startupinfo': startupinfo,
+        'creationflags': subprocess.CREATE_NO_WINDOW,
+    }
+
 # HSDRawViewer CSP generator path - relative to this script
 SCRIPT_DIR = Path(__file__).parent
 TOOLS_DIR = SCRIPT_DIR.parent
@@ -481,12 +495,12 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     # Run HSDRawViewer CSP generation
     try:
         # Run directly without PowerShell to avoid path quoting issues
-        if os.name == 'nt':  # Windows
-            # Use both CREATE_NO_WINDOW and DETACHED_PROCESS to hide console
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                   creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
-        else:  # Linux - run with Wine
-            result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            **get_windows_subprocess_args(),
+        )
 
         if result.returncode == 0:
             if os.path.exists(output_csp):

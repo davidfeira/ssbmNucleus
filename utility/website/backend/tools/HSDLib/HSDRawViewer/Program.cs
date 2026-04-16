@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using SixLabors.ImageSharp.Processing;
@@ -25,10 +24,6 @@ namespace HSDRawViewer
 {
     static class Program
     {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool AllocConsole();
-
         private static System.IO.StreamWriter logFile;
 
         /// <summary>
@@ -37,10 +32,10 @@ namespace HSDRawViewer
         [STAThread]
         static void Main(string[] args)
         {
-            // Allocate console for output when running from command line
+            // CLI modes may be launched by the app with redirected output.
+            // Forcing a console allocation creates a visible popup window.
             if (args.Length >= 2 && args[0] == "--csp")
             {
-                AllocConsole();
                 // Redirect Console output to both console and file
                 logFile = new System.IO.StreamWriter("csp_debug.log", false);
                 logFile.AutoFlush = true;
@@ -67,7 +62,6 @@ namespace HSDRawViewer
             // Check for streaming mode
             if (args.Length >= 3 && args[0] == "--stream")
             {
-                AllocConsole();
                 Console.WriteLine("Streaming mode detected");
                 RunStreamingServer(args);
                 return;
@@ -84,7 +78,6 @@ namespace HSDRawViewer
             // Check for model export/import mode
             if (args.Length >= 4 && args[0] == "--model")
             {
-                AllocConsole();
                 Console.WriteLine("Model operation mode detected");
                 RunModelOperation(args);
                 return;
@@ -93,7 +86,6 @@ namespace HSDRawViewer
             // Check for texture export/import mode
             if (args.Length >= 4 && args[0] == "--texture")
             {
-                AllocConsole();
                 Console.WriteLine("Texture operation mode detected");
                 RunTextureOperation(args);
                 return;
@@ -102,7 +94,6 @@ namespace HSDRawViewer
             // Check for sound extraction mode
             if (args.Length >= 1 && args[0] == "--sound")
             {
-                AllocConsole();
                 Console.WriteLine("Sound operation mode detected");
                 RunSoundOperation(args);
                 return;

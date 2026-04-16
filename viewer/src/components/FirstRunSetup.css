@@ -26,8 +26,6 @@
    ───────────────────────────────────────── */
 
 .first-run-modal {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-cyan);
   border-radius: 16px;
   width: min(100%, 34rem);
   box-shadow:
@@ -36,8 +34,19 @@
   overflow: visible;
   position: relative;
   max-height: var(--modal-max-height);
+  isolation: isolate;
+}
+
+.first-run-modal-surface {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-cyan);
+  border-radius: inherit;
   display: flex;
   flex-direction: column;
+  max-height: inherit;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 /* Traveling LED border effect (runs constantly, slow) */
@@ -66,7 +75,8 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 1;
-  z-index: -1;
+  pointer-events: none;
+  z-index: 0;
   animation: rotateBorder 8s linear infinite;
 }
 
@@ -95,7 +105,8 @@
   mask-composite: exclude;
   filter: blur(6px);
   opacity: 0.8;
-  z-index: -2;
+  pointer-events: none;
+  z-index: -1;
   animation: rotateBorder 8s linear infinite;
 }
 
@@ -115,6 +126,8 @@
 .first-run-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-3);
   padding: var(--space-6);
   border-bottom: 1px solid var(--color-border-subtle);
@@ -122,6 +135,14 @@
     var(--color-bg-surface) 0%,
     var(--color-bg-elevated) 100%
   );
+}
+
+.first-run-header-brand {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .first-run-logo {
@@ -136,6 +157,12 @@
   font-weight: var(--font-bold);
   color: var(--color-text-primary);
   margin: 0;
+}
+
+.first-run-cancel-button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
 }
 
 .first-run-content {

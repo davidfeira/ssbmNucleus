@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
 
 /**
  * GunEditorModal - Modal for importing custom gun models
@@ -142,21 +144,21 @@ export default function GunEditorModal({
     }
   }
 
-  return (
+  const modal = (
     <div
       className="gun-editor-overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        position: 'absolute',
+        inset: 0,
         background: 'rgba(0, 0, 0, 0.8)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000
+        zIndex: 1000,
+        padding: 'var(--page-block-padding) var(--modal-inline-padding)',
+        overflow: 'auto',
+        overscrollBehavior: 'contain'
       }}
     >
       <div className="gun-editor-modal" onClick={e => e.stopPropagation()}>
@@ -265,11 +267,15 @@ export default function GunEditorModal({
         <style>{`
           .gun-editor-modal {
             max-width: 500px;
-            width: 90%;
+            width: min(100%, 500px);
+            max-height: min(100%, var(--modal-max-height));
             background: #1a1a2e;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            margin: auto;
           }
 
           .gun-editor-header {
@@ -302,6 +308,7 @@ export default function GunEditorModal({
 
           .gun-editor-modal .modal-body {
             padding: 20px;
+            overflow-y: auto;
           }
 
           .gun-editor-modal .form-group {
@@ -494,4 +501,7 @@ export default function GunEditorModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

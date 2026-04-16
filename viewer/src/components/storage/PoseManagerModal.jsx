@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseSkinSelectorModal from './PoseSkinSelectorModal'
+import { getAppContentPortalTarget } from './appContentPortal'
+import { playSound } from '../../utils/sounds'
 
 /**
  * Pose Manager Modal
@@ -270,6 +273,7 @@ export default function PoseManagerModal({
   character,
   onClose,
   onRefresh,
+  onCostumesUpdated,
   API_URL
 }) {
   const [poseName, setPoseName] = useState('')
@@ -368,6 +372,7 @@ export default function PoseManagerModal({
         throw new Error(data.error || 'Failed to save pose')
       }
 
+      playSound('camera')
       setSaveSuccess(true)
       setPoseName('')
 
@@ -388,7 +393,7 @@ export default function PoseManagerModal({
     setPoses(poses.filter(p => p.name !== poseName))
   }
 
-  return (
+  const modal = (
     <div className="pm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="pm-modal">
         {/* Header */}
@@ -413,6 +418,7 @@ export default function PoseManagerModal({
                   character={character}
                   costumeCode={getDefaultCostumeCode(character)}
                   onClose={onClose}
+                  inline={true}
                   cspMode={true}
                   showGrid={false}
                   showBackground={false}
@@ -555,54 +561,52 @@ export default function PoseManagerModal({
         poseThumbnail={selectedPose?.hasThumbnail ? `${API_URL.replace('/api/mex', '')}${selectedPose.thumbnailUrl}` : null}
         onClose={() => setSelectedPose(null)}
         onRefresh={onRefresh}
+        onCostumesUpdated={onCostumesUpdated}
         API_URL={API_URL}
       />
 
       <style>{`
         .pm-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          position: absolute;
+          inset: 0;
           background: rgba(0, 0, 0, 0.8);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
+          z-index: calc(var(--z-modal) + 40);
+          padding: var(--page-block-padding) var(--modal-inline-padding);
+          overflow: auto;
+          overscroll-behavior: contain;
         }
 
         .pm-modal {
           background: #1a1a2e;
           border-radius: 12px;
-          width: 65vw;
-          height: 80vh;
-          max-width: 1000px;
-          max-height: 900px;
+          width: min(100%, 68rem);
+          height: min(100%, var(--modal-max-height));
+          max-height: 100%;
           display: flex;
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          margin: auto;
         }
 
         @media (min-width: 1440px) {
           .pm-modal {
             max-width: 1100px;
-            max-height: 1000px;
           }
         }
 
         @media (min-width: 1920px) {
           .pm-modal {
             max-width: 1250px;
-            max-height: 1100px;
           }
         }
 
         @media (min-width: 2560px) {
           .pm-modal {
             max-width: 1500px;
-            max-height: 1300px;
           }
         }
 
@@ -654,6 +658,7 @@ export default function PoseManagerModal({
           flex: 1;
           display: flex;
           overflow: hidden;
+          min-height: 0;
         }
 
         /* Left: Viewer + Category Section */
@@ -662,6 +667,7 @@ export default function PoseManagerModal({
           flex-direction: column;
           flex: 1;
           border-right: 1px solid #2a2a4a;
+          min-width: 0;
         }
 
         .pm-viewer-section {
@@ -706,6 +712,8 @@ export default function PoseManagerModal({
           inset: 0 !important;
           width: 100% !important;
           height: 100% !important;
+          padding: 0 !important;
+          overflow: hidden !important;
           background: transparent !important;
           backdrop-filter: none !important;
           z-index: 1 !important;
@@ -759,6 +767,7 @@ export default function PoseManagerModal({
           display: flex;
           flex-direction: column;
           background: #16162a;
+          min-height: 0;
         }
 
         .pm-poses-header {
@@ -947,7 +956,16 @@ export default function PoseManagerModal({
           color: #51cf66;
           border-top: 1px solid rgba(40, 167, 69, 0.3);
         }
+
+        @media (max-width: 1024px) {
+          .pm-modal {
+            width: 100%;
+          }
+        }
       `}</style>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

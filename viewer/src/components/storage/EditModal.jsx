@@ -8,6 +8,9 @@
  * - 3D model viewing (costumes only)
  * - Texture editing via Skin Creator (costumes only)
  */
+import { createPortal } from 'react-dom'
+import { getAppContentPortalTarget } from './appContentPortal'
+
 export default function EditModal({
   show,
   editingItem,
@@ -88,7 +91,7 @@ export default function EditModal({
     e.stopPropagation()
   }
 
-  return (
+  const modal = (
     <div className="edit-modal-fullscreen-overlay" onClick={handleOverlayClick}>
       <div className="edit-modal-fullscreen" onClick={handleContentClick}>
         {/* Close Button */}
@@ -528,4 +531,7 @@ export default function EditModal({
       </div>
     </div>
   )
+
+  const portalTarget = getAppContentPortalTarget()
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

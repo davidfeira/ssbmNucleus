@@ -90,12 +90,12 @@ So, just like character mods, the vault copy is your source item and the project
 
 Inside the project, stage variants can use button-token suffixes like `(B)`, `(X)`, `(Y)`, `(L)`, `(R)`, and `(Z)`.
 
-Those tokens are part of the variant filename and represent button-selected stage variants.
+When Nucleus copies a stage into the active project, it normalizes the installed filename to a no-space PascalCase form. Those tokens are part of that installed filename and represent button-selected stage variants.
 
 Examples:
 
-- `My Yoshi Alt (L).dat`
-- `Frozen Stadium (X).usd`
+- `MyYoshiAlt(L).dat`
+- `FrozenStadium(X).usd`
 
 ## Slippi Status
 

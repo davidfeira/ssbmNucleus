@@ -16,6 +16,8 @@ function App() {
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(true);
   const [skinCreatorOpen, setSkinCreatorOpen] = useState(false);
+  const [showFirstRunSetup, setShowFirstRunSetup] = useState(false);
+  const [settingsRefreshVersion, setSettingsRefreshVersion] = useState(0);
 
   // First-run setup state
   const [setupNeeded, setSetupNeeded] = useState(null); // null = checking, true = needed, false = complete
@@ -85,7 +87,7 @@ function App() {
   // Handle download completion - refresh metadata and play sound
   useEffect(() => {
     if (phase === DOWNLOAD_PHASES.COMPLETE && result?.success) {
-      playSound('newSkin')
+      playSound(result.cameraSound ? 'camera' : 'newSkin')
       fetchMetadata()
       setActiveTab('storage')
     }
@@ -141,6 +143,7 @@ function App() {
 
       if (result.success) {
         console.log('[Nucleus] Import successful after slippi choice:', result);
+        playSound(result.camera_sound ? 'camera' : 'newSkin');
         fetchMetadata();
         setActiveTab('storage');
         alert(`Successfully imported: ${pendingImportData.name || 'mod'}`);
@@ -160,8 +163,18 @@ function App() {
 
   // Handle setup completion
   const handleSetupComplete = () => {
+    setShowFirstRunSetup(false);
     setSetupNeeded(false);
+    setSettingsRefreshVersion(current => current + 1);
     fetchMetadata();
+  };
+
+  const handleOpenFirstRunSetup = () => {
+    setShowFirstRunSetup(true);
+  };
+
+  const handleCancelFirstRunSetup = () => {
+    setShowFirstRunSetup(false);
   };
 
   // Handle slippi choice from download modal
@@ -257,7 +270,11 @@ function App() {
               <MexPanel />
             </div>
             <div className={`app-panel app-panel--scroll ${activeTab === 'settings' ? '' : 'app-panel--hidden'}`}>
-              <Settings metadata={metadata} />
+              <Settings
+                key={settingsRefreshVersion}
+                metadata={metadata}
+                onOpenFirstRunSetup={handleOpenFirstRunSetup}
+              />
             </div>
           </>
         )}
@@ -282,6 +299,13 @@ function App() {
         onSlippiChoice={handleDownloadSlippiChoice}
         onDuplicateChoice={handleDownloadDuplicateChoice}
       />
+
+      {showFirstRunSetup && (
+        <FirstRunSetup
+          onComplete={handleSetupComplete}
+          onCancel={handleCancelFirstRunSetup}
+        />
+      )}
     </div>
   )
 }

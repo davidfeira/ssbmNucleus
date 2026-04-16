@@ -628,7 +628,7 @@
    ───────────────────────────────────────── */
 
 .edit-modal-fullscreen-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(6, 12, 20, 0.92);
   backdrop-filter: blur(12px);
@@ -638,12 +638,15 @@
   justify-content: center;
   z-index: var(--z-modal);
   animation: fadeIn var(--duration-fast) var(--ease-out);
-  padding: var(--modal-inline-padding);
+  padding: var(--page-block-padding) var(--modal-inline-padding);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .edit-modal-fullscreen {
-  width: var(--modal-max-width);
+  width: min(100%, var(--modal-max-width));
   height: min(100%, var(--modal-max-height));
+  max-height: 100%;
   background: linear-gradient(
     165deg,
     var(--color-bg-elevated) 0%,
@@ -662,6 +665,7 @@
   position: relative;
   overflow: visible;
   animation: modalSlideUp var(--duration-normal) var(--ease-spring);
+  margin: auto;
 }
 
 @keyframes modalSlideUp {
@@ -806,7 +810,7 @@
   align-items: stretch;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-6);
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
 }
 
@@ -1437,17 +1441,6 @@
 }
 
 @media (max-width: 1080px) {
-  .app-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-4);
-  }
-
-  .app-tabs {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
   .edit-modal-body {
     flex-wrap: wrap;
     overflow-y: auto;
@@ -1465,20 +1458,6 @@
 }
 
 @media (max-width: 720px) {
-  .header-brand {
-    justify-content: center;
-  }
-
-  .app-tabs {
-    width: 100%;
-  }
-
-  .tab {
-    flex: 1 1 0;
-    min-width: 0;
-    text-align: center;
-  }
-
   .edit-modal-overlay,
   .edit-modal-fullscreen-overlay {
     padding: var(--space-3);

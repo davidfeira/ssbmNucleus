@@ -15,6 +15,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
 from extra_types import get_extra_types, get_extra_type, has_extras, get_storage_character
+from core.config import get_subprocess_args
 
 logger = logging.getLogger(__name__)
 
@@ -1843,7 +1844,7 @@ def extract_model_from_dat(dat_path, jobj_path, output_dae_path):
     ]
 
     logger.info(f"Running model export: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, **get_subprocess_args())
 
     if result.returncode != 0:
         logger.error(f"Model export failed: {result.stderr}")
@@ -1878,7 +1879,7 @@ def import_model_to_dat(dat_path, jobj_path, model_dae_path, output_dat_path):
     ]
 
     logger.info(f"Running model import: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, **get_subprocess_args())
 
     if result.returncode != 0:
         logger.error(f"Model import failed: {result.stderr}")
@@ -2237,7 +2238,7 @@ def export_texture(dat_path, node_path, tex_index, output_png):
     ]
 
     logger.info(f"Running texture export: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, **get_subprocess_args())
 
     if result.returncode != 0:
         logger.error(f"Texture export failed: {result.stderr}")
@@ -2274,7 +2275,7 @@ def import_texture(dat_path, node_path, tex_index, input_png, output_dat):
     ]
 
     logger.info(f"Running texture import: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, **get_subprocess_args())
 
     if result.returncode != 0:
         logger.error(f"Texture import failed: {result.stderr}")

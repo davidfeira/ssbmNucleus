@@ -12,7 +12,13 @@
 import { useState } from 'react'
 import { playSound } from '../utils/sounds'
 
-export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onUpdateEditingItemActiveCsp }) {
+export function useCspManager({
+  API_URL,
+  onRefresh,
+  onUpdateEditingItemAlts,
+  onUpdateEditingItemActiveCsp,
+  onUpdateEditingItemData
+}) {
   // CSP Manager modal state
   const [showCspManager, setShowCspManager] = useState(false)
   const [cspManagerSkin, setCspManagerSkin] = useState(null) // Current skin being edited
@@ -24,17 +30,86 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
   const [compareSliderPosition, setCompareSliderPosition] = useState(50) // 0-100% for before/after slider
   const [lastImageUpdate, setLastImageUpdate] = useState(Date.now()) // For cache-busting images
   const [capturingHdCsp, setCapturingHdCsp] = useState(false)
+  const baseUrl = API_URL.replace('/api/mex', '')
+
+  const mapAlternateCsps = (character, skin) => (
+    (skin.alternate_csps || []).map(alt => ({
+      id: alt.id,
+      url: `/storage/${character}/${alt.filename}`,
+      poseName: alt.pose_name,
+      isHd: alt.is_hd,
+      timestamp: alt.timestamp,
+      file: null
+    }))
+  )
+
+  const buildManagedSkinData = (character, skin) => ({
+    ...skin,
+    character,
+    cspUrl: `${baseUrl}/storage/${character}/${skin.csp_filename || `${skin.id}_csp.png`}`,
+    hdCspUrl: skin.has_hd_csp
+      ? `${baseUrl}/storage/${character}/${skin.hd_csp_filename || `${skin.id}_csp_hd.png`}`
+      : null,
+    stockUrl: skin.has_stock
+      ? `${baseUrl}/storage/${character}/${skin.id}_stc.png`
+      : null,
+    active_csp_id: skin.active_csp_id || null,
+    alternateCsps: mapAlternateCsps(character, skin)
+  })
+
+  const refreshManagedSkinState = async (
+    character = cspManagerSkin?.character,
+    skinId = cspManagerSkin?.id,
+    { refreshParent = true } = {}
+  ) => {
+    if (!character || !skinId) return null
+
+    if (refreshParent && onRefresh) {
+      await onRefresh()
+    }
+
+    const response = await fetch(`${API_URL}/storage/metadata`)
+    const data = await response.json()
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to refresh storage metadata')
+    }
+
+    const skins = data.metadata?.characters?.[character]?.skins || []
+    const skin = skins.find(item => item.id === skinId && item.type !== 'folder')
+    if (!skin) {
+      return null
+    }
+
+    const managedSkinData = buildManagedSkinData(character, skin)
+    const isCurrentManagedSkin = cspManagerSkin?.character === character && cspManagerSkin?.id === skinId
+
+    if (isCurrentManagedSkin) {
+      setCspManagerSkin(prev => prev ? { ...prev, ...managedSkinData } : prev)
+      setAlternativeCsps(managedSkinData.alternateCsps)
+      setHdCspInfo(
+        managedSkinData.has_hd_csp
+          ? {
+              exists: true,
+              resolution: managedSkinData.hd_csp_resolution,
+              size: managedSkinData.hd_csp_size
+            }
+          : null
+      )
+    }
+
+    if (onUpdateEditingItemData) {
+      onUpdateEditingItemData(managedSkinData)
+    }
+
+    return managedSkinData
+  }
 
   // Open CSP manager
   const openCspManager = (skinData) => {
     setCspManagerSkin(skinData)
     // Load alternate CSPs from skin data if available
     const alts = (skinData.alternateCsps || []).map(alt => ({
-      id: alt.id,
-      url: alt.url,
-      poseName: alt.poseName,
-      isHd: alt.isHd,
-      timestamp: alt.timestamp,
+      ...alt,
       file: null // Not a new file, loaded from server
     }))
     setAlternativeCsps(alts)
@@ -140,10 +215,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
           onUpdateEditingItemAlts(prev => [...prev, newAlt])
         }
         setLastImageUpdate(Date.now())
-        // Refresh parent metadata so changes persist after modal close/reopen
-        if (onRefresh) {
-          onRefresh()
-        }
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         alert(`Failed to add CSP: ${data.error}`)
       }
@@ -172,9 +244,6 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
       if (data.success) {
         // Bust image cache and refresh metadata
         setLastImageUpdate(Date.now())
-        if (onRefresh) {
-          onRefresh()
-        }
         // Update local skin data with new active CSP
         setCspManagerSkin(prev => ({
           ...prev,
@@ -184,6 +253,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         if (onUpdateEditingItemActiveCsp) {
           onUpdateEditingItemActiveCsp(data.activeCspId)
         }
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         alert(`Failed to set active CSP: ${data.error}`)
       }
@@ -217,10 +287,8 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         if (onUpdateEditingItemAlts && removedId) {
           onUpdateEditingItemAlts(prev => prev.filter(a => a.id !== removedId))
         }
-        // Refresh parent metadata so changes persist after modal close/reopen
-        if (onRefresh) {
-          onRefresh()
-        }
+        setLastImageUpdate(Date.now())
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         alert(`Failed to remove CSP: ${data.error}`)
       }
@@ -255,10 +323,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
       // Bust image cache so new CSP shows immediately
       setLastImageUpdate(Date.now())
 
-      // Refresh metadata
-      if (onRefresh) {
-        await onRefresh()
-      }
+      await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
 
       closeCspManager()
     } catch (err) {
@@ -296,6 +361,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
           i === altIndex ? { ...alt, isHd: true } : alt
         ))
         setLastImageUpdate(Date.now())
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         playSound('error')
         alert(`Failed to regenerate HD: ${data.error}`)
@@ -366,10 +432,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         }
         // Bust image cache so the new HD CSP shows immediately
         setLastImageUpdate(Date.now())
-        // Refresh metadata to get updated data
-        if (onRefresh) {
-          onRefresh()
-        }
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         playSound('error')
         alert(`Failed to capture HD CSP: ${data.error}`)
@@ -434,11 +497,11 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         })
       }
 
+      playSound('camera')
+
       // Bust image cache and refresh
       setLastImageUpdate(Date.now())
-      if (onRefresh) {
-        await onRefresh()
-      }
+      await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
     } catch (err) {
       alert(`Error uploading CSP: ${err.message}`)
     }
@@ -518,10 +581,10 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         }
       }
 
+      playSound('camera')
+
       setLastImageUpdate(Date.now())
-      if (onRefresh) {
-        onRefresh()
-      }
+      await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
     } catch (err) {
       alert(`Error uploading CSP: ${err.message}`)
     }
@@ -545,9 +608,6 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
 
       if (data.success) {
         setLastImageUpdate(Date.now())
-        if (onRefresh) {
-          onRefresh()
-        }
         setCspManagerSkin(prev => ({
           ...prev,
           active_csp_id: null
@@ -556,6 +616,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
         if (onUpdateEditingItemActiveCsp) {
           onUpdateEditingItemActiveCsp(null)
         }
+        await refreshManagedSkinState(cspManagerSkin.character, cspManagerSkin.id)
       } else {
         alert(`Failed to reset CSP: ${data.error}`)
       }
@@ -598,6 +659,7 @@ export function useCspManager({ API_URL, onRefresh, onUpdateEditingItemAlts, onU
     handleCaptureHdCsp,
     handleRegenerateAltHd,
     handleResetToOriginal,
+    refreshManagedSkinState,
     handleUploadMainCsp,
     handleUploadAltCsp
   }

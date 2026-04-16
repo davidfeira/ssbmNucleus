@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 das_bp = Blueprint('das', __name__)
 
+BUTTON_INDICATOR_RE = re.compile(r'\s*\(([ABXYLRZ])\)$', re.IGNORECASE)
+WHITESPACE_RE = re.compile(r'\s+')
+PROJECT_VARIANT_WORD_RE = re.compile(r'[A-Za-z0-9]+')
+
 # DAS Stage configuration
 DAS_STAGES = {
     'GrNBa': {'code': 'GrNBa', 'name': 'Battlefield', 'folder': 'battlefield'},
@@ -46,18 +50,18 @@ DAS_DEFAULT_SCREENSHOTS = {
 def strip_button_indicator(filename):
     """
     Remove button indicator from filename stem
-    Example: vanilla(B) -> vanilla
+    Example: Vanilla(B) -> Vanilla
     """
-    return re.sub(r'\(([ABXYLRZ])\)$', '', filename, flags=re.IGNORECASE)
+    return normalize_whitespace(BUTTON_INDICATOR_RE.sub('', filename))
 
 
 def extract_button_indicator(filename):
     """
     Extract button indicator from filename stem
-    Example: vanilla(B) -> B
+    Example: Vanilla(B) -> B
     Returns None if no button indicator found
     """
-    match = re.search(r'\(([ABXYLRZ])\)$', filename, flags=re.IGNORECASE)
+    match = BUTTON_INDICATOR_RE.search(filename)
     return match.group(1).upper() if match else None
 
 
@@ -70,14 +74,53 @@ def add_button_indicator(filename, button):
     return f"{cleaned}({button.upper()})"
 
 
+def normalize_whitespace(name):
+    """Collapse repeated whitespace and trim ends."""
+    return WHITESPACE_RE.sub(' ', name).strip()
+
+
+def normalize_variant_name(name):
+    """
+    Normalize a DAS project filename stem.
+    - Sanitizes filesystem-unsafe characters
+    - Converts the base name to PascalCase with no spaces
+    - Canonicalizes button indicators to "Name(B)" format
+    """
+    if name is None:
+        return None
+
+    sanitized = sanitize_filename(name)
+    button = extract_button_indicator(sanitized)
+    base_name = strip_button_indicator(sanitized)
+    words = PROJECT_VARIANT_WORD_RE.findall(base_name)
+
+    if words:
+        normalized_base = ''.join(word[:1].upper() + word[1:] for word in words)
+    else:
+        normalized_base = re.sub(r'\s+', '', base_name)
+
+    if button:
+        return add_button_indicator(normalized_base, button)
+
+    return normalized_base
+
+
+def get_variant_match_key(name):
+    """
+    Convert a display name or installed filename stem into a canonical
+    key for project-side DAS matching.
+    """
+    normalized = normalize_variant_name(name)
+    return strip_button_indicator(normalized).lower() if normalized else ''
+
+
 def sanitize_filename(name):
     """
     Sanitize a display name for use as a filename
     Removes filesystem-unsafe characters while keeping readability
     """
     sanitized = re.sub(r'[<>:"/\\|?*]', '', name)
-    sanitized = sanitized.strip()
-    return sanitized
+    return normalize_whitespace(sanitized)
 
 
 def find_stage_screenshot(folder_path: Path, variant_id: str):
@@ -254,9 +297,9 @@ def das_get_stage_variants(stage_code):
             metadata_variants = {v['id']: v for v in stage_metadata.get('variants', [])}
 
             for stage_file in stage_folder.glob(file_pattern):
-                filename_stem = stage_file.stem  # e.g., "Autumn Dreamland" or "Autumn Dreamland(B)"
+                filename_stem = stage_file.stem  # e.g., "AutumnDreamland" or "AutumnDreamland(B)"
 
-                # Extract button indicator (e.g., "Autumn Dreamland(B)" -> "B")
+                # Extract button indicator (e.g., "AutumnDreamland(B)" -> "B")
                 button = extract_button_indicator(filename_stem)
 
                 # Strip button indicator for matching
@@ -267,10 +310,10 @@ def das_get_stage_variants(stage_code):
                 variant_meta = {}
 
                 # Try to match display name to variant in metadata
-                sanitized_display_name = sanitize_filename(display_name_from_file).lower()
+                installed_match_key = get_variant_match_key(display_name_from_file)
                 for vid, vmeta in metadata_variants.items():
                     variant_display_name = vmeta.get('name', vid)
-                    if sanitize_filename(variant_display_name).lower() == sanitized_display_name:
+                    if get_variant_match_key(variant_display_name) == installed_match_key:
                         variant_id_for_screenshot = vid
                         variant_meta = vmeta
                         logger.info(f"Matched display name '{display_name_from_file}' to variant_id '{vid}'")
@@ -469,14 +512,14 @@ def das_import_variant():
                         break
 
             # Use sanitized display name for filename
-            final_name = sanitize_filename(display_name)
+            final_name = normalize_variant_name(sanitize_filename(display_name))
             final_path = stage_folder / f"{final_name}{file_ext}"
 
             # If file already exists, append suffix to avoid conflicts
             if final_path.exists():
                 count = 1
                 while True:
-                    final_name = f"{sanitize_filename(display_name)}_{count}"
+                    final_name = normalize_variant_name(f"{sanitize_filename(display_name)}_{count}")
                     final_path = stage_folder / f"{final_name}{file_ext}"
                     if not final_path.exists():
                         break
@@ -562,14 +605,14 @@ def das_rename_variant():
     {
       "stageCode": "GrOp",
       "oldName": "vanilla",
-      "newName": "vanilla(B)"
+      "newName": "Vanilla(B)"
     }
     """
     try:
         data = request.json
         stage_code = data.get('stageCode')
         old_name = data.get('oldName')
-        new_name = data.get('newName')
+        new_name = normalize_variant_name(data.get('newName'))
 
         logger.info(f"DAS Rename Request - Stage: {stage_code}, Old: {old_name}, New: {new_name}")
 

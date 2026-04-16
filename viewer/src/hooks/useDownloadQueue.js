@@ -110,7 +110,12 @@ export function useDownloadQueue() {
       }
 
       if (importResult.success) {
-        setResult({ success: true, message: `Successfully imported: ${download.title || download.name || 'mod'}` })
+        setResult({
+          success: true,
+          importType: importResult.type,
+          cameraSound: importResult.camera_sound === true,
+          message: `Successfully imported: ${download.title || download.name || 'mod'}`
+        })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
       } else {
         throw new Error(importResult.error || 'Import failed')
@@ -225,7 +230,12 @@ export function useDownloadQueue() {
       }
 
       if (importResult.success) {
-        setResult({ success: true, message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}` })
+        setResult({
+          success: true,
+          importType: importResult.type,
+          cameraSound: importResult.camera_sound === true,
+          message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}`
+        })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
         return importResult
       } else {
@@ -298,7 +308,12 @@ export function useDownloadQueue() {
       }
 
       if (importResult.success) {
-        setResult({ success: true, message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}` })
+        setResult({
+          success: true,
+          importType: importResult.type,
+          cameraSound: importResult.camera_sound === true,
+          message: `Successfully imported: ${result.downloadTitle || result.downloadName || 'mod'}`
+        })
         setPhase(DOWNLOAD_PHASES.COMPLETE)
         return importResult
       } else {

@@ -534,6 +534,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
             'character': character,
             'color': dat_name_clean,  # Use descriptive name
             'skin_id': skin_id,  # Return the actual skin ID for pairing
+            'csp_source': csp_source,
+            'camera_sound': csp_source == 'generated',
             'message': f"Imported {character} - {dat_name_clean} costume"
         }
 
@@ -1038,14 +1040,17 @@ def import_file():
                 # Import each detected costume
                 results = []
                 imported_skin_ids = {}  # Track actual skin IDs: costume_code -> skin_id
+                should_play_camera_sound = False
                 for character_info in character_infos_sorted:
                     logger.info(f"  - Importing {character_info['character']} - {character_info['color']}")
                     logger.info(f"[DEBUG] Calling import_character_costume with custom_name='{custom_title}'")
                     result = import_character_costume(temp_zip_path, character_info, file.filename, auto_fix=auto_fix, custom_name=custom_title)
                     if result.get('success'):
+                        should_play_camera_sound = should_play_camera_sound or result.get('camera_sound', False)
                         results.append({
                             'character': character_info['character'],
-                            'color': character_info['color']
+                            'color': character_info['color'],
+                            'csp_source': result.get('csp_source')
                         })
                         # Track the actual skin ID that was created
                         if result.get('skin_id'):
@@ -1058,6 +1063,7 @@ def import_file():
                 return jsonify({
                     'success': True,
                     'type': 'character',
+                    'camera_sound': should_play_camera_sound,
                     'imported_count': len(results),
                     'costumes': results,
                     'message': f"Imported {len(results)} costume(s)"
