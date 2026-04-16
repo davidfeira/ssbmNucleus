@@ -37,7 +37,18 @@ def validate_dat_file(dat_path, auto_fix=False, create_backup=True):
     # Get the validator path relative to this script
     script_dir = Path(__file__).parent
     validator_exe = script_dir / "CostumeValidator" / "SlippiCostumeValidator.exe"
-    validator_exe = str(validator_exe.resolve())
+    validator_exe_resolved = validator_exe.resolve()
+
+    if not validator_exe_resolved.exists():
+        return {
+            'is_valid': False,
+            'needs_fix': False,
+            'fix_applied': False,
+            'backup_path': None,
+            'output': f"ERROR: SlippiCostumeValidator.exe not found at {validator_exe_resolved}\n(script_dir: {script_dir})"
+        }
+
+    validator_exe = str(validator_exe_resolved)
 
     # Get hash before validation to detect if file was modified
     with open(dat_path, 'rb') as f:
@@ -70,7 +81,8 @@ def validate_dat_file(dat_path, auto_fix=False, create_backup=True):
             error_msg += f"stdout: {result.stdout}\n"
             error_msg += f"stderr: {result.stderr}\n"
             error_msg += f"command: {cmd}\n"
-            error_msg += f"cwd: {file_dir}"
+            error_msg += f"cwd: {file_dir}\n"
+            error_msg += f"validator_exe: {validator_exe}"
             return {
                 'is_valid': False,
                 'needs_fix': False,

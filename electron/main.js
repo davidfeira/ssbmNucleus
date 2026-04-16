@@ -99,7 +99,18 @@ function startFlaskServer() {
     });
 
     pythonProcess.stderr.on('data', (data) => {
-      console.error(`[Flask Error] ${data.toString().trim()}`);
+      const errOutput = data.toString();
+      console.error(`[Flask Error] ${errOutput.trim()}`);
+
+      // Also check stderr for the port announcement (fallback)
+      const errMatch = errOutput.match(/BACKEND_PORT:(\d+)/);
+      if (errMatch && !resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        backendPort = parseInt(errMatch[1], 10);
+        console.log(`[Electron] Flask backend running on port ${backendPort} (from stderr)`);
+        resolve(backendPort);
+      }
     });
 
     pythonProcess.on('close', (code) => {

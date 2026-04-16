@@ -15,6 +15,21 @@ from pathlib import Path
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+# --- Safe stdout/stderr for PyInstaller GUI-mode or broken pipes ---
+def _safe_stream(stream):
+    """Return the stream if it's usable, otherwise open os.devnull."""
+    if stream is None:
+        return open(os.devnull, "w")
+    try:
+        stream.fileno()
+        return stream
+    except (OSError, AttributeError):
+        return open(os.devnull, "w")
+
+sys.stdout = _safe_stream(sys.stdout)
+sys.stderr = _safe_stream(sys.stderr)
+# -------------------------------------------------------------------
+
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -217,6 +232,10 @@ if __name__ == '__main__':
     port = find_free_port(preferred=5000)
     # Electron parses this line to discover the backend port
     print(f"BACKEND_PORT:{port}", flush=True)
+    # Also write to stderr as a fallback so Electron can find the port
+    # even if stdout is piped/broken
+    sys.stderr.write(f"BACKEND_PORT:{port}\n")
+    sys.stderr.flush()
 
     # Run the Flask app
     socketio.run(app, host='127.0.0.1', port=port, debug=True, use_reloader=False)

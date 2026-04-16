@@ -85,6 +85,7 @@ def validate_for_slippi(file_path, auto_fix=False):
         proper_filename = parser.get_character_filename()
 
         if not proper_filename:
+            logger.warning(f"Slippi validation skipped for {file_path}: could not determine character filename")
             return {
                 'is_valid': False,
                 'needs_fix': False,
@@ -152,7 +153,8 @@ def validate_for_slippi(file_path, auto_fix=False):
                 os.remove(temp_check_file)
 
     except Exception as e:
-        logger.error(f"Slippi validation failed for {file_path}: {e}")
+        import traceback
+        logger.error(f"Slippi validation failed for {file_path}: {e}\n{traceback.format_exc()}")
         return {
             'is_valid': False,
             'needs_fix': False,

@@ -319,7 +319,7 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
             try:
                 slippi_validation = validate_for_slippi(tmp_dat_path, auto_fix=auto_fix)
-                logger.info(f"Slippi validation: slippi_safe={slippi_validation['slippi_safe']}, auto_fix={auto_fix}")
+                logger.info(f"Slippi validation: slippi_safe={slippi_validation['slippi_safe']}, auto_fix={auto_fix}, output={slippi_validation.get('output', '')[:200]}")
 
                 # If auto_fix was applied, read the fixed DAT
                 if auto_fix and slippi_validation.get('fix_applied'):
