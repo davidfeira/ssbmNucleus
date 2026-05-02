@@ -6,6 +6,19 @@ const fs = require('fs');
 let pythonProcess = null;
 let mainWindow = null;
 let backendPort = null;
+let backendStartupError = null;
+const backendOutputBuffer = [];
+const BACKEND_OUTPUT_BUFFER_LINES = 80;
+
+function recordBackendOutput(stream, text) {
+  text.split(/\r?\n/).forEach((line) => {
+    if (!line) return;
+    backendOutputBuffer.push(`[${stream}] ${line}`);
+    if (backendOutputBuffer.length > BACKEND_OUTPUT_BUFFER_LINES) {
+      backendOutputBuffer.shift();
+    }
+  });
+}
 
 // Determine if we're in development or production
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -86,6 +99,7 @@ function startFlaskServer() {
     pythonProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(`[Flask] ${output.trim()}`);
+      recordBackendOutput('stdout', output);
 
       // Parse the port announcement from Flask
       const match = output.match(/BACKEND_PORT:(\d+)/);
@@ -101,6 +115,7 @@ function startFlaskServer() {
     pythonProcess.stderr.on('data', (data) => {
       const errOutput = data.toString();
       console.error(`[Flask Error] ${errOutput.trim()}`);
+      recordBackendOutput('stderr', errOutput);
 
       // Also check stderr for the port announcement (fallback)
       const errMatch = errOutput.match(/BACKEND_PORT:(\d+)/);
@@ -125,6 +140,7 @@ function startFlaskServer() {
 
     pythonProcess.on('error', (err) => {
       console.error('[Flask] Failed to start:', err);
+      recordBackendOutput('error', err.message);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
@@ -134,7 +150,27 @@ function startFlaskServer() {
   });
 }
 
-function createWindow() {
+async function getViteDevUrl(maxWaitMs = 30000) {
+  const portFile = path.join(__dirname, '..', 'viewer', '.vite-port');
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    if (fs.existsSync(portFile)) {
+      try {
+        const port = parseInt(fs.readFileSync(portFile, 'utf8').trim(), 10);
+        if (Number.isInteger(port) && port > 0) {
+          return `http://localhost:${port}`;
+        }
+      } catch (err) {
+        // Race with vite writing the file; try again.
+      }
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  console.warn(`[Electron] Vite port file not found at ${portFile} after ${maxWaitMs}ms; falling back to localhost:3000`);
+  return 'http://localhost:3000';
+}
+
+async function createWindow() {
   // Remove the default menu bar
   Menu.setApplicationMenu(null);
 
@@ -156,8 +192,10 @@ function createWindow() {
 
   // Load the app
   if (isDev) {
-    // In development, load from Vite dev server
-    mainWindow.loadURL('http://localhost:3000');
+    // Discover Vite's actual port (it writes viewer/.vite-port on startup).
+    const viteUrl = await getViteDevUrl();
+    console.log(`[Electron] Loading Vite dev server at ${viteUrl}`);
+    mainWindow.loadURL(viteUrl);
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load built files
@@ -195,6 +233,16 @@ function createWindow() {
 }
 
 // IPC Handlers for file dialogs
+ipcMain.handle('backend-diagnostics', async () => {
+  return {
+    startupError: backendStartupError,
+    output: backendOutputBuffer.slice(),
+    pid: pythonProcess ? pythonProcess.pid : null,
+    alive: pythonProcess !== null && !pythonProcess.killed,
+    port: backendPort,
+  };
+});
+
 ipcMain.handle('open-project-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -500,15 +548,16 @@ app.whenReady().then(async () => {
     console.log(`[Electron] Backend ready on port ${backendPort}`);
   } catch (err) {
     console.error('[Electron] Failed to start Flask backend:', err.message);
+    backendStartupError = err.message;
     // Fall back to default port so the app can still attempt to load
     backendPort = 5000;
   }
 
-  createWindow();
+  await createWindow();
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      await createWindow();
     }
   });
 

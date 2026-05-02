@@ -26,6 +26,9 @@ dist-backend/
 viewer/dist/
 *.exe
 
+# Vite dev port handoff (written by vite, read by electron)
+viewer/.vite-port
+
 # Dependencies
 node_modules/
 venv/

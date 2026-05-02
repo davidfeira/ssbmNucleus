@@ -18,11 +18,39 @@ set DEBUG=electron-builder
 set "PACKAGE_STAGE=%PROJECT_ROOT%\build-package-staging"
 set "PACKAGE_OUTPUT=%PROJECT_ROOT%\dist-electron"
 
-REM Check if PyInstaller is installed
-python -c "import PyInstaller" 2>nul
+REM Use the project venv explicitly. The system 'python' on PATH may be a
+REM different interpreter without our deps installed (Flask, etc.), which
+REM produces an exe that crashes at startup with ModuleNotFoundError.
+set "VENV_PYTHON=%PROJECT_ROOT%\venv\Scripts\python.exe"
+if not exist "%VENV_PYTHON%" (
+    echo ERROR: venv not found at %VENV_PYTHON%
+    echo Create it with: python -m venv venv ^&^& venv\Scripts\pip install -r requirements.txt
+    pause
+    exit /b 1
+)
+
+REM Verify the venv has the runtime deps PyInstaller needs to bundle.
+"%VENV_PYTHON%" -c "import flask, flask_cors, flask_socketio, PIL, numpy, yaml" 2>nul
 if %errorlevel% neq 0 (
-    echo PyInstaller not found. Installing...
-    pip install pyinstaller
+    echo ERROR: venv is missing required runtime dependencies.
+    echo Run: "%VENV_PYTHON%" -m pip install -r requirements.txt
+    pause
+    exit /b 1
+)
+
+REM Check if PyInstaller is installed in the venv (not globally).
+"%VENV_PYTHON%" -c "import PyInstaller" 2>nul
+if %errorlevel% neq 0 (
+    echo PyInstaller not found in venv. Installing...
+    "%VENV_PYTHON%" -m pip install pyinstaller
+    REM Verify by re-importing rather than trusting pip's exit code (pip can
+    REM exit non-zero on harmless notices like "a new release of pip is available").
+    "%VENV_PYTHON%" -c "import PyInstaller" 2>nul
+    if %errorlevel% neq 0 (
+        echo ERROR: PyInstaller install failed - cannot import after pip install.
+        pause
+        exit /b 1
+    )
 )
 
 REM Force delete old build artifacts to prevent caching issues
@@ -40,7 +68,7 @@ if exist "%~dp0__pycache__" (
 echo.
 echo [1/5] Building Python Backend...
 echo ----------------------------------------
-python -m PyInstaller "%~dp0mex_backend.spec" --clean --noconfirm --distpath "%PROJECT_ROOT%\dist"
+"%VENV_PYTHON%" -m PyInstaller "%~dp0mex_backend.spec" --clean --noconfirm --distpath "%PROJECT_ROOT%\dist"
 if %errorlevel% neq 0 (
     echo ERROR: Python backend build failed
     pause
@@ -118,11 +146,13 @@ if not defined ELECTRON_VERSION (
     exit /b 1
 )
 
-REM Clear electron-builder cache to avoid symlink issues
-if exist "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\" (
-    echo Clearing electron-builder cache...
-    rmdir /s /q "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign"
-)
+REM Note: previously wiped %LOCALAPPDATA%\electron-builder\Cache\winCodeSign here
+REM "to avoid symlink issues" — that actually CAUSED the problem by forcing
+REM re-extraction every build. winCodeSign contains macOS symlinks that need
+REM SeCreateSymbolicLinkPrivilege to extract. Real fix: enable Windows
+REM Developer Mode (Settings -> Privacy & security -> For developers).
+REM The cache is keyed by winCodeSign version, which only changes when
+REM electron-builder is upgraded, so it's safe to reuse.
 
 echo Preparing clean packaging stage...
 if exist "%PACKAGE_STAGE%" (
@@ -212,6 +242,30 @@ if %errorlevel% neq 0 (
 if exist "%PACKAGE_OUTPUT%" (
     rmdir /s /q "%PACKAGE_OUTPUT%"
 )
+
+echo.
+echo Verifying critical bundle artifacts...
+set "MISSING_ARTIFACT="
+if not exist "%PACKAGE_STAGE%\dist\mex_backend.exe" (
+    echo ERROR: mex_backend.exe missing from %PACKAGE_STAGE%\dist
+    set "MISSING_ARTIFACT=1"
+)
+if not exist "%PACKAGE_STAGE%\dist-backend\mex\mexcli.exe" (
+    echo ERROR: mexcli.exe missing from %PACKAGE_STAGE%\dist-backend\mex
+    set "MISSING_ARTIFACT=1"
+)
+if not exist "%PACKAGE_STAGE%\dist-backend\hsdraw\HSDRawViewer.exe" (
+    echo ERROR: HSDRawViewer.exe missing from %PACKAGE_STAGE%\dist-backend\hsdraw
+    set "MISSING_ARTIFACT=1"
+)
+if defined MISSING_ARTIFACT (
+    echo.
+    echo Refusing to package an installer with missing critical artifacts.
+    pause
+    exit /b 1
+)
+echo Bundle artifacts verified.
+echo.
 
 call "%PROJECT_ROOT%\node_modules\.bin\electron-builder.cmd" --win --projectDir "%PACKAGE_STAGE%" "--config.directories.output=%PACKAGE_OUTPUT%" "--config.electronVersion=%ELECTRON_VERSION%"
 if %errorlevel% neq 0 (

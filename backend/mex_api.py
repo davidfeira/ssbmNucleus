@@ -184,14 +184,11 @@ if __name__ == '__main__':
     print(f"Default Project: {MEX_PROJECT_PATH}")
     print(f"Storage: {STORAGE_PATH}")
 
-    # Verify MexCLI exists
-    if not MEXCLI_PATH.exists():
-        print(f"ERROR: MexCLI not found at {MEXCLI_PATH}")
-        print("Please build it first: cd utility/MexManager/MexCLI && dotnet build -c Release")
-        sys.exit(1)
-
-    # Verify optional exe dependencies and warn if missing
+    # Verify dependencies and warn if missing — never exit, so Vault/Settings
+    # tabs still work and the user sees a real connection (not a dead backend).
     _missing_deps = []
+    if not MEXCLI_PATH.exists():
+        _missing_deps.append(f"MexCLI not found at {MEXCLI_PATH} (Install tab will not work)")
     if not HSDRAW_EXE.exists():
         _missing_deps.append(f"HSDRawViewer not found at {HSDRAW_EXE}")
     # Check xdelta3

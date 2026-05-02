@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('electron', {
   backendPort,
 
   /**
+   * Get diagnostics about the bundled backend (startup error, recent stdout/stderr).
+   * Used by error UIs to surface the real reason the backend isn't responding.
+   * @returns {Promise<{startupError: string|null, output: string[], pid: number|null, alive: boolean, port: number|null}>}
+   */
+  getBackendDiagnostics: () => ipcRenderer.invoke('backend-diagnostics'),
+
+  /**
    * Open a native file picker dialog to select a .mexproj file
    * @returns {Promise<string|null>} Full file path or null if canceled
    */

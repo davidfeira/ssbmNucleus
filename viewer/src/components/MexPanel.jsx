@@ -16,6 +16,7 @@ const MexPanel = () => {
   const [storageCostumes, setStorageCostumes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [diagnostics, setDiagnostics] = useState(null)
   const [projectLoaded, setProjectLoaded] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showIsoBuilder, setShowIsoBuilder] = useState(false)
@@ -48,6 +49,14 @@ const MexPanel = () => {
     } catch (err) {
       setError('Failed to connect to MEX API')
       console.error(err)
+      if (window.electron?.getBackendDiagnostics) {
+        try {
+          const diag = await window.electron.getBackendDiagnostics()
+          setDiagnostics(diag)
+        } catch (diagErr) {
+          console.error('Failed to fetch backend diagnostics:', diagErr)
+        }
+      }
       setLoading(false)
     }
   }
@@ -190,12 +199,29 @@ const MexPanel = () => {
   }
 
   if (error) {
+    const recentOutput = diagnostics?.output?.slice(-20).join('\n')
     return (
       <div className="mex-panel error">
         <h2>MEX Connection Error</h2>
         <p>{error}</p>
-        <p>Make sure the backend is running:</p>
-        <code>python backend/mex_api.py</code>
+        {diagnostics?.startupError && (
+          <>
+            <p>The bundled backend failed to start:</p>
+            <code>{diagnostics.startupError}</code>
+          </>
+        )}
+        {recentOutput && (
+          <details className="mex-error-details">
+            <summary>Show backend output (paste this when reporting the issue)</summary>
+            <pre className="mex-error-log">{recentOutput}</pre>
+          </details>
+        )}
+        {!window.electron && (
+          <>
+            <p>Make sure the backend is running:</p>
+            <code>python backend/mex_api.py</code>
+          </>
+        )}
       </div>
     )
   }
