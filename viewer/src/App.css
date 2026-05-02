@@ -97,6 +97,17 @@
   color: var(--color-cyan);
 }
 
+.app-version {
+  align-self: flex-end;
+  margin-bottom: 6px;
+  font-family: 'Exo 2', 'Segoe UI', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.45));
+  user-select: text;
+}
+
 /* ─────────────────────────────────────────
    TAB NAVIGATION
    ───────────────────────────────────────── */

@@ -9,6 +9,7 @@ import HexagonLoader from './components/shared/HexagonLoader'
 import { useDownloadQueue, DOWNLOAD_PHASES } from './hooks/useDownloadQueue'
 import { playSound, playHoverSound } from './utils/sounds'
 import { API_URL } from './config'
+import { version as APP_VERSION } from '../package.json'
 import './App.css'
 
 function App() {
@@ -228,6 +229,7 @@ function App() {
           <div className="header-brand">
             <img src="./nucleuslogo.png" alt="SSBM Vault" className="header-logo" />
             <h1>SSBM <span className="vault-text">Vault</span></h1>
+            <span className="app-version" title={`SSBM Vault v${APP_VERSION}`}>v{APP_VERSION}</span>
           </div>
           <nav className="app-tabs">
             <button
