@@ -63,6 +63,49 @@ def get_dolphin_gfx_ini_path(slippi_path: str) -> Path:
     return Path(slippi_path) / "User" / "Config" / "GFX.ini"
 
 
+def get_dolphin_ini_path(slippi_path: str) -> Path:
+    """Get path to Dolphin's main Dolphin.ini configuration file."""
+    return Path(slippi_path) / "User" / "Config" / "Dolphin.ini"
+
+
+def disable_dolphin_panic_handlers(slippi_path: str) -> bool:
+    """Force UsePanicHandlers=False in Dolphin.ini.
+
+    Why: panic dialogs from Dolphin's emulation core (notably the recurring
+    Pokemon Stadium issue) interrupt gameplay and crash sessions. Disabling
+    the handler suppresses the dialog and lets emulation continue.
+    """
+    dolphin_ini = get_dolphin_ini_path(slippi_path)
+
+    if not dolphin_ini.parent.exists():
+        logger.warning(f"Config dir missing, skipping panic-handler patch: {dolphin_ini.parent}")
+        return False
+
+    config = configparser.ConfigParser()
+    config.optionxform = str
+
+    try:
+        if dolphin_ini.exists():
+            config.read(dolphin_ini, encoding='utf-8')
+
+        if 'Interface' not in config:
+            config['Interface'] = {}
+
+        if config['Interface'].get('UsePanicHandlers') == 'False':
+            return True
+
+        config['Interface']['UsePanicHandlers'] = 'False'
+
+        with open(dolphin_ini, 'w', encoding='utf-8') as f:
+            config.write(f)
+
+        logger.info(f"Disabled UsePanicHandlers in {dolphin_ini}")
+        return True
+    except Exception as e:
+        logger.error(f"Error disabling UsePanicHandlers: {e}")
+        return False
+
+
 def get_dolphin_texture_settings(slippi_path: str) -> dict:
     """Read current texture settings from Dolphin's GFX.ini."""
     gfx_ini = get_dolphin_gfx_ini_path(slippi_path)
@@ -178,6 +221,8 @@ def verify_slippi_path():
         # Check for Dolphin.ini
         dolphin_ini = config_dir / 'Dolphin.ini'
         has_dolphin_ini = dolphin_ini.exists()
+
+        disable_dolphin_panic_handlers(slippi_path)
 
         return jsonify({
             'success': True,
