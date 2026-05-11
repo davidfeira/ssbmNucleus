@@ -21,6 +21,7 @@ from .xdelta import xdelta_bp
 from .bundles import bundles_bp
 from .viewer import viewer_bp
 from .settings import settings_bp
+from .iso_scan import iso_scan_bp
 
 __all__ = [
     'assets_bp',
@@ -40,4 +41,5 @@ __all__ = [
     'bundles_bp',
     'viewer_bp',
     'settings_bp',
+    'iso_scan_bp',
 ]

@@ -80,6 +80,11 @@
         "filter": ["xdelta3*"]
       },
       {
+        "from": "tools/wit-v3.05a-r8638-cygwin64",
+        "to": "tools/wit-v3.05a-r8638-cygwin64",
+        "filter": ["**/*"]
+      },
+      {
         "from": "scripts/tools/clear_storage.py",
         "to": "scripts/tools/clear_storage.py"
       }

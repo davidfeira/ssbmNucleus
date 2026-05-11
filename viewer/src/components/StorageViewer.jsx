@@ -13,6 +13,7 @@ import FolderCard from './storage/FolderCard'
 import SkinCard from './storage/SkinCard'
 import ContextMenu from './storage/ContextMenu'
 import XdeltaImportModal from './storage/XdeltaImportModal'
+import IsoScanModal from './storage/IsoScanModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
 import XdeltaCreateModal from './storage/XdeltaCreateModal'
 import XdeltaBuildModal from './storage/XdeltaBuildModal'
@@ -68,6 +69,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
   const [showSkinCreator, setShowSkinCreator] = useState(false) // Skin creator modal
   const [skinCreatorInitialCostume, setSkinCreatorInitialCostume] = useState(null) // For "edit from vault" flow
+
+  const [showIsoScanModal, setShowIsoScanModal] = useState(false)
 
   const [contextMenu, setContextMenu] = useState(null) // { x, y, type: 'skin'/'variant', item, index }
 
@@ -1149,7 +1152,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         importMessage={importMessage}
         onFileImport={handleFileImport}
         onShowXdeltaImportModal={() => setShowXdeltaImportModal(true)}
+        onShowIsoScanModal={() => setShowIsoScanModal(true)}
       />
+
+      {showIsoScanModal && (
+        <IsoScanModal
+          onClose={() => setShowIsoScanModal(false)}
+          onRefresh={onRefresh}
+        />
+      )}
 
       {mode === 'characters' ? (
         <CharactersGrid

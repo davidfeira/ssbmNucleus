@@ -31,6 +31,12 @@ contextBridge.exposeInMainWorld('electron', {
   openIsoDialog: () => ipcRenderer.invoke('open-iso-dialog'),
 
   /**
+   * Open a multi-select ISO picker for batch scanning.
+   * @returns {Promise<string[]>} Array of absolute file paths (empty if canceled)
+   */
+  openIsoMultiDialog: () => ipcRenderer.invoke('open-iso-multi-dialog'),
+
+  /**
    * Open a native directory picker dialog
    * @returns {Promise<string|null>} Full directory path or null if canceled
    */

@@ -13,7 +13,8 @@ export default function ImportToolbar({
   importing,
   importMessage,
   onFileImport,
-  onShowXdeltaImportModal
+  onShowXdeltaImportModal,
+  onShowIsoScanModal
 }) {
   return (
     <div className="import-file-container">
@@ -41,6 +42,18 @@ export default function ImportToolbar({
           onClick={() => { playSound('start'); onShowXdeltaImportModal(); }}
         >
           Import Patch
+        </button>
+      )}
+      {mode === 'characters' && onShowIsoScanModal && (
+        <button
+          className="intake-import-btn"
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('start'); onShowIsoScanModal(); }}
+          disabled={importing}
+          style={{ marginLeft: '0.5rem' }}
+          title="Scan one or more ISOs for new skins not already in your vault"
+        >
+          Scan ISO
         </button>
       )}
       {importMessage && (

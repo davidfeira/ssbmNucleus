@@ -276,6 +276,23 @@ ipcMain.handle('open-iso-dialog', async () => {
   return result.filePaths[0];
 });
 
+ipcMain.handle('open-iso-multi-dialog', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'GameCube ISO', extensions: ['iso', 'gcm'] },
+      { name: 'All Files', extensions: ['*'] }
+    ],
+    title: 'Select ISOs to scan for new skins'
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return [];
+  }
+
+  return result.filePaths;
+});
+
 ipcMain.handle('select-directory-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
