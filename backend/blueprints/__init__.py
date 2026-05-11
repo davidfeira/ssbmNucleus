@@ -22,6 +22,7 @@ from .bundles import bundles_bp
 from .viewer import viewer_bp
 from .settings import settings_bp
 from .iso_scan import iso_scan_bp
+from .menus import menus_bp
 
 __all__ = [
     'assets_bp',
@@ -42,4 +43,5 @@ __all__ = [
     'viewer_bp',
     'settings_bp',
     'iso_scan_bp',
+    'menus_bp',
 ]

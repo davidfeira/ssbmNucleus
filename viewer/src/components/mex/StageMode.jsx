@@ -508,6 +508,13 @@ export default function StageMode({
                 >
                   Stages
                 </button>
+                <button
+                  className={`mode-toggle-btn ${mode === 'menus' ? 'active' : ''}`}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { if (mode !== 'menus') { playSound('boop'); onModeChange('menus'); } }}
+                >
+                  Menus
+                </button>
               </div>
               <span className="fighters-count">{DAS_STAGES.length}</span>
             </div>

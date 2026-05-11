@@ -1511,6 +1511,13 @@ export default function CharacterMode({
             >
               Stages
             </button>
+            <button
+              className={`mode-toggle-btn ${mode === 'menus' ? 'active' : ''}`}
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (mode !== 'menus') { playSound('boop'); onModeChange('menus'); } }}
+            >
+              Menus
+            </button>
           </div>
           <span className="fighters-count">{playableFighters.length}</span>
         </div>

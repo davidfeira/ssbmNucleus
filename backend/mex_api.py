@@ -62,6 +62,7 @@ from blueprints import (
     viewer_bp,
     settings_bp,
     iso_scan_bp,
+    menus_bp,
 )
 
 # Import extras API (existing blueprint)
@@ -125,6 +126,7 @@ app.register_blueprint(bundles_bp)
 app.register_blueprint(viewer_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(iso_scan_bp)
+app.register_blueprint(menus_bp)
 
 
 # SocketIO connection handlers

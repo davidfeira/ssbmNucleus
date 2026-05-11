@@ -35,7 +35,7 @@ export default function ImportToolbar({
             style={{ display: 'none' }}
           />
         </label>
-      ) : (
+      ) : mode === 'patches' ? (
         <button
           className="intake-import-btn"
           onMouseEnter={playHoverSound}
@@ -43,7 +43,7 @@ export default function ImportToolbar({
         >
           Import Patch
         </button>
-      )}
+      ) : null}
       {mode === 'characters' && onShowIsoScanModal && (
         <button
           className="intake-import-btn"

@@ -99,6 +99,22 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for CSS icons dump mode
+            if (args.Length >= 1 && args[0] == "--css-icons")
+            {
+                Console.WriteLine("CSS icons dump mode detected");
+                RunCssIconsDump(args);
+                return;
+            }
+
+            // Check for MEX CSS info mode (reads MxDt.dat icon -> fighter mapping)
+            if (args.Length >= 1 && args[0] == "--mex-css-info")
+            {
+                Console.WriteLine("MEX CSS info mode detected");
+                RunMexCssInfo(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -1259,6 +1275,487 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: Texture operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Dump every TOBJ found on the given JOBJ subtree, recursively, into outDir.
+        /// Returns a flat list of manifest entries (one per dumped texture).
+        /// </summary>
+        static List<Dictionary<string, object>> DumpJobjTextures(HSDRaw.Common.HSD_JOBJ root, string outDir, string prefix)
+        {
+            var entries = new List<Dictionary<string, object>>();
+            if (root == null) return entries;
+
+            int jointIndex = 0;
+            // Walk every joint in the tree (depth-first via Children flattened by enumerator below)
+            void Walk(HSDRaw.Common.HSD_JOBJ jobj, List<int> path)
+            {
+                int dobjIdx = 0;
+                var dobj = jobj.Dobj;
+                while (dobj != null)
+                {
+                    var mobj = dobj.Mobj;
+                    var tobj = mobj?.Textures;
+                    int tobjIdx = 0;
+                    while (tobj != null)
+                    {
+                        string filename = $"{prefix}_j{string.Join("-", path)}_d{dobjIdx}_t{tobjIdx}.png";
+                        try
+                        {
+                            using var img = tobj.ToImage();
+                            using var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, filename), System.IO.FileMode.Create);
+                            img.Save(fs, new PngEncoder());
+
+                            entries.Add(new Dictionary<string, object>
+                            {
+                                ["filename"] = filename,
+                                ["joint_path"] = string.Join("-", path),
+                                ["dobj_index"] = dobjIdx,
+                                ["tobj_index"] = tobjIdx,
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"  Skipped texture {filename}: {ex.Message}");
+                        }
+                        tobj = tobj.Next;
+                        tobjIdx++;
+                    }
+                    dobj = dobj.Next;
+                    dobjIdx++;
+                }
+
+                int childIdx = 0;
+                var child = jobj.Child;
+                while (child != null)
+                {
+                    var nextPath = new List<int>(path) { childIdx };
+                    Walk(child, nextPath);
+                    child = child.Next;
+                    childIdx++;
+                }
+            }
+
+            Walk(root, new List<int> { jointIndex });
+            return entries;
+        }
+
+        /// <summary>
+        /// Dump CSS icon textures from a CSS data file (MnSlChr.dat / .usd / mexSelectChr.dat).
+        /// Usage:
+        ///   HSDRawViewer.exe --css-icons export <dat_file> <output_dir>
+        ///
+        /// Output:
+        ///   - PNG files for each icon TOBJ
+        ///   - manifest.json describing format detected and per-file metadata
+        /// </summary>
+        static void RunCssIconsDump(string[] args)
+        {
+            try
+            {
+                if (args.Length < 4 || args[1] != "export")
+                {
+                    Console.WriteLine("Usage: HSDRawViewer.exe --css-icons export <dat_file> <output_dir>");
+                    return;
+                }
+
+                string datFile = args[2];
+                string outDir = args[3];
+                System.IO.Directory.CreateDirectory(outDir);
+
+                Console.WriteLine($"Loading: {datFile}");
+                var rawFile = new HSDRawFile(datFile);
+
+                Console.WriteLine($"Roots in file: {rawFile.Roots.Count}");
+                foreach (var r in rawFile.Roots)
+                    Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
+
+                string format = null;
+                var manifestIcons = new List<Dictionary<string, object>>();
+                var manifestOther = new List<Dictionary<string, object>>();
+
+                // PHASE 1: try MEX format (mexSelectChr root)
+                var mexRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.MEX.Menus.MEX_mexSelectChr);
+                if (mexRoot != null)
+                {
+                    format = "mex";
+                    Console.WriteLine("Detected MEX format (mexSelectChr root)");
+
+                    var mex = (HSDRaw.MEX.Menus.MEX_mexSelectChr)mexRoot.Data;
+                    var iconModel = mex.IconModel;
+                    if (iconModel != null)
+                    {
+                        // Each child JOBJ of IconModel is one CSS icon slot.
+                        // Per GenerateMexSelectChr.cs: first DOBJ = background, second DOBJ = foreground icon.
+                        var children = iconModel.Children;
+                        Console.WriteLine($"Found {children.Length} icon slots in IconModel");
+
+                        for (int i = 0; i < children.Length; i++)
+                        {
+                            var child = children[i];
+                            int dobjIdx = 0;
+                            var dobj = child.Dobj;
+                            string fgFile = null;
+                            string bgFile = null;
+                            while (dobj != null)
+                            {
+                                var tobj = dobj.Mobj?.Textures;
+                                if (tobj != null)
+                                {
+                                    string role = dobjIdx == 0 ? "bg" : (dobjIdx == 1 ? "fg" : $"d{dobjIdx}");
+                                    string filename = $"icon_{i:D2}_{role}.png";
+                                    try
+                                    {
+                                        using var img = tobj.ToImage();
+                                        using var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, filename), System.IO.FileMode.Create);
+                                        img.Save(fs, new PngEncoder());
+                                        if (role == "fg") fgFile = filename;
+                                        else if (role == "bg") bgFile = filename;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"  Slot {i} {role}: skipped ({ex.Message})");
+                                    }
+                                }
+                                dobj = dobj.Next;
+                                dobjIdx++;
+                            }
+
+                            manifestIcons.Add(new Dictionary<string, object>
+                            {
+                                ["index"] = i,
+                                ["foreground"] = fgFile,
+                                ["background"] = bgFile,
+                            });
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("WARNING: mexSelectChr has no IconModel");
+                    }
+                }
+
+                // PHASE 2: vanilla format (MnSelectChrDataTable)
+                // Always run, even if MEX was detected — vanilla CSS still contains the
+                // base icon strip in MenuMaterialAnimation that some tools rely on.
+                var vanillaRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_SelectChrDataTable);
+                if (vanillaRoot != null)
+                {
+                    if (format == null) format = "vanilla";
+                    Console.WriteLine($"Detected vanilla CSS data ({vanillaRoot.Name})");
+                    var tb = (HSDRaw.Melee.Mn.SBM_SelectChrDataTable)vanillaRoot.Data;
+
+                    // Dump static JOBJ textures from each model tree.
+                    // The small icon-grid tiles live on the MenuModel JOBJ tree as
+                    // static DOBJ textures, separate from the CSP tex-anims.
+                    void DumpJobjStaticTextures(HSDRaw.Common.HSD_JOBJ root, string prefix, List<Dictionary<string, object>> bucket)
+                    {
+                        if (root == null) return;
+                        int jointIdx = 0;
+                        void Walk(HSDRaw.Common.HSD_JOBJ jobj)
+                        {
+                            int ji = jointIdx++;
+                            var dobj = jobj.Dobj;
+                            int dobjIdx = 0;
+                            while (dobj != null)
+                            {
+                                var tobj = dobj.Mobj?.Textures;
+                                int tobjIdx = 0;
+                                while (tobj != null)
+                                {
+                                    string filename = $"{prefix}_static_j{ji:D3}_d{dobjIdx}_t{tobjIdx}.png";
+                                    try
+                                    {
+                                        using var img = tobj.ToImage();
+                                        int w = img.Width, h = img.Height;
+                                        using var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, filename), System.IO.FileMode.Create);
+                                        img.Save(fs, new PngEncoder());
+                                        bucket.Add(new Dictionary<string, object>
+                                        {
+                                            ["filename"] = filename,
+                                            ["joint_index"] = ji,
+                                            ["dobj_index"] = dobjIdx,
+                                            ["tobj_index"] = tobjIdx,
+                                            ["section"] = prefix + "_static",
+                                            ["width"] = w,
+                                            ["height"] = h,
+                                        });
+                                    }
+                                    catch { }
+                                    tobj = tobj.Next;
+                                    tobjIdx++;
+                                }
+                                dobj = dobj.Next;
+                                dobjIdx++;
+                            }
+                            var child = jobj.Child;
+                            while (child != null)
+                            {
+                                Walk(child);
+                                child = child.Next;
+                            }
+                        }
+                        Walk(root);
+                    }
+
+                    // For vanilla CSS icon grids, the actual small icons (64x56) are
+                    // static DOBJ textures on the MenuModel's JOBJ tree. Each icon
+                    // joint has 2 DOBJs: [0]=background, [1]=foreground icon.
+                    // We extract DOBJ 1 for joints that have a 64x56 texture.
+                    if (format == "vanilla" && tb.MenuModel != null)
+                    {
+                        int ji = 0;
+                        void WalkIcons(HSDRaw.Common.HSD_JOBJ jobj)
+                        {
+                            int myJoint = ji++;
+                            var dobj = jobj.Dobj;
+                            // Skip to DOBJ 1 (foreground)
+                            if (dobj != null && dobj.Next != null)
+                            {
+                                var fg = dobj.Next;
+                                var tobj = fg.Mobj?.Textures;
+                                if (tobj != null)
+                                {
+                                    try
+                                    {
+                                        using var img = tobj.ToImage();
+                                        if (img.Width == 64 && img.Height == 56)
+                                        {
+                                            string filename = $"icon_j{myJoint:D3}.png";
+                                            using var fs = new System.IO.FileStream(
+                                                System.IO.Path.Combine(outDir, filename),
+                                                System.IO.FileMode.Create);
+                                            img.Save(fs, new PngEncoder());
+                                            manifestIcons.Add(new Dictionary<string, object>
+                                            {
+                                                ["filename"] = filename,
+                                                ["joint_index"] = myJoint,
+                                                ["width"] = 64,
+                                                ["height"] = 56,
+                                            });
+                                        }
+                                    }
+                                    catch { }
+                                }
+                            }
+                            var child = jobj.Child;
+                            while (child != null)
+                            {
+                                WalkIcons(child);
+                                child = child.Next;
+                            }
+                        }
+                        WalkIcons(tb.MenuModel);
+                        Console.WriteLine($"Extracted {manifestIcons.Count} vanilla icon grid tiles (64x56)");
+                    }
+
+                    void DumpAnimJointTOBJs(HSDRaw.Common.Animation.HSD_MatAnimJoint root, string prefix, List<Dictionary<string, object>> bucket)
+                    {
+                        if (root == null) return;
+                        var tree = root.TreeList;
+                        for (int j = 0; j < tree.Count; j++)
+                        {
+                            var node = tree[j];
+                            var texAnim = node.MaterialAnimation?.TextureAnimation;
+                            if (texAnim == null) continue;
+                            HSDRaw.Common.HSD_TOBJ[] tobjs;
+                            try { tobjs = texAnim.ToTOBJs(); }
+                            catch { continue; }
+
+                            // Pull keyframes (frame -> tobj_index) for this animation when present.
+                            // For vanilla CSS the texture animation cycles icons by frame number, where
+                            // frame ~= fighter ExternalCharID + stride * costume_index.
+                            List<Dictionary<string, object>> keyframes = null;
+                            try
+                            {
+                                var fobj = texAnim.AnimationObject?.FObjDesc;
+                                if (fobj != null)
+                                {
+                                    var keys = fobj.GetDecodedKeys();
+                                    if (keys != null && keys.Count > 0)
+                                    {
+                                        keyframes = new List<Dictionary<string, object>>();
+                                        foreach (var key in keys)
+                                        {
+                                            keyframes.Add(new Dictionary<string, object>
+                                            {
+                                                ["frame"] = key.Frame,
+                                                ["tobj_index"] = (int)key.Value,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                            catch { /* keyframes are best-effort */ }
+
+                            for (int k = 0; k < tobjs.Length; k++)
+                            {
+                                string filename = $"{prefix}_j{j:D2}_{k:D2}.png";
+                                try
+                                {
+                                    using var img = tobjs[k].ToImage();
+                                    using var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, filename), System.IO.FileMode.Create);
+                                    img.Save(fs, new PngEncoder());
+                                    var entry = new Dictionary<string, object>
+                                    {
+                                        ["filename"] = filename,
+                                        ["joint_index"] = j,
+                                        ["tobj_index"] = k,
+                                        ["section"] = prefix,
+                                    };
+                                    if (keyframes != null && k == 0)
+                                    {
+                                        // Attach the joint's keyframe schedule once (on the first tobj entry)
+                                        entry["keyframes"] = keyframes;
+                                    }
+                                    bucket.Add(entry);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"  {filename}: skipped ({ex.Message})");
+                                }
+                            }
+                        }
+                    }
+
+                    // MenuMaterialAnimation joints 51-54 = CSP portraits (NOT icon grid tiles).
+                    // Store in 'other' bucket regardless of format.
+                    DumpAnimJointTOBJs(tb.MenuMaterialAnimation, "menu", manifestOther);
+                    // single-player menu icon (joint 45)
+                    DumpAnimJointTOBJs(tb.SingleMenuMaterialAnimation, "single", manifestOther);
+                    // big portrait (joint 6)
+                    DumpAnimJointTOBJs(tb.PortraitMaterialAnimation, "portrait", manifestOther);
+                }
+
+                if (format == null)
+                {
+                    Console.WriteLine("ERROR: No recognized CSS data found in DAT");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var manifest = new Dictionary<string, object>
+                {
+                    ["format"] = format,
+                    ["source_file"] = System.IO.Path.GetFileName(datFile),
+                    ["icons"] = manifestIcons,
+                    ["other"] = manifestOther,
+                };
+                System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(outDir, "manifest.json"),
+                    JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })
+                );
+
+                Console.WriteLine($"SUCCESS: Dumped {manifestIcons.Count} icons + {manifestOther.Count} other textures ({format} format)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: CSS icons dump failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Read MEX_CSSIcon[] from MxDt.dat and write JSON describing each icon.
+        /// Usage:
+        ///   HSDRawViewer.exe --mex-css-info export <mxdt_file> <output.json>
+        /// </summary>
+        static void RunMexCssInfo(string[] args)
+        {
+            try
+            {
+                if (args.Length < 4 || args[1] != "export")
+                {
+                    Console.WriteLine("Usage: HSDRawViewer.exe --mex-css-info export <mxdt_file> <output.json>");
+                    return;
+                }
+
+                string mxdtFile = args[2];
+                string outFile = args[3];
+
+                Console.WriteLine($"Loading: {mxdtFile}");
+                var rawFile = new HSDRawFile(mxdtFile);
+
+                var mexRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.MEX.MEX_Data);
+                if (mexRoot == null)
+                {
+                    Console.WriteLine("ERROR: No mexData root found in file");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var mexData = (HSDRaw.MEX.MEX_Data)mexRoot.Data;
+                var menuTable = mexData.MenuTable;
+                var cssIconData = menuTable?.CSSIconData;
+                if (cssIconData == null)
+                {
+                    Console.WriteLine("ERROR: No CSSIconData in mexData.MenuTable");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var icons = cssIconData.Icons ?? new HSDRaw.MEX.Menus.MEX_CSSIcon[0];
+                Console.WriteLine($"Found {icons.Length} MEX CSS icons");
+
+                var icon_entries = new List<Dictionary<string, object>>();
+                foreach (var icon in icons)
+                {
+                    icon_entries.Add(new Dictionary<string, object>
+                    {
+                        ["joint_id"] = icon.JointID,
+                        ["external_char_id"] = icon.ExternalCharID,
+                        ["csp_lookup_index"] = icon.CSPLookupIndex,
+                        ["sfx_id"] = icon.SFXID,
+                        ["x1"] = icon.X1,
+                        ["y1"] = icon.Y1,
+                        ["x2"] = icon.X2,
+                        ["y2"] = icon.Y2,
+                    });
+                }
+
+                // Pull the fighter table (display names + char file symbols) when present.
+                var fighter_entries = new List<Dictionary<string, object>>();
+                var fighterData = mexData.FighterData;
+                if (fighterData != null)
+                {
+                    var nameArr = fighterData.NameText?.Array ?? new HSDRaw.Common.HSD_String[0];
+                    var charArr = fighterData.CharFiles?.Array ?? new HSDRaw.MEX.MEX_CharFileStrings[0];
+                    int fighterCount = System.Math.Max(nameArr.Length, charArr.Length);
+                    Console.WriteLine($"Fighter table: {nameArr.Length} names, {charArr.Length} char files");
+                    for (int i = 0; i < fighterCount; i++)
+                    {
+                        string name = i < nameArr.Length ? (nameArr[i]?.Value ?? string.Empty) : string.Empty;
+                        string symbol = i < charArr.Length ? (charArr[i]?.Symbol ?? string.Empty) : string.Empty;
+                        string fileName = i < charArr.Length ? (charArr[i]?.FileName ?? string.Empty) : string.Empty;
+                        fighter_entries.Add(new Dictionary<string, object>
+                        {
+                            ["internal_id"] = i,
+                            ["name"] = name,
+                            ["symbol"] = symbol,
+                            ["file_name"] = fileName,
+                        });
+                    }
+                }
+
+                var output = new Dictionary<string, object>
+                {
+                    ["source_file"] = System.IO.Path.GetFileName(mxdtFile),
+                    ["icon_count"] = icons.Length,
+                    ["icons"] = icon_entries,
+                    ["fighter_count"] = fighter_entries.Count,
+                    ["fighters"] = fighter_entries,
+                };
+
+                System.IO.File.WriteAllText(outFile, JsonSerializer.Serialize(output, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine($"SUCCESS: wrote {outFile}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: MEX CSS info failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

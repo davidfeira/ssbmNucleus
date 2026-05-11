@@ -23,6 +23,9 @@ import ImportToolbar from './storage/ImportToolbar'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
 import PatchesGrid from './storage/PatchesGrid'
+import MenusGrid from './storage/MenusGrid'
+import CssMenuTypesGrid from './storage/CssMenuTypesGrid'
+import IconGridModsView from './storage/IconGridModsView'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
@@ -33,6 +36,7 @@ import { useXdeltaProgress } from '../hooks/useXdeltaProgress'
 import { useCspManager } from '../hooks/useCspManager'
 import { useEditModal } from '../hooks/useEditModal'
 import { buildDisplayList, countSkinsInFolder, getFolderIdAtPosition } from '../utils/storageViewerUtils'
+import { playSound, playHoverSound } from '../utils/sounds'
 import { API_URL, BACKEND_URL } from '../config'
 
 // Skeleton loading components
@@ -55,10 +59,13 @@ const SkeletonSkinCard = () => (
 )
 
 export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange }) {
-  const [mode, setMode] = useState('characters') // 'characters', 'stages', or 'patches'
+  const [mode, setMode] = useState('characters') // 'characters', 'stages', 'patches', or 'menus'
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCharacter, setSelectedCharacter] = useState(null)
   const [selectedStage, setSelectedStage] = useState(null)
+  const [selectedMenuType, setSelectedMenuType] = useState(null) // 'css' or 'sss'
+  const [selectedMenuModType, setSelectedMenuModType] = useState(null) // e.g. 'icon_grid'
+  const [menuDetailOpen, setMenuDetailOpen] = useState(false)
   const [stageVariants, setStageVariants] = useState({})
   const [bundles, setBundles] = useState([])
   const [showBundleEditModal, setShowBundleEditModal] = useState(false)
@@ -1137,9 +1144,18 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           setMode(newMode)
           if (newMode === 'characters') {
             setSelectedStage(null)
+            setSelectedMenuType(null)
+            setSelectedMenuModType(null)
           } else if (newMode === 'stages') {
             setSelectedCharacter(null)
+            setSelectedMenuType(null)
+            setSelectedMenuModType(null)
           } else if (newMode === 'patches') {
+            setSelectedCharacter(null)
+            setSelectedStage(null)
+            setSelectedMenuType(null)
+            setSelectedMenuModType(null)
+          } else if (newMode === 'menus') {
             setSelectedCharacter(null)
             setSelectedStage(null)
           }
@@ -1175,7 +1191,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectStage={setSelectedStage}
         />
-      ) : (
+      ) : mode === 'patches' ? (
         <PatchesGrid
           xdeltaPatches={xdeltaPatches}
           bundles={bundles}
@@ -1185,6 +1201,47 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onEditBundle={handleEditBundle}
           onInstallBundle={handleInstallBundle}
         />
+      ) : selectedMenuType ? (
+        <div className="grid-wrapper">
+          {!menuDetailOpen && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+              <button
+                className="mode-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSound('boop')
+                  if (selectedMenuModType) {
+                    setSelectedMenuModType(null)
+                  } else {
+                    setSelectedMenuType(null)
+                  }
+                }}
+              >
+                ← Back
+              </button>
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                Menus / {selectedMenuType.toUpperCase()}
+                {selectedMenuModType ? ` / ${selectedMenuModType.replace('_', ' ')}` : ''}
+              </span>
+            </div>
+          )}
+
+          {selectedMenuType === 'css' && !selectedMenuModType && (
+            <CssMenuTypesGrid onSelectModType={setSelectedMenuModType} />
+          )}
+
+          {selectedMenuType === 'css' && selectedMenuModType === 'icon_grid' && (
+            <IconGridModsView onDetailChange={setMenuDetailOpen} />
+          )}
+
+          {selectedMenuType === 'sss' && (
+            <div style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>
+              SSS mods — coming soon
+            </div>
+          )}
+        </div>
+      ) : (
+        <MenusGrid onSelectMenuType={setSelectedMenuType} />
       )}
 
       {/* XDelta Import Modal */}

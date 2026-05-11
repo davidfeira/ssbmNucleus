@@ -5,6 +5,7 @@ import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
 import CharacterMode from './mex/CharacterMode'
 import StageMode from './mex/StageMode'
+import MenuMode from './mex/MenuMode'
 import HexagonLoader from './shared/HexagonLoader'
 import { API_URL } from '../config'
 
@@ -298,13 +299,18 @@ const MexPanel = () => {
             refreshing={refreshing}
             API_URL={API_URL}
           />
-        ) : (
+        ) : mode === 'stages' ? (
           <StageMode
             mode={mode}
             onModeChange={setMode}
             onRefresh={handleRefresh}
             refreshing={refreshing}
             API_URL={API_URL}
+          />
+        ) : (
+          <MenuMode
+            mode={mode}
+            onModeChange={setMode}
           />
         )}
 

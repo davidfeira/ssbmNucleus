@@ -24,6 +24,7 @@ from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
 from generate_csp import generate_csp
 from blueprints.xdelta import load_xdelta_metadata, save_xdelta_metadata
+from blueprints.menus import install_icon_grid_mod, looks_like_icon_grid_zip
 from extra_types import get_extra_type, get_extra_types, get_storage_character
 from extras_api import extract_model_from_dat
 
@@ -962,6 +963,24 @@ def import_file():
                 if result:
                     return jsonify(result) if result.get('success') else (jsonify(result), 400)
 
+            # EXPLICIT CSS ICON GRID ROUTING
+            if mod_type == 'css_icon_grid':
+                logger.info('Explicit CSS icon grid import')
+                try:
+                    icon_grid_name = custom_title or Path(file.filename).stem
+                    mods = install_icon_grid_mod(temp_zip_path, name=icon_grid_name)
+                    names = ', '.join(m.get('name', '?') for m in mods)
+                    return jsonify({
+                        'success': True,
+                        'type': 'menu_mod',
+                        'menu_mod_type': 'css_icon_grid',
+                        'mods': mods,
+                        'imported_count': len(mods),
+                        'message': f"Imported {len(mods)} icon grid mod(s): {names}"
+                    })
+                except zipfile.BadZipFile:
+                    return jsonify({'success': False, 'error': 'Invalid or corrupt zip file'}), 400
+
             # PHASE 1: Try character detection first
             logger.info("Phase 1: Attempting character detection...")
             character_infos = detect_character_from_zip(temp_zip_path)
@@ -1236,7 +1255,26 @@ def import_file():
             except zipfile.BadZipFile:
                 pass  # Not a valid zip, fall through to error
 
-            # PHASE 4: Detection failed
+            # PHASE 4: Try CSS icon grid detection
+            logger.info('Phase 4: Attempting CSS icon grid detection...')
+            if looks_like_icon_grid_zip(temp_zip_path):
+                logger.info('[OK] Detected CSS icon grid mod')
+                try:
+                    icon_grid_name = custom_title or Path(file.filename).stem
+                    mods = install_icon_grid_mod(temp_zip_path, name=icon_grid_name)
+                    names = ', '.join(m.get('name', '?') for m in mods)
+                    return jsonify({
+                        'success': True,
+                        'type': 'menu_mod',
+                        'menu_mod_type': 'css_icon_grid',
+                        'mods': mods,
+                        'imported_count': len(mods),
+                        'message': f"Imported {len(mods)} icon grid mod(s): {names}"
+                    })
+                except (zipfile.BadZipFile, RuntimeError):
+                    pass
+
+            # PHASE 5: Detection failed
             logger.warning("Could not detect mod type")
             return jsonify({
                 'success': False,

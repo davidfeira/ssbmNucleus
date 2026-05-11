@@ -1,8 +1,8 @@
 /**
- * ModeToolbar - Mode switcher for Characters/Stages/Patches
+ * ModeToolbar - Mode switcher for Characters/Stages/Patches/Menus
  *
  * Features:
- * - Three mode buttons (Characters, Stages, Patches)
+ * - Four mode buttons (Characters, Stages, Patches, Menus)
  * - Active mode highlighting
  * - Clears selections when switching modes
  */
@@ -38,6 +38,13 @@ export default function ModeToolbar({ mode, onModeChange }) {
         onClick={() => handleModeChange('patches')}
       >
         Patches
+      </button>
+      <button
+        className={`mode-btn ${mode === 'menus' ? 'active' : ''}`}
+        onMouseEnter={playHoverSound}
+        onClick={() => handleModeChange('menus')}
+      >
+        Menus
       </button>
     </div>
   )
