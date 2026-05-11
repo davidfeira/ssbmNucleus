@@ -14,7 +14,7 @@ camera:
   nearClipPlane: 10
 settings:
   renderBones: false
-  renderObjects: Visible
+  renderObjects: true
   renderOrientation: false
   usePerPixelLighting: true
   useCameraLight: true

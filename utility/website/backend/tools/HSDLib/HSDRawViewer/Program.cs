@@ -531,6 +531,12 @@ namespace HSDRawViewer
                     float ambientPower = 0.35f, ambientR = 255, ambientG = 255, ambientB = 255;
                     float diffusePower = 1.2f, diffuseR = 255, diffuseG = 255, diffuseB = 255;
                     bool hasLightingSettings = false;
+                    // When the YML sets `useCameraLight: true`, leave the default camera light
+                    // alone — don't slam in a custom hard-lit setup that washes out the model.
+                    // Mirrors the meleeWebsite repo's CSP fix; YMLs in csp_data/<Char>/ rely on
+                    // this so vanilla skins render with the canonical Melee CSS lighting.
+                    bool useCameraLight = false;
+                    bool useCameraLightFound = false;
                     float animFrame = -1; // -1 means not set
 
                     // Load settings from scene file if using scene mode
@@ -661,6 +667,13 @@ namespace HSDRawViewer
                                     parsingHiddenNodes = false;
                                 }
                                 // Parse lighting settings
+                                else if (trimmedLine.StartsWith("useCameraLight:"))
+                                {
+                                    var val = trimmedLine.Substring(15).Trim().ToLower();
+                                    useCameraLight = val == "true";
+                                    useCameraLightFound = true;
+                                    Console.WriteLine($"Found useCameraLight: {useCameraLight}");
+                                }
                                 else if (trimmedLine.StartsWith("lightX:"))
                                 {
                                     if (float.TryParse(trimmedLine.Substring(7).Trim(), out float val))
@@ -776,8 +789,14 @@ namespace HSDRawViewer
                                 renderJObj.RequestAnimationUpdate(HSDRawViewer.Rendering.Models.FrameFlags.All, animFrame);
                             }
 
-                            // Apply lighting settings if found in YAML
-                            if (hasLightingSettings)
+                            // Apply lighting settings if found in YAML — but only when the YML
+                            // hasn't explicitly opted into camera light. `useCameraLight: true`
+                            // means "leave the default lighting alone".
+                            if (useCameraLightFound && useCameraLight)
+                            {
+                                Console.WriteLine("useCameraLight=true — skipping custom lighting override");
+                            }
+                            else if (hasLightingSettings)
                             {
                                 Console.WriteLine("Applying custom lighting settings...");
                                 ApplyLightingSettings(renderJObj, lightX, lightY, lightZ, ambientPower, ambientR, ambientG, ambientB, diffusePower, diffuseR, diffuseG, diffuseB);

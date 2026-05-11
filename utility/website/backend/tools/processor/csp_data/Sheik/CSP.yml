@@ -3,13 +3,13 @@ cSPMode: false
 showGrid: false
 showBackdrop: false
 camera:
-  x: 0.776541591
-  y: 7.1688447
-  z: -28.7707634
+  x: 0.482066989
+  y: 5.93576622
+  z: -24.5943546
   scale: 1
   fovRadians: 0.52359879
-  rotationXRadians: -0.535816431
-  rotationYRadians: 2.19387531
+  rotationXRadians: -0.614357293
+  rotationYRadians: 2.51850986
   farClipPlane: 100000
   nearClipPlane: 10
 settings:
