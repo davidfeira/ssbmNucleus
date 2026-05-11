@@ -63,6 +63,16 @@ def import_costume():
                 'error': f'Costume ZIP not found: {costume_path}'
             }), 404
 
+        # NOTE on Ice Climbers: do NOT bundle the Popo and Nana DATs into
+        # one zip here. MexCLI's import-costume treats each `.dat` it finds
+        # in a zip as a NEW costume entry, not as halves of one slot — so
+        # a bundled zip with PlPpBu + PlNnBu under fighter="Ice Climbers"
+        # ends up with the second DAT overwriting the first slot's Popo
+        # half (game shows the Nana skin on both halves of the pair).
+        # The frontend (CharacterMode.jsx:533-589) already handles IC by
+        # making two separate calls: Popo zip → fighter "Ice Climbers",
+        # Nana zip → fighter "Nana" (internalId 11, which is MexCLI's view
+        # onto the Nana half of the IC slot). That's the correct path.
         logger.info(f"Calling MexCLI to import costume...")
         mex = get_mex_manager()
         result = mex.import_costume(fighter_name, str(full_costume_path))

@@ -347,7 +347,7 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
 
                     # Ice Climbers Popo: Extract both Popo and Nana DATs to same temp dir
                     # so generate_csp can find the pair and create composite CSP
-                    if char_info.get('is_popo'):
+                    if char_info.get('is_popo') and char_info.get('pair_dat_file'):
                         logger.info("Ice Climbers Popo detected - extracting pair for composite CSP")
                         temp_dir = tempfile.mkdtemp()
                         try:
@@ -452,6 +452,24 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                         with open(vanilla_stock_path, 'rb') as f:
                             stock_data = f.read()
                         stock_source = 'vanilla'
+                    else:
+                        # Custom MEX color slots (e.g. PlPpBr) have no matching
+                        # vanilla folder, so fall back to the character's default
+                        # color (Nr) stock. Better an arbitrary but on-brand icon
+                        # than no icon — empty stock is the most reported "import
+                        # looks broken" symptom.
+                        costume_code = char_info.get('costume_code') or ''
+                        if len(costume_code) >= 4:
+                            default_costume_code = costume_code[:4] + 'Nr'
+                            default_stock_path = VANILLA_ASSETS_DIR / character / default_costume_code / "stock.png"
+                            if default_stock_path.exists():
+                                with open(default_stock_path, 'rb') as f:
+                                    stock_data = f.read()
+                                stock_source = 'vanilla_default'
+                                logger.info(
+                                    f"No stock found for {costume_code}, falling back to "
+                                    f"vanilla default {default_costume_code}/stock.png"
+                                )
 
                 # Ice Climbers: Nana should copy stock from Popo
                 if char_info.get('is_nana') and not stock_data:

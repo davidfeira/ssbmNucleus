@@ -930,7 +930,12 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
                 'folder': r['folder'],
             })
 
-        # --- Ice Climbers pairing (unchanged from original) ---
+        # --- Ice Climbers pairing ---
+        # Two-pass: prefer the vanilla color-name pairing (Default/Default,
+        # Red/White, Orange/Aqua, Green/Yellow), then fall back to filename
+        # slot suffix (PlPpXX <-> PlNnXX) for non-vanilla color slots. Anything
+        # still unmatched is emitted as a solo entry so the caller can decide
+        # what to do — never silently dropped.
         processed_results = []
         ice_climbers_entries = [r for r in results if r['character'] == 'Ice Climbers']
         other_entries = [r for r in results if r['character'] != 'Ice Climbers']
@@ -946,31 +951,63 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
                 'Green': 'Yellow',
             }
 
+            def _slot_suffix(costume_code):
+                stem = os.path.splitext(costume_code or '')[0]
+                return stem[-2:] if len(stem) >= 4 else None
+
+            def _link_pair(popo, nana):
+                popo['is_popo'] = True
+                popo['is_nana'] = False
+                popo['pair_dat_file'] = nana['dat_file']
+                popo['pair_color'] = nana['color']
+                popo['pair_costume_code'] = nana['costume_code']
+                nana['is_nana'] = True
+                nana['is_popo'] = False
+                nana['pair_dat_file'] = popo['dat_file']
+                nana['pair_color'] = popo['color']
+                nana['pair_costume_code'] = popo['costume_code']
+
             paired_nanas = set()
+            paired_popos = set()
+
+            # Pass 1: vanilla color-name pairing
             for popo in popo_entries:
-                expected_nana_color = POPO_TO_NANA.get(popo['color'])
-                matching_nana = None
-                if expected_nana_color:
-                    for nana in nana_entries:
-                        if nana['color'] == expected_nana_color and id(nana) not in paired_nanas:
-                            matching_nana = nana
-                            paired_nanas.add(id(nana))
-                            break
+                expected = POPO_TO_NANA.get(popo['color'])
+                if not expected:
+                    continue
+                for nana in nana_entries:
+                    if id(nana) in paired_nanas:
+                        continue
+                    if nana['color'] == expected:
+                        _link_pair(popo, nana)
+                        paired_popos.add(id(popo))
+                        paired_nanas.add(id(nana))
+                        processed_results.append(popo)
+                        processed_results.append(nana)
+                        break
 
-                if matching_nana:
-                    popo['is_popo'] = True
-                    popo['is_nana'] = False
-                    popo['pair_dat_file'] = matching_nana['dat_file']
-                    popo['pair_color'] = matching_nana['color']
-                    popo['pair_costume_code'] = matching_nana['costume_code']
-                    processed_results.append(popo)
+            # Pass 2: filename suffix fallback for custom-color slots
+            for popo in popo_entries:
+                if id(popo) in paired_popos:
+                    continue
+                suf = _slot_suffix(popo.get('costume_code'))
+                if not suf:
+                    continue
+                for nana in nana_entries:
+                    if id(nana) in paired_nanas:
+                        continue
+                    if _slot_suffix(nana.get('costume_code')) == suf:
+                        _link_pair(popo, nana)
+                        paired_popos.add(id(popo))
+                        paired_nanas.add(id(nana))
+                        processed_results.append(popo)
+                        processed_results.append(nana)
+                        break
 
-                    matching_nana['is_nana'] = True
-                    matching_nana['is_popo'] = False
-                    matching_nana['pair_dat_file'] = popo['dat_file']
-                    matching_nana['pair_color'] = popo['color']
-                    matching_nana['pair_costume_code'] = popo['costume_code']
-                    processed_results.append(matching_nana)
+            # Unmatched IC halves are intentionally dropped — solo Popo/Nana
+            # imports aren't supported (you can't play half an Ice Climber).
+            # If neither the vanilla color-name table nor the filename-suffix
+            # fallback found a partner, the entry is silently discarded.
 
         processed_results.extend(other_entries)
         return processed_results

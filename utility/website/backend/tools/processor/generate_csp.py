@@ -280,32 +280,51 @@ def find_ice_climbers_pair(dat_filepath):
         logger.error(f"Failed to parse Ice Climbers file {dat_filepath}: {e}")
         return (None, None, None, None)
 
-    # Determine if this is Popo or Nana based on filename pattern (for finding pair)
-    if 'PlPp' in filename:
+    # Determine if this is Popo or Nana. Prefer the parsed character (set by
+    # DATParser.detect_character above) so imports work with renamed temp files
+    # like `tmpXXXX.dat` — the filename loses the PlPp/PlNn signal once a DAT
+    # is copied into a tempdir, and without char_type generate_csp can't fire
+    # its "skip solo Nana" branch and we end up rendering an orphaned Nana.
+    if character == 'Ice Climbers' or 'PlPp' in filename:
         char_type = 'popo'
         popo_color = my_color
         nana_color = POPO_TO_NANA.get(popo_color)
-
-        if not nana_color:
-            logger.warning(f"No color mapping defined for Popo {popo_color}")
-            return (char_type, None, popo_color, None)
-
         # Search for PlNn files
         search_pattern = 'PlNn'
-
-    elif 'PlNn' in filename:
+    elif character == 'Ice Climbers (Nana)' or 'PlNn' in filename:
         char_type = 'nana'
         nana_color = my_color
         popo_color = NANA_TO_POPO.get(nana_color)
-
-        if not popo_color:
-            logger.warning(f"No color mapping defined for Nana {nana_color}")
-            return (char_type, None, None, nana_color)
-
         # Search for PlPp files
         search_pattern = 'PlPp'
     else:
         return (None, None, None, None)
+
+    # Strategy 0: Filename slot suffix in the SAME directory.
+    # Custom MEX color slots (e.g. Popo Blue + Nana Blue) aren't in the vanilla
+    # POPO_TO_NANA color table, so the color-name strategies below give up. But
+    # iso_scanner deliberately stages both halves of an IC pair into the same
+    # skin folder before invoking generate_csp specifically so a filename match
+    # works here — no DAT parsing needed.
+    stem = os.path.splitext(filename)[0]
+    if len(stem) >= 6:
+        my_suffix = stem[4:6]  # 2-char slot code, e.g. "Bu"
+        candidate = dat_dir / f"{search_pattern}{my_suffix}.dat"
+        if candidate.exists() and candidate.resolve() != Path(dat_filepath).resolve():
+            logger.info(
+                f"Found Ice Climbers pair in same directory by filename suffix: "
+                f"{candidate.name} (suffix '{my_suffix}')"
+            )
+            return (char_type, str(candidate), popo_color, nana_color)
+
+    # If the vanilla color table doesn't cover this slot, we can't fall back
+    # on color-based matching below — bail out so the caller renders solo.
+    if char_type == 'popo' and not nana_color:
+        logger.warning(f"No color mapping defined for Popo {popo_color}")
+        return (char_type, None, popo_color, None)
+    if char_type == 'nana' and not popo_color:
+        logger.warning(f"No color mapping defined for Nana {nana_color}")
+        return (char_type, None, None, nana_color)
 
     # Helper function to check if a file matches the expected color
     def check_color_match(filepath, expected_color):
@@ -492,13 +511,20 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     logger.info(f"Running HSDRawViewer for {Path(dat_filepath).name}")
     logger.info(f"Command: {' '.join(cmd)}")
 
-    # Run HSDRawViewer CSP generation
+    # Run HSDRawViewer CSP generation.
+    # IMPORTANT: HSDRawViewer.Program.Main opens a relative-path file
+    # `csp_debug.log` for exclusive write at startup. If two instances share a
+    # cwd they collide and the loser crashes before doing any work — that's
+    # the "no_output / return code 3762504530" pattern that shows up under
+    # iso_scanner's parallel ThreadPoolExecutor. Force the cwd to the DAT's
+    # own folder so each parallel call isolates its debug log.
     try:
         # Run directly without PowerShell to avoid path quoting issues
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
+            cwd=os.path.dirname(os.path.abspath(dat_filepath)),
             **get_windows_subprocess_args(),
         )
 

@@ -104,8 +104,15 @@ def list_storage_costumes():
             for skin in skins:
                 if skin.get('type') == 'folder':
                     continue
-                if skin.get('visible') is False:
-                    continue
+                # NOTE: We do NOT filter `visible: False` here. The frontend
+                # (CharacterMode.jsx) already filters `!c.isNana` for the
+                # displayed costume grid, so hidden Nana entries don't appear
+                # as separate tiles — but they DO need to be in the array so
+                # the IC install path can find them via
+                # `storageCostumes.find(c => c.folder === pairedNanaId)`.
+                # Filtering them out here is what was causing "Paired Nana
+                # costume not found" → batch-install fail with no HTTP request
+                # ever leaving the renderer.
 
                 zip_path = STORAGE_PATH / char_name / skin.get('filename', '')
                 if zip_path.exists():
