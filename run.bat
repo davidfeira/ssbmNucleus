@@ -10,6 +10,14 @@ REM Work from the directory where this script lives
 cd /d "%~dp0"
 
 REM ----------------------------------------
+REM  Parse flags
+REM ----------------------------------------
+set REBUILD=0
+for %%A in (%*) do (
+    if /I "%%A"=="--rebuild" set REBUILD=1
+)
+
+REM ----------------------------------------
 REM  Check prerequisites
 REM ----------------------------------------
 where python >nul 2>&1
@@ -136,7 +144,16 @@ echo.
 REM ----------------------------------------
 REM  Build MexCLI (.NET)
 REM ----------------------------------------
-if not exist utility\MexManager\MexCLI\bin\Release\net6.0\mexcli.exe (
+if !REBUILD!==1 (
+    echo [REBUILD] Building MexCLI...
+    dotnet build utility\MexManager\MexCLI -c Release
+    if !errorlevel! neq 0 (
+        echo [ERROR] Failed to build MexCLI.
+        pause
+        exit /b 1
+    )
+    echo [OK] MexCLI rebuilt.
+) else if not exist utility\MexManager\MexCLI\bin\Release\net6.0\mexcli.exe (
     echo [SETUP] Building MexCLI...
     dotnet build utility\MexManager\MexCLI -c Release
     if !errorlevel! neq 0 (
@@ -160,7 +177,16 @@ if not exist utility\MexManager\MexCLI\bin\Release\net6.0\codes.gct (
 REM ----------------------------------------
 REM  Build HSDRawViewer (.NET)
 REM ----------------------------------------
-if not exist utility\website\backend\tools\HSDLib\HSDRawViewer\bin\Release\net6.0\HSDRawViewer.exe (
+if !REBUILD!==1 (
+    echo [REBUILD] Building HSDRawViewer...
+    dotnet build utility\website\backend\tools\HSDLib\HSDRawViewer -c Release
+    if !errorlevel! neq 0 (
+        echo [ERROR] Failed to build HSDRawViewer.
+        pause
+        exit /b 1
+    )
+    echo [OK] HSDRawViewer rebuilt.
+) else if not exist utility\website\backend\tools\HSDLib\HSDRawViewer\bin\Release\net6.0-windows\HSDRawViewer.exe (
     echo [SETUP] Building HSDRawViewer...
     dotnet build utility\website\backend\tools\HSDLib\HSDRawViewer -c Release
     if !errorlevel! neq 0 (
