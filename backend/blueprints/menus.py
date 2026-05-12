@@ -1199,20 +1199,23 @@ def install_bg_to_mex(mod_id):
             logger.info(f'  Replaced MnSlChr.usd with custom background')
 
         # Step 2: Add Gecko code to disable hardcoded CSS BG animation
+        logger.info(f'  MexCLI path: {MEXCLI_PATH} (exists={MEXCLI_PATH.exists()})')
+        logger.info(f'  Project path: {project_path}')
         if MEXCLI_PATH.exists():
             try:
+                cmd = [str(MEXCLI_PATH), 'add-code',
+                       str(project_path),
+                       'Disable Hardcoded CSS BG Anim',
+                       '04263384 48000010']
+                logger.info(f'  Running: {" ".join(cmd)}')
                 code_result = subprocess.run(
-                    [str(MEXCLI_PATH), 'add-code',
-                     str(project_path),
-                     'Disable Hardcoded CSS BG Anim',
-                     '04263384 48000010'],
-                    capture_output=True, text=True, timeout=30,
+                    cmd,
+                    capture_output=True, text=True, timeout=60,
                     **get_subprocess_args()
                 )
-                if code_result.returncode == 0:
-                    logger.info('  Added Gecko code: Disable Hardcoded CSS BG Anim')
-                else:
-                    logger.warning(f'  Failed to add Gecko code: {code_result.stdout} {code_result.stderr}')
+                logger.info(f'  add-code exit={code_result.returncode} stdout={code_result.stdout[:500]}')
+                if code_result.stderr:
+                    logger.info(f'  add-code stderr={code_result.stderr[:500]}')
             except Exception as e:
                 logger.warning(f'  Failed to add Gecko code: {e}')
         else:
