@@ -1,6 +1,7 @@
 using System.Text.Json;
 using mexLib;
 using mexLib.Types;
+using mexLib.Utilties;
 
 namespace MexCLI.Commands
 {
@@ -66,7 +67,17 @@ namespace MexCLI.Commands
                 }
 
                 workspace.Project.Codes.Add(code);
-                workspace.Save(null);
+
+                // Write only the codes file — do NOT call workspace.Save() which
+                // does a full recompile of all project files (MnSlChr, MxDt, etc.)
+                // and would overwrite any pending modifications like background swaps.
+                File.WriteAllBytes(
+                    workspace.GetFilePath("codes.ini"),
+                    CodeLoader.ToINI(workspace.Project.Codes));
+                // Also write codes.gct so it's ready for ISO export
+                File.WriteAllBytes(
+                    workspace.GetFilePath("codes.gct"),
+                    CodeLoader.ToGCT(workspace.Project.GetAllGekkoCodes()));
 
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
