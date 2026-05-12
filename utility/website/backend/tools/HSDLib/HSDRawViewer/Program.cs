@@ -99,6 +99,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for PNG → MEX .tex conversion mode
+            if (args.Length >= 1 && args[0] == "--convert-tex")
+            {
+                Console.WriteLine("Convert TEX mode detected");
+                RunConvertTex(args);
+                return;
+            }
+
             // Check for CSS icons dump mode
             if (args.Length >= 1 && args[0] == "--css-icons")
             {
@@ -1356,9 +1364,17 @@ namespace HSDRawViewer
         {
             try
             {
+                if (args.Length >= 2 && args[1] == "import")
+                {
+                    RunCssIconsImport(args);
+                    return;
+                }
+
                 if (args.Length < 4 || args[1] != "export")
                 {
-                    Console.WriteLine("Usage: HSDRawViewer.exe --css-icons export <dat_file> <output_dir>");
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --css-icons export <dat_file> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --css-icons import <mexSelectChr.dat> <icons_dir> <output.dat>");
                     return;
                 }
 
@@ -1664,6 +1680,180 @@ namespace HSDRawViewer
         /// Usage:
         ///   HSDRawViewer.exe --mex-css-info export <mxdt_file> <output.json>
         /// </summary>
+        /// <summary>
+        /// Convert a PNG image to MEX's .tex format.
+        /// Usage:
+        ///   HSDRawViewer.exe --convert-tex <input.png> <output.tex> <width> <height> <gx_format> <tlut_format>
+        /// For CSS icons: --convert-tex icon.png icon.tex 64 56 8 2
+        ///   (format 8 = CI8, tlut 2 = RGB5A3)
+        /// </summary>
+        static void RunConvertTex(string[] args)
+        {
+            try
+            {
+                if (args.Length < 7)
+                {
+                    Console.WriteLine("Usage: HSDRawViewer.exe --convert-tex <input.png> <output.tex> <width> <height> <gx_format> <tlut_format>");
+                    Console.WriteLine("  CSS icon example: --convert-tex icon.png icon.tex 64 56 8 2");
+                    return;
+                }
+
+                string inputPng = args[1];
+                string outputTex = args[2];
+                int width = int.Parse(args[3]);
+                int height = int.Parse(args[4]);
+                var format = (HSDRaw.GX.GXTexFmt)int.Parse(args[5]);
+                var tlutFormat = (HSDRaw.GX.GXTlutFmt)int.Parse(args[6]);
+
+                // Load PNG, resize to target dimensions, get BGRA pixels
+                using var rawImg = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(inputPng);
+                rawImg.Mutate(x => x.Resize(width, height));
+                byte[] bgra = new byte[width * height * 4];
+                rawImg.CopyPixelDataTo(bgra);
+
+                // Convert BGRA → RGBA for GXImageConverter
+                byte[] rgba = new byte[bgra.Length];
+                for (int i = 0; i < bgra.Length; i += 4)
+                {
+                    rgba[i]     = bgra[i + 2]; // R
+                    rgba[i + 1] = bgra[i + 1]; // G
+                    rgba[i + 2] = bgra[i];     // B
+                    rgba[i + 3] = bgra[i + 3]; // A
+                }
+
+                // Encode to GX format
+                byte[] imageData = HSDRaw.Tools.GXImageConverter.EncodeImage(
+                    rgba, width, height, format, tlutFormat, out byte[] palData);
+
+                // Write MEX .tex format: header + image data + palette data
+                using var outStream = System.IO.File.Create(outputTex);
+                outStream.WriteByte((byte)'T');
+                outStream.WriteByte((byte)'E');
+                outStream.WriteByte((byte)'X');
+                outStream.WriteByte(0); // no compression
+                outStream.WriteByte((byte)format);
+                outStream.WriteByte((byte)tlutFormat);
+                outStream.WriteByte(0); outStream.WriteByte(0); // padding
+                outStream.Write(BitConverter.GetBytes(width));
+                outStream.Write(BitConverter.GetBytes(height));
+                outStream.Write(BitConverter.GetBytes(0x20)); // image offset
+                outStream.Write(BitConverter.GetBytes(imageData.Length));
+                outStream.Write(BitConverter.GetBytes(0x20 + imageData.Length)); // palette offset
+                outStream.Write(BitConverter.GetBytes(palData?.Length ?? 0));
+                outStream.Write(imageData);
+                if (palData != null) outStream.Write(palData);
+
+                Console.WriteLine($"SUCCESS: {inputPng} → {outputTex} ({width}x{height}, fmt={format}, tlut={tlutFormat})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Convert TEX failed: {ex.Message}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Import icon PNGs into a mexSelectChr.dat file.
+        /// Usage:
+        ///   HSDRawViewer.exe --css-icons import <mexSelectChr.dat> <icons_dir> <output.dat>
+        ///
+        /// icons_dir contains files named like "Mario.png", "Fox.png" etc.
+        /// Each is injected into the corresponding IconModel child's foreground TOBJ,
+        /// matched by slot index (icon_dir file order doesn't matter — the manifest.json
+        /// from a prior export maps slot → character, and the Python caller renames
+        /// files to slot indices before calling this).
+        ///
+        /// Actually simpler: files are named by slot index: "00.png", "01.png", ...
+        /// The Python caller handles character→slot mapping.
+        /// </summary>
+        static void RunCssIconsImport(string[] args)
+        {
+            try
+            {
+                if (args.Length < 5)
+                {
+                    Console.WriteLine("Usage: HSDRawViewer.exe --css-icons import <mexSelectChr.dat> <icons_dir> <output.dat>");
+                    return;
+                }
+
+                string datFile = args[2];
+                string iconsDir = args[3];
+                string outputDat = args[4];
+
+                Console.WriteLine($"Loading: {datFile}");
+                var rawFile = new HSDRawFile(datFile);
+
+                var mexRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.MEX.Menus.MEX_mexSelectChr);
+                if (mexRoot == null)
+                {
+                    Console.WriteLine("ERROR: No mexSelectChr root found — only MEX format supported for import");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var mex = (HSDRaw.MEX.Menus.MEX_mexSelectChr)mexRoot.Data;
+                var iconModel = mex.IconModel;
+                if (iconModel == null)
+                {
+                    Console.WriteLine("ERROR: mexSelectChr has no IconModel");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var children = iconModel.Children;
+                Console.WriteLine($"IconModel has {children.Length} slots");
+
+                int replaced = 0;
+                for (int i = 0; i < children.Length; i++)
+                {
+                    // Look for a PNG named by slot index: "00.png", "01.png", etc.
+                    string pngPath = System.IO.Path.Combine(iconsDir, $"{i:D2}.png");
+                    if (!System.IO.File.Exists(pngPath))
+                        continue;
+
+                    var child = children[i];
+                    // Foreground DOBJ is the second one (index 1)
+                    var dobj = child.Dobj;
+                    if (dobj?.Next == null)
+                    {
+                        Console.WriteLine($"  Slot {i}: no foreground DOBJ, skipping");
+                        continue;
+                    }
+
+                    var fgDobj = dobj.Next;
+                    var tobj = fgDobj.Mobj?.Textures;
+                    if (tobj == null)
+                    {
+                        Console.WriteLine($"  Slot {i}: no foreground TOBJ, skipping");
+                        continue;
+                    }
+
+                    try
+                    {
+                        using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
+                        var imgFormat = tobj.ImageData.Format;
+                        var palFormat = tobj.TlutData?.Format ?? HSDRaw.GX.GXTlutFmt.IA8;
+                        tobj.InjectBitmap(image, imgFormat, palFormat);
+                        replaced++;
+                        Console.WriteLine($"  Slot {i}: replaced ({image.Width}x{image.Height})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  Slot {i}: failed ({ex.Message})");
+                    }
+                }
+
+                rawFile.Save(outputDat);
+                Console.WriteLine($"SUCCESS: Replaced {replaced}/{children.Length} icon slots → {outputDat}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: CSS icons import failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
         static void RunMexCssInfo(string[] args)
         {
             try

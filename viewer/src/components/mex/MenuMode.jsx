@@ -27,6 +27,9 @@ export default function MenuMode({ mode, onModeChange }) {
   const [selectedMod, setSelectedMod] = useState(null)
   const [iconGridMods, setIconGridMods] = useState([])
   const [loading, setLoading] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installMessage, setInstallMessage] = useState('')
+  const [installedMods, setInstalledMods] = useState({}) // submod_key -> mod
 
   const fetchIconGridMods = useCallback(async () => {
     setLoading(true)
@@ -48,6 +51,32 @@ export default function MenuMode({ mode, onModeChange }) {
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
     return [] // doors, background not wired yet
+  }
+
+  const handleInstall = async () => {
+    if (!selectedMod) return
+    setInstalling(true)
+    setInstallMessage('')
+    try {
+      const res = await fetch(`${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`, {
+        method: 'POST'
+      })
+      const data = await res.json()
+      if (data.success) {
+        playSound('newSkin')
+        setInstallMessage(`✓ ${data.message}`)
+        setInstalledMods(prev => ({ ...prev, [selectedSubmod]: selectedMod }))
+      } else {
+        playSound('error')
+        setInstallMessage(`✗ ${data.error}`)
+      }
+    } catch (err) {
+      playSound('error')
+      setInstallMessage(`✗ ${err.message}`)
+    } finally {
+      setInstalling(false)
+      setTimeout(() => setInstallMessage(''), 4000)
+    }
   }
 
   const submodTypes = selectedMenu === 'css' ? CSS_SUBMOD_TYPES : []
@@ -98,16 +127,38 @@ export default function MenuMode({ mode, onModeChange }) {
           <div className="costumes-section">
             <h3>Currently in MEX</h3>
             <div className="costume-list existing">
-              <div className="costume-card existing-costume vanilla-extra">
-                <div className="costume-preview" style={{ padding: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem' }}>
-                    Vanilla
+              {installedMods[selectedSubmod] ? (
+                <div className="costume-card existing-costume">
+                  <div className="costume-preview">
+                    {installedMods[selectedSubmod].screenshotUrl ? (
+                      <img
+                        src={`${BACKEND_URL}${installedMods[selectedSubmod].screenshotUrl}`}
+                        alt={installedMods[selectedSubmod].name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem' }}>
+                        {installedMods[selectedSubmod].name?.[0] || '?'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="costume-info">
+                    <h4>{installedMods[selectedSubmod].name}</h4>
+                    <span style={{ fontSize: '11px', color: '#888' }}>{installedMods[selectedSubmod].icon_count || 0} icons</span>
                   </div>
                 </div>
-                <div className="costume-info">
-                  <h4>Vanilla</h4>
+              ) : (
+                <div className="costume-card existing-costume vanilla-extra">
+                  <div className="costume-preview" style={{ padding: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem' }}>
+                      Vanilla
+                    </div>
+                  </div>
+                  <div className="costume-info">
+                    <h4>Vanilla</h4>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -120,10 +171,16 @@ export default function MenuMode({ mode, onModeChange }) {
                   <button
                     className="btn-batch-import"
                     onMouseEnter={playHoverSound}
-                    onClick={() => { playSound('start') }}
+                    onClick={() => { playSound('start'); handleInstall() }}
+                    disabled={installing}
                   >
-                    Import Selected
+                    {installing ? 'Installing...' : 'Import Selected'}
                   </button>
+                )}
+                {installMessage && (
+                  <span style={{ fontSize: '0.8rem', color: installMessage.startsWith('✓') ? 'var(--color-success, #4caf50)' : 'var(--color-error, #f44336)' }}>
+                    {installMessage}
+                  </span>
                 )}
               </div>
             </div>

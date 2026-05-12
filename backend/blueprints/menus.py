@@ -32,7 +32,8 @@ from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
-from core.config import STORAGE_PATH, HSDRAW_EXE, get_subprocess_args
+from core.config import STORAGE_PATH, HSDRAW_EXE, MEXCLI_PATH, get_subprocess_args
+from core.state import get_project_files_dir, get_current_project_path
 
 logger = logging.getLogger(__name__)
 
@@ -855,6 +856,86 @@ def relabel_icon(mod_id):
         return jsonify({'success': True, 'mod': _attach_urls(mod)})
     except Exception as e:
         logger.error(f'Relabel icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/install/<mod_id>', methods=['POST'])
+def install_icon_grid_to_mex(mod_id):
+    """Install an icon grid mod into the currently loaded MEX project.
+
+    Uses `mexcli set-css-icon` per fighter, which calls mexLib's
+    SetFromImageFile — handles PNG→TEX conversion with correct color space
+    and GX format natively.
+    """
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        if not MEXCLI_PATH.exists():
+            return jsonify({'success': False, 'error': f'MexCLI not found at {MEXCLI_PATH}'}), 500
+
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
+        installed = 0
+        errors = []
+
+        # Build the install list, handling the Zelda/Sheik shared-slot edge case:
+        # if the mod only has one of them, use that icon for both.
+        install_list = list(mod.get('icons', []))
+        has_zelda = any(e.get('character') == 'Zelda' for e in install_list)
+        has_sheik = any(e.get('character') == 'Sheik' for e in install_list)
+        if has_zelda and not has_sheik:
+            zelda_entry = next(e for e in install_list if e.get('character') == 'Zelda')
+            install_list.append({'character': 'Sheik', 'icon': zelda_entry['icon']})
+        elif has_sheik and not has_zelda:
+            sheik_entry = next(e for e in install_list if e.get('character') == 'Sheik')
+            install_list.append({'character': 'Zelda', 'icon': sheik_entry['icon']})
+
+        for entry in install_list:
+            character = entry.get('character')
+            icon_file = entry.get('icon')
+            if not character or not icon_file:
+                continue
+            src = icons_dir / icon_file
+            if not src.exists():
+                continue
+
+            try:
+                result = subprocess.run(
+                    [str(MEXCLI_PATH), 'set-css-icon',
+                     str(project_path), character, str(src)],
+                    capture_output=True, text=True, timeout=30,
+                    **get_subprocess_args()
+                )
+                if result.returncode == 0:
+                    installed += 1
+                    logger.info(f'  Set CSS icon: {character}')
+                else:
+                    err_msg = result.stdout.strip() or result.stderr.strip()
+                    logger.warning(f'  Failed CSS icon for {character}: {err_msg}')
+                    errors.append(character)
+            except Exception as e:
+                logger.warning(f'  Failed CSS icon for {character}: {e}')
+                errors.append(character)
+
+        if installed == 0:
+            return jsonify({
+                'success': False,
+                'error': f'No icons installed. Errors: {", ".join(errors)}'
+            }), 400
+
+        msg = f'Installed {installed} icon(s). Rebuild ISO to apply.'
+        if errors:
+            msg += f' ({len(errors)} failed: {", ".join(errors)})'
+
+        logger.info(f'[OK] Installed icon grid mod {mod_id} via MexCLI ({installed} icons)')
+        return jsonify({'success': True, 'message': msg, 'matched': installed})
+    except Exception as e:
+        logger.error(f'Install icon grid mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

@@ -42,6 +42,8 @@ namespace MexCLI
                         return Commands.RecompileCommand.Execute(args);
                     case "info":
                         return Commands.InfoCommand.Execute(args);
+                    case "set-css-icon":
+                        return Commands.SetCSSIconCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":
