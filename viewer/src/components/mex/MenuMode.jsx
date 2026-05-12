@@ -26,6 +26,7 @@ export default function MenuMode({ mode, onModeChange }) {
   const [selectedSubmod, setSelectedSubmod] = useState(null)
   const [selectedMod, setSelectedMod] = useState(null)
   const [iconGridMods, setIconGridMods] = useState([])
+  const [bgMods, setBgMods] = useState([])
   const [loading, setLoading] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [installMessage, setInstallMessage] = useState('')
@@ -44,13 +45,27 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }, [])
 
+  const fetchBgMods = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/css/background/list`)
+      const data = await res.json()
+      if (data.success) setBgMods(data.mods || [])
+    } catch (err) {
+      console.error('Failed to fetch background mods:', err)
+    }
+  }, [])
+
   useEffect(() => {
-    if (selectedMenu === 'css') fetchIconGridMods()
-  }, [selectedMenu, fetchIconGridMods])
+    if (selectedMenu === 'css') {
+      fetchIconGridMods()
+      fetchBgMods()
+    }
+  }, [selectedMenu, fetchIconGridMods, fetchBgMods])
 
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
-    return [] // doors, background not wired yet
+    if (key === 'background') return bgMods
+    return []
   }
 
   const handleInstall = async () => {
@@ -58,7 +73,11 @@ export default function MenuMode({ mode, onModeChange }) {
     setInstalling(true)
     setInstallMessage('')
     try {
-      const res = await fetch(`${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`, {
+      // Dynamic install endpoint based on selected submod type
+      const installEndpoint = selectedSubmod === 'background'
+        ? `${API_URL}/menus/css/background/install/${selectedMod.id}`
+        : `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
+      const res = await fetch(installEndpoint, {
         method: 'POST'
       })
       const data = await res.json()

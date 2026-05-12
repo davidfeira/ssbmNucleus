@@ -46,6 +46,10 @@ ICON_GRID_PATH.mkdir(parents=True, exist_ok=True)
 
 ICON_GRID_METADATA = ICON_GRID_PATH / 'metadata.json'
 
+BG_PATH = CSS_PATH / 'background'
+BG_PATH.mkdir(parents=True, exist_ok=True)
+BG_METADATA = BG_PATH / 'metadata.json'
+
 SCREENSHOT_CANDIDATES = ['screenshot_0.png', 'screenshot.png', 'preview.png']
 
 # Canonical Melee character → list of accepted filename stems (lowercase).
@@ -959,4 +963,288 @@ def delete_icon_grid_mod(mod_id):
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f'Delete icon grid mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CSS Background mod catalog
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_bg_catalog():
+    if not BG_METADATA.exists():
+        return {'version': '1.0', 'mods': []}
+    try:
+        with open(BG_METADATA, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {'version': '1.0', 'mods': []}
+
+
+def _save_bg_catalog(data):
+    BG_METADATA.parent.mkdir(parents=True, exist_ok=True)
+    with open(BG_METADATA, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+
+def _load_bg_mod_json(mod_id):
+    mod_path = BG_PATH / mod_id / 'mod.json'
+    if not mod_path.exists():
+        return None
+    try:
+        with open(mod_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f'Failed to read bg mod.json for {mod_id}: {e}')
+        return None
+
+
+def _save_bg_mod_json(mod_id, mod):
+    mod_dir = BG_PATH / mod_id
+    mod_dir.mkdir(parents=True, exist_ok=True)
+    with open(mod_dir / 'mod.json', 'w', encoding='utf-8') as f:
+        json.dump(mod, f, indent=2)
+
+
+def _attach_bg_urls(mod):
+    """Add screenshot URL to a background mod dict."""
+    out = dict(mod)
+    mod_id = mod.get('id')
+    if not mod_id:
+        return out
+    base = f'/storage/menus/css/background/{mod_id}'
+    if mod.get('screenshot'):
+        out['screenshotUrl'] = f"{base}/{mod['screenshot']}"
+    return out
+
+
+def _find_mnslchr_dat(directory):
+    """Find a MnSlChr dat/usd file in an extracted directory."""
+    directory = Path(directory)
+    for p in sorted(directory.rglob('*')):
+        if not p.is_file():
+            continue
+        name_lower = p.name.lower()
+        if name_lower.startswith('mnslchr') and name_lower.endswith(('.dat', '.usd')):
+            return p
+    return None
+
+
+@menus_bp.route('/api/mex/menus/css/background/list', methods=['GET'])
+def list_bg_mods():
+    """List all installed CSS background mods."""
+    try:
+        catalog = _load_bg_catalog()
+        mods = []
+        for entry in catalog.get('mods', []):
+            mod_id = entry.get('id')
+            if not mod_id:
+                continue
+            out = dict(entry)
+            if entry.get('screenshot'):
+                out['screenshotUrl'] = f"/storage/menus/css/background/{mod_id}/{entry['screenshot']}"
+            mods.append(out)
+        return jsonify({'success': True, 'mods': mods})
+    except Exception as e:
+        logger.error(f'List bg mods error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/background/import', methods=['POST'])
+def import_bg_mod():
+    """Import a CSS background mod.
+
+    Accepts .zip (containing MnSlChr.dat/.usd) or a raw .dat/.usd file.
+    Extracts the background model/animation bundle via HSDRawViewer --css-bg export.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        fname_lower = file.filename.lower()
+        is_zip = fname_lower.endswith('.zip')
+        is_dat = fname_lower.endswith('.dat')
+        is_usd = fname_lower.endswith('.usd')
+        if not (is_zip or is_dat or is_usd):
+            return jsonify({'success': False, 'error': 'File must be .zip, .dat, or .usd'}), 400
+
+        name = (request.form.get('name') or '').strip() or Path(file.filename).stem
+        description = (request.form.get('description') or '').strip()
+
+        with tempfile.TemporaryDirectory(prefix='cssbg_') as tmp:
+            temp_root = Path(tmp)
+
+            if is_zip:
+                zip_path = temp_root / 'upload.zip'
+                file.save(str(zip_path))
+                extract_dir = temp_root / 'extracted'
+                extract_dir.mkdir()
+                try:
+                    _safe_extract_zip(zip_path, extract_dir)
+                except zipfile.BadZipFile:
+                    return jsonify({'success': False, 'error': 'Invalid or corrupt zip file'}), 400
+                source_dat = _find_mnslchr_dat(extract_dir)
+                screenshot_src = _find_screenshot(extract_dir)
+            else:
+                # Raw dat/usd
+                source_dat = temp_root / file.filename
+                file.save(str(source_dat))
+                screenshot_src = None
+
+            if source_dat is None or not source_dat.exists():
+                return jsonify({'success': False, 'error': 'No MnSlChr .dat/.usd found in upload'}), 400
+
+            # Run HSDRawViewer --css-bg export to extract background.dat
+            export_dir = temp_root / 'bg_export'
+            export_dir.mkdir()
+            result = _run_hsd_cli(['--css-bg', 'export', str(source_dat), str(export_dir)])
+            if result is None:
+                return jsonify({'success': False, 'error': 'Failed to extract background from DAT'}), 500
+
+            bg_dat = export_dir / 'background.dat'
+            if not bg_dat.exists():
+                return jsonify({'success': False, 'error': 'HSDRawViewer did not produce background.dat'}), 500
+
+            # Create mod entry
+            mod_id = str(uuid.uuid4())[:8]
+            mod_dir = BG_PATH / mod_id
+            mod_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy background.dat
+            shutil.copy(str(bg_dat), str(mod_dir / 'background.dat'))
+
+            # Copy screenshot if available
+            screenshot_filename = None
+            if screenshot_src is not None and screenshot_src.exists():
+                screenshot_filename = f'screenshot{screenshot_src.suffix.lower()}'
+                shutil.copy(str(screenshot_src), str(mod_dir / screenshot_filename))
+
+            mod = {
+                'id': mod_id,
+                'name': name,
+                'description': description,
+                'screenshot': screenshot_filename,
+                'created': datetime.now().isoformat(),
+            }
+            _save_bg_mod_json(mod_id, mod)
+
+            catalog = _load_bg_catalog()
+            catalog.setdefault('mods', []).append({
+                'id': mod_id,
+                'name': name,
+                'description': description,
+                'screenshot': screenshot_filename,
+                'created': mod['created'],
+            })
+            _save_bg_catalog(catalog)
+
+            logger.info(f'[OK] Imported CSS background mod: {name} ({mod_id})')
+            return jsonify({'success': True, 'mod': _attach_bg_urls(mod)})
+
+    except Exception as e:
+        logger.error(f'Import bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/background/install/<mod_id>', methods=['POST'])
+def install_bg_to_mex(mod_id):
+    """Install a CSS background mod into the currently loaded MEX project.
+
+    1. Runs HSDRawViewer --css-bg import to swap the background in MnSlChr.usd
+    2. Runs mexcli add-code to inject the Gecko code that disables the hardcoded
+       CSS background animation, so the custom one is visible.
+    """
+    try:
+        mod = _load_bg_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        files_dir = get_project_files_dir()
+        if files_dir is None:
+            return jsonify({'success': False, 'error': 'No project files directory'}), 400
+
+        mnslchr_usd = Path(files_dir) / 'MnSlChr.usd'
+        if not mnslchr_usd.exists():
+            return jsonify({'success': False, 'error': f'MnSlChr.usd not found at {mnslchr_usd}'}), 400
+
+        bg_dat = BG_PATH / mod_id / 'background.dat'
+        if not bg_dat.exists():
+            return jsonify({'success': False, 'error': 'background.dat missing from mod'}), 400
+
+        if not HSDRAW_EXE.exists():
+            return jsonify({'success': False, 'error': f'HSDRawViewer not found at {HSDRAW_EXE}'}), 500
+
+        with tempfile.TemporaryDirectory(prefix='cssbg_install_') as tmp:
+            output_usd = Path(tmp) / 'MnSlChr.usd'
+
+            # Step 1: Import background into MnSlChr.usd
+            result = _run_hsd_cli([
+                '--css-bg', 'import',
+                str(mnslchr_usd), str(bg_dat), str(output_usd)
+            ])
+            if result is None:
+                return jsonify({'success': False, 'error': 'HSDRawViewer --css-bg import failed'}), 500
+
+            if not output_usd.exists():
+                return jsonify({'success': False, 'error': 'Import produced no output file'}), 500
+
+            # Copy output back to project
+            shutil.copy(str(output_usd), str(mnslchr_usd))
+            logger.info(f'  Replaced MnSlChr.usd with custom background')
+
+        # Step 2: Add Gecko code to disable hardcoded CSS BG animation
+        if MEXCLI_PATH.exists():
+            try:
+                code_result = subprocess.run(
+                    [str(MEXCLI_PATH), 'add-code',
+                     str(project_path),
+                     'Disable Hardcoded CSS BG Anim',
+                     '04263384 48000010'],
+                    capture_output=True, text=True, timeout=30,
+                    **get_subprocess_args()
+                )
+                if code_result.returncode == 0:
+                    logger.info('  Added Gecko code: Disable Hardcoded CSS BG Anim')
+                else:
+                    logger.warning(f'  Failed to add Gecko code: {code_result.stdout} {code_result.stderr}')
+            except Exception as e:
+                logger.warning(f'  Failed to add Gecko code: {e}')
+        else:
+            logger.warning(f'  MexCLI not found at {MEXCLI_PATH}; skipping Gecko code injection')
+
+        msg = f'Installed background "{mod["name"]}". Rebuild ISO to apply.'
+        logger.info(f'[OK] Installed CSS background mod {mod_id}')
+        return jsonify({'success': True, 'message': msg})
+
+    except Exception as e:
+        logger.error(f'Install bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/background/delete/<mod_id>', methods=['POST'])
+def delete_bg_mod(mod_id):
+    """Delete a CSS background mod and its files."""
+    try:
+        catalog = _load_bg_catalog()
+        mods = catalog.get('mods', [])
+        idx = next((i for i, m in enumerate(mods) if m.get('id') == mod_id), -1)
+        if idx < 0:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        mod_dir = BG_PATH / mod_id
+        if mod_dir.exists():
+            shutil.rmtree(mod_dir, ignore_errors=True)
+
+        mods.pop(idx)
+        _save_bg_catalog(catalog)
+        logger.info(f'[OK] Deleted CSS background mod: {mod_id}')
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f'Delete bg mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

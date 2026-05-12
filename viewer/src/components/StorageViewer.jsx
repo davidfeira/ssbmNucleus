@@ -26,6 +26,7 @@ import PatchesGrid from './storage/PatchesGrid'
 import MenusGrid from './storage/MenusGrid'
 import CssMenuTypesGrid from './storage/CssMenuTypesGrid'
 import IconGridModsView from './storage/IconGridModsView'
+import BackgroundModsView from './storage/BackgroundModsView'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
@@ -1232,6 +1233,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
           {selectedMenuType === 'css' && selectedMenuModType === 'icon_grid' && (
             <IconGridModsView onDetailChange={setMenuDetailOpen} />
+          )}
+
+          {selectedMenuType === 'css' && selectedMenuModType === 'background' && (
+            <BackgroundModsView />
           )}
 
           {selectedMenuType === 'sss' && (

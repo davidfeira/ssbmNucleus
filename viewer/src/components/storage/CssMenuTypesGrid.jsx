@@ -12,6 +12,12 @@ const CSS_MOD_TYPES = [
     name: 'Icon Grid',
     short: 'IG',
     description: 'Custom character portraits used on the CSS banner'
+  },
+  {
+    key: 'background',
+    name: 'Background',
+    short: 'BG',
+    description: 'CSS background and stage art'
   }
 ]
 

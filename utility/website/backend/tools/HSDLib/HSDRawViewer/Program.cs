@@ -115,6 +115,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for CSS background export/import mode
+            if (args.Length >= 1 && args[0] == "--css-bg")
+            {
+                Console.WriteLine("CSS background mode detected");
+                RunCssBgOperation(args);
+                return;
+            }
+
             // Check for MEX CSS info mode (reads MxDt.dat icon -> fighter mapping)
             if (args.Length >= 1 && args[0] == "--mex-css-info")
             {
@@ -1360,6 +1368,162 @@ namespace HSDRawViewer
         ///   - PNG files for each icon TOBJ
         ///   - manifest.json describing format detected and per-file metadata
         /// </summary>
+        /// <summary>
+        /// Export or import CSS background model/animation from MnSlChr.dat/.usd.
+        /// Export: HSDRawViewer.exe --css-bg export <mnslchr.dat> <output_dir>
+        /// Import: HSDRawViewer.exe --css-bg import <project_mnslchr.usd> <background.dat> <output.usd>
+        /// </summary>
+        static void RunCssBgOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --css-bg export <mnslchr.dat> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --css-bg import <project.usd> <background.dat> <output.usd>");
+                    return;
+                }
+
+                string subCommand = args[1].ToLower();
+
+                if (subCommand == "export")
+                {
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --css-bg export <mnslchr.dat> <output_dir>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    Console.WriteLine($"Roots in file: {rawFile.Roots.Count}");
+                    foreach (var r in rawFile.Roots)
+                        Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
+
+                    var vanillaRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_SelectChrDataTable);
+                    if (vanillaRoot == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_SelectChrDataTable root found in DAT");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_SelectChrDataTable)vanillaRoot.Data;
+
+                    if (tb.BackgroundModel == null)
+                    {
+                        Console.WriteLine("ERROR: SBM_SelectChrDataTable has no BackgroundModel (offset 0x10)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    // Create a standalone HSDRawFile with 3 roots for the background data
+                    var bgFile = new HSDRawFile();
+                    bgFile.Roots.Add(new HSDRootNode() { Name = "bg_model", Data = tb.BackgroundModel });
+                    if (tb.BackgroundAnimation != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_anim", Data = tb.BackgroundAnimation });
+                    if (tb.BackgroundMaterialAnimation != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_matanim", Data = tb.BackgroundMaterialAnimation });
+
+                    string bgDatPath = System.IO.Path.Combine(outDir, "background.dat");
+                    bgFile.Save(bgDatPath);
+                    Console.WriteLine($"Saved background.dat with {bgFile.Roots.Count} roots");
+
+                    // Write manifest
+                    var manifest = new Dictionary<string, object>
+                    {
+                        ["format"] = "css_background",
+                        ["source_file"] = System.IO.Path.GetFileName(datFile),
+                        ["roots"] = bgFile.Roots.Count,
+                        ["has_model"] = true,
+                        ["has_anim"] = tb.BackgroundAnimation != null,
+                        ["has_matanim"] = tb.BackgroundMaterialAnimation != null,
+                    };
+                    System.IO.File.WriteAllText(
+                        System.IO.Path.Combine(outDir, "manifest.json"),
+                        JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })
+                    );
+
+                    Console.WriteLine($"SUCCESS: Exported CSS background to {outDir}");
+                }
+                else if (subCommand == "import")
+                {
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --css-bg import <project.usd> <background.dat> <output.usd>");
+                        return;
+                    }
+
+                    string projectUsd = args[2];
+                    string bgDatPath = args[3];
+                    string outputUsd = args[4];
+
+                    Console.WriteLine($"Loading project: {projectUsd}");
+                    var rawFile = new HSDRawFile(projectUsd);
+
+                    var vanillaRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_SelectChrDataTable);
+                    if (vanillaRoot == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_SelectChrDataTable root found in project USD");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_SelectChrDataTable)vanillaRoot.Data;
+
+                    Console.WriteLine($"Loading background: {bgDatPath}");
+                    var bgFile = new HSDRawFile(bgDatPath);
+
+                    Console.WriteLine($"Background file roots: {bgFile.Roots.Count}");
+                    foreach (var r in bgFile.Roots)
+                        Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
+
+                    // Find roots by name
+                    var modelRoot = bgFile.Roots.Find(r => r.Name == "bg_model");
+                    var animRoot = bgFile.Roots.Find(r => r.Name == "bg_anim");
+                    var matAnimRoot = bgFile.Roots.Find(r => r.Name == "bg_matanim");
+
+                    if (modelRoot == null)
+                    {
+                        Console.WriteLine("ERROR: background.dat missing 'bg_model' root");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    // Replace the background data in the project
+                    tb.BackgroundModel = modelRoot.Data as HSD_JOBJ;
+                    if (animRoot != null)
+                        tb.BackgroundAnimation = animRoot.Data as HSD_AnimJoint;
+                    if (matAnimRoot != null)
+                        tb.BackgroundMaterialAnimation = matAnimRoot.Data as HSD_MatAnimJoint;
+
+                    Console.WriteLine($"Saving to: {outputUsd}");
+                    rawFile.Save(outputUsd);
+
+                    Console.WriteLine($"SUCCESS: Imported CSS background into {outputUsd}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown css-bg sub-command: {subCommand}");
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --css-bg export <mnslchr.dat> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --css-bg import <project.usd> <background.dat> <output.usd>");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: CSS background operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
         static void RunCssIconsDump(string[] args)
         {
             try

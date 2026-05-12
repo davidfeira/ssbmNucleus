@@ -44,6 +44,8 @@ namespace MexCLI
                         return Commands.InfoCommand.Execute(args);
                     case "set-css-icon":
                         return Commands.SetCSSIconCommand.Execute(args);
+                    case "add-code":
+                        return Commands.AddCodeCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":
@@ -87,6 +89,7 @@ namespace MexCLI
             Console.WriteLine("  export <project.mexproj> <output.iso>      - Export ISO");
             Console.WriteLine("  recompile-csps <project.mexproj>           - Recompile CSPs from PNG sources");
             Console.WriteLine("  info <project.mexproj>                     - Get project information");
+            Console.WriteLine("  add-code <project> <name> <hex_source>     - Add a Gecko code to project");
             Console.WriteLine("  help                                       - Show this help message");
         }
     }
