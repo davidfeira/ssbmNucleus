@@ -1496,12 +1496,14 @@ namespace HSDRawViewer
                         return;
                     }
 
-                    // Replace the background data in the project
-                    tb.BackgroundModel = modelRoot.Data as HSD_JOBJ;
+                    // Replace the background data in the project.
+                    // Roots loaded from a standalone file are generic HSDAccessor — we
+                    // need to wrap their raw struct in the correctly-typed accessor.
+                    tb.BackgroundModel = new HSD_JOBJ() { _s = modelRoot.Data._s };
                     if (animRoot != null)
-                        tb.BackgroundAnimation = animRoot.Data as HSD_AnimJoint;
+                        tb.BackgroundAnimation = new HSDRaw.Common.Animation.HSD_AnimJoint() { _s = animRoot.Data._s };
                     if (matAnimRoot != null)
-                        tb.BackgroundMaterialAnimation = matAnimRoot.Data as HSD_MatAnimJoint;
+                        tb.BackgroundMaterialAnimation = new HSDRaw.Common.Animation.HSD_MatAnimJoint() { _s = matAnimRoot.Data._s };
 
                     Console.WriteLine($"Saving to: {outputUsd}");
                     rawFile.Save(outputUsd);
