@@ -1500,10 +1500,15 @@ namespace HSDRawViewer
                     // Roots loaded from a standalone file are generic HSDAccessor — we
                     // need to wrap their raw struct in the correctly-typed accessor.
                     tb.BackgroundModel = new HSD_JOBJ() { _s = modelRoot.Data._s };
-                    if (animRoot != null)
-                        tb.BackgroundAnimation = new HSDRaw.Common.Animation.HSD_AnimJoint() { _s = animRoot.Data._s };
-                    if (matAnimRoot != null)
-                        tb.BackgroundMaterialAnimation = new HSDRaw.Common.Animation.HSD_MatAnimJoint() { _s = matAnimRoot.Data._s };
+                    // Replace or clear animation — if the mod doesn't provide one,
+                    // null it out so the vanilla material animation (which may tint
+                    // colors) doesn't leak onto the new model.
+                    tb.BackgroundAnimation = animRoot != null
+                        ? new HSDRaw.Common.Animation.HSD_AnimJoint() { _s = animRoot.Data._s }
+                        : null;
+                    tb.BackgroundMaterialAnimation = matAnimRoot != null
+                        ? new HSDRaw.Common.Animation.HSD_MatAnimJoint() { _s = matAnimRoot.Data._s }
+                        : null;
 
                     Console.WriteLine($"Saving to: {outputUsd}");
                     rawFile.Save(outputUsd);
