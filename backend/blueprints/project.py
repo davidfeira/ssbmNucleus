@@ -463,6 +463,9 @@ def list_fighters():
         fighters = mex.list_fighters()
 
         # Add default stock icon URL for each fighter
+        project_path = get_current_project_path()
+        project_dir = project_path.parent if project_path else None
+
         for fighter in fighters:
             name = fighter['name']
             # Find the Normal costume folder (ends with 'Nr') in vanilla assets
@@ -472,6 +475,18 @@ def list_fighters():
                     if folder.is_dir() and folder.name.endswith('Nr'):
                         fighter['defaultStockUrl'] = f"/vanilla/{name}/{folder.name}/stock.png"
                         break
+
+            # Fallback for custom fighters: read stock icon from project assets
+            if 'defaultStockUrl' not in fighter and project_dir and fighter.get('isMexFighter'):
+                fighter_json = project_dir / 'data' / 'fighters' / f"{fighter['internalId']:03d}.json"
+                if fighter_json.exists():
+                    import json as _json
+                    fdata = _json.load(open(fighter_json))
+                    costumes = fdata.get('costumes', [])
+                    if costumes:
+                        icon_ref = costumes[0].get('icon', '')
+                        if icon_ref:
+                            fighter['defaultStockUrl'] = f"/assets/{icon_ref.replace(chr(92), '/')}.png"
 
         return jsonify({
             'success': True,

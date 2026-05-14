@@ -53,6 +53,11 @@ export default function CharacterMode({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState(null)
 
+  // Add character modal state
+  const [showAddCharacterModal, setShowAddCharacterModal] = useState(false)
+  const [vaultCharacters, setVaultCharacters] = useState([])
+  const [addingCharacter, setAddingCharacter] = useState(null)
+
   // Team color state
   const [teamColors, setTeamColors] = useState({ red: null, blue: null, green: null })
   const [selectedTeamColor, setSelectedTeamColor] = useState(null)
@@ -1484,9 +1489,61 @@ export default function CharacterMode({
     )
   }
 
+  const openAddCharacterModal = async () => {
+    setShowAddCharacterModal(true)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/list`)
+      const data = await response.json()
+      if (data.success) setVaultCharacters(data.characters || [])
+    } catch (err) {
+      console.error('Failed to fetch vault characters:', err)
+    }
+  }
+
+  const handleAddCharacter = async (slug) => {
+    setAddingCharacter(slug)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug })
+      })
+      const data = await response.json()
+      if (data.success) {
+        setShowAddCharacterModal(false)
+        onRefresh()
+      } else {
+        alert(data.error || 'Failed to add character')
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setAddingCharacter(null)
+    }
+  }
+
+  const handleRemoveFighter = async (fighterName) => {
+    if (!confirm(`Remove "${fighterName}" from the project?`)) return
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/remove-from-project`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fighterName })
+      })
+      const data = await response.json()
+      if (data.success) {
+        onRefresh()
+      } else {
+        alert(data.error || 'Failed to remove fighter')
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
   // Character mode UI (default)
   // Hide non-playable characters
-  const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag']
+  const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag', 'NONE']
   const playableFighters = fighters.filter(f => !hiddenCharacters.includes(f.name))
   const batchImportProgress = batchImporting && batchProgress.total > 0
     ? (batchProgress.current / batchProgress.total) * 100
@@ -1548,11 +1605,64 @@ export default function CharacterMode({
                     )}
                   </div>
                 </div>
+                {fighter.isMexFighter && (
+                  <button
+                    className="fighter-remove-btn"
+                    title={`Remove ${fighter.name}`}
+                    onClick={(e) => { e.stopPropagation(); handleRemoveFighter(fighter.name); }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             )
           })}
+          <button
+            className="add-character-btn"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); openAddCharacterModal(); }}
+          >
+            + Add Character
+          </button>
         </div>
       </div>
+
+      {showAddCharacterModal && (
+        <div className="modal-overlay" onClick={() => setShowAddCharacterModal(false)}>
+          <div className="modal-content add-character-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Custom Character</h3>
+              <button className="modal-close" onClick={() => setShowAddCharacterModal(false)}>&times;</button>
+            </div>
+            <div className="add-character-list">
+              {vaultCharacters.length === 0 ? (
+                <p style={{ color: 'var(--color-text-muted)', padding: '1rem' }}>
+                  No custom characters in vault. Scan an ISO from the Vault tab first.
+                </p>
+              ) : vaultCharacters.map(char => (
+                <button
+                  key={char.slug}
+                  className={`add-character-item ${addingCharacter === char.slug ? 'adding' : ''}`}
+                  disabled={addingCharacter !== null}
+                  onClick={() => handleAddCharacter(char.slug)}
+                >
+                  {char.has_css_icon && (
+                    <img
+                      src={`${BACKEND_URL}${char.icon_url}`}
+                      alt=""
+                      className="add-character-icon"
+                      onError={e => e.target.style.display = 'none'}
+                    />
+                  )}
+                  <span className="add-character-name">{char.name}</span>
+                  <span className="add-character-costumes">{char.costume_count} costumes</span>
+                  {addingCharacter === char.slug && <span className="add-character-status">Adding...</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={`costumes-panel ${refreshing || loadingFighter ? 'refreshing' : ''}`}>
         {selectedFighter ? (

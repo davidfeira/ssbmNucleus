@@ -27,6 +27,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
+from core.state import get_current_project_path, reload_mex_manager
 
 logger = logging.getLogger(__name__)
 
@@ -474,3 +475,95 @@ def export_custom_character(slug):
         return send_file(zip_path, as_attachment=True, download_name=f'{slug}.zip')
 
     return jsonify({'success': False, 'error': 'Fighter ZIP not found (imported from project scan?)'}), 404
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/install', methods=['POST'])
+def install_custom_character():
+    """Install a custom character from the vault into the currently open project."""
+    try:
+        data = request.json or {}
+        slug = data.get('slug', '').strip()
+        if not slug:
+            return jsonify({'success': False, 'error': 'Missing slug parameter'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded. Open a project first.'}), 400
+
+        zip_path = CUSTOM_CHARACTERS_PATH / slug / 'fighter.zip'
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Fighter ZIP not found for "{slug}". Re-scan the ISO to generate it.'}), 404
+
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        cmd = [mexcli_path, 'add-fighter', str(project_path), str(zip_path)]
+        logger.info(f"Installing custom character '{slug}': {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"add-fighter failed: {error_msg}")
+            return jsonify({'success': False, 'error': f'Failed to add fighter: {error_msg}'}), 500
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        try:
+            cli_output = json.loads(result.stdout.strip().split('\n')[-1])
+        except (json.JSONDecodeError, IndexError):
+            cli_output = {}
+
+        logger.info(f"[OK] Installed custom character '{slug}' into project")
+        return jsonify({
+            'success': True,
+            'message': f"Added {cli_output.get('name', slug)} to project",
+            'name': cli_output.get('name', slug),
+            'costumeCount': cli_output.get('costumeCount', 0),
+        })
+    except Exception as e:
+        logger.error(f"Install custom character error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/remove-from-project', methods=['POST'])
+def remove_custom_character_from_project():
+    """Remove a custom character from the currently open project."""
+    try:
+        data = request.json or {}
+        fighter_name = data.get('name', '').strip()
+        if not fighter_name:
+            return jsonify({'success': False, 'error': 'Missing name parameter'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded.'}), 400
+
+        mexcli_path = str(MEXCLI_PATH)
+        cmd = [mexcli_path, 'remove-fighter', str(project_path), fighter_name]
+        logger.info(f"Removing fighter '{fighter_name}': {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or 'Unknown error'
+            return jsonify({'success': False, 'error': f'Failed to remove fighter: {error_msg}'}), 500
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        logger.info(f"[OK] Removed fighter '{fighter_name}' from project")
+        return jsonify({'success': True, 'message': f'Removed {fighter_name}'})
+    except Exception as e:
+        logger.error(f"Remove fighter error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500

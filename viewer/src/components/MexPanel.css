@@ -531,6 +531,126 @@
 }
 
 /* ─────────────────────────────────────────
+   ADD CHARACTER BUTTON + MODAL
+   ───────────────────────────────────────── */
+
+.add-character-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 1px dashed var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-character-btn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.add-character-modal {
+  max-width: 500px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.add-character-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.add-character-modal .modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-xl);
+  cursor: pointer;
+}
+
+.add-character-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.add-character-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  margin-bottom: var(--space-2);
+  transition: all var(--transition-fast);
+}
+
+.add-character-item:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
+}
+
+.add-character-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-character-item.adding {
+  border-color: var(--color-accent);
+}
+
+.add-character-icon {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.add-character-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.add-character-costumes {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.add-character-status {
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+}
+
+.fighter-remove-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  padding: 0 var(--space-2);
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.fighter-item:hover .fighter-remove-btn {
+  opacity: 1;
+}
+
+.fighter-remove-btn:hover {
+  color: var(--color-danger, #e53e3e);
+}
+
+/* ─────────────────────────────────────────
    COSTUMES PANEL
    ───────────────────────────────────────── */
 

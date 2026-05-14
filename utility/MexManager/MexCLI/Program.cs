@@ -60,6 +60,10 @@ namespace MexCLI
                         return Commands.ExportFighterCommand.Execute(args);
                     case "export-stage":
                         return Commands.ExportStageCommand.Execute(args);
+                    case "add-fighter":
+                        return Commands.AddFighterCommand.Execute(args);
+                    case "remove-fighter":
+                        return Commands.RemoveFighterCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":
