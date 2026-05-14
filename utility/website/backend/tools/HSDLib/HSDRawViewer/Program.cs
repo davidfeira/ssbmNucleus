@@ -1741,10 +1741,10 @@ namespace HSDRawViewer
                         }
                     });
 
-                    // RGB5A3: same 2 bytes/pixel as IA8, but with color support — no memory increase
+                    // RGB5A3: same 2 bytes/pixel as IA8, but with color support
                     var imgFormat = HSDRaw.GX.GXTexFmt.RGB5A3;
                     var palFormat = HSDRaw.GX.GXTlutFmt.IA8;
-                    Console.WriteLine($"Encoding as RGB5A3 (2 bytes/pixel, same as original IA8)");
+                    Console.WriteLine($"Encoding as RGB5A3 (2 bytes/pixel, color)");
 
                     foreach (var tobj in doorTobjs)
                     {

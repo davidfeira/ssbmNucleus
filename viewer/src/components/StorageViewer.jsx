@@ -1253,10 +1253,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           {selectedMenuType === 'sss' && selectedMenuModType === 'background' && (
             <BackgroundModsView />
           )}
-
-          {selectedMenuType === 'sss' && selectedMenuModType === 'layout' && (
-            <SssLayoutEditor />
-          )}
         </div>
       ) : (
         <div className="grid-wrapper">

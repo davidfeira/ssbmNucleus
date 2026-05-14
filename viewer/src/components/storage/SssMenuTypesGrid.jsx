@@ -9,12 +9,6 @@ const SSS_MOD_TYPES = [
     name: 'Background',
     short: 'BG',
     description: 'SSS background model and animations'
-  },
-  {
-    key: 'layout',
-    name: 'Layout Editor',
-    short: 'SSS',
-    description: 'Edit stage icon positions and layout'
   }
 ]
 
