@@ -9,6 +9,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
+import SssLayoutEditor from '../storage/SssLayoutEditor'
+import CssLayoutEditor from '../storage/CssLayoutEditor'
 
 const MENU_TYPES = [
   { key: 'css', name: 'Character Select Screen', short: 'CSS' },
@@ -19,6 +21,12 @@ const CSS_SUBMOD_TYPES = [
   { key: 'icon_grid', name: 'Icon Grid', description: 'Character portraits on the CSS banner' },
   { key: 'doors', name: 'Doors', description: 'Character panel door animations' },
   { key: 'background', name: 'Background', description: 'CSS background and stage art' },
+  { key: 'layout', name: 'Layout Editor', description: 'Edit fighter icon positions and layout' },
+]
+
+const SSS_SUBMOD_TYPES = [
+  { key: 'background', name: 'Background', description: 'SSS background model and animations' },
+  { key: 'layout', name: 'Layout Editor', description: 'Edit stage icon positions and layout' },
 ]
 
 export default function MenuMode({ mode, onModeChange }) {
@@ -47,7 +55,7 @@ export default function MenuMode({ mode, onModeChange }) {
 
   const fetchBgMods = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/menus/css/background/list`)
+      const res = await fetch(`${API_URL}/menus/background/list`)
       const data = await res.json()
       if (data.success) setBgMods(data.mods || [])
     } catch (err) {
@@ -60,11 +68,14 @@ export default function MenuMode({ mode, onModeChange }) {
       fetchIconGridMods()
       fetchBgMods()
     }
+    if (selectedMenu === 'sss') {
+      fetchBgMods()
+    }
   }, [selectedMenu, fetchIconGridMods, fetchBgMods])
 
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
-    if (key === 'background') return bgMods
+    if (key === 'background') return bgMods // shared pool for CSS and SSS
     return []
   }
 
@@ -73,10 +84,14 @@ export default function MenuMode({ mode, onModeChange }) {
     setInstalling(true)
     setInstallMessage('')
     try {
-      // Dynamic install endpoint based on selected submod type
-      const installEndpoint = selectedSubmod === 'background'
-        ? `${API_URL}/menus/css/background/install/${selectedMod.id}`
-        : `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
+      let installEndpoint
+      if (selectedMenu === 'sss' && selectedSubmod === 'background') {
+        installEndpoint = `${API_URL}/menus/sss/background/install/${selectedMod.id}`
+      } else if (selectedSubmod === 'background') {
+        installEndpoint = `${API_URL}/menus/css/background/install/${selectedMod.id}`
+      } else {
+        installEndpoint = `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
+      }
       const res = await fetch(installEndpoint, {
         method: 'POST'
       })
@@ -98,7 +113,52 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }
 
-  const submodTypes = selectedMenu === 'css' ? CSS_SUBMOD_TYPES : []
+  const submodTypes = selectedMenu === 'css' ? CSS_SUBMOD_TYPES
+    : selectedMenu === 'sss' ? SSS_SUBMOD_TYPES : []
+
+  // ── Layout editors (not a normal import flow) ──
+  if ((selectedMenu === 'css' || selectedMenu === 'sss') && selectedSubmod === 'layout') {
+    const EditorComponent = selectedMenu === 'css' ? CssLayoutEditor : SssLayoutEditor
+    const menuLabel = selectedMenu.toUpperCase()
+    return (
+      <div className="mex-content">
+        <div className="fighters-list">
+          <div className="extras-header">
+            <h3>{menuLabel} Mods</h3>
+            <button
+              className="btn-back-small"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null) }}
+            >
+              ← Back
+            </button>
+          </div>
+          <div className="fighter-items">
+            {submodTypes.map(st => (
+              <div
+                key={st.key}
+                className={`fighter-item ${selectedSubmod === st.key ? 'selected' : ''}`}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); setSelectedSubmod(st.key); setSelectedMod(null) }}
+              >
+                <div className="fighter-content">
+                  <div className="fighter-name">{st.name}</div>
+                  <div className="fighter-info">
+                    <span className="costume-count">
+                      {st.key === 'layout' ? 'editor' : `${getModsForSubmod(st.key).length} in vault`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="costumes-panel" style={{ overflow: 'hidden', flexDirection: 'column' }}>
+          <EditorComponent />
+        </div>
+      </div>
+    )
+  }
 
   // ── Submod type selected → extras-style view ──
   if (selectedMenu && selectedSubmod) {
@@ -131,7 +191,7 @@ export default function MenuMode({ mode, onModeChange }) {
                   <div className="fighter-name">{st.name}</div>
                   <div className="fighter-info">
                     <span className="costume-count">
-                      {getModsForSubmod(st.key).length} in vault
+                      {st.key === 'layout' ? 'editor' : `${getModsForSubmod(st.key).length} in vault`}
                     </span>
                   </div>
                 </div>
@@ -278,16 +338,11 @@ export default function MenuMode({ mode, onModeChange }) {
                 <div className="fighter-content">
                   <div className="fighter-name">{st.name}</div>
                   <div className="fighter-info">
-                    <span className="costume-count">{getModsForSubmod(st.key).length} in vault</span>
+                    <span className="costume-count">{st.key === 'layout' ? 'editor' : `${getModsForSubmod(st.key).length} in vault`}</span>
                   </div>
                 </div>
               </div>
             ))}
-            {selectedMenu === 'sss' && (
-              <div style={{ padding: '1rem', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem', textAlign: 'center' }}>
-                SSS mod types coming soon
-              </div>
-            )}
           </div>
         </div>
 

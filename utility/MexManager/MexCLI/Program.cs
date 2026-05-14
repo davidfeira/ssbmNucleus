@@ -46,6 +46,14 @@ namespace MexCLI
                         return Commands.SetCSSIconCommand.Execute(args);
                     case "add-code":
                         return Commands.AddCodeCommand.Execute(args);
+                    case "get-sss-layout":
+                        return Commands.GetSssLayoutCommand.Execute(args);
+                    case "set-sss-layout":
+                        return Commands.SetSssLayoutCommand.Execute(args);
+                    case "get-css-layout":
+                        return Commands.GetCssLayoutCommand.Execute(args);
+                    case "set-css-layout":
+                        return Commands.SetCssLayoutCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":
@@ -90,6 +98,8 @@ namespace MexCLI
             Console.WriteLine("  recompile-csps <project.mexproj>           - Recompile CSPs from PNG sources");
             Console.WriteLine("  info <project.mexproj>                     - Get project information");
             Console.WriteLine("  add-code <project> <name> <hex_source>     - Add a Gecko code to project");
+            Console.WriteLine("  get-sss-layout <project.mexproj>           - Get SSS layout data as JSON");
+            Console.WriteLine("  set-sss-layout <project.mexproj>           - Set SSS layout (reads JSON from stdin)");
             Console.WriteLine("  help                                       - Show this help message");
         }
     }

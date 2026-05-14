@@ -1,30 +1,27 @@
 /**
- * CssMenuTypesGrid - Mod type selector for the Character Select Screen.
- *
- * Currently exposes one tile: Icon Grid. Additional CSS mod types
- * (layouts, backgrounds, portraits, etc.) can be added here later.
+ * SssMenuTypesGrid - Mod type selector for the Stage Select Screen.
  */
 import { playSound, playHoverSound } from '../../utils/sounds'
 
-const CSS_MOD_TYPES = [
-  {
-    key: 'icon_grid',
-    name: 'Icon Grid',
-    short: 'IG',
-    description: 'Custom character portraits used on the CSS banner'
-  },
+const SSS_MOD_TYPES = [
   {
     key: 'background',
     name: 'Background',
     short: 'BG',
-    description: 'CSS background and stage art'
+    description: 'SSS background model and animations'
+  },
+  {
+    key: 'layout',
+    name: 'Layout Editor',
+    short: 'SSS',
+    description: 'Edit stage icon positions and layout'
   }
 ]
 
-export default function CssMenuTypesGrid({ onSelectModType }) {
+export default function SssMenuTypesGrid({ onSelectModType }) {
   return (
     <div className="stages-grid" style={{ justifyContent: 'center' }}>
-      {CSS_MOD_TYPES.map((modType) => (
+      {SSS_MOD_TYPES.map((modType) => (
         <div
           key={modType.key}
           className="stage-card"

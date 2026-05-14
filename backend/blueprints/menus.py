@@ -30,10 +30,10 @@ import zipfile
 import logging
 from pathlib import Path
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, HSDRAW_EXE, MEXCLI_PATH, get_subprocess_args
-from core.state import get_project_files_dir, get_current_project_path
+from core.state import get_project_files_dir, get_current_project_path, get_mex_manager
 
 logger = logging.getLogger(__name__)
 
@@ -1029,9 +1029,22 @@ def _find_mnslchr_dat(directory):
     return None
 
 
+def _find_mnslmap_dat(directory):
+    """Find a MnSlMap dat/usd file in an extracted directory."""
+    directory = Path(directory)
+    for p in sorted(directory.rglob('*')):
+        if not p.is_file():
+            continue
+        name_lower = p.name.lower()
+        if name_lower.startswith('mnslmap') and name_lower.endswith(('.dat', '.usd')):
+            return p
+    return None
+
+
 @menus_bp.route('/api/mex/menus/css/background/list', methods=['GET'])
+@menus_bp.route('/api/mex/menus/background/list', methods=['GET'])
 def list_bg_mods():
-    """List all installed CSS background mods."""
+    """List all installed background mods (shared CSS/SSS pool)."""
     try:
         catalog = _load_bg_catalog()
         mods = []
@@ -1042,6 +1055,9 @@ def list_bg_mods():
             out = dict(entry)
             if entry.get('screenshot'):
                 out['screenshotUrl'] = f"/storage/menus/css/background/{mod_id}/{entry['screenshot']}"
+            mod_json = _load_bg_mod_json(mod_id)
+            if mod_json:
+                out['includeScene'] = mod_json.get('includeScene', False)
             mods.append(out)
         return jsonify({'success': True, 'mods': mods})
     except Exception as e:
@@ -1050,11 +1066,13 @@ def list_bg_mods():
 
 
 @menus_bp.route('/api/mex/menus/css/background/import', methods=['POST'])
+@menus_bp.route('/api/mex/menus/background/import', methods=['POST'])
 def import_bg_mod():
-    """Import a CSS background mod.
+    """Import a menu background mod (shared CSS/SSS pool).
 
-    Accepts .zip (containing MnSlChr.dat/.usd) or a raw .dat/.usd file.
-    Extracts the background model/animation bundle via HSDRawViewer --css-bg export.
+    Accepts .zip (containing MnSlChr.dat/.usd or MnSlMap.dat/.usd) or a raw
+    .dat/.usd file.  Auto-detects CSS vs SSS source and extracts the background
+    model/animation bundle via HSDRawViewer.
     """
     try:
         if 'file' not in request.files:
@@ -1073,7 +1091,7 @@ def import_bg_mod():
         name = (request.form.get('name') or '').strip() or Path(file.filename).stem
         description = (request.form.get('description') or '').strip()
 
-        with tempfile.TemporaryDirectory(prefix='cssbg_') as tmp:
+        with tempfile.TemporaryDirectory(prefix='menubg_') as tmp:
             temp_root = Path(tmp)
 
             if is_zip:
@@ -1086,20 +1104,31 @@ def import_bg_mod():
                 except zipfile.BadZipFile:
                     return jsonify({'success': False, 'error': 'Invalid or corrupt zip file'}), 400
                 source_dat = _find_mnslchr_dat(extract_dir)
+                hsd_cmd = '--css-bg'
+                if source_dat is None:
+                    source_dat = _find_mnslmap_dat(extract_dir)
+                    hsd_cmd = '--sss-bg'
                 screenshot_src = _find_screenshot(extract_dir)
             else:
-                # Raw dat/usd
                 source_dat = temp_root / file.filename
                 file.save(str(source_dat))
                 screenshot_src = None
+                # Detect by filename; default to CSS, fall back to SSS
+                if 'mnslmap' in fname_lower:
+                    hsd_cmd = '--sss-bg'
+                else:
+                    hsd_cmd = '--css-bg'
 
             if source_dat is None or not source_dat.exists():
-                return jsonify({'success': False, 'error': 'No MnSlChr .dat/.usd found in upload'}), 400
+                return jsonify({'success': False, 'error': 'No MnSlChr or MnSlMap .dat/.usd found in upload'}), 400
 
-            # Run HSDRawViewer --css-bg export to extract background.dat
             export_dir = temp_root / 'bg_export'
             export_dir.mkdir()
-            result = _run_hsd_cli(['--css-bg', 'export', str(source_dat), str(export_dir)])
+            result = _run_hsd_cli([hsd_cmd, 'export', str(source_dat), str(export_dir)])
+            if result is None:
+                # Try the other command in case detection was wrong
+                alt_cmd = '--sss-bg' if hsd_cmd == '--css-bg' else '--css-bg'
+                result = _run_hsd_cli([alt_cmd, 'export', str(source_dat), str(export_dir)])
             if result is None:
                 return jsonify({'success': False, 'error': 'Failed to extract background from DAT'}), 500
 
@@ -1183,11 +1212,13 @@ def install_bg_to_mex(mod_id):
         with tempfile.TemporaryDirectory(prefix='cssbg_install_') as tmp:
             output_usd = Path(tmp) / 'MnSlChr.usd'
 
-            # Step 1: Import background into MnSlChr.usd
-            result = _run_hsd_cli([
+            hsd_args = [
                 '--css-bg', 'import',
                 str(mnslchr_usd), str(bg_dat), str(output_usd)
-            ])
+            ]
+            if mod.get('includeScene'):
+                hsd_args.append('--include-scene')
+            result = _run_hsd_cli(hsd_args)
             if result is None:
                 return jsonify({'success': False, 'error': 'HSDRawViewer --css-bg import failed'}), 500
 
@@ -1231,8 +1262,9 @@ def install_bg_to_mex(mod_id):
 
 
 @menus_bp.route('/api/mex/menus/css/background/delete/<mod_id>', methods=['POST'])
+@menus_bp.route('/api/mex/menus/background/delete/<mod_id>', methods=['POST'])
 def delete_bg_mod(mod_id):
-    """Delete a CSS background mod and its files."""
+    """Delete a background mod and its files."""
     try:
         catalog = _load_bg_catalog()
         mods = catalog.get('mods', [])
@@ -1246,8 +1278,219 @@ def delete_bg_mod(mod_id):
 
         mods.pop(idx)
         _save_bg_catalog(catalog)
-        logger.info(f'[OK] Deleted CSS background mod: {mod_id}')
+        logger.info(f'[OK] Deleted background mod: {mod_id}')
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f'Delete bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/background/update/<mod_id>', methods=['POST'])
+def update_bg_mod_settings(mod_id):
+    """Update settings for a background mod (e.g. includeScene toggle)."""
+    try:
+        mod = _load_bg_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        data = request.get_json(silent=True) or {}
+        if 'includeScene' in data:
+            mod['includeScene'] = bool(data['includeScene'])
+
+        _save_bg_mod_json(mod_id, mod)
+        return jsonify({'success': True, 'mod': _attach_bg_urls(mod)})
+    except Exception as e:
+        logger.error(f'Update bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/sss/background/install/<mod_id>', methods=['POST'])
+def install_sss_bg_to_mex(mod_id):
+    """Install a background mod into the SSS (MnSlMap.usd) of the loaded MEX project.
+
+    Uses HSDRawViewer --sss-bg import to swap the background in MnSlMap.usd.
+    """
+    try:
+        mod = _load_bg_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        files_dir = get_project_files_dir()
+        if files_dir is None:
+            return jsonify({'success': False, 'error': 'No project files directory'}), 400
+
+        mnslmap_usd = Path(files_dir) / 'MnSlMap.usd'
+        if not mnslmap_usd.exists():
+            return jsonify({'success': False, 'error': f'MnSlMap.usd not found at {mnslmap_usd}'}), 400
+
+        bg_dat = BG_PATH / mod_id / 'background.dat'
+        if not bg_dat.exists():
+            return jsonify({'success': False, 'error': 'background.dat missing from mod'}), 400
+
+        if not HSDRAW_EXE.exists():
+            return jsonify({'success': False, 'error': f'HSDRawViewer not found at {HSDRAW_EXE}'}), 500
+
+        with tempfile.TemporaryDirectory(prefix='sssbg_install_') as tmp:
+            output_usd = Path(tmp) / 'MnSlMap.usd'
+
+            hsd_args = [
+                '--sss-bg', 'import',
+                str(mnslmap_usd), str(bg_dat), str(output_usd)
+            ]
+            if mod.get('includeScene'):
+                hsd_args.append('--include-scene')
+            result = _run_hsd_cli(hsd_args)
+            if result is None:
+                return jsonify({'success': False, 'error': 'HSDRawViewer --sss-bg import failed'}), 500
+
+            if not output_usd.exists():
+                return jsonify({'success': False, 'error': 'Import produced no output file'}), 500
+
+            shutil.copy(str(output_usd), str(mnslmap_usd))
+            logger.info(f'  Replaced MnSlMap.usd with custom background')
+
+        msg = f'Installed background "{mod["name"]}" to SSS. Rebuild ISO to apply.'
+        logger.info(f'[OK] Installed SSS background mod {mod_id}')
+        return jsonify({'success': True, 'message': msg})
+
+    except Exception as e:
+        logger.error(f'Install SSS bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+#  SSS Layout Editor endpoints
+# ---------------------------------------------------------------------------
+
+@menus_bp.route('/api/mex/menus/sss/layout', methods=['GET'])
+def get_sss_layout():
+    """Get the full SSS layout from the current MEX project."""
+    try:
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+        result = mex.get_sss_layout()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'Get SSS layout error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/sss/layout', methods=['POST'])
+def set_sss_layout():
+    """Save SSS layout changes to the MEX project."""
+    try:
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        layout_data = request.get_json()
+        if not layout_data or 'pages' not in layout_data:
+            return jsonify({'success': False, 'error': 'Missing pages data'}), 400
+
+        import json as _json
+        result = mex.set_sss_layout(_json.dumps(layout_data))
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'Set SSS layout error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/sss/stage-icon', methods=['GET'])
+def get_sss_stage_icon():
+    """Serve a stage icon PNG from the MEX project assets directory."""
+    try:
+        icon_path = request.args.get('path')
+        if not icon_path:
+            return jsonify({'success': False, 'error': 'Missing path parameter'}), 400
+
+        icon_file = Path(icon_path)
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        project_dir = project_path.parent.resolve()
+        try:
+            icon_file.resolve().relative_to(project_dir)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
+        if not icon_file.exists():
+            return jsonify({'success': False, 'error': 'Icon file not found'}), 404
+
+        return send_file(str(icon_file), mimetype='image/png',
+                         max_age=300)
+    except Exception as e:
+        logger.error(f'Get SSS stage icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+#  CSS Layout Editor endpoints
+# ---------------------------------------------------------------------------
+
+@menus_bp.route('/api/mex/menus/css/layout', methods=['GET'])
+def get_css_layout():
+    """Get the full CSS layout from the current MEX project."""
+    try:
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+        result = mex.get_css_layout()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'Get CSS layout error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/layout', methods=['POST'])
+def set_css_layout():
+    """Save CSS layout changes to the MEX project."""
+    try:
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        layout_data = request.get_json()
+        if not layout_data or 'icons' not in layout_data:
+            return jsonify({'success': False, 'error': 'Missing icons data'}), 400
+
+        import json as _json
+        result = mex.set_css_layout(_json.dumps(layout_data))
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'Set CSS layout error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/fighter-icon', methods=['GET'])
+def get_css_fighter_icon():
+    """Serve a fighter icon PNG from the MEX project assets directory."""
+    try:
+        icon_path = request.args.get('path')
+        if not icon_path:
+            return jsonify({'success': False, 'error': 'Missing path parameter'}), 400
+
+        icon_file = Path(icon_path)
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        project_dir = project_path.parent.resolve()
+        try:
+            icon_file.resolve().relative_to(project_dir)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
+        if not icon_file.exists():
+            return jsonify({'success': False, 'error': 'Icon file not found'}), 404
+
+        return send_file(str(icon_file), mimetype='image/png', max_age=300)
+    except Exception as e:
+        logger.error(f'Get CSS fighter icon error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

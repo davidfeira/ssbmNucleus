@@ -25,8 +25,10 @@ import StagesGrid from './storage/StagesGrid'
 import PatchesGrid from './storage/PatchesGrid'
 import MenusGrid from './storage/MenusGrid'
 import CssMenuTypesGrid from './storage/CssMenuTypesGrid'
+import SssMenuTypesGrid from './storage/SssMenuTypesGrid'
 import IconGridModsView from './storage/IconGridModsView'
 import BackgroundModsView from './storage/BackgroundModsView'
+import SssLayoutEditor from './storage/SssLayoutEditor'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
@@ -1239,14 +1241,22 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             <BackgroundModsView />
           )}
 
-          {selectedMenuType === 'sss' && (
-            <div style={{ color: 'var(--color-text-muted)', padding: '2rem', textAlign: 'center' }}>
-              SSS mods — coming soon
-            </div>
+          {selectedMenuType === 'sss' && !selectedMenuModType && (
+            <SssMenuTypesGrid onSelectModType={setSelectedMenuModType} />
+          )}
+
+          {selectedMenuType === 'sss' && selectedMenuModType === 'background' && (
+            <BackgroundModsView />
+          )}
+
+          {selectedMenuType === 'sss' && selectedMenuModType === 'layout' && (
+            <SssLayoutEditor />
           )}
         </div>
       ) : (
-        <MenusGrid onSelectMenuType={setSelectedMenuType} />
+        <div className="grid-wrapper">
+          <MenusGrid onSelectMenuType={setSelectedMenuType} />
+        </div>
       )}
 
       {/* XDelta Import Modal */}

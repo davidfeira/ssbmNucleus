@@ -412,6 +412,65 @@ class MexManager:
         except subprocess.SubprocessError as e:
             raise MexManagerError(f"Failed to export ISO: {e}")
 
+    def _run_command_with_stdin(self, stdin_data: str, *args) -> Dict:
+        """Run mexcli command with data piped to stdin."""
+        cmd = [str(self.cli_path)] + list(args)
+        logger.info(f"Running MexCLI command (with stdin): {' '.join(cmd)}")
+
+        try:
+            creation_flags = 0
+            if os.name == 'nt':
+                creation_flags = subprocess.CREATE_NO_WINDOW
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                input=stdin_data,
+                check=False,
+                cwd=str(self.project_path.parent),
+                creationflags=creation_flags,
+                timeout=120
+            )
+
+            if result.stdout.strip():
+                try:
+                    output = json.loads(result.stdout)
+                    if isinstance(output, dict) and not output.get('success', True):
+                        raise MexManagerError(f"MexCLI error: {output.get('error', 'Unknown error')}")
+                    return output
+                except json.JSONDecodeError:
+                    pass
+
+            if result.stderr:
+                raise MexManagerError(f"MexCLI error: {result.stderr}")
+            if result.returncode != 0:
+                raise MexManagerError(f"MexCLI command failed with code {result.returncode}")
+            return {"success": True}
+
+        except subprocess.SubprocessError as e:
+            raise MexManagerError(f"Failed to execute mexcli: {e}")
+
+    def get_sss_layout(self) -> Dict:
+        """Get full SSS layout data from the MEX project."""
+        return self._run_command("get-sss-layout", str(self.project_path))
+
+    def set_sss_layout(self, layout_json: str) -> Dict:
+        """Write SSS layout data to the MEX project via stdin."""
+        return self._run_command_with_stdin(
+            layout_json, "set-sss-layout", str(self.project_path)
+        )
+
+    def get_css_layout(self) -> Dict:
+        """Get full CSS layout data from the MEX project."""
+        return self._run_command("get-css-layout", str(self.project_path))
+
+    def set_css_layout(self, layout_json: str) -> Dict:
+        """Write CSS layout data to the MEX project via stdin."""
+        return self._run_command_with_stdin(
+            layout_json, "set-css-layout", str(self.project_path)
+        )
+
     def get_character_id(self, character_name: str) -> Optional[int]:
         """
         Convert character name to internal ID.
