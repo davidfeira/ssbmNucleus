@@ -8,42 +8,6 @@ namespace MexCLI.Commands
 {
     public static class AddStageCommand
     {
-        private const int Columns = 6;
-        private const float IconWidth = 3.1f;
-        private const float IconHeight = 2.7f;
-        private const float SpacingX = 6.6f;
-        private const float SpacingY = 5.6f;
-        private const float CenterY = 10.0f;
-
-        private static void LayoutCustomGrid(MexStageSelect page)
-        {
-            int count = page.StageIcons.Count;
-            int rows = (int)Math.Ceiling(count / (double)Columns);
-            float totalWidth = (Math.Min(count, Columns) - 1) * SpacingX;
-            float totalHeight = (rows - 1) * SpacingY;
-            float startX = -totalWidth / 2f;
-            float startY = CenterY + totalHeight / 2f;
-
-            for (int i = 0; i < count; i++)
-            {
-                int col = i % Columns;
-                int row = i / Columns;
-                int itemsInRow = (row < rows - 1) ? Columns : count - row * Columns;
-                float rowWidth = (itemsInRow - 1) * SpacingX;
-                float rowStartX = -rowWidth / 2f;
-
-                var icon = page.StageIcons[i];
-                icon.X = rowStartX + col * SpacingX;
-                icon.Y = startY - row * SpacingY;
-                icon.Z = 1f;
-                icon.ScaleX = 1f;
-                icon.ScaleY = 1f;
-                icon.Width = IconWidth;
-                icon.Height = IconHeight;
-                icon.Group = row % 3;
-            }
-        }
-
         public static int Execute(string[] args)
         {
             try
@@ -134,8 +98,6 @@ namespace MexCLI.Commands
                     StageID = externalId,
                     Status = MexStageSelectIcon.StageIconStatus.Unlocked,
                 });
-
-                LayoutCustomGrid(customPage);
 
                 workspace.Save(null);
 

@@ -520,6 +520,37 @@ export default function StageMode({
     setSelectedCustomStages(new Set())
   }
 
+  const autoApplySssGrid = async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/sss/layout`)
+      const data = await res.json()
+      if (!data.success || !data.pages) return
+      // Apply grid to each page that has icons
+      const cols = 6
+      const baseW = 5.95, baseH = 5.21, centerX = 0, centerY = 5.5
+      const updatedPages = data.pages.map(page => {
+        const icons = page.icons || []
+        if (icons.length === 0) return page
+        const rows = Math.ceil(icons.length / cols)
+        const sx = 1.0, sy = 1.0
+        const iw = baseW * sx, ih = baseH * sy
+        const totalW = Math.min(icons.length, cols) * iw, totalH = rows * ih
+        const gridIcons = icons.map((icon, i) => {
+          const col = i % cols, row = Math.floor(i / cols)
+          return { ...icon, x: centerX - totalW / 2 + iw * col + iw / 2, y: centerY + totalH / 2 - ih * row - ih / 2, z: 0, scaleX: sx, scaleY: sy }
+        })
+        return { ...page, icons: gridIcons }
+      })
+      await fetch(`${API_URL}/menus/sss/layout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pages: updatedPages })
+      })
+    } catch (err) {
+      console.error('Auto SSS grid failed:', err)
+    }
+  }
+
   const handleBatchInstallStages = async () => {
     const slugs = [...selectedCustomStages]
     if (slugs.length === 0) return
@@ -541,6 +572,7 @@ export default function StageMode({
         console.error(`Error installing ${slugs[i]}:`, err)
       }
     }
+    await autoApplySssGrid()
     setBatchInstallingStages(false)
     setSelectedCustomStages(new Set())
     await fetchCustomStagesData()

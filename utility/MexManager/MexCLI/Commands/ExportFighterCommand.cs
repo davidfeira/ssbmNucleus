@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using mexLib;
 using mexLib.Types;
@@ -58,8 +59,41 @@ namespace MexCLI.Commands
                 if (dir != null && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                using FileStream fs = new(outputPath, FileMode.Create);
-                fighter.ToPackage(workspace, fs, options);
+                using (FileStream fs = new(outputPath, FileMode.Create))
+                    fighter.ToPackage(workspace, fs, options);
+
+                // Append any related files ToPackage missed (kirby cap, effects, etc.)
+                {
+                    string filesDir = workspace.GetFilePath("");
+                    if (Directory.Exists(filesDir))
+                    {
+                        List<string> extraFiles = new();
+                        // Kirby cap file
+                        if (!string.IsNullOrEmpty(fighter.Files.KirbyCapFileName))
+                        {
+                            string kcf = Path.Combine(filesDir, fighter.Files.KirbyCapFileName);
+                            if (File.Exists(kcf)) extraFiles.Add(kcf);
+                        }
+                        // Kirby effect file
+                        if (!string.IsNullOrEmpty(fighter.Files.KirbyEffectFile))
+                        {
+                            string kef = Path.Combine(filesDir, fighter.Files.KirbyEffectFile);
+                            if (File.Exists(kef)) extraFiles.Add(kef);
+                        }
+
+                        if (extraFiles.Count > 0)
+                        {
+                            using FileStream zipFs = new(outputPath, FileMode.Open, FileAccess.ReadWrite);
+                            using ZipArchive zip = new(zipFs, ZipArchiveMode.Update);
+                            foreach (string filePath in extraFiles)
+                            {
+                                string name = Path.GetFileName(filePath);
+                                if (zip.GetEntry(name) != null) continue;
+                                zip.CreateEntryFromFile(filePath, name, CompressionLevel.Fastest);
+                            }
+                        }
+                    }
+                }
 
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {

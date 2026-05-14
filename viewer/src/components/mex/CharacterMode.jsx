@@ -57,6 +57,9 @@ export default function CharacterMode({
   const [showAddCharacterModal, setShowAddCharacterModal] = useState(false)
   const [vaultCharacters, setVaultCharacters] = useState([])
   const [addingCharacter, setAddingCharacter] = useState(null)
+  const [selectedVaultChars, setSelectedVaultChars] = useState(new Set())
+  const [batchAddingChars, setBatchAddingChars] = useState(false)
+  const [batchCharProgress, setBatchCharProgress] = useState({ current: 0, total: 0 })
 
   // Team color state
   const [teamColors, setTeamColors] = useState({ red: null, blue: null, green: null })
@@ -1500,26 +1503,67 @@ export default function CharacterMode({
     }
   }
 
-  const handleAddCharacter = async (slug) => {
-    setAddingCharacter(slug)
+  const toggleVaultCharSelection = (slug) => {
+    setSelectedVaultChars(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+  }
+
+  const autoApplyCssGrid = async () => {
     try {
-      const response = await fetch(`${API_URL}/custom-characters/install`, {
+      const res = await fetch(`${API_URL}/menus/css/layout`)
+      const data = await res.json()
+      if (!data.success) return
+      const { icons, template } = data
+      if (!icons || !template || icons.length === 0) return
+      const cols = template.iconsPerRow || 9
+      const rows = Math.ceil(icons.length / cols)
+      const vanillaW = 63.45, vanillaH = 21.6, baseW = 7.05, baseH = 7.2
+      const sx = vanillaW / (cols * baseW), sy = vanillaH / (rows * baseH)
+      const newTemplate = { ...template, scaleX: sx, scaleY: sy, iconWidth: baseW, iconHeight: baseH, centerX: 0.05, centerY: 9.5 }
+      const iw = baseW * sx, ih = baseH * sy
+      const totalW = Math.min(icons.length, cols) * iw, totalH = rows * ih
+      const gridIcons = icons.map((icon, i) => {
+        const col = i % cols, row = Math.floor(i / cols)
+        return { ...icon, x: newTemplate.centerX - totalW / 2 + iw * col + iw / 2, y: newTemplate.centerY + totalH / 2 - ih * row - ih / 2, z: 0, scaleX: sx, scaleY: sy, collisionSizeX: baseW, collisionSizeY: baseH, collisionOffsetX: 0, collisionOffsetY: 0 }
+      })
+      await fetch(`${API_URL}/menus/css/layout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug })
+        body: JSON.stringify({ icons: gridIcons, template: newTemplate })
       })
-      const data = await response.json()
-      if (data.success) {
-        setShowAddCharacterModal(false)
-        onRefresh()
-      } else {
-        alert(data.error || 'Failed to add character')
-      }
     } catch (err) {
-      alert(`Error: ${err.message}`)
-    } finally {
-      setAddingCharacter(null)
+      console.error('Auto CSS grid failed:', err)
     }
+  }
+
+  const handleBatchAddCharacters = async () => {
+    const slugs = [...selectedVaultChars]
+    if (slugs.length === 0) return
+    setBatchAddingChars(true)
+    setBatchCharProgress({ current: 0, total: slugs.length })
+    for (let i = 0; i < slugs.length; i++) {
+      setBatchCharProgress({ current: i + 1, total: slugs.length })
+      try {
+        const response = await fetch(`${API_URL}/custom-characters/install`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: slugs[i] })
+        })
+        const data = await response.json()
+        if (!data.success) console.error(`Failed to install ${slugs[i]}:`, data.error)
+      } catch (err) {
+        console.error(`Error installing ${slugs[i]}:`, err)
+      }
+    }
+    await autoApplyCssGrid()
+    setBatchAddingChars(false)
+    setSelectedVaultChars(new Set())
+    setShowAddCharacterModal(false)
+    onRefresh()
   }
 
   const handleRemoveFighter = async (fighterName) => {
@@ -1628,37 +1672,80 @@ export default function CharacterMode({
       </div>
 
       {showAddCharacterModal && (
-        <div className="modal-overlay" onClick={() => setShowAddCharacterModal(false)}>
+        <div className="modal-overlay" onClick={() => { if (!batchAddingChars) { setShowAddCharacterModal(false); setSelectedVaultChars(new Set()) } }}>
           <div className="modal-content add-character-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Add Custom Character</h3>
-              <button className="modal-close" onClick={() => setShowAddCharacterModal(false)}>&times;</button>
+              <h3>Add Custom Characters{selectedVaultChars.size > 0 ? ` (${selectedVaultChars.size} selected)` : ''}</h3>
+              <button className="modal-close" onClick={() => { if (!batchAddingChars) { setShowAddCharacterModal(false); setSelectedVaultChars(new Set()) } }}>&times;</button>
             </div>
+            {vaultCharacters.length > 0 && (
+              <div className="batch-controls" style={{ marginBottom: 'var(--space-2)' }}>
+                {selectedVaultChars.size > 0 ? (
+                  <>
+                    <button
+                      className="btn-batch-import"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('start'); handleBatchAddCharacters(); }}
+                      disabled={batchAddingChars}
+                    >
+                      {batchAddingChars
+                        ? `Adding ${batchCharProgress.current}/${batchCharProgress.total}...`
+                        : `Add Selected (${selectedVaultChars.size})`}
+                    </button>
+                    <button
+                      className="btn-clear-selection"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('boop'); setSelectedVaultChars(new Set()); }}
+                      disabled={batchAddingChars}
+                    >
+                      Clear
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="btn-select-all"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); setSelectedVaultChars(new Set(vaultCharacters.map(c => c.slug))); }}
+                  >
+                    Select All
+                  </button>
+                )}
+              </div>
+            )}
             <div className="add-character-list">
               {vaultCharacters.length === 0 ? (
                 <p style={{ color: 'var(--color-text-muted)', padding: '1rem' }}>
                   No custom characters in vault. Scan an ISO from the Vault tab first.
                 </p>
-              ) : vaultCharacters.map(char => (
-                <button
-                  key={char.slug}
-                  className={`add-character-item ${addingCharacter === char.slug ? 'adding' : ''}`}
-                  disabled={addingCharacter !== null}
-                  onClick={() => handleAddCharacter(char.slug)}
-                >
-                  {char.has_css_icon && (
-                    <img
-                      src={`${BACKEND_URL}${char.icon_url}`}
-                      alt=""
-                      className="add-character-icon"
-                      onError={e => e.target.style.display = 'none'}
+              ) : vaultCharacters.map(char => {
+                const isSelected = selectedVaultChars.has(char.slug)
+                return (
+                  <button
+                    key={char.slug}
+                    className={`add-character-item ${isSelected ? 'adding' : ''}`}
+                    disabled={batchAddingChars}
+                    onClick={() => { if (!batchAddingChars) { playSound('boop'); toggleVaultCharSelection(char.slug); } }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}}
+                      disabled={batchAddingChars}
+                      style={{ flexShrink: 0 }}
                     />
-                  )}
-                  <span className="add-character-name">{char.name}</span>
-                  <span className="add-character-costumes">{char.costume_count} costumes</span>
-                  {addingCharacter === char.slug && <span className="add-character-status">Adding...</span>}
-                </button>
-              ))}
+                    {char.has_css_icon && (
+                      <img
+                        src={`${BACKEND_URL}${char.icon_url}`}
+                        alt=""
+                        className="add-character-icon"
+                        onError={e => e.target.style.display = 'none'}
+                      />
+                    )}
+                    <span className="add-character-name">{char.name}</span>
+                    <span className="add-character-costumes">{char.costume_count} costumes</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>

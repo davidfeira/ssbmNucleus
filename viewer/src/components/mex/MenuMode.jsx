@@ -168,41 +168,18 @@ export default function MenuMode({ mode, onModeChange }) {
   // ── Layout editors (not a normal import flow) ──
   if ((selectedMenu === 'css' || selectedMenu === 'sss') && selectedSubmod === 'layout') {
     const EditorComponent = selectedMenu === 'css' ? CssLayoutEditor : SssLayoutEditor
-    const menuLabel = selectedMenu.toUpperCase()
     return (
-      <div className="mex-content">
-        <div className="fighters-list">
-          <div className="extras-header">
-            <h3>{menuLabel} Mods</h3>
-            <button
-              className="btn-back-small"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null) }}
-            >
-              ← Back
-            </button>
-          </div>
-          <div className="fighter-items">
-            {submodTypes.map(st => (
-              <div
-                key={st.key}
-                className={`fighter-item ${selectedSubmod === st.key ? 'selected' : ''}`}
-                onMouseEnter={playHoverSound}
-                onClick={() => { playSound('boop'); setSelectedSubmod(st.key); setSelectedMod(null) }}
-              >
-                <div className="fighter-content">
-                  <div className="fighter-name">{st.name}</div>
-                  <div className="fighter-info">
-                    <span className="costume-count">
-                      {st.key === 'layout' ? 'editor' : `${getModsForSubmod(st.key).length} in vault`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="mex-content" style={{ flexDirection: 'column' }}>
+        <div style={{ padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--color-border-subtle)' }}>
+          <button
+            className="btn-back-small"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null); setSelectedMenu(null) }}
+          >
+            ← Back to Menus
+          </button>
         </div>
-        <div className="costumes-panel" style={{ overflow: 'hidden', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <EditorComponent />
         </div>
       </div>
@@ -223,7 +200,7 @@ export default function MenuMode({ mode, onModeChange }) {
             <button
               className="btn-back-small"
               onMouseEnter={playHoverSound}
-              onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null) }}
+              onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null); setSelectedMenu(null) }}
             >
               ← Back
             </button>

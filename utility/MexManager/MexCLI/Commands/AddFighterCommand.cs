@@ -8,6 +8,33 @@ namespace MexCLI.Commands
 {
     public static class AddFighterCommand
     {
+        private static void FixSharedFile(
+            MexWorkspace workspace,
+            MexFighter.FighterFiles files,
+            Func<MexFighter.FighterFiles, string?> getter,
+            Action<MexFighter.FighterFiles, string?> setter)
+        {
+            string? current = getter(files);
+            if (string.IsNullOrEmpty(current)) return;
+            if (!current.Contains("_0")) return;
+
+            // e.g. EfLgData_001.dat → EfLgData.dat
+            int underscoreIdx = current.LastIndexOf('_');
+            if (underscoreIdx < 0) return;
+            string ext = Path.GetExtension(current);
+            string original = current.Substring(0, underscoreIdx) + ext;
+
+            string currentPath = workspace.GetFilePath(current);
+            string originalPath = workspace.GetFilePath(original);
+
+            if (File.Exists(originalPath) && File.Exists(currentPath))
+            {
+                // Original already exists — use it, delete the duplicate
+                File.Delete(currentPath);
+                setter(files, original);
+            }
+        }
+
         public static int Execute(string[] args)
         {
             try
@@ -65,7 +92,30 @@ namespace MexCLI.Commands
                     using FileStream stream2 = new(fighterZipPath, FileMode.Open);
                     using System.IO.Compression.ZipArchive zip = new(stream2);
                     fighter.Files.FromPackage(workspace, zip);
+
+                    // Also extract any remaining .dat files (kirby cap, effects, etc.)
+                    foreach (var entry in zip.Entries)
+                    {
+                        if (entry.Name.Length == 0) continue;
+                        if (!entry.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)) continue;
+                        string destPath = workspace.GetFilePath(entry.Name);
+                        if (File.Exists(destPath)) continue;
+                        string? destDir = Path.GetDirectoryName(destPath);
+                        if (destDir != null && !Directory.Exists(destDir))
+                            Directory.CreateDirectory(destDir);
+                        using Stream entryStream = entry.Open();
+                        using FileStream outFile = new(destPath, FileMode.CreateNew);
+                        entryStream.CopyTo(outFile);
+                    }
                 }
+
+                // Fix shared files: FromPackage renames files with _001 suffix via
+                // GetUniqueFilePath when a file already exists. But if the original
+                // file is identical (shared resource like effect files), we should
+                // use the original instead of the duplicate.
+                FixSharedFile(workspace, fighter.Files, f => f.EffectFile, (f, v) => f.EffectFile = v);
+                FixSharedFile(workspace, fighter.Files, f => f.KirbyEffectFile, (f, v) => f.KirbyEffectFile = v);
+                FixSharedFile(workspace, fighter.Files, f => f.KirbyCapFileName, (f, v) => f.KirbyCapFileName = v);
 
                 // Internal index 34 is a broken slot in m-ex — insert a NONE placeholder
                 // if this addition would land there, then add the real fighter after it.
@@ -83,15 +133,11 @@ namespace MexCLI.Commands
                 // Add fighter to project (shifts existing CSS icon references)
                 workspace.Project.AddNewFighter(fighter);
 
-                // Add a CSS icon for the new fighter (not for NONE)
+                // Add a CSS icon for the new fighter
                 workspace.Project.CharacterSelect.FighterIcons.Add(new MexCharacterSelectIcon
                 {
                     Fighter = externalId,
                 });
-
-                // Auto-layout the CSS grid
-                workspace.Project.CharacterSelect.Template.Apply(
-                    workspace.Project.CharacterSelect.FighterIcons);
 
                 workspace.Save(null);
 
