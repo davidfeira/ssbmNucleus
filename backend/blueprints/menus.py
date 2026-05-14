@@ -865,30 +865,12 @@ def relabel_icon(mod_id):
 
 @menus_bp.route('/api/mex/menus/css/icon_grid/install/<mod_id>', methods=['POST'])
 def install_icon_grid_to_mex(mod_id):
-    """Install an icon grid mod into the currently loaded MEX project.
-
-    Uses `mexcli set-css-icon` per fighter, which calls mexLib's
-    SetFromImageFile — handles PNG→TEX conversion with correct color space
-    and GX format natively.
-    """
+    """Return the install plan (list of icons to install) without executing."""
     try:
         mod = _load_mod_json(mod_id)
         if not mod:
             return jsonify({'success': False, 'error': 'Mod not found'}), 404
 
-        project_path = get_current_project_path()
-        if project_path is None:
-            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
-
-        if not MEXCLI_PATH.exists():
-            return jsonify({'success': False, 'error': f'MexCLI not found at {MEXCLI_PATH}'}), 500
-
-        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
-        installed = 0
-        errors = []
-
-        # Build the install list, handling the Zelda/Sheik shared-slot edge case:
-        # if the mod only has one of them, use that icon for both.
         install_list = list(mod.get('icons', []))
         has_zelda = any(e.get('character') == 'Zelda' for e in install_list)
         has_sheik = any(e.get('character') == 'Sheik' for e in install_list)
@@ -899,47 +881,55 @@ def install_icon_grid_to_mex(mod_id):
             sheik_entry = next(e for e in install_list if e.get('character') == 'Sheik')
             install_list.append({'character': 'Zelda', 'icon': sheik_entry['icon']})
 
+        valid = []
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
         for entry in install_list:
             character = entry.get('character')
             icon_file = entry.get('icon')
-            if not character or not icon_file:
-                continue
-            src = icons_dir / icon_file
-            if not src.exists():
-                continue
+            if character and icon_file and (icons_dir / icon_file).exists():
+                valid.append({'character': character, 'icon': icon_file})
 
-            try:
-                result = subprocess.run(
-                    [str(MEXCLI_PATH), 'set-css-icon',
-                     str(project_path), character, str(src)],
-                    capture_output=True, text=True, timeout=30,
-                    **get_subprocess_args()
-                )
-                if result.returncode == 0:
-                    installed += 1
-                    logger.info(f'  Set CSS icon: {character}')
-                else:
-                    err_msg = result.stdout.strip() or result.stderr.strip()
-                    logger.warning(f'  Failed CSS icon for {character}: {err_msg}')
-                    errors.append(character)
-            except Exception as e:
-                logger.warning(f'  Failed CSS icon for {character}: {e}')
-                errors.append(character)
-
-        if installed == 0:
-            return jsonify({
-                'success': False,
-                'error': f'No icons installed. Errors: {", ".join(errors)}'
-            }), 400
-
-        msg = f'Installed {installed} icon(s). Rebuild ISO to apply.'
-        if errors:
-            msg += f' ({len(errors)} failed: {", ".join(errors)})'
-
-        logger.info(f'[OK] Installed icon grid mod {mod_id} via MexCLI ({installed} icons)')
-        return jsonify({'success': True, 'message': msg, 'matched': installed})
+        return jsonify({'success': True, 'icons': valid, 'total': len(valid)})
     except Exception as e:
-        logger.error(f'Install icon grid mod error: {e}', exc_info=True)
+        logger.error(f'Icon grid install plan error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/install/<mod_id>/icon', methods=['POST'])
+def install_single_css_icon(mod_id):
+    """Install a single CSS icon for one fighter."""
+    try:
+        data = request.get_json()
+        character = data.get('character')
+        icon_file = data.get('icon')
+        if not character or not icon_file:
+            return jsonify({'success': False, 'error': 'Missing character or icon'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        if not MEXCLI_PATH.exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
+        src = icons_dir / icon_file
+        if not src.exists():
+            return jsonify({'success': False, 'error': f'Icon file not found: {icon_file}'}), 404
+
+        result = subprocess.run(
+            [str(MEXCLI_PATH), 'set-css-icon',
+             str(project_path), character, str(src)],
+            capture_output=True, text=True, timeout=30,
+            **get_subprocess_args()
+        )
+        if result.returncode == 0:
+            return jsonify({'success': True, 'character': character})
+        else:
+            err_msg = result.stdout.strip() or result.stderr.strip()
+            return jsonify({'success': False, 'error': err_msg}), 500
+    except Exception as e:
+        logger.error(f'Install single CSS icon error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -1493,4 +1483,148 @@ def get_css_fighter_icon():
         return send_file(str(icon_file), mimetype='image/png', max_age=0)
     except Exception as e:
         logger.error(f'Get CSS fighter icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+#  CSS Doors endpoints
+# ---------------------------------------------------------------------------
+
+DOORS_PATH = CSS_PATH / 'doors'
+DOORS_PATH.mkdir(parents=True, exist_ok=True)
+DOORS_METADATA = DOORS_PATH / 'metadata.json'
+
+
+def _load_doors_metadata():
+    if DOORS_METADATA.exists():
+        return json.loads(DOORS_METADATA.read_text())
+    return []
+
+
+def _save_doors_metadata(mods):
+    DOORS_METADATA.write_text(json.dumps(mods, indent=2))
+
+
+@menus_bp.route('/api/mex/menus/css/doors/list', methods=['GET'])
+def list_door_mods():
+    try:
+        mods = _load_doors_metadata()
+        for mod in mods:
+            mod_dir = DOORS_PATH / mod['id']
+            img = mod_dir / 'door.png'
+            if img.exists():
+                mod['imageUrl'] = f'/api/mex/menus/css/doors/image/{mod["id"]}'
+        return jsonify({'success': True, 'mods': mods})
+    except Exception as e:
+        logger.error(f'List door mods error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/image/<mod_id>', methods=['GET'])
+def get_door_image(mod_id):
+    try:
+        img = DOORS_PATH / mod_id / 'door.png'
+        if not img.exists():
+            return jsonify({'success': False, 'error': 'Not found'}), 404
+        return send_file(str(img), mimetype='image/png', max_age=0)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/import', methods=['POST'])
+def import_door_mod():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        f = request.files['file']
+        if not f.filename:
+            return jsonify({'success': False, 'error': 'Empty filename'}), 400
+
+        mod_id = str(uuid.uuid4())[:8]
+        mod_dir = DOORS_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+
+        name = request.form.get('name', Path(f.filename).stem)
+        door_path = mod_dir / 'door.png'
+        f.save(str(door_path))
+
+        mod = {
+            'id': mod_id,
+            'name': name,
+            'created': datetime.now().isoformat()
+        }
+
+        mods = _load_doors_metadata()
+        mods.append(mod)
+        _save_doors_metadata(mods)
+
+        mod['imageUrl'] = f'/api/mex/menus/css/doors/image/{mod_id}'
+        return jsonify({'success': True, 'mod': mod})
+    except Exception as e:
+        logger.error(f'Import door mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/delete/<mod_id>', methods=['POST'])
+def delete_door_mod(mod_id):
+    try:
+        mods = _load_doors_metadata()
+        mods = [m for m in mods if m['id'] != mod_id]
+        _save_doors_metadata(mods)
+        mod_dir = DOORS_PATH / mod_id
+        if mod_dir.exists():
+            shutil.rmtree(str(mod_dir))
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f'Delete door mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/install/<mod_id>', methods=['POST'])
+def install_door_mod(mod_id):
+    """Install a door texture into MnSlChr.usd using HSDRawViewer --css-doors import."""
+    try:
+        mods = _load_doors_metadata()
+        mod = next((m for m in mods if m['id'] == mod_id), None)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        door_png = DOORS_PATH / mod_id / 'door.png'
+        if not door_png.exists():
+            return jsonify({'success': False, 'error': 'door.png missing from mod'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        files_dir = get_project_files_dir()
+        if files_dir is None:
+            return jsonify({'success': False, 'error': 'No project files directory'}), 400
+
+        mnslchr = Path(files_dir) / 'MnSlChr.usd'
+        if not mnslchr.exists():
+            return jsonify({'success': False, 'error': f'MnSlChr.usd not found at {mnslchr}'}), 400
+
+        if not HSDRAW_EXE.exists():
+            return jsonify({'success': False, 'error': f'HSDRawViewer not found'}), 500
+
+        with tempfile.TemporaryDirectory(prefix='cssdoors_') as tmp:
+            output_usd = Path(tmp) / 'MnSlChr.usd'
+            result = _run_hsd_cli([
+                '--css-doors', 'import',
+                str(mnslchr), str(door_png), str(output_usd)
+            ])
+            if result is None:
+                return jsonify({'success': False, 'error': 'HSDRawViewer --css-doors import failed'}), 500
+
+            if not output_usd.exists():
+                return jsonify({'success': False, 'error': 'Import produced no output file'}), 500
+
+            shutil.copy(str(output_usd), str(mnslchr))
+
+        msg = f'Installed door "{mod["name"]}". Rebuild ISO to apply.'
+        logger.info(f'[OK] Installed CSS door mod {mod_id}')
+        return jsonify({'success': True, 'message': msg})
+    except Exception as e:
+        logger.error(f'Install door mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

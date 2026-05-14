@@ -28,6 +28,7 @@ import CssMenuTypesGrid from './storage/CssMenuTypesGrid'
 import SssMenuTypesGrid from './storage/SssMenuTypesGrid'
 import IconGridModsView from './storage/IconGridModsView'
 import BackgroundModsView from './storage/BackgroundModsView'
+import DoorModsView from './storage/DoorModsView'
 import SssLayoutEditor from './storage/SssLayoutEditor'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
@@ -1239,6 +1240,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
           {selectedMenuType === 'css' && selectedMenuModType === 'background' && (
             <BackgroundModsView />
+          )}
+
+          {selectedMenuType === 'css' && selectedMenuModType === 'doors' && (
+            <DoorModsView />
           )}
 
           {selectedMenuType === 'sss' && !selectedMenuModType && (

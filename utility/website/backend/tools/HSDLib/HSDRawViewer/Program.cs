@@ -123,6 +123,22 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for SSS background export/import mode
+            if (args.Length >= 1 && args[0] == "--sss-bg")
+            {
+                Console.WriteLine("SSS background mode detected");
+                RunSssBgOperation(args);
+                return;
+            }
+
+            // Check for CSS doors export/import mode
+            if (args.Length >= 1 && args[0] == "--css-doors")
+            {
+                Console.WriteLine("CSS doors mode detected");
+                RunCssDoorsOperation(args);
+                return;
+            }
+
             // Check for MEX CSS info mode (reads MxDt.dat icon -> fighter mapping)
             if (args.Length >= 1 && args[0] == "--mex-css-info")
             {
@@ -1423,19 +1439,25 @@ namespace HSDRawViewer
                         return;
                     }
 
-                    // Create a standalone HSDRawFile with 3 roots for the background data
                     var bgFile = new HSDRawFile();
                     bgFile.Roots.Add(new HSDRootNode() { Name = "bg_model", Data = tb.BackgroundModel });
                     if (tb.BackgroundAnimation != null)
                         bgFile.Roots.Add(new HSDRootNode() { Name = "bg_anim", Data = tb.BackgroundAnimation });
                     if (tb.BackgroundMaterialAnimation != null)
                         bgFile.Roots.Add(new HSDRootNode() { Name = "bg_matanim", Data = tb.BackgroundMaterialAnimation });
+                    if (tb.Camera != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_camera", Data = tb.Camera });
+                    if (tb.Light1 != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_light1", Data = tb.Light1 });
+                    if (tb.Light2 != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_light2", Data = tb.Light2 });
+                    if (tb.Fog != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_fog", Data = tb.Fog });
 
                     string bgDatPath = System.IO.Path.Combine(outDir, "background.dat");
                     bgFile.Save(bgDatPath);
                     Console.WriteLine($"Saved background.dat with {bgFile.Roots.Count} roots");
 
-                    // Write manifest
                     var manifest = new Dictionary<string, object>
                     {
                         ["format"] = "css_background",
@@ -1444,6 +1466,7 @@ namespace HSDRawViewer
                         ["has_model"] = true,
                         ["has_anim"] = tb.BackgroundAnimation != null,
                         ["has_matanim"] = tb.BackgroundMaterialAnimation != null,
+                        ["has_scene"] = tb.Camera != null,
                     };
                     System.IO.File.WriteAllText(
                         System.IO.Path.Combine(outDir, "manifest.json"),
@@ -1484,7 +1507,6 @@ namespace HSDRawViewer
                     foreach (var r in bgFile.Roots)
                         Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
 
-                    // Find roots by name
                     var modelRoot = bgFile.Roots.Find(r => r.Name == "bg_model");
                     var animRoot = bgFile.Roots.Find(r => r.Name == "bg_anim");
                     var matAnimRoot = bgFile.Roots.Find(r => r.Name == "bg_matanim");
@@ -1496,19 +1518,32 @@ namespace HSDRawViewer
                         return;
                     }
 
-                    // Replace the background data in the project.
-                    // Roots loaded from a standalone file are generic HSDAccessor — we
-                    // need to wrap their raw struct in the correctly-typed accessor.
                     tb.BackgroundModel = new HSD_JOBJ() { _s = modelRoot.Data._s };
-                    // Replace or clear animation — if the mod doesn't provide one,
-                    // null it out so the vanilla material animation (which may tint
-                    // colors) doesn't leak onto the new model.
                     tb.BackgroundAnimation = animRoot != null
                         ? new HSDRaw.Common.Animation.HSD_AnimJoint() { _s = animRoot.Data._s }
                         : null;
                     tb.BackgroundMaterialAnimation = matAnimRoot != null
                         ? new HSDRaw.Common.Animation.HSD_MatAnimJoint() { _s = matAnimRoot.Data._s }
                         : null;
+
+                    bool includeScene = args.Any(a => a == "--include-scene");
+                    if (includeScene)
+                    {
+                        var cameraRoot = bgFile.Roots.Find(r => r.Name == "bg_camera");
+                        var light1Root = bgFile.Roots.Find(r => r.Name == "bg_light1");
+                        var light2Root = bgFile.Roots.Find(r => r.Name == "bg_light2");
+                        var fogRoot = bgFile.Roots.Find(r => r.Name == "bg_fog");
+
+                        if (cameraRoot != null)
+                            tb.Camera = new HSD_Camera() { _s = cameraRoot.Data._s };
+                        if (light1Root != null)
+                            tb.Light1 = new HSD_LOBJ() { _s = light1Root.Data._s };
+                        if (light2Root != null)
+                            tb.Light2 = new HSD_LOBJ() { _s = light2Root.Data._s };
+                        if (fogRoot != null)
+                            tb.Fog = new HSD_FogDesc() { _s = fogRoot.Data._s };
+                        Console.WriteLine("Applied scene settings (camera, lights, fog)");
+                    }
 
                     Console.WriteLine($"Saving to: {outputUsd}");
                     rawFile.Save(outputUsd);
@@ -1526,6 +1561,396 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: CSS background operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// CSS doors texture export/import.
+        ///   Export: HSDRawViewer.exe --css-doors export mnslchr.usd output_dir
+        ///   Import: HSDRawViewer.exe --css-doors import mnslchr.usd door.png output.usd
+        /// </summary>
+        /// <summary>
+        /// Collect all TOBJs from a JOBJ tree, returning (jointIndex, tobj) pairs
+        /// </summary>
+        static List<(int jointIdx, HSD_TOBJ tobj)> CollectAllTextures(HSD_JOBJ root)
+        {
+            var result = new List<(int, HSD_TOBJ)>();
+            var joints = root.TreeList;
+            for (int ji = 0; ji < joints.Count; ji++)
+            {
+                var jobj = joints[ji];
+                if (jobj.Dobj == null) continue;
+                foreach (var dobj in jobj.Dobj.List)
+                {
+                    if (dobj.Mobj?.Textures == null) continue;
+                    foreach (var tobj in dobj.Mobj.Textures.List)
+                    {
+                        if (tobj.ImageData != null)
+                            result.Add((ji, tobj));
+                    }
+                }
+            }
+            return result;
+        }
+
+        static void RunCssDoorsOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --css-doors export <mnslchr.usd> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --css-doors import <mnslchr.usd> <door.png> <output.usd>");
+                    return;
+                }
+
+                string subCommand = args[1].ToLower();
+
+                if (subCommand == "export")
+                {
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --css-doors export <mnslchr.usd> <output_dir>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    var root = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_SelectChrDataTable);
+                    if (root == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_SelectChrDataTable root found");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_SelectChrDataTable)root.Data;
+
+                    // Dump ALL textures from MenuModel so we can identify doors
+                    var allTex = CollectAllTextures(tb.MenuModel);
+                    Console.WriteLine($"Found {allTex.Count} textures in MenuModel:");
+                    int exported = 0;
+                    foreach (var (ji, tobj) in allTex)
+                    {
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string outPath = System.IO.Path.Combine(outDir, $"menu_j{ji}_{w}x{h}_{fmt}_{exported}.png");
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(outPath, System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        Console.WriteLine($"  Joint {ji}: {w}x{h} {fmt} -> {System.IO.Path.GetFileName(outPath)}");
+                        exported++;
+                    }
+                    Console.WriteLine($"SUCCESS: Exported {exported} textures");
+                }
+                else if (subCommand == "import")
+                {
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --css-doors import <mnslchr.usd> <door.png> <output.usd>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string doorPng = args[3];
+                    string outputDat = args[4];
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    var root = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_SelectChrDataTable);
+                    if (root == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_SelectChrDataTable root found");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_SelectChrDataTable)root.Data;
+
+                    // Load the user's door image
+                    using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(doorPng);
+
+                    // Find door textures: look for the characteristic diagonal-alpha texture
+                    // Door textures have partial transparency (alpha < 255 in some pixels, > 0 in others)
+                    // and are the same size repeated across ports.
+                    // Strategy: find all unique-sized textures that have mixed alpha values
+                    var allTex = CollectAllTextures(tb.MenuModel);
+                    Console.WriteLine($"Found {allTex.Count} textures in MenuModel, searching for door textures...");
+
+                    // Group textures by size+format (shared textures have same dimensions and format)
+                    var byKey = new Dictionary<string, List<(int ji, HSD_TOBJ tobj)>>();
+                    foreach (var entry in allTex)
+                    {
+                        var key = $"{entry.tobj.ImageData.Width}x{entry.tobj.ImageData.Height}_{entry.tobj.ImageData.Format}";
+                        if (!byKey.ContainsKey(key))
+                            byKey[key] = new List<(int, HSD_TOBJ)>();
+                        byKey[key].Add(entry);
+                    }
+
+                    // Door textures are 128x200 IA8 at joints 138/139, 146/147, 154/155, 162/163
+                    List<HSD_TOBJ> doorTobjs = new();
+                    HSD_TOBJ doorTobj = null;
+
+                    foreach (var (ji, tobj) in allTex)
+                    {
+                        if (tobj.ImageData.Width == 128 && tobj.ImageData.Height == 200)
+                        {
+                            doorTobjs.Add(tobj);
+                            doorTobj ??= tobj;
+                            Console.WriteLine($"  Door texture found at joint {ji}: {tobj.ImageData.Format}");
+                        }
+                    }
+
+                    if (doorTobj == null)
+                    {
+                        Console.WriteLine("ERROR: No 128x200 door textures found. Try 'export' to inspect textures manually.");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine($"Found {doorTobjs.Count} door textures to replace");
+
+                    // Extract alpha mask from original
+                    using var originalImage = doorTobj.ToImage();
+                    using var resizedUser = userImage.Clone(ctx => ctx.Resize(originalImage.Width, originalImage.Height));
+
+                    // Apply original alpha mask to user's image
+                    resizedUser.ProcessPixelRows(originalImage, (userAccessor, origAccessor) =>
+                    {
+                        for (int y = 0; y < userAccessor.Height; y++)
+                        {
+                            var userRow = userAccessor.GetRowSpan(y);
+                            var origRow = origAccessor.GetRowSpan(y);
+                            for (int x = 0; x < userRow.Length; x++)
+                            {
+                                userRow[x] = new SixLabors.ImageSharp.PixelFormats.Bgra32(
+                                    userRow[x].R, userRow[x].G, userRow[x].B, origRow[x].A);
+                            }
+                        }
+                    });
+
+                    // RGB5A3: same 2 bytes/pixel as IA8, but with color support — no memory increase
+                    var imgFormat = HSDRaw.GX.GXTexFmt.RGB5A3;
+                    var palFormat = HSDRaw.GX.GXTlutFmt.IA8;
+                    Console.WriteLine($"Encoding as RGB5A3 (2 bytes/pixel, same as original IA8)");
+
+                    foreach (var tobj in doorTobjs)
+                    {
+                        tobj.InjectBitmap(resizedUser, imgFormat, palFormat);
+                    }
+
+                    rawFile.Save(outputDat);
+                    Console.WriteLine($"SUCCESS: Replaced {doorTobjs.Count} door textures as RGB5A3, saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown css-doors sub-command: {subCommand}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: CSS doors operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Export or import SSS background model/animation from MnSlMap.dat/.usd.
+        /// Export: HSDRawViewer.exe --sss-bg export <mnslmap.dat> <output_dir>
+        /// Import: HSDRawViewer.exe --sss-bg import <project_mnslmap.usd> <background.dat> <output.usd>
+        /// </summary>
+        static void RunSssBgOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --sss-bg export <mnslmap.dat> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --sss-bg import <project.usd> <background.dat> <output.usd>");
+                    return;
+                }
+
+                string subCommand = args[1].ToLower();
+
+                if (subCommand == "export")
+                {
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --sss-bg export <mnslmap.dat> <output_dir>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    Console.WriteLine($"Roots in file: {rawFile.Roots.Count}");
+                    foreach (var r in rawFile.Roots)
+                        Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
+
+                    var vanillaRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_MnSelectStageDataTable);
+                    if (vanillaRoot == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_MnSelectStageDataTable root found in DAT");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_MnSelectStageDataTable)vanillaRoot.Data;
+
+                    if (tb.BackgroundModel == null)
+                    {
+                        Console.WriteLine("ERROR: SBM_MnSelectStageDataTable has no BackgroundModel (offset 0xB0)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var bgFile = new HSDRawFile();
+                    bgFile.Roots.Add(new HSDRootNode() { Name = "bg_model", Data = tb.BackgroundModel });
+                    if (tb.BackgroundAnimation != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_anim", Data = tb.BackgroundAnimation });
+                    if (tb.BackgroundMaterialAnimation != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_matanim", Data = tb.BackgroundMaterialAnimation });
+                    if (tb.BackgroundShapeAnimation != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_shapeanim", Data = tb.BackgroundShapeAnimation });
+                    if (tb.Camera != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_camera", Data = tb.Camera });
+                    if (tb.Light1 != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_light1", Data = tb.Light1 });
+                    if (tb.Light2 != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_light2", Data = tb.Light2 });
+                    if (tb.Fog != null)
+                        bgFile.Roots.Add(new HSDRootNode() { Name = "bg_fog", Data = tb.Fog });
+
+                    string bgDatPath = System.IO.Path.Combine(outDir, "background.dat");
+                    bgFile.Save(bgDatPath);
+                    Console.WriteLine($"Saved background.dat with {bgFile.Roots.Count} roots");
+
+                    var manifest = new Dictionary<string, object>
+                    {
+                        ["format"] = "sss_background",
+                        ["source_file"] = System.IO.Path.GetFileName(datFile),
+                        ["roots"] = bgFile.Roots.Count,
+                        ["has_model"] = true,
+                        ["has_anim"] = tb.BackgroundAnimation != null,
+                        ["has_matanim"] = tb.BackgroundMaterialAnimation != null,
+                        ["has_shapeanim"] = tb.BackgroundShapeAnimation != null,
+                        ["has_scene"] = tb.Camera != null,
+                    };
+                    System.IO.File.WriteAllText(
+                        System.IO.Path.Combine(outDir, "manifest.json"),
+                        JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })
+                    );
+
+                    Console.WriteLine($"SUCCESS: Exported SSS background to {outDir}");
+                }
+                else if (subCommand == "import")
+                {
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --sss-bg import <project.usd> <background.dat> <output.usd>");
+                        return;
+                    }
+
+                    string projectUsd = args[2];
+                    string bgDatPath = args[3];
+                    string outputUsd = args[4];
+
+                    Console.WriteLine($"Loading project: {projectUsd}");
+                    var rawFile = new HSDRawFile(projectUsd);
+
+                    var vanillaRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Mn.SBM_MnSelectStageDataTable);
+                    if (vanillaRoot == null)
+                    {
+                        Console.WriteLine("ERROR: No SBM_MnSelectStageDataTable root found in project USD");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    var tb = (HSDRaw.Melee.Mn.SBM_MnSelectStageDataTable)vanillaRoot.Data;
+
+                    Console.WriteLine($"Loading background: {bgDatPath}");
+                    var bgFile = new HSDRawFile(bgDatPath);
+
+                    Console.WriteLine($"Background file roots: {bgFile.Roots.Count}");
+                    foreach (var r in bgFile.Roots)
+                        Console.WriteLine($"  - {r.Name} ({r.Data?.GetType().Name})");
+
+                    var modelRoot = bgFile.Roots.Find(r => r.Name == "bg_model");
+                    var animRoot = bgFile.Roots.Find(r => r.Name == "bg_anim");
+                    var matAnimRoot = bgFile.Roots.Find(r => r.Name == "bg_matanim");
+                    var shapeAnimRoot = bgFile.Roots.Find(r => r.Name == "bg_shapeanim");
+
+                    if (modelRoot == null)
+                    {
+                        Console.WriteLine("ERROR: background.dat missing 'bg_model' root");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    tb.BackgroundModel = new HSD_JOBJ() { _s = modelRoot.Data._s };
+                    tb.BackgroundAnimation = animRoot != null
+                        ? new HSDRaw.Common.Animation.HSD_AnimJoint() { _s = animRoot.Data._s }
+                        : null;
+                    tb.BackgroundMaterialAnimation = matAnimRoot != null
+                        ? new HSDRaw.Common.Animation.HSD_MatAnimJoint() { _s = matAnimRoot.Data._s }
+                        : null;
+                    tb.BackgroundShapeAnimation = shapeAnimRoot != null
+                        ? new HSDRaw.Common.Animation.HSD_ShapeAnimJoint() { _s = shapeAnimRoot.Data._s }
+                        : null;
+
+                    bool includeScene = args.Any(a => a == "--include-scene");
+                    if (includeScene)
+                    {
+                        var cameraRoot = bgFile.Roots.Find(r => r.Name == "bg_camera");
+                        var light1Root = bgFile.Roots.Find(r => r.Name == "bg_light1");
+                        var light2Root = bgFile.Roots.Find(r => r.Name == "bg_light2");
+                        var fogRoot = bgFile.Roots.Find(r => r.Name == "bg_fog");
+
+                        if (cameraRoot != null)
+                            tb.Camera = new HSD_Camera() { _s = cameraRoot.Data._s };
+                        if (light1Root != null)
+                            tb.Light1 = new HSD_LOBJ() { _s = light1Root.Data._s };
+                        if (light2Root != null)
+                            tb.Light2 = new HSD_LOBJ() { _s = light2Root.Data._s };
+                        if (fogRoot != null)
+                            tb.Fog = new HSD_FogDesc() { _s = fogRoot.Data._s };
+                        Console.WriteLine("Applied scene settings (camera, lights, fog)");
+                    }
+
+                    Console.WriteLine($"Saving to: {outputUsd}");
+                    rawFile.Save(outputUsd);
+
+                    Console.WriteLine($"SUCCESS: Imported SSS background into {outputUsd}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown sss-bg sub-command: {subCommand}");
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --sss-bg export <mnslmap.dat> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --sss-bg import <project.usd> <background.dat> <output.usd>");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: SSS background operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

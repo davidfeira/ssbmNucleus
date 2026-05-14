@@ -18,6 +18,12 @@ const CSS_MOD_TYPES = [
     name: 'Background',
     short: 'BG',
     description: 'CSS background and stage art'
+  },
+  {
+    key: 'doors',
+    name: 'Doors',
+    short: 'DR',
+    description: 'Character port door textures'
   }
 ]
 

@@ -11,6 +11,7 @@ import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
 import SssLayoutEditor from '../storage/SssLayoutEditor'
 import CssLayoutEditor from '../storage/CssLayoutEditor'
+import HexagonLoader from '../shared/HexagonLoader'
 
 const MENU_TYPES = [
   { key: 'css', name: 'Character Select Screen', short: 'CSS' },
@@ -33,9 +34,11 @@ export default function MenuMode({ mode, onModeChange }) {
   const [selectedMod, setSelectedMod] = useState(null)
   const [iconGridMods, setIconGridMods] = useState([])
   const [bgMods, setBgMods] = useState([])
+  const [doorMods, setDoorMods] = useState([])
   const [loading, setLoading] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [installMessage, setInstallMessage] = useState('')
+  const [installProgress, setInstallProgress] = useState(null) // { current, total, character }
   const [installedMods, setInstalledMods] = useState({}) // submod_key -> mod
 
   const fetchIconGridMods = useCallback(async () => {
@@ -61,19 +64,31 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }, [])
 
+  const fetchDoorMods = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/css/doors/list`)
+      const data = await res.json()
+      if (data.success) setDoorMods(data.mods || [])
+    } catch (err) {
+      console.error('Failed to fetch door mods:', err)
+    }
+  }, [])
+
   useEffect(() => {
     if (selectedMenu === 'css') {
       fetchIconGridMods()
       fetchBgMods()
+      fetchDoorMods()
     }
     if (selectedMenu === 'sss') {
       fetchBgMods()
     }
-  }, [selectedMenu, fetchIconGridMods, fetchBgMods])
+  }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods])
 
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
-    if (key === 'background') return bgMods // shared pool for CSS and SSS
+    if (key === 'background') return bgMods
+    if (key === 'doors') return doorMods
     return []
   }
 
@@ -81,32 +96,68 @@ export default function MenuMode({ mode, onModeChange }) {
     if (!selectedMod) return
     setInstalling(true)
     setInstallMessage('')
+    setInstallProgress(null)
     try {
-      let installEndpoint
-      if (selectedMenu === 'sss' && selectedSubmod === 'background') {
-        installEndpoint = `${API_URL}/menus/sss/background/install/${selectedMod.id}`
-      } else if (selectedSubmod === 'background') {
-        installEndpoint = `${API_URL}/menus/css/background/install/${selectedMod.id}`
+      if (selectedSubmod === 'icon_grid') {
+        // Per-icon install with progress
+        const planRes = await fetch(`${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`, { method: 'POST' })
+        const plan = await planRes.json()
+        if (!plan.success) { playSound('error'); setInstallMessage(`✗ ${plan.error}`); return }
+
+        const icons = plan.icons
+        let installed = 0, errors = []
+        for (let i = 0; i < icons.length; i++) {
+          setInstallProgress({ current: i + 1, total: icons.length, character: icons[i].character })
+          try {
+            const res = await fetch(`${API_URL}/menus/css/icon_grid/install/${selectedMod.id}/icon`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(icons[i])
+            })
+            const data = await res.json()
+            if (data.success) installed++
+            else errors.push(icons[i].character)
+          } catch { errors.push(icons[i].character) }
+        }
+
+        if (installed > 0) {
+          playSound('newSkin')
+          let msg = `✓ Installed ${installed} icon(s). Rebuild ISO to apply.`
+          if (errors.length) msg += ` (${errors.length} failed)`
+          setInstallMessage(msg)
+          setInstalledMods(prev => ({ ...prev, [selectedSubmod]: selectedMod }))
+        } else {
+          playSound('error')
+          setInstallMessage(`✗ No icons installed`)
+        }
       } else {
-        installEndpoint = `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
-      }
-      const res = await fetch(installEndpoint, {
-        method: 'POST'
-      })
-      const data = await res.json()
-      if (data.success) {
-        playSound('newSkin')
-        setInstallMessage(`✓ ${data.message}`)
-        setInstalledMods(prev => ({ ...prev, [selectedSubmod]: selectedMod }))
-      } else {
-        playSound('error')
-        setInstallMessage(`✗ ${data.error}`)
+        let installEndpoint
+        if (selectedMenu === 'sss' && selectedSubmod === 'background') {
+          installEndpoint = `${API_URL}/menus/sss/background/install/${selectedMod.id}`
+        } else if (selectedSubmod === 'background') {
+          installEndpoint = `${API_URL}/menus/css/background/install/${selectedMod.id}`
+        } else if (selectedSubmod === 'doors') {
+          installEndpoint = `${API_URL}/menus/css/doors/install/${selectedMod.id}`
+        } else {
+          installEndpoint = `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
+        }
+        const res = await fetch(installEndpoint, { method: 'POST' })
+        const data = await res.json()
+        if (data.success) {
+          playSound('newSkin')
+          setInstallMessage(`✓ ${data.message}`)
+          setInstalledMods(prev => ({ ...prev, [selectedSubmod]: selectedMod }))
+        } else {
+          playSound('error')
+          setInstallMessage(`✗ ${data.error}`)
+        }
       }
     } catch (err) {
       playSound('error')
       setInstallMessage(`✗ ${err.message}`)
     } finally {
       setInstalling(false)
+      setInstallProgress(null)
       setTimeout(() => setInstallMessage(''), 4000)
     }
   }
@@ -277,9 +328,9 @@ export default function MenuMode({ mode, onModeChange }) {
                     onClick={() => { playSound('boop'); setSelectedMod(mod) }}
                   >
                     <div className="costume-preview">
-                      {mod.screenshotUrl ? (
+                      {(mod.screenshotUrl || mod.imageUrl) ? (
                         <img
-                          src={`${BACKEND_URL}${mod.screenshotUrl}`}
+                          src={`${BACKEND_URL}${mod.screenshotUrl || mod.imageUrl}`}
                           alt={mod.name}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => { e.target.style.display = 'none' }}
@@ -306,6 +357,26 @@ export default function MenuMode({ mode, onModeChange }) {
             </div>
           </div>
         </div>
+
+        {installing && (
+          <div className="import-overlay">
+            <div className="import-modal import-modal--hexagon">
+              <HexagonLoader
+                className="import-loader"
+                size={104}
+                label="Installing mod"
+                progress={installProgress ? (installProgress.current / installProgress.total) * 100 : null}
+                minimumVisibleProgress={6}
+              />
+              <h3>Installing...</h3>
+              <p className="import-status">
+                {installProgress
+                  ? `${installProgress.character} (${installProgress.current}/${installProgress.total})`
+                  : 'Please wait...'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
