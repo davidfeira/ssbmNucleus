@@ -34,6 +34,8 @@ import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
 import CustomStagesGrid from './storage/CustomStagesGrid'
 import CustomStageDetailView from './storage/CustomStageDetailView'
+import CustomCharactersGrid from './storage/CustomCharactersGrid'
+import CustomCharacterDetailView from './storage/CustomCharacterDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
 import { useFolderManagement } from '../hooks/useFolderManagement'
 import { useFileImport } from '../hooks/useFileImport'
@@ -82,6 +84,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [showCustomStages, setShowCustomStages] = useState(false)
   const [selectedCustomStage, setSelectedCustomStage] = useState(null)
   const [customStageImporting, setCustomStageImporting] = useState(false)
+
+  // Custom characters state (sub-page within characters mode)
+  const [customCharacters, setCustomCharacters] = useState([])
+  const [showCustomCharacters, setShowCustomCharacters] = useState(false)
+  const [selectedCustomCharacter, setSelectedCustomCharacter] = useState(null)
+  const [customCharacterImporting, setCustomCharacterImporting] = useState(false)
 
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
@@ -155,12 +163,18 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }
 
-  // Custom stage scan project handler
-  const handleCustomStageScan = async () => {
+  // Custom stage scan ISO handler
+  const handleCustomStageScanIso = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
     setCustomStageImporting(true)
     try {
-      const response = await fetch(`${API_URL}/custom-stages/scan-project`, {
-        method: 'POST'
+      const response = await fetch(`${API_URL}/custom-stages/scan-iso`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isoPath: file.path })
       })
       const data = await response.json()
       if (data.success) {
@@ -175,6 +189,75 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       alert(`Scan error: ${err.message}`)
     } finally {
       setCustomStageImporting(false)
+    }
+  }
+
+  // Fetch custom characters
+  const fetchCustomCharacters = async () => {
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/list`)
+      const data = await response.json()
+      if (data.success) {
+        setCustomCharacters(data.characters || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch custom characters:', err)
+    }
+  }
+
+  // Custom character import handler
+  const handleCustomCharacterImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    setCustomCharacterImporting(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch(`${API_URL}/custom-characters/import-zip`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        await fetchCustomCharacters()
+      } else {
+        alert(data.error || 'Import failed')
+      }
+    } catch (err) {
+      alert(`Import error: ${err.message}`)
+    } finally {
+      setCustomCharacterImporting(false)
+    }
+  }
+
+  // Custom character scan ISO handler
+  const handleCustomCharacterScanIso = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    setCustomCharacterImporting(true)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/scan-iso`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isoPath: file.path })
+      })
+      const data = await response.json()
+      if (data.success) {
+        await fetchCustomCharacters()
+        if (data.message) {
+          alert(data.message)
+        }
+      } else {
+        alert(data.error || 'Scan failed')
+      }
+    } catch (err) {
+      alert(`Scan error: ${err.message}`)
+    } finally {
+      setCustomCharacterImporting(false)
     }
   }
 
@@ -531,6 +614,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     if (mode === 'stages') {
       fetchStageVariants()
       fetchCustomStages()
+    }
+  }, [mode, metadata])
+
+  // Fetch custom characters when in characters mode
+  useEffect(() => {
+    if (mode === 'characters') {
+      fetchCustomCharacters()
     }
   }, [mode, metadata])
 
@@ -1003,6 +1093,64 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
 
 
+  // If a custom character is selected, show its detail view
+  if (selectedCustomCharacter) {
+    return (
+      <CustomCharacterDetailView
+        character={selectedCustomCharacter}
+        onBack={() => setSelectedCustomCharacter(null)}
+        onDelete={() => { setSelectedCustomCharacter(null); fetchCustomCharacters(); }}
+        onRename={(updated) => {
+          setSelectedCustomCharacter(updated)
+          fetchCustomCharacters()
+        }}
+        API_URL={API_URL}
+      />
+    )
+  }
+
+  // If custom characters sub-page is open, show the grid
+  if (showCustomCharacters) {
+    return (
+      <div className="storage-viewer">
+        <ModeToolbar
+          mode={mode}
+          onModeChange={(newMode) => {
+            setMode(newMode)
+            setShowCustomCharacters(false)
+            setSelectedCustomCharacter(null)
+            if (newMode === 'characters') {
+              setSelectedStage(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'stages') {
+              setSelectedCharacter(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'patches') {
+              setSelectedCharacter(null)
+              setSelectedStage(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'menus') {
+              setSelectedCharacter(null)
+              setSelectedStage(null)
+            }
+          }}
+        />
+        <CustomCharactersGrid
+          customCharacters={customCharacters}
+          isLoading={isLoading}
+          onSelectCharacter={setSelectedCustomCharacter}
+          onBack={() => setShowCustomCharacters(false)}
+          onImportZip={handleCustomCharacterImport}
+          onScanIso={handleCustomCharacterScanIso}
+          importing={customCharacterImporting}
+        />
+      </div>
+    )
+  }
+
   // If a custom stage is selected, show its detail view
   if (selectedCustomStage) {
     return (
@@ -1054,7 +1202,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onSelectStage={setSelectedCustomStage}
           onBack={() => setShowCustomStages(false)}
           onImportZip={handleCustomStageImport}
-          onScanProject={handleCustomStageScan}
+          onScanIso={handleCustomStageScanIso}
           importing={customStageImporting}
         />
       </div>
@@ -1278,6 +1426,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           setMode(newMode)
           setShowCustomStages(false)
           setSelectedCustomStage(null)
+          setShowCustomCharacters(false)
+          setSelectedCustomCharacter(null)
           if (newMode === 'characters') {
             setSelectedStage(null)
             setSelectedMenuType(null)
@@ -1320,6 +1470,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           allCharacters={allCharacters}
           isLoading={isLoading}
           onSelectCharacter={setSelectedCharacter}
+          customCharacterCount={customCharacters.length}
+          onOpenCustomCharacters={() => setShowCustomCharacters(true)}
         />
       ) : mode === 'stages' ? (
         <StagesGrid

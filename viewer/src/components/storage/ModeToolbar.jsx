@@ -33,18 +33,18 @@ export default function ModeToolbar({ mode, onModeChange }) {
         Stages
       </button>
       <button
-        className={`mode-btn ${mode === 'patches' ? 'active' : ''}`}
-        onMouseEnter={playHoverSound}
-        onClick={() => handleModeChange('patches')}
-      >
-        Patches
-      </button>
-      <button
         className={`mode-btn ${mode === 'menus' ? 'active' : ''}`}
         onMouseEnter={playHoverSound}
         onClick={() => handleModeChange('menus')}
       >
         Menus
+      </button>
+      <button
+        className={`mode-btn ${mode === 'patches' ? 'active' : ''}`}
+        onMouseEnter={playHoverSound}
+        onClick={() => handleModeChange('patches')}
+      >
+        Patches
       </button>
     </div>
   )

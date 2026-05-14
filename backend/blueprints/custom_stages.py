@@ -15,16 +15,18 @@ Metadata is tracked under metadata.json["custom_stages"] (list of objects).
 """
 
 import json
+import os
 import re
 import shutil
+import subprocess
+import tempfile
 import zipfile
 import logging
 from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
-from core.config import STORAGE_PATH
-from core.state import get_current_project_path
+from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
 
 logger = logging.getLogger(__name__)
 
@@ -170,119 +172,200 @@ def import_custom_stage_zip():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@custom_stages_bp.route('/api/mex/custom-stages/scan-project', methods=['POST'])
-def scan_project_for_custom_stages():
-    try:
-        project_path = get_current_project_path()
-        if project_path is None:
-            return jsonify({'success': False, 'error': 'No project loaded. Open a project first.'}), 400
+VANILLA_STAGE_NAMES = {
+    'Null', 'Test Stage', "Princess Peach's Castle", 'Rainbow Cruise',
+    'Kongo Jungle', 'Jungle Japes', 'Great Bay', 'Temple', 'Brinstar',
+    'Brinstar Depths', "Yoshi's Story", "Yoshi's Island",
+    'Fountain of Dreams', 'Green Greens', 'Corneria', 'Venom',
+    'Pokemon Stadium', 'Poke Floats', 'Mute City', 'Big Blue', 'Onett',
+    'Fourside', 'Icicle Mountain', 'Ice Top', 'Kingdom', 'Kingdom II',
+    'Akaneia', 'Flat Zone', 'Dream Land N64', "Yoshi's Island N64",
+    'Kongo Jungle N64', 'Mushroom Kingdom (Adventure)', 'Underground Maze',
+    'Brinstar Escape Shaft', 'F-Zero Grand Prix', 'Battlefield',
+    'Final Destination', 'Trophy Collector', 'Race to the Finish',
+    'Targets!Mario', 'Targets!C. Falcon', 'Targets!Young Link',
+    'Targets!DK', 'Targets!Dr. Mario', 'Targets!Falco', 'Targets!Fox',
+    'Targets!Ice Climbers', 'Targets!Kirby', 'Targets!Bowser',
+    'Targets!Link', 'Targets!Luigi', 'Targets!Marth', 'Targets!Mewtwo',
+    'Targets!Ness', 'Targets!Peach', 'Targets!Pichu', 'Targets!Pikachu',
+    'Targets!Jigglypuff', 'Targets!Samus', 'Targets!Sheik',
+    'Targets!Yoshi', 'Targets!Zelda', 'Targets!Game and Watch',
+    'Targets!Roy', 'Targets!Ganon', 'All-Star Rest Area',
+    'Home-Run Stadium', 'Trophy (Goomba)', 'Trophy (Entei)',
+    "Trophy (Majora's Mask)",
+}
 
-        project_dir = project_path.parent
-        files_dir = project_dir / 'files'
-        data_dir = project_dir / 'data'
-        assets_sss_dir = project_dir / 'assets' / 'sss'
 
-        if not files_dir.exists():
-            return jsonify({'success': False, 'error': 'Project files/ directory not found'}), 404
+def _resolve_asset_png(assets_dir, asset_ref):
+    """Resolve an asset reference like 'sss\\icon_048' to a .png file path."""
+    if not asset_ref or not assets_dir.exists():
+        return None
+    normalized = asset_ref.replace('\\', '/').replace('/', os.sep)
+    png_path = assets_dir / f"{normalized}.png"
+    if png_path.exists():
+        return png_path
+    basename = Path(normalized).name
+    candidate = assets_dir / f"{basename}.png"
+    if candidate.exists():
+        return candidate
+    return None
 
-        VANILLA_STAGE_CODES = {'GrNBa', 'GrNLa', 'GrSt', 'GrOp', 'GrPs', 'GrIz'}
 
-        metadata = _read_metadata()
-        existing_names = {s['name'].lower() for s in metadata.get('custom_stages', [])}
+def _extract_custom_stages_from_project(project_dir, source_label):
+    """Extract custom stages from a MEX project directory into the vault.
+    Returns (imported, skipped) name lists."""
+    files_dir = project_dir / 'files'
+    stages_dir = project_dir / 'data' / 'stages'
+    assets_dir = project_dir / 'assets'
+    project_path = project_dir / 'project.mexproj'
 
-        imported = []
-        skipped = []
+    if not stages_dir.exists():
+        raise FileNotFoundError('Project data/stages/ directory not found')
 
-        stage_jsons = []
-        for search_dir in [data_dir, assets_sss_dir]:
-            if search_dir and search_dir.exists():
-                stage_jsons.extend(search_dir.rglob('*.json'))
+    with open(project_path, 'r') as f:
+        proj_data = json.load(f)
 
-        for stage_json_path in stage_jsons:
-            try:
-                with open(stage_json_path, 'r') as f:
-                    stage_data = json.load(f)
+    stage_files = proj_data.get('stageSaveMap', {}).get('filePaths', [])
+    if not stage_files:
+        return [], []
 
-                stage_name = stage_data.get('name', '')
-                file_name = stage_data.get('fileName', '')
+    metadata = _read_metadata()
+    existing_names = {s['name'].lower() for s in metadata.get('custom_stages', [])}
 
-                if not stage_name:
-                    continue
+    imported = []
+    skipped = []
 
-                is_vanilla = False
-                for code in VANILLA_STAGE_CODES:
-                    if code in file_name or code.lower() in file_name.lower():
-                        is_vanilla = True
-                        break
+    for stage_file in stage_files:
+        stage_json_path = stages_dir / stage_file
+        if not stage_json_path.exists():
+            continue
 
-                if is_vanilla:
-                    continue
+        try:
+            with open(stage_json_path, 'r') as f:
+                stage_data = json.load(f)
 
-                if stage_name.lower() in existing_names:
-                    skipped.append(stage_name)
-                    continue
-
-                slug = _dedupe_slug(_make_slug(stage_name))
-                stage_dir = CUSTOM_STAGES_PATH / slug
-                stage_dir.mkdir(parents=True, exist_ok=True)
-
-                with open(stage_dir / 'stage.json', 'w') as f:
-                    json.dump(stage_data, f, indent=2)
-
-                icon_name = stage_data.get('iconFile', '')
-                has_icon = False
-                if icon_name and assets_sss_dir.exists():
-                    icon_candidates = list(assets_sss_dir.rglob(icon_name))
-                    if icon_candidates:
-                        shutil.copy2(icon_candidates[0], stage_dir / 'icon.png')
-                        has_icon = True
-
-                banner_name = stage_data.get('bannerFile', '')
-                has_banner = False
-                if banner_name and assets_sss_dir.exists():
-                    banner_candidates = list(assets_sss_dir.rglob(banner_name))
-                    if banner_candidates:
-                        shutil.copy2(banner_candidates[0], stage_dir / 'banner.png')
-                        has_banner = True
-
-                dat_files_found = []
-                if file_name and files_dir.exists():
-                    dat_candidates = list(files_dir.rglob(f"{file_name}*"))
-                    for dc in dat_candidates:
-                        if dc.suffix.lower() == '.dat':
-                            dat_files_found.append(dc.name)
-
-                entry = {
-                    'slug': slug,
-                    'name': stage_name,
-                    'source': 'project-scan',
-                    'date_added': datetime.now().isoformat(),
-                    'series_id': stage_data.get('seriesID', 0),
-                    'sound_bank': stage_data.get('soundBank', None),
-                    'dat_files': dat_files_found,
-                    'has_banner': has_banner,
-                    'has_icon': has_icon
-                }
-
-                metadata['custom_stages'].append(entry)
-                existing_names.add(stage_name.lower())
-                imported.append(stage_name)
-
-            except (json.JSONDecodeError, KeyError):
+            stage_name = stage_data.get('name', '')
+            if not stage_name or stage_name in VANILLA_STAGE_NAMES:
                 continue
 
-        if imported:
-            _write_metadata(metadata)
+            if stage_name.lower() in existing_names:
+                skipped.append(stage_name)
+                continue
 
-        logger.info(f"[OK] Project scan: imported {len(imported)}, skipped {len(skipped)}")
-        return jsonify({
-            'success': True,
-            'imported': imported,
-            'skipped': skipped,
-            'message': f"Imported {len(imported)} custom stage(s), skipped {len(skipped)} duplicate(s)"
-        })
+            slug = _dedupe_slug(_make_slug(stage_name))
+            stage_dir = CUSTOM_STAGES_PATH / slug
+            stage_dir.mkdir(parents=True, exist_ok=True)
+
+            with open(stage_dir / 'stage.json', 'w') as f:
+                json.dump(stage_data, f, indent=2)
+
+            assets_obj = stage_data.get('assets', {})
+            has_icon = False
+            icon_ref = assets_obj.get('icon')
+            icon_file = _resolve_asset_png(assets_dir, icon_ref)
+            if icon_file:
+                shutil.copy2(icon_file, stage_dir / 'icon.png')
+                has_icon = True
+
+            has_banner = False
+            banner_ref = assets_obj.get('banner')
+            banner_file = _resolve_asset_png(assets_dir, banner_ref)
+            if banner_file:
+                shutil.copy2(banner_file, stage_dir / 'banner.png')
+                has_banner = True
+
+            file_name = stage_data.get('fileName') or ''
+            dat_files_found = []
+            if file_name and files_dir.exists():
+                clean = file_name.lstrip('/')
+                if not clean.endswith('.dat'):
+                    clean += '.dat'
+                main_dat = files_dir / clean
+                if main_dat.exists():
+                    dat_files_found.append(main_dat.name)
+                for extra in stage_data.get('additionalFiles', []):
+                    extra_path = files_dir / extra.lstrip('/')
+                    if extra_path.exists():
+                        dat_files_found.append(extra_path.name)
+
+            entry = {
+                'slug': slug,
+                'name': stage_name,
+                'source': source_label,
+                'date_added': datetime.now().isoformat(),
+                'series_id': stage_data.get('seriesID', 0),
+                'sound_bank': stage_data.get('soundBank', None),
+                'dat_files': dat_files_found,
+                'has_banner': has_banner,
+                'has_icon': has_icon
+            }
+
+            metadata['custom_stages'].append(entry)
+            existing_names.add(stage_name.lower())
+            imported.append(stage_name)
+
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    if imported:
+        _write_metadata(metadata)
+
+    return imported, skipped
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/scan-iso', methods=['POST'])
+def scan_iso_for_custom_stages():
+    """Create a temp MEX project from an ISO, extract custom stages, clean up."""
+    try:
+        data = request.json or {}
+        iso_path = data.get('isoPath', '').strip()
+        if not iso_path:
+            return jsonify({'success': False, 'error': 'Missing isoPath parameter'}), 400
+
+        iso_file = Path(iso_path)
+        if not iso_file.exists():
+            return jsonify({'success': False, 'error': f'ISO not found: {iso_path}'}), 404
+        if iso_file.suffix.lower() not in ('.iso', '.gcm'):
+            return jsonify({'success': False, 'error': 'File must be an .iso or .gcm'}), 400
+
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found. Build MexCLI first.'}), 500
+
+        temp_dir = tempfile.mkdtemp(prefix='nucleus_stage_scan_')
+        try:
+            logger.info(f"Scanning ISO for custom stages: {iso_path}")
+            logger.info(f"Temp project dir: {temp_dir}")
+
+            cmd = [mexcli_path, 'import-iso', str(iso_file), temp_dir, 'temp_scan']
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or 'Unknown error'
+                logger.error(f"MexCLI create failed: {error_msg}")
+                return jsonify({'success': False, 'error': f'Failed to open ISO: {error_msg}'}), 500
+
+            project_dir = Path(temp_dir)
+            if not (project_dir / 'project.mexproj').exists():
+                return jsonify({'success': False, 'error': 'MexCLI created project but .mexproj not found'}), 500
+
+            imported, skipped = _extract_custom_stages_from_project(project_dir, 'iso-scan')
+
+            logger.info(f"[OK] ISO scan: imported {len(imported)}, skipped {len(skipped)}")
+            return jsonify({
+                'success': True,
+                'imported': imported,
+                'skipped': skipped,
+                'message': f"Imported {len(imported)} custom stage(s), skipped {len(skipped)} duplicate(s)"
+            })
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     except Exception as e:
-        logger.error(f"Scan project for custom stages error: {e}", exc_info=True)
+        logger.error(f"Scan ISO for custom stages error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

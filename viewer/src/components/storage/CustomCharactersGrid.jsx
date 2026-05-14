@@ -1,18 +1,18 @@
 import { playSound, playHoverSound } from '../../utils/sounds'
 
 const SkeletonCard = () => (
-  <div className="stage-card skeleton-card">
-    <div className="stage-icon-container">
+  <div className="character-card skeleton-card">
+    <div className="character-icon-container">
       <div className="skeleton skeleton-image"></div>
     </div>
     <div className="skeleton skeleton-text" style={{ width: '60%', height: '12px' }}></div>
   </div>
 )
 
-export default function CustomStagesGrid({
-  customStages,
+export default function CustomCharactersGrid({
+  customCharacters,
   isLoading,
-  onSelectStage,
+  onSelectCharacter,
   onBack,
   onImportZip,
   onScanIso,
@@ -26,7 +26,7 @@ export default function CustomStagesGrid({
           onMouseEnter={playHoverSound}
           onClick={() => { playSound('back'); onBack(); }}
         >
-          ← Back to Stages
+          ← Back to Characters
         </button>
 
         <div className="import-file-container" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
@@ -63,28 +63,28 @@ export default function CustomStagesGrid({
         </div>
       </div>
 
-      <div className="custom-stages-grid">
+      <div className="custom-characters-grid">
         {isLoading ? (
           Array.from({ length: 8 }).map((_, idx) => (
-            <SkeletonCard key={`skeleton-cs-${idx}`} />
+            <SkeletonCard key={`skeleton-cc-${idx}`} />
           ))
-        ) : customStages.length === 0 ? (
+        ) : customCharacters.length === 0 ? (
           <div className="no-skins-message" style={{ gridColumn: '1 / -1' }}>
-            <p>No custom stages yet. Import a stage package or scan an ISO.</p>
+            <p>No custom characters yet. Import a fighter package or scan an ISO.</p>
           </div>
-        ) : customStages.map((stage) => (
+        ) : customCharacters.map((char) => (
           <div
-            key={stage.slug}
-            className="stage-card"
+            key={char.slug}
+            className="character-card"
             onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); onSelectStage(stage); }}
+            onClick={() => { playSound('boop'); onSelectCharacter(char); }}
           >
-            <div className="stage-icon-container">
-              {stage.has_icon ? (
+            <div className="character-icon-container">
+              {char.has_css_icon ? (
                 <img
-                  src={stage.icon_url}
-                  alt={stage.name}
-                  className="stage-icon"
+                  src={char.icon_url}
+                  alt={char.name}
+                  className="character-icon"
                   style={{ imageRendering: 'pixelated' }}
                   onError={(e) => {
                     e.target.style.display = 'none'
@@ -92,12 +92,15 @@ export default function CustomStagesGrid({
                   }}
                 />
               ) : null}
-              <div className="stage-placeholder" style={{ display: stage.has_icon ? 'none' : 'flex' }}>
-                {stage.name[0]}
+              <div className="stage-placeholder" style={{ display: char.has_css_icon ? 'none' : 'flex' }}>
+                {char.name[0]}
               </div>
             </div>
-            <div className="stage-info">
-              <h3 className="stage-name">{stage.name}</h3>
+            <div className="character-info">
+              <h3 className="character-name">{char.name}</h3>
+              <p className="skin-count">
+                <span>{char.costume_count}</span> costume{char.costume_count !== 1 ? 's' : ''}
+              </p>
             </div>
           </div>
         ))}

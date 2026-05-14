@@ -20,7 +20,7 @@ const SkeletonCard = () => (
   </div>
 )
 
-export default function CharactersGrid({ characters, allCharacters, isLoading, onSelectCharacter }) {
+export default function CharactersGrid({ characters, allCharacters, isLoading, onSelectCharacter, customCharacterCount = 0, onOpenCustomCharacters }) {
   return (
     <div className="grid-wrapper">
       <div className="characters-grid">
@@ -64,6 +64,23 @@ export default function CharactersGrid({ characters, allCharacters, isLoading, o
             </div>
           )
         })}
+
+          {!isLoading && (
+          <div
+            className="character-card custom-characters-gateway"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); onOpenCustomCharacters && onOpenCustomCharacters(); }}
+          >
+            <div className="character-icon-container">
+              <div className="character-placeholder" style={{ display: 'flex', fontSize: '2rem', fontWeight: 700 }}>
+                +
+              </div>
+            </div>
+            <p className="skin-count">
+              <span>{customCharacterCount}</span> character{customCharacterCount !== 1 ? 's' : ''}
+            </p>
+          </div>
+          )}
       </div>
     </div>
   )

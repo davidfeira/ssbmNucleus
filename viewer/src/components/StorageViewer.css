@@ -286,6 +286,22 @@
 }
 
 /* ─────────────────────────────────────────
+   CUSTOM CHARACTERS SUB-PAGE GRID
+   ───────────────────────────────────────── */
+
+.custom-characters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.custom-characters-grid .character-icon,
+.custom-characters-grid .character-css-icon {
+  image-rendering: pixelated;
+}
+
+/* ─────────────────────────────────────────
    CUSTOM STAGE DETAIL VIEW
    ───────────────────────────────────────── */
 
@@ -337,6 +353,70 @@
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* ─────────────────────────────────────────
+   CUSTOM CHARACTER COSTUME GALLERY
+   ───────────────────────────────────────── */
+
+.custom-char-costumes {
+  margin-bottom: var(--space-4);
+}
+
+.custom-char-costume-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+.custom-char-costume-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  text-align: center;
+}
+
+.custom-char-csp {
+  width: 100%;
+  aspect-ratio: 136 / 188;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: var(--color-bg-base);
+}
+
+.custom-char-csp-placeholder {
+  width: 100%;
+  aspect-ratio: 136 / 188;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-bg-base);
+}
+
+.custom-char-costume-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+.custom-char-stock {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.custom-char-costume-name {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ─────────────────────────────────────────

@@ -23,28 +23,19 @@ const MENU_TYPES = [
 
 export default function MenusGrid({ onSelectMenuType }) {
   return (
-    <div className="grid-wrapper">
-      <div className="stages-grid">
-        {MENU_TYPES.map((menu) => (
-          <div
-            key={menu.key}
-            className="stage-card"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); onSelectMenuType(menu.key) }}
-          >
-            <div className="stage-icon-container">
-              <div className="stage-placeholder" style={{ display: 'flex' }}>
-                {menu.short}
-              </div>
-            </div>
-
-            <div className="stage-info">
-              <h3 className="stage-name">{menu.name}</h3>
-              <p className="stage-variant-count">{menu.description}</p>
-            </div>
+    <div className="stages-grid" style={{ justifyContent: 'center' }}>
+      {MENU_TYPES.map((menu) => (
+        <div
+          key={menu.key}
+          className="stage-card"
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); onSelectMenuType(menu.key) }}
+        >
+          <div className="stage-info" style={{ padding: '2rem 1rem' }}>
+            <h3 className="stage-name">{menu.name}</h3>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -194,23 +194,23 @@ def das_install():
         for stage_code, stage_info in DAS_STAGES.items():
             logger.info(f"Installing DAS for {stage_info['name']} ({stage_code})...")
 
-            # Pokemon Stadium uses .usd, others use .dat
-            file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+            # Root-level file uses .usd for Pokemon Stadium, .dat for others
+            root_ext = '.usd' if stage_code == 'GrPs' else '.dat'
 
             # Create stage folder first
             stage_folder = project_files / stage_code
             stage_folder.mkdir(exist_ok=True)
             logger.info(f"  Created folder: {stage_code}/")
 
-            # Get paths
-            original_stage = project_files / f"{stage_code}{file_ext}"
-            loader_src = das_source / f"{stage_code}{file_ext}"
-            vanilla_in_folder = stage_folder / f"vanilla{file_ext}"
+            # Get paths — alts inside the folder are always .dat
+            original_stage = project_files / f"{stage_code}{root_ext}"
+            loader_src = das_source / f"{stage_code}{root_ext}"
+            vanilla_in_folder = stage_folder / "vanilla.dat"
 
             # If vanilla variant doesn't exist yet and original stage exists, copy it into folder
             if not vanilla_in_folder.exists() and original_stage.exists():
                 shutil.copy2(original_stage, vanilla_in_folder)
-                logger.info(f"  Copied vanilla stage to {stage_code}/vanilla{file_ext}")
+                logger.info(f"  Copied vanilla stage to {stage_code}/vanilla.dat")
 
                 # Copy default screenshot for vanilla variant to storage
                 if stage_code in DAS_DEFAULT_SCREENSHOTS:
@@ -225,7 +225,7 @@ def das_install():
             # Install DAS loader (replaces original stage file)
             if loader_src.exists():
                 shutil.copy2(loader_src, original_stage)
-                logger.info(f"  Installed DAS loader: {stage_code}{file_ext}")
+                logger.info(f"  Installed DAS loader: {stage_code}{root_ext}")
             else:
                 logger.warning(f"  DAS loader not found: {loader_src}")
 
@@ -276,14 +276,12 @@ def das_get_stage_variants(stage_code):
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # List stage files in current project's files/{stage_code}/ (.dat or .usd for Pokemon Stadium)
         project_files = get_project_files_dir()
         stage_folder = project_files / stage_code
         variants = []
 
         if stage_folder.exists() and stage_folder.is_dir():
-            # Pokemon Stadium uses .usd, others use .dat
-            file_pattern = '*.usd' if stage_code == 'GrPs' else '*.dat'
+            file_pattern = '*.dat'
 
             # Load metadata to get slippi status and other info
             metadata_file = STORAGE_PATH / 'metadata.json'
@@ -474,16 +472,14 @@ def das_import_variant():
         stage_folder = project_files / stage_code
         stage_folder.mkdir(exist_ok=True)
 
-        # Pokemon Stadium uses .usd, others use .dat
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+        file_ext = '.dat'
 
         with zipfile.ZipFile(full_variant_path, 'r') as zip_ref:
-            # Find the stage file in the zip
-            stage_files = [f for f in zip_ref.namelist() if f.endswith(file_ext) or f.endswith('.dat')]
+            stage_files = [f for f in zip_ref.namelist() if f.endswith('.dat') or f.endswith('.usd')]
             if not stage_files:
                 return jsonify({
                     'success': False,
-                    'error': f'No {file_ext} file found in ZIP'
+                    'error': 'No .dat/.usd stage file found in ZIP'
                 }), 400
 
             # Read the stage file data
@@ -569,8 +565,7 @@ def das_remove_variant():
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # Find and remove the variant file
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+        file_ext = '.dat'
         project_files = get_project_files_dir()
         stage_folder = project_files / stage_code
         variant_path = stage_folder / f"{variant_name}{file_ext}"
@@ -628,22 +623,19 @@ def das_rename_variant():
                 'error': f'Unknown stage code: {stage_code}'
             }), 400
 
-        # Pokemon Stadium uses .usd, others use .dat
-        file_ext = '.usd' if stage_code == 'GrPs' else '.dat'
+        file_ext = '.dat'
         project_files = get_project_files_dir()
         stage_folder = project_files / stage_code
 
         old_path = stage_folder / f"{old_name}{file_ext}"
         new_path = stage_folder / f"{new_name}{file_ext}"
 
-        # Check if old file exists
         if not old_path.exists():
             return jsonify({
                 'success': False,
                 'error': f'Source file not found: {old_name}{file_ext}'
             }), 404
 
-        # Check if new file already exists (prevent overwriting)
         if new_path.exists():
             return jsonify({
                 'success': False,

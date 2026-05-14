@@ -1,7 +1,7 @@
 /**
- * BackgroundModsView - List of imported CSS Background mods.
+ * BackgroundModsView - List of imported background mods (shared CSS/SSS pool).
  *
- * Each mod is a background model/animation bundle extracted from a CSS dat.
+ * Each mod is a background model/animation bundle extracted from a menu dat.
  * Provides import (.zip/.dat/.usd upload) and delete actions; renders
  * a screenshot as the card image when available.
  */
@@ -18,7 +18,7 @@ export default function BackgroundModsView() {
   const fetchMods = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/menus/css/background/list`)
+      const res = await fetch(`${API_URL}/menus/background/list`)
       const data = await res.json()
       if (data.success) {
         setMods(data.mods || [])
@@ -48,7 +48,7 @@ export default function BackgroundModsView() {
     formData.append('file', file)
 
     try {
-      const res = await fetch(`${API_URL}/menus/css/background/import`, {
+      const res = await fetch(`${API_URL}/menus/background/import`, {
         method: 'POST',
         body: formData
       })
@@ -72,7 +72,7 @@ export default function BackgroundModsView() {
       return
     }
     try {
-      const res = await fetch(`${API_URL}/menus/css/background/delete/${mod.id}`, {
+      const res = await fetch(`${API_URL}/menus/background/delete/${mod.id}`, {
         method: 'POST'
       })
       const data = await res.json()
@@ -84,6 +84,24 @@ export default function BackgroundModsView() {
       }
     } catch (err) {
       alert(`Delete error: ${err.message}`)
+    }
+  }
+
+  const handleToggleScene = async (mod) => {
+    const newVal = !mod.includeScene
+    try {
+      const res = await fetch(`${API_URL}/menus/background/update/${mod.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeScene: newVal })
+      })
+      const data = await res.json()
+      if (data.success) {
+        playSound('boop')
+        setMods(prev => prev.map(m => m.id === mod.id ? { ...m, includeScene: newVal } : m))
+      }
+    } catch (err) {
+      console.error('Failed to toggle scene setting:', err)
     }
   }
 
@@ -119,7 +137,7 @@ export default function BackgroundModsView() {
           </div>
         ) : mods.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-            No background mods yet. Import a .zip or .dat containing a MnSlChr file to get started.
+            No background mods yet. Import a .zip or .dat containing a MnSlChr or MnSlMap file to get started.
           </div>
         ) : (
           mods.map((mod) => (
@@ -150,6 +168,19 @@ export default function BackgroundModsView() {
                 {mod.description && (
                   <p className="patch-row-description">{mod.description}</p>
                 )}
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                  title="When enabled, installs the background's camera, lighting, and fog settings alongside the model. Turn off if the background looks wrong on a different screen."
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!mod.includeScene}
+                    onChange={() => handleToggleScene(mod)}
+                    style={{ accentColor: 'var(--color-primary, #7c4dff)' }}
+                  />
+                  Include Scene Settings
+                </label>
               </div>
 
               <div className="patch-row-actions">
