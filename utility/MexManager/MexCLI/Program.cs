@@ -56,6 +56,10 @@ namespace MexCLI
                         return Commands.GetCssLayoutCommand.Execute(args);
                     case "set-css-layout":
                         return Commands.SetCssLayoutCommand.Execute(args);
+                    case "export-fighter":
+                        return Commands.ExportFighterCommand.Execute(args);
+                    case "export-stage":
+                        return Commands.ExportStageCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":

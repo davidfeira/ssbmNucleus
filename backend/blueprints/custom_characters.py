@@ -206,7 +206,9 @@ def _extract_custom_characters_from_project(project_dir, source_label):
     imported = []
     skipped = []
 
-    for fighter_file in fighter_files:
+    mexcli_path = str(MEXCLI_PATH)
+
+    for fighter_index, fighter_file in enumerate(fighter_files):
         fighter_json_path = fighters_dir / fighter_file
         if not fighter_json_path.exists():
             continue
@@ -226,6 +228,17 @@ def _extract_custom_characters_from_project(project_dir, source_label):
             slug = _dedupe_slug(_make_slug(fighter_name))
             char_dir = CUSTOM_CHARACTERS_PATH / slug
             char_dir.mkdir(parents=True, exist_ok=True)
+
+            # Export full fighter ZIP via MexCLI
+            zip_path = char_dir / 'fighter.zip'
+            if Path(mexcli_path).exists():
+                export_cmd = [mexcli_path, 'export-fighter', str(project_path), str(fighter_index), str(zip_path)]
+                export_result = subprocess.run(
+                    export_cmd, capture_output=True, text=True,
+                    cwd=str(PROJECT_ROOT), **get_subprocess_args()
+                )
+                if export_result.returncode != 0:
+                    logger.warning(f"Failed to export fighter ZIP for '{fighter_name}': {export_result.stderr or export_result.stdout}")
 
             with open(char_dir / 'fighter.json', 'w') as f:
                 json.dump(fighter_data, f, indent=2)

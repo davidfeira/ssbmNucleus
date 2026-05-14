@@ -235,7 +235,9 @@ def _extract_custom_stages_from_project(project_dir, source_label):
     imported = []
     skipped = []
 
-    for stage_file in stage_files:
+    mexcli_path = str(MEXCLI_PATH)
+
+    for stage_index, stage_file in enumerate(stage_files):
         stage_json_path = stages_dir / stage_file
         if not stage_json_path.exists():
             continue
@@ -255,6 +257,17 @@ def _extract_custom_stages_from_project(project_dir, source_label):
             slug = _dedupe_slug(_make_slug(stage_name))
             stage_dir = CUSTOM_STAGES_PATH / slug
             stage_dir.mkdir(parents=True, exist_ok=True)
+
+            # Export full stage ZIP via MexCLI
+            zip_path = stage_dir / 'stage.zip'
+            if Path(mexcli_path).exists():
+                export_cmd = [mexcli_path, 'export-stage', str(project_path), str(stage_index), str(zip_path)]
+                export_result = subprocess.run(
+                    export_cmd, capture_output=True, text=True,
+                    cwd=str(PROJECT_ROOT), **get_subprocess_args()
+                )
+                if export_result.returncode != 0:
+                    logger.warning(f"Failed to export stage ZIP for '{stage_name}': {export_result.stderr or export_result.stdout}")
 
             with open(stage_dir / 'stage.json', 'w') as f:
                 json.dump(stage_data, f, indent=2)
