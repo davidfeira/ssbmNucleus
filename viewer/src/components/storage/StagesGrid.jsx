@@ -20,7 +20,7 @@ const DAS_STAGES = [
   { code: 'GrNLa', name: 'Final Destination', folder: 'final_destination', vanillaImage: `${BACKEND_URL}/vanilla/stages/final destination.png` }
 ]
 
-export default function StagesGrid({ stageVariants, isLoading, onSelectStage }) {
+export default function StagesGrid({ stageVariants, isLoading, onSelectStage, customStageCount = 0, onOpenCustomStages }) {
   return (
     <div className="grid-wrapper">
       <div className="stages-grid">
@@ -69,6 +69,26 @@ export default function StagesGrid({ stageVariants, isLoading, onSelectStage }) 
             </div>
           )
         })}
+
+          {!isLoading && (
+          <div
+            className="stage-card custom-stages-gateway"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); onOpenCustomStages && onOpenCustomStages(); }}
+          >
+            <div className="stage-icon-container">
+              <div className="stage-placeholder" style={{ display: 'flex' }}>
+                +
+              </div>
+            </div>
+            <div className="stage-info">
+              <h3 className="stage-name">Custom Stages</h3>
+              <p className="stage-variant-count">
+                <span>{customStageCount}</span> stage{customStageCount !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          )}
       </div>
     </div>
   )

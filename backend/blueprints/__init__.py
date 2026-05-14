@@ -23,6 +23,7 @@ from .viewer import viewer_bp
 from .settings import settings_bp
 from .iso_scan import iso_scan_bp
 from .menus import menus_bp
+from .custom_stages import custom_stages_bp
 
 __all__ = [
     'assets_bp',
@@ -44,4 +45,5 @@ __all__ = [
     'settings_bp',
     'iso_scan_bp',
     'menus_bp',
+    'custom_stages_bp',
 ]

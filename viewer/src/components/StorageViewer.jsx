@@ -32,6 +32,8 @@ import DoorModsView from './storage/DoorModsView'
 import SssLayoutEditor from './storage/SssLayoutEditor'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
+import CustomStagesGrid from './storage/CustomStagesGrid'
+import CustomStageDetailView from './storage/CustomStageDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
 import { useFolderManagement } from '../hooks/useFolderManagement'
 import { useFileImport } from '../hooks/useFileImport'
@@ -75,6 +77,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [showBundleEditModal, setShowBundleEditModal] = useState(false)
   const [editingBundle, setEditingBundle] = useState(null)
 
+  // Custom stages state (sub-page within stages mode)
+  const [customStages, setCustomStages] = useState([])
+  const [showCustomStages, setShowCustomStages] = useState(false)
+  const [selectedCustomStage, setSelectedCustomStage] = useState(null)
+  const [customStageImporting, setCustomStageImporting] = useState(false)
+
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
 
@@ -104,6 +112,69 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       }
     } catch (err) {
       console.error('Failed to fetch stage variants:', err)
+    }
+  }
+
+  // Fetch custom stages
+  const fetchCustomStages = async () => {
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/list`)
+      const data = await response.json()
+      if (data.success) {
+        setCustomStages(data.stages || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch custom stages:', err)
+    }
+  }
+
+  // Custom stage import handler
+  const handleCustomStageImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    setCustomStageImporting(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch(`${API_URL}/custom-stages/import-zip`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        await fetchCustomStages()
+      } else {
+        alert(data.error || 'Import failed')
+      }
+    } catch (err) {
+      alert(`Import error: ${err.message}`)
+    } finally {
+      setCustomStageImporting(false)
+    }
+  }
+
+  // Custom stage scan project handler
+  const handleCustomStageScan = async () => {
+    setCustomStageImporting(true)
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/scan-project`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+      if (data.success) {
+        await fetchCustomStages()
+        if (data.message) {
+          alert(data.message)
+        }
+      } else {
+        alert(data.error || 'Scan failed')
+      }
+    } catch (err) {
+      alert(`Scan error: ${err.message}`)
+    } finally {
+      setCustomStageImporting(false)
     }
   }
 
@@ -455,10 +526,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }, [cspManagerSkin, editingItem, onRefresh, refreshManagedSkinState, setLastImageUpdate])
 
-  // Fetch stage variants when in stages mode or when metadata changes
+  // Fetch stage variants and custom stages when in stages mode
   useEffect(() => {
     if (mode === 'stages') {
       fetchStageVariants()
+      fetchCustomStages()
     }
   }, [mode, metadata])
 
@@ -931,6 +1003,64 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
 
 
+  // If a custom stage is selected, show its detail view
+  if (selectedCustomStage) {
+    return (
+      <CustomStageDetailView
+        stage={selectedCustomStage}
+        onBack={() => setSelectedCustomStage(null)}
+        onDelete={() => { setSelectedCustomStage(null); fetchCustomStages(); }}
+        onRename={(updatedStage) => {
+          setSelectedCustomStage(updatedStage)
+          fetchCustomStages()
+        }}
+        API_URL={API_URL}
+      />
+    )
+  }
+
+  // If custom stages sub-page is open, show the grid
+  if (showCustomStages) {
+    return (
+      <div className="storage-viewer">
+        <ModeToolbar
+          mode={mode}
+          onModeChange={(newMode) => {
+            setMode(newMode)
+            setShowCustomStages(false)
+            setSelectedCustomStage(null)
+            if (newMode === 'characters') {
+              setSelectedStage(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'stages') {
+              setSelectedCharacter(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'patches') {
+              setSelectedCharacter(null)
+              setSelectedStage(null)
+              setSelectedMenuType(null)
+              setSelectedMenuModType(null)
+            } else if (newMode === 'menus') {
+              setSelectedCharacter(null)
+              setSelectedStage(null)
+            }
+          }}
+        />
+        <CustomStagesGrid
+          customStages={customStages}
+          isLoading={isLoading}
+          onSelectStage={setSelectedCustomStage}
+          onBack={() => setShowCustomStages(false)}
+          onImportZip={handleCustomStageImport}
+          onScanProject={handleCustomStageScan}
+          importing={customStageImporting}
+        />
+      </div>
+    )
+  }
+
   // If a stage is selected, show its variants
   if (selectedStage) {
     return (
@@ -1146,6 +1276,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         mode={mode}
         onModeChange={(newMode) => {
           setMode(newMode)
+          setShowCustomStages(false)
+          setSelectedCustomStage(null)
           if (newMode === 'characters') {
             setSelectedStage(null)
             setSelectedMenuType(null)
@@ -1194,6 +1326,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           stageVariants={stageVariants}
           isLoading={isLoading}
           onSelectStage={setSelectedStage}
+          customStageCount={customStages.length}
+          onOpenCustomStages={() => setShowCustomStages(true)}
         />
       ) : mode === 'patches' ? (
         <PatchesGrid
