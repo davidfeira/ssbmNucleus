@@ -61,7 +61,8 @@ export default function SssCanvas({
   templateWidth = SSS_TEMPLATE_WIDTH,
   templateHeight = SSS_TEMPLATE_HEIGHT,
   templateSrc = '/sss_template.png',
-  getCollisionRect
+  getCollisionRect,
+  iconEndpoint = '/menus/sss/stage-icon'
 }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
@@ -90,10 +91,15 @@ export default function SssCanvas({
     img.src = templateSrc
   }, [templateSrc])
 
+  const makeIconUrl = useCallback((iconPath) => {
+    return `${API_URL}${iconEndpoint}?path=${encodeURIComponent(iconPath)}`
+  }, [API_URL, iconEndpoint])
+
   useEffect(() => {
+    imgCache.current = {}
     icons.forEach(icon => {
       if (!icon.iconPath) return
-      const url = `${API_URL}/menus/sss/stage-icon?path=${encodeURIComponent(icon.iconPath)}`
+      const url = makeIconUrl(icon.iconPath)
       if (url in imgCache.current) return
       imgCache.current[url] = null
       const img = new Image()
@@ -101,7 +107,7 @@ export default function SssCanvas({
       img.onerror = () => { imgCache.current[url] = false }
       img.src = url
     })
-  }, [icons, API_URL])
+  }, [icons, makeIconUrl])
 
   useEffect(() => {
     const el = containerRef.current
@@ -116,8 +122,7 @@ export default function SssCanvas({
 
   const getImg = (icon) => {
     if (!icon.iconPath) return null
-    const url = `${API_URL}/menus/sss/stage-icon?path=${encodeURIComponent(icon.iconPath)}`
-    return imgCache.current[url] || null
+    return imgCache.current[makeIconUrl(icon.iconPath)] || null
   }
 
   const selSet = new Set(selectedIndices)

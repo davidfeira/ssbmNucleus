@@ -318,6 +318,7 @@ export default function CssLayoutEditor() {
           templateHeight={CSS_TEMPLATE_HEIGHT}
           templateSrc="/css_template.png"
           getCollisionRect={getCssCollisionRect}
+          iconEndpoint="/menus/css/fighter-icon"
         />
 
         <div className="sss-right-panel">

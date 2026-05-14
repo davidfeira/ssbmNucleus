@@ -1424,7 +1424,7 @@ def get_sss_stage_icon():
             return jsonify({'success': False, 'error': 'Icon file not found'}), 404
 
         return send_file(str(icon_file), mimetype='image/png',
-                         max_age=300)
+                         max_age=0)
     except Exception as e:
         logger.error(f'Get SSS stage icon error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1490,7 +1490,7 @@ def get_css_fighter_icon():
         if not icon_file.exists():
             return jsonify({'success': False, 'error': 'Icon file not found'}), 404
 
-        return send_file(str(icon_file), mimetype='image/png', max_age=300)
+        return send_file(str(icon_file), mimetype='image/png', max_age=0)
     except Exception as e:
         logger.error(f'Get CSS fighter icon error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

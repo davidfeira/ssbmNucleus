@@ -21,12 +21,10 @@ const CSS_SUBMOD_TYPES = [
   { key: 'icon_grid', name: 'Icon Grid', description: 'Character portraits on the CSS banner' },
   { key: 'doors', name: 'Doors', description: 'Character panel door animations' },
   { key: 'background', name: 'Background', description: 'CSS background and stage art' },
-  { key: 'layout', name: 'Layout Editor', description: 'Edit fighter icon positions and layout' },
 ]
 
 const SSS_SUBMOD_TYPES = [
   { key: 'background', name: 'Background', description: 'SSS background model and animations' },
-  { key: 'layout', name: 'Layout Editor', description: 'Edit stage icon positions and layout' },
 ]
 
 export default function MenuMode({ mode, onModeChange }) {
@@ -394,12 +392,25 @@ export default function MenuMode({ mode, onModeChange }) {
               onMouseEnter={playHoverSound}
               onClick={() => { playSound('boop'); setSelectedMenu(mt.key) }}
             >
-              <div className="fighter-content">
+              <div className="fighter-content" style={{ flex: 1 }}>
                 <div className="fighter-name">{mt.short}</div>
                 <div className="fighter-info">
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #888)' }}>{mt.name}</span>
                 </div>
               </div>
+              <button
+                className="sss-action-btn add"
+                style={{ flex: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
+                onMouseEnter={playHoverSound}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  playSound('boop')
+                  setSelectedMenu(mt.key)
+                  setSelectedSubmod('layout')
+                }}
+              >
+                Edit Layout
+              </button>
             </div>
           ))}
         </div>
