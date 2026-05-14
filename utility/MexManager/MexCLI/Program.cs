@@ -64,6 +64,10 @@ namespace MexCLI
                         return Commands.AddFighterCommand.Execute(args);
                     case "remove-fighter":
                         return Commands.RemoveFighterCommand.Execute(args);
+                    case "add-stage":
+                        return Commands.AddStageCommand.Execute(args);
+                    case "remove-stage":
+                        return Commands.RemoveStageCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":

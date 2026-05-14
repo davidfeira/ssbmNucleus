@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using mexLib;
 using mexLib.Types;
@@ -56,8 +57,40 @@ namespace MexCLI.Commands
                 if (dir != null && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                using FileStream fs = new(outputPath, FileMode.Create);
-                MexStage.ToPackage(fs, workspace, stage, options);
+                // First do the standard export
+                using (FileStream fs = new(outputPath, FileMode.Create))
+                    MexStage.ToPackage(fs, workspace, stage, options);
+
+                // Then append any related files the stage code loads dynamically
+                // (e.g., GrAc.dat → GrAcDy.dat, GrAcNt.dat, GrAcVBlanca.dat, ...)
+                if (stage.FileName != null)
+                {
+                    string stem = Path.GetFileNameWithoutExtension(stage.FileName.TrimStart('/'));
+                    string filesDir = workspace.GetFilePath("");
+                    if (Directory.Exists(filesDir))
+                    {
+                        HashSet<string> alreadyPacked = new(StringComparer.OrdinalIgnoreCase);
+                        alreadyPacked.Add(stage.FileName.TrimStart('/'));
+                        foreach (string f in stage.AdditionalFiles)
+                            alreadyPacked.Add(f.TrimStart('/'));
+
+                        string[] relatedFiles = Directory.GetFiles(filesDir, stem + "*");
+                        if (relatedFiles.Length > alreadyPacked.Count)
+                        {
+                            using FileStream zipFs = new(outputPath, FileMode.Open, FileAccess.ReadWrite);
+                            using ZipArchive zip = new(zipFs, ZipArchiveMode.Update);
+                            foreach (string relatedFile in relatedFiles)
+                            {
+                                string name = Path.GetFileName(relatedFile);
+                                if (alreadyPacked.Contains(name))
+                                    continue;
+                                if (zip.GetEntry(name) != null)
+                                    continue;
+                                zip.CreateEntryFromFile(relatedFile, name, CompressionLevel.Fastest);
+                            }
+                        }
+                    }
+                }
 
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {

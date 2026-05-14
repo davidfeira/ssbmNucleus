@@ -27,6 +27,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
+from core.state import get_current_project_path, reload_mex_manager
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,55 @@ def import_custom_stage_zip():
         return jsonify({'success': False, 'error': 'Invalid or corrupted ZIP file'}), 400
     except Exception as e:
         logger.error(f"Import custom stage ZIP error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/in-project', methods=['GET'])
+def list_custom_stages_in_project():
+    """List custom stages currently installed in the open project (index > 70)."""
+    try:
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': True, 'stages': []})
+
+        project_dir = project_path.parent
+        stages_dir = project_dir / 'data' / 'stages'
+
+        if not stages_dir.exists() or not project_path.exists():
+            return jsonify({'success': True, 'stages': []})
+
+        with open(project_path, 'r') as f:
+            proj_data = json.load(f)
+
+        stage_files = proj_data.get('stageSaveMap', {}).get('filePaths', [])
+        assets_dir = project_dir / 'assets'
+        stages = []
+
+        for i, stage_file in enumerate(stage_files):
+            if i <= 70:
+                continue
+            stage_json_path = stages_dir / stage_file
+            if not stage_json_path.exists():
+                continue
+            try:
+                with open(stage_json_path, 'r') as f:
+                    stage_data = json.load(f)
+                name = stage_data.get('name', f'Stage {i}')
+                icon_ref = stage_data.get('assets', {}).get('icon')
+                icon_url = None
+                if icon_ref:
+                    icon_url = f"/assets/{icon_ref.replace(chr(92), '/')}.png"
+                stages.append({
+                    'index': i,
+                    'name': name,
+                    'icon_url': icon_url,
+                })
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+        return jsonify({'success': True, 'stages': stages})
+    except Exception as e:
+        logger.error(f"List project custom stages error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -466,3 +516,94 @@ def export_custom_stage(slug):
         return send_file(zip_path, as_attachment=True, download_name=f'{slug}.zip')
 
     return jsonify({'success': False, 'error': 'Stage ZIP not found (imported from project scan?)'}), 404
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/install', methods=['POST'])
+def install_custom_stage():
+    """Install a custom stage from the vault into the currently open project."""
+    try:
+        data = request.json or {}
+        slug = data.get('slug', '').strip()
+        if not slug:
+            return jsonify({'success': False, 'error': 'Missing slug parameter'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded. Open a project first.'}), 400
+
+        zip_path = CUSTOM_STAGES_PATH / slug / 'stage.zip'
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Stage ZIP not found for "{slug}". Re-scan the ISO to generate it.'}), 404
+
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        cmd = [mexcli_path, 'add-stage', str(project_path), str(zip_path)]
+        logger.info(f"Installing custom stage '{slug}': {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"add-stage failed: {error_msg}")
+            return jsonify({'success': False, 'error': f'Failed to add stage: {error_msg}'}), 500
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        try:
+            cli_output = json.loads(result.stdout.strip().split('\n')[-1])
+        except (json.JSONDecodeError, IndexError):
+            cli_output = {}
+
+        logger.info(f"[OK] Installed custom stage '{slug}' into project")
+        return jsonify({
+            'success': True,
+            'message': f"Added {cli_output.get('name', slug)} to project",
+            'name': cli_output.get('name', slug),
+        })
+    except Exception as e:
+        logger.error(f"Install custom stage error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/remove-from-project', methods=['POST'])
+def remove_custom_stage_from_project():
+    """Remove a custom stage from the currently open project."""
+    try:
+        data = request.json or {}
+        stage_name = data.get('name', '').strip()
+        if not stage_name:
+            return jsonify({'success': False, 'error': 'Missing name parameter'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded.'}), 400
+
+        mexcli_path = str(MEXCLI_PATH)
+        cmd = [mexcli_path, 'remove-stage', str(project_path), stage_name]
+        logger.info(f"Removing stage '{stage_name}': {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or 'Unknown error'
+            return jsonify({'success': False, 'error': f'Failed to remove stage: {error_msg}'}), 500
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        logger.info(f"[OK] Removed stage '{stage_name}' from project")
+        return jsonify({'success': True, 'message': f'Removed {stage_name}'})
+    except Exception as e:
+        logger.error(f"Remove stage error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500

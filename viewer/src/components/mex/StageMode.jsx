@@ -79,6 +79,14 @@ export default function StageMode({
   const [importingCostume, setImportingCostume] = useState(null)
   const [removing, setRemoving] = useState(false)
   const [batchImporting, setBatchImporting] = useState(false)
+
+  // Custom stages state
+  const [vaultStages, setVaultStages] = useState([])
+  const [projectCustomStages, setProjectCustomStages] = useState([])
+  const [addingStage, setAddingStage] = useState(null)
+  const [selectedCustomStages, setSelectedCustomStages] = useState(new Set())
+  const [batchInstallingStages, setBatchInstallingStages] = useState(false)
+  const [batchStageProgress, setBatchStageProgress] = useState({ current: 0, total: 0 })
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   const [dataReady, setDataReady] = useState(false)
 
@@ -93,9 +101,14 @@ export default function StageMode({
     checkDASInstallation()
     fetchStorageVariants()
     fetchAllMexVariantCounts()
+    fetchCustomStagesData()
   }, [])
 
   useEffect(() => {
+    if (selectedStage?.isCustom) {
+      setDataReady(true)
+      return
+    }
     if (selectedStage && dasInstalled) {
       setDataReady(false)
       setMexVariants([])
@@ -475,6 +488,85 @@ export default function StageMode({
     ? (batchProgress.current / batchProgress.total) * 100
     : null
 
+  const fetchCustomStagesData = async () => {
+    try {
+      const [vaultRes, projectRes] = await Promise.all([
+        fetch(`${API_URL}/custom-stages/list`),
+        fetch(`${API_URL}/custom-stages/in-project`)
+      ])
+      const vaultData = await vaultRes.json()
+      const projectData = await projectRes.json()
+      if (vaultData.success) setVaultStages(vaultData.stages || [])
+      if (projectData.success) setProjectCustomStages(projectData.stages || [])
+    } catch (err) {
+      console.error('Failed to fetch custom stages:', err)
+    }
+  }
+
+  const toggleCustomStageSelection = (slug) => {
+    setSelectedCustomStages(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+  }
+
+  const selectAllCustomStages = () => {
+    setSelectedCustomStages(new Set(vaultStages.map(s => s.slug)))
+  }
+
+  const clearCustomStageSelection = () => {
+    setSelectedCustomStages(new Set())
+  }
+
+  const handleBatchInstallStages = async () => {
+    const slugs = [...selectedCustomStages]
+    if (slugs.length === 0) return
+    setBatchInstallingStages(true)
+    setBatchStageProgress({ current: 0, total: slugs.length })
+    for (let i = 0; i < slugs.length; i++) {
+      setBatchStageProgress({ current: i + 1, total: slugs.length })
+      try {
+        const response = await fetch(`${API_URL}/custom-stages/install`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: slugs[i] })
+        })
+        const data = await response.json()
+        if (!data.success) {
+          console.error(`Failed to install ${slugs[i]}:`, data.error)
+        }
+      } catch (err) {
+        console.error(`Error installing ${slugs[i]}:`, err)
+      }
+    }
+    setBatchInstallingStages(false)
+    setSelectedCustomStages(new Set())
+    await fetchCustomStagesData()
+    onRefresh()
+  }
+
+  const handleRemoveCustomStage = async (stageName) => {
+    if (!confirm(`Remove "${stageName}" from the project?`)) return
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/remove-from-project`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: stageName })
+      })
+      const data = await response.json()
+      if (data.success) {
+        await fetchCustomStagesData()
+        onRefresh()
+      } else {
+        alert(data.error || 'Failed to remove stage')
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
   return (
     <div className="mex-content">
       {!dasInstalled ? (
@@ -539,11 +631,123 @@ export default function StageMode({
                   </div>
                 )
               })}
+              <div
+                className={`fighter-item ${selectedStage?.isCustom ? 'selected' : ''}`}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); setSelectedStage({ code: 'custom', name: 'Custom Stages', isCustom: true }); }}
+              >
+                <div className="fighter-name">Custom Stages</div>
+                <div className="fighter-info">
+                  <span className="costume-count">{projectCustomStages.length} in ISO</span>
+                  {vaultStages.length > 0 && (
+                    <span className="available-count">{vaultStages.length} available</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
           <div className={`costumes-panel ${refreshing ? 'refreshing' : ''}`}>
-            {selectedStage ? (
+            {selectedStage?.isCustom ? (
+              <>
+                <div className="costumes-section">
+                  <div className="costumes-section-header">
+                    <h3>In ISO ({projectCustomStages.length})</h3>
+                  </div>
+                  <div className="costume-list existing">
+                    {projectCustomStages.map((stage, idx) => (
+                      <div key={stage.index} className="costume-card existing-costume card-visible" style={{ animationDelay: `${idx * 30}ms` }}>
+                        <div className="costume-preview">
+                          {stage.icon_url && (
+                            <img src={`${BACKEND_URL}${stage.icon_url}`} alt={stage.name} style={{ imageRendering: 'pixelated' }} onError={e => e.target.style.display = 'none'} />
+                          )}
+                          <button className="btn-remove" onClick={() => handleRemoveCustomStage(stage.name)} title="Remove stage">×</button>
+                        </div>
+                        <div className="costume-info"><h4>{stage.name}</h4></div>
+                      </div>
+                    ))}
+                    {projectCustomStages.length === 0 && (
+                      <div className="no-costumes"><p>No custom stages installed</p></div>
+                    )}
+                  </div>
+                </div>
+                <div className="costumes-section">
+                  <div className="costumes-section-header">
+                    <h3>
+                      Available to Import ({vaultStages.length})
+                      {selectedCustomStages.size > 0 && ` - ${selectedCustomStages.size} selected`}
+                    </h3>
+                    {vaultStages.length > 0 && (
+                      <div className="batch-controls">
+                        {selectedCustomStages.size > 0 ? (
+                          <>
+                            <button
+                              className="btn-batch-import"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => { playSound('start'); handleBatchInstallStages(); }}
+                              disabled={batchInstallingStages}
+                            >
+                              {batchInstallingStages
+                                ? `Installing ${batchStageProgress.current}/${batchStageProgress.total}...`
+                                : `Install Selected (${selectedCustomStages.size})`}
+                            </button>
+                            <button
+                              className="btn-clear-selection"
+                              onMouseEnter={playHoverSound}
+                              onClick={() => { playSound('boop'); clearCustomStageSelection(); }}
+                              disabled={batchInstallingStages}
+                            >
+                              Clear
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="btn-select-all"
+                            onMouseEnter={playHoverSound}
+                            onClick={() => { playSound('boop'); selectAllCustomStages(); }}
+                          >
+                            Select All
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="costume-list">
+                    {vaultStages.map((stage, idx) => {
+                      const isSelected = selectedCustomStages.has(stage.slug)
+                      return (
+                        <div
+                          key={stage.slug}
+                          className={`costume-card card-visible ${isSelected ? 'selected' : ''}`}
+                          style={{ animationDelay: `${idx * 30}ms` }}
+                          onMouseEnter={playHoverSound}
+                          onClick={() => { if (!batchInstallingStages) { playSound('boop'); toggleCustomStageSelection(stage.slug); } }}
+                        >
+                          <div className="costume-preview">
+                            {stage.has_icon && (
+                              <img src={`${BACKEND_URL}${stage.icon_url}`} alt={stage.name} style={{ imageRendering: 'pixelated' }} onError={e => e.target.style.display = 'none'} />
+                            )}
+                            <input
+                              type="checkbox"
+                              className="costume-checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              disabled={batchInstallingStages}
+                            />
+                          </div>
+                          <div className="costume-info">
+                            <h4>{stage.name}</h4>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {vaultStages.length === 0 && (
+                      <div className="no-costumes"><p>No custom stages in vault</p></div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : selectedStage ? (
               <>
                 <div className="costumes-section">
                   <div className="costumes-section-header">
