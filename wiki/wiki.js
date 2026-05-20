@@ -57,6 +57,7 @@ const NAV_SECTIONS = [
       { label: "CSP Compression", path: "wiki/CSP-Compression.md" },
       { label: "Patches", path: "wiki/Patches.md" },
       { label: "Texture Pack Mode", path: "wiki/Texture-Pack-Mode.md" },
+      { label: "Mod Bundles", path: "wiki/Mod-Bundles.md" },
     ],
   },
   {
