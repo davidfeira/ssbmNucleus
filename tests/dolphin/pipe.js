@@ -266,6 +266,19 @@ async function postStart(port) {
   await tapButton(port, 'A', CSS.A_HOLD);
 }
 
+// From a locked CSS: START -> stage select, then STOP (leave the cursor on the
+// stage grid). This hands off to the closed-loop stage selector (melee_sss.py),
+// which reads the cursor + hovered stage and picks the target stage itself --
+// the stage analog of cpustep+cl_select. Ends with a neutral so the persistent
+// pipe's first write isn't dropped on the handoff.
+async function gotoStage(port) {
+  await neutralFrame(port);
+  await sleep(CSS.PACE);
+  await tapButton(port, 'START', CSS.A_HOLD);
+  await sleep(1800);                 // -> stage select; cursor spawns on the grid
+  await neutralFrame(port);
+}
+
 function parseArgs(argv) {
   const flags = {};
   const positional = [];
@@ -347,6 +360,9 @@ async function main() {
       break;
     case 'poststart':
       await postStart(port);
+      break;
+    case 'gotostage':
+      await gotoStage(port);
       break;
     default:
       throw new Error(`Unknown command: ${command || '<none>'}. Try: tap | press | release | tilt | stick | trig | neutral | frame | char | startmatch`);
