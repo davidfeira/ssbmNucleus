@@ -113,19 +113,23 @@ function main() {
   if (color === undefined || color === null) {
     color = manifest.costumeCount ? manifest.costumeCount - 1 : 0;
   }
-  // costume mods get a full match (select fighter+costume); other types can't be
-  // auto-selected yet, so they fall back to a boot-health crash-test (boot +
-  // reach the CSS so the mod's data loads + watch process/frame health).
-  const healthMode = !!flags.health || modType !== 'costume';
+  // A custom m-ex fighter is selectable in-match via its CSS icon coordinate
+  // (manifest.cssIcon, the app's grid placement). costume mods select
+  // fighter+costume. Anything else (stage mods, or a char build without an icon)
+  // falls back to a boot-health crash-test (boot + reach the CSS so the mod's
+  // data loads + watch process/frame health).
+  const customChar = modType === 'character' && manifest.cssIcon && !flags.health;
+  const healthMode = !!flags.health || (modType !== 'costume' && !customChar);
   const label = (manifest.costumeId || manifest.characterName || manifest.stageName
     || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);
-  if (!healthMode && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
+  if (!healthMode && !customChar && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
   log(`ISO: ${iso}`);
-  log(healthMode ? `mode: boot-health (modType=${modType}, ${label})`
-    : `mode: match — select ${fighter} costume ${color} (${label})`);
+  if (healthMode) log(`mode: boot-health (modType=${modType}, ${label})`);
+  else if (customChar) log(`mode: match — select custom fighter ${label} @icon(${manifest.cssIcon.x},${manifest.cssIcon.y})`);
+  else log(`mode: match — select ${fighter} costume ${color} (${label})`);
 
   // 3. Launch -----------------------------------------------------------------
   log('killing any running Dolphin');
@@ -145,6 +149,18 @@ function main() {
     log('navigating to the CSS so the mod loads, then watching boot health...');
     node(PIPE, ['gotocss']);
     observeArgs = [OBSERVE, '--health', '--seconds', String(OBSERVE_SECONDS), '--label', label];
+  } else if (customChar) {
+    // Custom m-ex fighter: select it by its CSS icon coordinate (the app's grid
+    // placement, recorded in the manifest), then stage + start -- one pipe.
+    const stage = (flags.stage && flags.stage !== true) ? flags.stage : 'battlefield';
+    const ic = manifest.cssIcon;
+    log(`closed-loop: gotocss -> CPU -> cl_match ${label} @icon(${ic.x},${ic.y},${ic.index}) stage ${stage}`);
+    node(PIPE, ['gotocss']);
+    node(PIPE, ['cpustep']);
+    const m = cp.spawnSync(VENV_PY,
+      [CL_MATCH, label, '--icon', `${ic.x},${ic.y},${ic.index}`, stage], { stdio: 'inherit' });
+    if (m.status !== 0) throw new Error(`closed-loop custom-fighter select failed (${label})`);
+    observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else if (flags['closed-loop']) {
     // Robust path: discrete per-frame steps to reach the CSS + add a CPU
     // (gotocss, cpustep), then a SINGLE memory-feedback process (cl_match.py)

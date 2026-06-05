@@ -196,6 +196,44 @@ function pickFromMeta(key, wanted) {
   return item;
 }
 
+// --- CSS icon placement for custom fighters ---------------------------------
+
+// m-ex's add-fighter leaves a new fighter's CSS icon at the default (0,0,0),
+// which sits BELOW the roster grid in the port-panel zone -- so in-game the
+// cursor can't hover+lock it (pressing A there toggles a port instead). This
+// mirrors the app's "add it into the grid" step: move the new icon into a free
+// roster slot (an empty bottom-row edge cell, which maps to a clean, lockable
+// cursor position). Returns { x, y, index }: the icon's grid coordinate (the
+// cursor target is (x, y - 3.5), validated) and its list index (== the in-game
+// CSS grid index, used to confirm the hover).
+async function placeCustomFighterIcon(baseUrl, fighterName) {
+  const got = await api(baseUrl, 'GET', '/api/mex/menus/css/layout');
+  const layout = got.json || {};
+  const icons = layout.icons || [];
+  if (!icons.length) throw new Error('css layout returned no icons');
+  // The new fighter's icon: by name, else the unplaced one at (0,0), else last.
+  let idx = icons.findIndex((ic) => (ic.fighterName || '') === fighterName);
+  if (idx < 0) idx = icons.findIndex((ic) => Math.round(ic.x) === 0 && Math.round(ic.y) === 0);
+  if (idx < 0) idx = icons.length - 1;
+  // Free roster slots: the bottom row's empty edge cells (x = +/-28, y = 2),
+  // which sit clear of the port panels; fall back to the upper-row edges.
+  const key = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+  const occupied = new Set(icons.map((ic, i) => (i === idx ? null : key(ic.x, ic.y))));
+  const candidates = [
+    { x: -28.15, y: 2.0, z: -1.0 }, { x: 28.25, y: 2.0, z: -1.0 },
+    { x: -28.15, y: 9.2, z: -1.0 }, { x: 28.25, y: 9.2, z: -1.0 },
+    { x: -28.15, y: 16.4, z: -1.0 }, { x: 28.25, y: 16.4, z: -1.0 },
+  ];
+  const slot = candidates.find((c) => !occupied.has(key(c.x, c.y))) || candidates[0];
+  icons[idx] = { ...icons[idx], x: slot.x, y: slot.y, z: slot.z };
+  const post = await api(baseUrl, 'POST', '/api/mex/menus/css/layout',
+    { template: layout.template, icons });
+  if (!post.json || !post.json.success) {
+    throw new Error(`css layout save failed: ${JSON.stringify(post.json)}`);
+  }
+  return { x: slot.x, y: slot.y, index: idx };
+}
+
 // --- Export wait ------------------------------------------------------------
 
 // The export runs in a background thread and only reports done over SocketIO,
@@ -322,7 +360,11 @@ async function main() {
       const r = await api(baseUrl, 'POST', '/api/mex/custom-characters/install', { slug: item.slug });
       if (!r.json.success) throw new Error(`character install failed: ${JSON.stringify(r.json)}`);
       log(`added fighter "${item.name}" (${(r.json.costumeCount || item.costume_count || '?')} costumes)`);
-      modInfo = { modType, characterName: item.name, characterSlug: item.slug };
+      // Place its CSS icon into a real roster slot (add-fighter leaves it at
+      // (0,0) in the port-panel zone, unselectable) -- the app's "add to grid".
+      const cssIcon = await placeCustomFighterIcon(baseUrl, item.name);
+      log(`placed ${item.name} CSS icon at grid slot (${cssIcon.x}, ${cssIcon.y}) [grid index ${cssIcon.index}]`);
+      modInfo = { modType, characterName: item.name, characterSlug: item.slug, cssIcon };
     } else if (modType === 'stage') {
       const item = pickFromMeta('custom_stages', wantedTarget);
       log(`installing custom stage "${item.name}" (${item.slug})`);
