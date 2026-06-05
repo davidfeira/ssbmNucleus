@@ -244,6 +244,28 @@ async function startMatch(port, opts) {
   await tapButton(port, 'A', CSS.A_HOLD);
 }
 
+// Add a CPU on port 2 (its N/A door is just right of the port-1 spawn). A 2nd
+// player is REQUIRED before you can lock your character in. Used as a discrete
+// step so a closed-loop (memory-feedback) selector can do the character pick.
+async function cpuStep(port) {
+  await tiltHold(port, '1.0', '0.5', 150);
+  await tapButton(port, 'A', CSS.A_HOLD);
+  await sleep(CSS.PACE);
+}
+
+// From a locked CSS (READY TO FIGHT): START -> stage select -> pick a stage.
+// Leads with a neutral so that if this is the first input after a pipe handoff
+// (closed-loop selector -> here), the sacrificial frame absorbs any dropped
+// first-connection write and START itself lands reliably.
+async function postStart(port) {
+  await neutralFrame(port);
+  await sleep(CSS.PACE);
+  await tapButton(port, 'START', CSS.A_HOLD);
+  await sleep(1500);
+  await tiltHold(port, '0.5', '1.0', 110);
+  await tapButton(port, 'A', CSS.A_HOLD);
+}
+
 function parseArgs(argv) {
   const flags = {};
   const positional = [];
@@ -319,6 +341,12 @@ async function main() {
       break;
     case 'gotocss':
       await navToCss(port);
+      break;
+    case 'cpustep':
+      await cpuStep(port);
+      break;
+    case 'poststart':
+      await postStart(port);
       break;
     default:
       throw new Error(`Unknown command: ${command || '<none>'}. Try: tap | press | release | tilt | stick | trig | neutral | frame | char | startmatch`);

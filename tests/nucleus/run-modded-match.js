@@ -30,6 +30,7 @@ const BUILD = path.join(HERE, 'build-modded-iso.js');
 const CONTROL = path.join(HERE, '..', 'dolphin', 'control.js');
 const PIPE = path.join(HERE, '..', 'dolphin', 'pipe.js');
 const OBSERVE = path.join(HERE, 'observe.py');
+const CL_SELECT = path.join(HERE, 'cl_select.py');
 const VENV_PY = path.join(HERE, 'melee_venv', 'Scripts', 'python.exe');
 const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json');
 const PIPE_READY_TIMEOUT_MS = 45000; // wait this long for Dolphin's input pipe
@@ -142,6 +143,18 @@ function main() {
     log('navigating to the CSS so the mod loads, then watching boot health...');
     node(PIPE, ['gotocss']);
     observeArgs = [OBSERVE, '--health', '--seconds', String(OBSERVE_SECONDS), '--label', label];
+  } else if (flags['closed-loop']) {
+    // Robust path: discrete steps (nav + CPU + start) via the per-frame pipe,
+    // analog character positioning via memory feedback (cl_select.py). The
+    // selector is a separate process so its persistent pipe opens after the
+    // node per-frame connections have closed.
+    log('closed-loop: gotocss -> CPU -> memory-feedback select -> start');
+    node(PIPE, ['gotocss']);
+    node(PIPE, ['cpustep']);
+    const sel = cp.spawnSync(VENV_PY, [CL_SELECT, fighter, String(color)], { stdio: 'inherit' });
+    if (sel.status !== 0) throw new Error('closed-loop select did not lock the character');
+    node(PIPE, ['poststart']);
+    observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else {
     const smArgs = ['startmatch', fighter, '--color', String(color)];
     if (flags['no-cpu']) smArgs.push('--nocpu');
