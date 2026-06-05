@@ -205,6 +205,24 @@ function copyTemplateConfig(templateUserDir, targetUserDir) {
   }
 }
 
+// Seed the Slippi login files the netplay build needs to boot straight into the
+// game. Slippi/ holds user.json (the login file) plus the connect-code files;
+// without it the build stops on its "Access instructions to log-in" gate and the
+// Melee menus never load. Roster/stage unlocks are handled separately by the
+// Slippi Gecko codes, so the GC memory card does not need to be seeded.
+function copyTemplateUserData(templateUserDir, targetUserDir) {
+  if (!templateUserDir) {
+    return;
+  }
+  const source = path.join(templateUserDir, 'Slippi');
+  if (!fs.existsSync(source)) {
+    return;
+  }
+  const target = path.join(targetUserDir, 'Slippi');
+  fs.mkdirSync(target, { recursive: true });
+  fs.cpSync(source, target, { recursive: true });
+}
+
 function patchDolphinConfig(userDir) {
   const dolphinIni = path.join(userDir, 'Config', 'Dolphin.ini');
   writeIni(dolphinIni, (sections) => {
@@ -215,36 +233,53 @@ function patchDolphinConfig(userDir) {
     upsertIniValue(sections, 'Display', 'RenderWindowAutoSize', 'False');
     upsertIniValue(sections, 'Display', 'RenderWindowWidth', '1280');
     upsertIniValue(sections, 'Display', 'RenderWindowHeight', '960');
+    // Port 1 is a Standard Controller driven over Slippi's named pipe; the
+    // other ports are off so the CSS has exactly one (port-1) cursor. A CPU
+    // opponent is added in-game via the port-4 "N/A door".
+    upsertIniValue(sections, 'Core', 'SIDevice0', '6');
+    upsertIniValue(sections, 'Core', 'SIDevice1', '0');
+    upsertIniValue(sections, 'Core', 'SIDevice2', '0');
+    upsertIniValue(sections, 'Core', 'SIDevice3', '0');
   });
 
+  // Drive port 1 from Dolphin's always-open named pipe (\\.\pipe\slippibot1 on
+  // Windows). Bindings mirror libmelee's controller profile: digital buttons
+  // map to `Button <NAME>` and the sticks to `Axis MAIN/C X|Y +|-`, so the pipe
+  // protocol (PRESS/RELEASE <btn>, SET MAIN <x> <y>, FLUSH) reaches the game.
   const gcPadIni = path.join(userDir, 'Config', 'GCPadNew.ini');
   writeIni(gcPadIni, (sections) => {
-    const section = 'GCPad1';
-    upsertIniValue(sections, section, 'Device', 'DInput/0/Keyboard Mouse');
-    upsertIniValue(sections, section, 'Buttons/A', 'X');
-    upsertIniValue(sections, section, 'Buttons/B', 'Z');
-    upsertIniValue(sections, section, 'Buttons/X', 'C');
-    upsertIniValue(sections, section, 'Buttons/Y', 'S');
-    upsertIniValue(sections, section, 'Buttons/Z', 'D');
-    upsertIniValue(sections, section, 'Buttons/Start', 'RETURN');
-    upsertIniValue(sections, section, 'Main Stick/Up', 'UP');
-    upsertIniValue(sections, section, 'Main Stick/Down', 'DOWN');
-    upsertIniValue(sections, section, 'Main Stick/Left', 'LEFT');
-    upsertIniValue(sections, section, 'Main Stick/Right', 'RIGHT');
-    upsertIniValue(sections, section, 'Main Stick/Modifier', 'LSHIFT');
-    upsertIniValue(sections, section, 'Main Stick/Modifier/Range', '50.000000000000000');
-    upsertIniValue(sections, section, 'C-Stick/Up', 'I');
-    upsertIniValue(sections, section, 'C-Stick/Down', 'K');
-    upsertIniValue(sections, section, 'C-Stick/Left', 'J');
-    upsertIniValue(sections, section, 'C-Stick/Right', 'L');
-    upsertIniValue(sections, section, 'C-Stick/Modifier', 'LCONTROL');
-    upsertIniValue(sections, section, 'C-Stick/Modifier/Range', '50.000000000000000');
-    upsertIniValue(sections, section, 'Triggers/L', 'Q');
-    upsertIniValue(sections, section, 'Triggers/R', 'W');
-    upsertIniValue(sections, section, 'D-Pad/Up', 'T');
-    upsertIniValue(sections, section, 'D-Pad/Down', 'G');
-    upsertIniValue(sections, section, 'D-Pad/Left', 'F');
-    upsertIniValue(sections, section, 'D-Pad/Right', 'H');
+    const p = 'GCPad1';
+    sections.set(p, new Map()); // wipe any inherited keyboard mapping
+    upsertIniValue(sections, p, 'Device', 'Pipe/0/slippibot1');
+    upsertIniValue(sections, p, 'Buttons/A', 'Button A');
+    upsertIniValue(sections, p, 'Buttons/B', 'Button B');
+    upsertIniValue(sections, p, 'Buttons/X', 'Button X');
+    upsertIniValue(sections, p, 'Buttons/Y', 'Button Y');
+    upsertIniValue(sections, p, 'Buttons/Z', 'Button Z');
+    upsertIniValue(sections, p, 'Buttons/L', 'Button L');
+    upsertIniValue(sections, p, 'Buttons/R', 'Button R');
+    upsertIniValue(sections, p, 'Buttons/Start', 'Button START');
+    upsertIniValue(sections, p, 'Buttons/Threshold', '50.0');
+    upsertIniValue(sections, p, 'Main Stick/Up', 'Axis MAIN Y +');
+    upsertIniValue(sections, p, 'Main Stick/Down', 'Axis MAIN Y -');
+    upsertIniValue(sections, p, 'Main Stick/Left', 'Axis MAIN X -');
+    upsertIniValue(sections, p, 'Main Stick/Right', 'Axis MAIN X +');
+    upsertIniValue(sections, p, 'Main Stick/Radius', '100.0');
+    upsertIniValue(sections, p, 'D-Pad/Up', 'Button D_UP');
+    upsertIniValue(sections, p, 'D-Pad/Down', 'Button D_DOWN');
+    upsertIniValue(sections, p, 'D-Pad/Left', 'Button D_LEFT');
+    upsertIniValue(sections, p, 'D-Pad/Right', 'Button D_RIGHT');
+    upsertIniValue(sections, p, 'C-Stick/Up', 'Axis C Y +');
+    upsertIniValue(sections, p, 'C-Stick/Down', 'Axis C Y -');
+    upsertIniValue(sections, p, 'C-Stick/Left', 'Axis C X -');
+    upsertIniValue(sections, p, 'C-Stick/Right', 'Axis C X +');
+    upsertIniValue(sections, p, 'C-Stick/Radius', '100.0');
+    upsertIniValue(sections, p, 'Triggers/L', 'Button L');
+    upsertIniValue(sections, p, 'Triggers/R', 'Button R');
+    upsertIniValue(sections, p, 'Triggers/L-Analog', 'Axis L -+');
+    upsertIniValue(sections, p, 'Triggers/R-Analog', 'Axis R -+');
+    upsertIniValue(sections, p, 'Triggers/Threshold', '90.0');
+    sections.set('GCPad3', new Map()); // drop the inherited port-3 keyboard cursor
   });
 }
 
@@ -467,6 +502,7 @@ async function main() {
   fs.mkdirSync(userDir, { recursive: true });
   fs.mkdirSync(path.join(runDir, 'screenshots'), { recursive: true });
   copyTemplateConfig(templateUserDir, userDir);
+  copyTemplateUserData(templateUserDir, userDir);
   patchDolphinConfig(userDir);
 
   const metadata = {
