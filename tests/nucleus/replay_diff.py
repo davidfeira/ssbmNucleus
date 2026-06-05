@@ -39,12 +39,15 @@ FIELDS = [
 
 def get_field(player, dotted):
     """Resolve a possibly-dotted field (e.g. 'position.x') off a PlayerState,
-    normalizing enums to their int value and floats to plain floats."""
+    normalizing enums to their int value and numpy scalars to native Python
+    (so comparison and the printed report are clean)."""
     obj = player
     for part in dotted.split("."):
         obj = getattr(obj, part)
-    if hasattr(obj, "value"):       # an enum (action, character, ...)
+    if hasattr(obj, "value") and not hasattr(obj, "item"):  # an enum
         return obj.value
+    if hasattr(obj, "item"):         # a numpy scalar -> python int/float
+        return obj.item()
     return obj
 
 
@@ -67,6 +70,24 @@ def open_replay(path):
     return c
 
 
+def parse_replay(path, fields):
+    """Read a .slp into {frame: {port: state_vector}} plus its identity
+    (stage, {port: character}) from the first frame -- the identity lets us
+    confirm two replays are the SAME match before calling a diff a 'desync'."""
+    c = open_replay(path)
+    frames = {}
+    identity = None
+    for gs in step_all(c):
+        frames[gs.frame] = {int(p): player_vector(pl, fields)
+                            for p, pl in gs.players.items()}
+        if identity is None and gs.players:
+            stage = gs.stage.value if hasattr(gs.stage, "value") else gs.stage
+            chars = tuple(sorted((int(p), int(pl.character.value))
+                                 for p, pl in gs.players.items()))
+            identity = (int(stage), chars)
+    return frames, identity
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if len(args) < 2:
@@ -80,43 +101,44 @@ def main():
     if "--max-report" in sys.argv:
         max_report = int(sys.argv[sys.argv.index("--max-report") + 1])
 
-    ca, cb = open_replay(a_path), open_replay(b_path)
-    # Index B's frames by frame number so we compare like-for-like even if the
-    # two recordings start/stop a frame apart.
-    b_frames = {}
-    for gs in step_all(cb):
-        b_frames[gs.frame] = {p: player_vector(pl, fields)
-                              for p, pl in gs.players.items()}
+    a_frames, a_id = parse_replay(a_path, fields)
+    b_frames, b_id = parse_replay(b_path, fields)
+
+    print(f"  A = {a_path}")
+    print(f"  B = {b_path}")
+    # Same-match guard: a real desync pair is the SAME match (same stage +
+    # characters) recorded by two clients. If those differ, this isn't a desync
+    # -- it's two unrelated games, and a frame diff is meaningless.
+    same_match = a_id == b_id
+    if not same_match:
+        print(f"  NOTE: these look like DIFFERENT matches "
+              f"(A stage/chars={a_id}, B={b_id}); a desync pair is the same "
+              f"match recorded by two clients. Reporting the diff anyway.")
 
     compared = 0
     first_desync = None
     diffs = []
-    for gs in step_all(ca):
-        if gs.frame not in b_frames:
-            continue
-        bf = b_frames[gs.frame]
-        af = {p: player_vector(pl, fields) for p, pl in gs.players.items()}
+    for frame in sorted(set(a_frames) & set(b_frames)):
+        af, bf = a_frames[frame], b_frames[frame]
         compared += 1
         if set(af) != set(bf):
-            # ports themselves differ -> not the same match
-            diffs.append((gs.frame, "ports", set(af), set(bf)))
+            diffs.append((frame, "ports", set(af), set(bf)))
             if first_desync is None:
-                first_desync = gs.frame
+                first_desync = frame
             continue
         for port in af:
             if af[port] != bf[port]:
-                # find which fields differ for a readable report
                 bad = [(fields[i], af[port][i], bf[port][i])
                        for i in range(len(fields)) if af[port][i] != bf[port][i]]
-                diffs.append((gs.frame, port, bad, None))
+                diffs.append((frame, port, bad, None))
                 if first_desync is None:
-                    first_desync = gs.frame
+                    first_desync = frame
 
-    print(f"compared {compared} shared frames of:")
-    print(f"  A = {a_path}")
-    print(f"  B = {b_path}")
+    print(f"compared {compared} shared frames")
     if first_desync is None:
-        print("VERDICT: synced -- identical every shared frame.")
+        verdict = "synced -- identical every shared frame."
+        print(f"VERDICT: {verdict}"
+              if same_match else f"VERDICT: {verdict} (but different matches)")
         return 0
     print(f"VERDICT: DESYNC at frame {first_desync}")
     for frame, port, bad, _extra in diffs[:max_report]:
