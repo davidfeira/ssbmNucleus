@@ -11,6 +11,7 @@ desync between two RUNNING clients; this one does it after the fact from the
 replays. Both read state the same way conceptually -- per-frame, per-player.
 
     python replay_diff.py <a.slp> <b.slp> [--max-report N] [--fields f1,f2,...]
+                          [--context]   # dump full state at the desync frame
 
 Exit 0 if the replays stay identical for every shared frame (synced), 1 if they
 diverge (desync found, with the frame + fields printed).
@@ -149,6 +150,22 @@ def main():
             print(f"  frame {frame} port {port}: {fieldstr}")
     if len(diffs) > max_report:
         print(f"  ... and {len(diffs) - max_report} more differing frame/port rows")
+
+    # --context: dump the full per-player state of both replays at the desync
+    # frame (and the last synced frame before it) -- the whole picture at the
+    # moment the simulations parted, to chase down what the mod did.
+    if "--context" in sys.argv:
+        prev = first_desync - 1
+        for label, fr in (("last synced", prev), ("DESYNC", first_desync)):
+            if fr not in a_frames or fr not in b_frames:
+                continue
+            print(f"\n  --- {label} frame {fr} ---")
+            for port in sorted(set(a_frames[fr]) & set(b_frames[fr])):
+                av, bv = a_frames[fr][port], b_frames[fr][port]
+                print(f"    port {port}:")
+                for i, name in enumerate(fields):
+                    mark = "" if av[i] == bv[i] else "   <-- DIFF"
+                    print(f"      {name:22} A={av[i]!r:>12} B={bv[i]!r:>12}{mark}")
     return 1
 
 
