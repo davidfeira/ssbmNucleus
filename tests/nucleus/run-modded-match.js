@@ -29,10 +29,12 @@ const HERE = __dirname;
 const BUILD = path.join(HERE, 'build-modded-iso.js');
 const CONTROL = path.join(HERE, '..', 'dolphin', 'control.js');
 const PIPE = path.join(HERE, '..', 'dolphin', 'pipe.js');
+const OBSERVE = path.join(HERE, 'observe.py');
+const VENV_PY = path.join(HERE, 'melee_venv', 'Scripts', 'python.exe');
 const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json');
 const PIPE_READY_TIMEOUT_MS = 45000; // wait this long for Dolphin's input pipe
 const MENU_WAIT_MS = 13000;          // after the pipe is up, time to reach the menu
-const MATCH_WAIT_MS = 6000;
+const OBSERVE_SECONDS = 25;          // watch the match this long for crashes/hangs
 
 function log(msg) {
   // eslint-disable-next-line no-console
@@ -134,12 +136,22 @@ function main() {
   log(`pipe.js ${smArgs.join(' ')}`);
   node(PIPE, smArgs);
 
-  // 5. Verify -----------------------------------------------------------------
-  log(`waiting ${MATCH_WAIT_MS / 1000}s for the match to load`);
-  sleepSync(MATCH_WAIT_MS);
-  log('screenshotting the running match');
+  // 5. Observe the match for crashes/hangs -----------------------------------
+  // observe.py reads live RAM: it waits for the in-game scene, then watches the
+  // frame counter (freeze = hang), the process (death = crash), and the scene
+  // (leaving in-game = ended). Exit 0 = healthy, non-zero = crash/hang/ended.
+  const label = (manifest.costumeId || `${fighter}-c${color}`).replace(/[^a-z0-9_-]/gi, '-');
+  log(`observing the match for ${OBSERVE_SECONDS}s (mod: ${label})...`);
+  const res = cp.spawnSync(VENV_PY, [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label], {
+    stdio: 'inherit',
+  });
   node(CONTROL, ['shot', '--label', 'modded-match-verify']);
-  log('done — inspect the screenshot above to confirm the mod loaded (no crash).');
+  if (res.status === 0) {
+    log(`PASS: ${label} loaded and ran without crash/hang.`);
+  } else {
+    log(`FAIL: ${label} crashed/hung/ended early — see crash-reports/.`);
+    process.exitCode = 1;
+  }
 }
 
 try {
