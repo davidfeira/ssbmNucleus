@@ -33,6 +33,16 @@ import time
 SSS_CURSOR_PTR = 0x804D7820
 SSS_HOVERED_STAGE = 0x804D6CAD
 
+# Scene id: major byte at 0x80479D30 (0x02 = VS mode), minor at 0x80479D33
+# (within VS: 0x00 = character select, 0x01 = stage select, 0x02 = in-game).
+# We gate steering on being ON the stage-select scene, because the cursor
+# pointer chain still resolves on other screens but reads junk (often 0,0) --
+# without this guard, move_to would happily push inputs on the wrong screen.
+SCENE_MAJOR = 0x80479D30
+SCENE_MINOR = 0x80479D33
+VS_MAJOR = 0x02
+SSS_MINOR = 0x01
+
 # enums.Stage value (the byte at SSS_HOVERED_STAGE) -- used to CONFIRM the cursor
 # is over the intended stage, the same way hovered() confirms a character.
 STAGE_ID = {
@@ -122,6 +132,36 @@ class StageCursor:
             time.sleep(0.01)
         return (None, None)
 
+    def on_stage_select(self):
+        """True only when the game is actually on the stage-select scene -- a
+        guard before steering, since the cursor read is meaningless elsewhere."""
+        return (self.d.u8(SCENE_MAJOR) == VS_MAJOR
+                and self.d.u8(SCENE_MINOR) == SSS_MINOR)
+
+    def wait_for_stage_select(self, timeout=8.0):
+        """Wait until the stage-select scene is up (e.g. after a START whose
+        transition is still in flight). Returns False on timeout."""
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.on_stage_select():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def ensure_stage_select(self):
+        """Make sure we're on the stage-select scene, advancing from a locked
+        CSS with START if needed. Pressing START over THIS persistent pipe (vs
+        a separate per-frame `gotostage`) avoids the connection-handoff that was
+        dropping the START -- and we verify the scene actually changed, retrying
+        a couple times. Returns True once stage select is up."""
+        if self.on_stage_select():
+            return True
+        for _ in range(4):
+            self.p.tap("START", 0.06)
+            if self.wait_for_stage_select(timeout=2.5):
+                return True
+        return self.on_stage_select()
+
     def hovered_stage(self):
         """The enums.Stage id the cursor is currently over (ground truth, used
         to confirm a selection). Returns the raw byte; compare to STAGE_ID."""
@@ -167,24 +207,41 @@ class StageCursor:
         self.p.center()
         return False
 
-    def select(self, name, press=True, settle=0.35):
+    def select(self, name, press=True):
         """Steer to a stage by name and press A to pick it (which, with a
         locked CSS, starts the match on that stage). Navigation is purely by
         the cursor coordinate -- like libmelee, since the hovered-stage byte
         stays NO_STAGE until a stage is actually confirmed, so it can't gate a
-        pre-press check. Returns whether the cursor reached the stage's cell;
-        whether the right stage actually loaded is confirmed downstream by the
-        observer (the match starts healthy) or a screenshot."""
+        pre-press check. When press=True, confirms the match actually started
+        (the scene leaves stage-select), re-pressing A if a tap didn't take, and
+        returns whether it started; with press=False, returns whether the cursor
+        reached the stage's cell."""
         key = norm(name)
         if key not in STAGE_TARGET:
             raise KeyError(f"no stage target for '{name}' "
                            f"(known: {', '.join(sorted(STAGE_TARGET))})")
+        # Don't steer unless we're truly on the stage-select scene (advancing
+        # from a locked CSS with START if needed) -- otherwise the cursor read
+        # is junk and we'd push inputs on the wrong screen.
+        if not self.ensure_stage_select():
+            return False
         tx, ty = STAGE_TARGET[key]
         reached = self.move_to(tx, ty)
-        if press:
-            self.p.tap("A", 0.06)
-            time.sleep(settle)
-        return reached
+        if not press:
+            return reached
+        # Confirm with A and verify the match actually starts (the scene leaves
+        # stage-select). A single tap occasionally doesn't take, so re-center
+        # onto the cell and re-press a few times.
+        for _ in range(5):
+            self.p.center()
+            time.sleep(0.12)
+            self.p.tap("A", 0.08)
+            time.sleep(0.4)
+            if not self.on_stage_select():
+                return True
+            # cursor may have drifted off the tile -- nudge back on before retry
+            self.move_to(tx, ty, timeout=2.0)
+        return False
 
 
 if __name__ == "__main__":

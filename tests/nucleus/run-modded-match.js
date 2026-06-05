@@ -19,6 +19,8 @@
  *   node run-modded-match.js --build --fighter Falco --costume <id>
  *   node run-modded-match.js --iso <path> --char Fox --color 4
  *   node run-modded-match.js --no-cpu        # 1-player (no CPU opponent)
+ *   node run-modded-match.js --closed-loop --stage fd   # memory-feedback char
+ *                                            # + stage selection (default BF)
  */
 
 const fs = require('fs');
@@ -31,6 +33,7 @@ const CONTROL = path.join(HERE, '..', 'dolphin', 'control.js');
 const PIPE = path.join(HERE, '..', 'dolphin', 'pipe.js');
 const OBSERVE = path.join(HERE, 'observe.py');
 const CL_SELECT = path.join(HERE, 'cl_select.py');
+const CL_STAGE = path.join(HERE, 'cl_stage.py');
 const VENV_PY = path.join(HERE, 'melee_venv', 'Scripts', 'python.exe');
 const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json');
 const PIPE_READY_TIMEOUT_MS = 45000; // wait this long for Dolphin's input pipe
@@ -145,15 +148,20 @@ function main() {
     observeArgs = [OBSERVE, '--health', '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else if (flags['closed-loop']) {
     // Robust path: discrete steps (nav + CPU + start) via the per-frame pipe,
-    // analog character positioning via memory feedback (cl_select.py). The
-    // selector is a separate process so its persistent pipe opens after the
-    // node per-frame connections have closed.
-    log('closed-loop: gotocss -> CPU -> memory-feedback select -> start');
+    // analog character AND stage positioning via memory feedback (cl_select.py,
+    // cl_stage.py). Each selector is a separate process so its persistent pipe
+    // opens after the node per-frame connections have closed.
+    const stage = (flags.stage && flags.stage !== true) ? flags.stage : 'battlefield';
+    log(`closed-loop: gotocss -> CPU -> select ${fighter} -> stage ${stage} -> start`);
     node(PIPE, ['gotocss']);
     node(PIPE, ['cpustep']);
     const sel = cp.spawnSync(VENV_PY, [CL_SELECT, fighter, String(color)], { stdio: 'inherit' });
     if (sel.status !== 0) throw new Error('closed-loop select did not lock the character');
-    node(PIPE, ['poststart']);
+    // cl_stage advances from the locked CSS to stage select itself (START over
+    // its own persistent pipe, then verifies) -- no separate per-frame step,
+    // whose connection handoff was dropping the START.
+    const st = cp.spawnSync(VENV_PY, [CL_STAGE, stage], { stdio: 'inherit' });
+    if (st.status !== 0) throw new Error(`closed-loop stage select did not reach ${stage}`);
     observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else {
     const smArgs = ['startmatch', fighter, '--color', String(color)];

@@ -2,10 +2,12 @@
 cl_stage.py -- closed-loop (memory-feedback) stage selection, as a standalone
 step for the match orchestrator. The stage analog of cl_select.py.
 
-Assumes we're on the stage-select screen (reached via `pipe.js gotostage` from
-a locked CSS). Steers the cursor to the target stage by reading its live
-position (no timing), then presses A to pick it -- which, with the CSS already
-locked, starts the match on that stage.
+Assumes the CSS is locked (a character picked + a port-2 CPU). It advances to
+the stage-select screen itself -- pressing START over its own persistent pipe
+and verifying the scene changed (a separate per-frame `gotostage` step dropped
+the START on the connection handoff) -- then steers the cursor to the target
+stage by reading its live position (no timing) and presses A, which starts the
+match on that stage.
 
     python cl_stage.py <stage>      # e.g. battlefield, fd, dreamland, yoshis,
                                     #      stadium, fountain, random
