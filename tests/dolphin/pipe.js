@@ -196,6 +196,47 @@ async function selectChar(port, name, opts) {
   }
 }
 
+function neutralFrame(port) {
+  const lines = [...BUTTONS].map((b) => `RELEASE ${b}`);
+  lines.push('SET MAIN 0.5 0.5', 'SET C 0.5 0.5', 'SET L 0', 'SET R 0', 'FLUSH');
+  return frame(port, lines);
+}
+
+// Full post-boot match start: from the Slippi "Online Play" submenu the ISO
+// lands on, back out to the main menu, into VS Mode, add a CPU on port 2, pick
+// our character + costume, choose a stage, and start. The menu waits are the
+// proven recipe; booting the ISO (~13s) is the caller's responsibility. Works
+// for both vanilla-Slippi and Nucleus-built modded ISOs (both land in Online
+// Play). Returns once the match should be loading.
+async function startMatch(port, opts) {
+  const char = opts.char || 'fox';
+  const color = opts.color !== undefined ? opts.color : 0;
+  await neutralFrame(port);
+  await sleep(CSS.PACE);
+  await tapButton(port, 'B', CSS.A_HOLD);          // out of Online Play...
+  await tapButton(port, 'B', CSS.A_HOLD);          // ...back to the main menu
+  await tapButton(port, 'D_DOWN', CSS.A_HOLD);     // down to VS Mode
+  await tapButton(port, 'A', CSS.A_HOLD);
+  await sleep(1500);                               // -> VS submenu (Melee)
+  await tapButton(port, 'A', CSS.A_HOLD);
+  await sleep(3000);                               // -> character select
+  if (!opts.nocpu) {
+    // CPU opponent on port 2: its N/A door is just right of the port-1 spawn.
+    await tiltHold(port, '1.0', '0.5', 150);
+    await tapButton(port, 'A', CSS.A_HOLD);
+    await sleep(CSS.PACE);
+  }
+  // Our character + costume (selectChar presses A to lock it in).
+  await selectChar(port, char, { color });
+  await sleep(400);
+  // Start -> stage select. The stage cursor spawns below the grid, so tilt up
+  // onto a stage, then confirm to start the match.
+  await tapButton(port, 'START', CSS.A_HOLD);
+  await sleep(1500);
+  await tiltHold(port, '0.5', '1.0', 110);
+  await tapButton(port, 'A', CSS.A_HOLD);
+}
+
 function parseArgs(argv) {
   const flags = {};
   const positional = [];
@@ -262,8 +303,15 @@ async function main() {
     case 'char':
       await selectChar(port, positional[0], flags);
       break;
+    case 'startmatch':
+      await startMatch(port, {
+        char: positional[0] || flags.char,
+        color: flags.color !== undefined ? parseInt(flags.color, 10) : 0,
+        nocpu: flags.nocpu,
+      });
+      break;
     default:
-      throw new Error(`Unknown command: ${command || '<none>'}. Try: tap | press | release | tilt | stick | trig | neutral | frame | char`);
+      throw new Error(`Unknown command: ${command || '<none>'}. Try: tap | press | release | tilt | stick | trig | neutral | frame | char | startmatch`);
   }
   console.log(`OK (${command} ${positional.join(' ')})`);
 }
