@@ -90,7 +90,7 @@ function main() {
   // 1. Build (optional) -------------------------------------------------------
   if (flags.build) {
     const buildArgs = [];
-    for (const k of ['iso', 'fighter', 'costume', 'name']) {
+    for (const k of ['type', 'mod', 'iso', 'fighter', 'costume', 'name']) {
       if (flags[k] && flags[k] !== true) buildArgs.push(`--${k}`, flags[k]);
     }
     log(`building a fresh modded ISO: build-modded-iso.js ${buildArgs.join(' ')}`);

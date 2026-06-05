@@ -32,10 +32,21 @@ node tests/nucleus/build-modded-iso.js --type stage --mod "Hyrule Castle 64"
 
 # Build AND run a crash-test match (costume mods), ending in PASS/FAIL:
 node tests/nucleus/run-modded-match.js --build
+node tests/nucleus/run-modded-match.js --build --type character --mod sonic
 
 # Re-use the last build:
 node tests/nucleus/run-modded-match.js
+
+# Robust path: select the character by memory feedback instead of timing:
+node tests/nucleus/run-modded-match.js --closed-loop
 ```
+
+`--closed-loop` does the discrete steps (menu nav, port-2 CPU, start) via the
+per-frame pipe and the **analog character positioning + costume by reading the
+cursor/costume in RAM** (`cl_select.py`) — deterministic, immune to cursor
+acceleration/frame timing. The default path uses `pipe.js startmatch` (timing).
+Non-costume mods auto-fall back to a **boot-health** check (boot + reach CSS +
+watch process/frame health), which crash-tests any mod type without selecting it.
 
 The build writes the ISO to `output/<project>.iso` and a manifest to
 `tests/artifacts/nucleus/last-build.json`, e.g.:
