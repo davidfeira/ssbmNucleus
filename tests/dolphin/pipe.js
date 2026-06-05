@@ -208,9 +208,10 @@ function neutralFrame(port) {
 // proven recipe; booting the ISO (~13s) is the caller's responsibility. Works
 // for both vanilla-Slippi and Nucleus-built modded ISOs (both land in Online
 // Play). Returns once the match should be loading.
-async function startMatch(port, opts) {
-  const char = opts.char || 'fox';
-  const color = opts.color !== undefined ? opts.color : 0;
+// From the post-boot Online Play submenu, back out to the main menu, into VS
+// Mode, and onto the character-select screen. Shared by startMatch and the
+// standalone `gotocss` command (used for boot-health checks of any mod).
+async function navToCss(port) {
   await neutralFrame(port);
   await sleep(CSS.PACE);
   await tapButton(port, 'B', CSS.A_HOLD);          // out of Online Play...
@@ -220,6 +221,12 @@ async function startMatch(port, opts) {
   await sleep(1500);                               // -> VS submenu (Melee)
   await tapButton(port, 'A', CSS.A_HOLD);
   await sleep(3000);                               // -> character select
+}
+
+async function startMatch(port, opts) {
+  const char = opts.char || 'fox';
+  const color = opts.color !== undefined ? opts.color : 0;
+  await navToCss(port);
   if (!opts.nocpu) {
     // CPU opponent on port 2: its N/A door is just right of the port-1 spawn.
     await tiltHold(port, '1.0', '0.5', 150);
@@ -309,6 +316,9 @@ async function main() {
         color: flags.color !== undefined ? parseInt(flags.color, 10) : 0,
         nocpu: flags.nocpu,
       });
+      break;
+    case 'gotocss':
+      await navToCss(port);
       break;
     default:
       throw new Error(`Unknown command: ${command || '<none>'}. Try: tap | press | release | tilt | stick | trig | neutral | frame | char | startmatch`);

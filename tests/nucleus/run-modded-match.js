@@ -102,21 +102,27 @@ function main() {
     manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
   }
   const iso = (flags.iso && flags.iso !== true) ? flags.iso : manifest.iso;
+  const modType = manifest.modType || 'costume';
   const fighter = (flags.char && flags.char !== true) ? flags.char : manifest.fighter;
-  // The modded costume's in-game color index = its slot index. Fall back to
-  // "last costume" (count-1) for older manifests that predate the field.
   let color = flags.color !== undefined && flags.color !== true
     ? parseInt(flags.color, 10)
     : manifest.colorIndex;
   if (color === undefined || color === null) {
     color = manifest.costumeCount ? manifest.costumeCount - 1 : 0;
   }
+  // costume mods get a full match (select fighter+costume); other types can't be
+  // auto-selected yet, so they fall back to a boot-health crash-test (boot +
+  // reach the CSS so the mod's data loads + watch process/frame health).
+  const healthMode = !!flags.health || modType !== 'costume';
+  const label = (manifest.costumeId || manifest.characterName || manifest.stageName
+    || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);
-  if (!fighter) throw new Error('no fighter to select (set --char or build a manifest)');
+  if (!healthMode && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
   log(`ISO: ${iso}`);
-  log(`select: ${fighter} costume index ${color}${manifest.costumeId ? ` (${manifest.costumeId})` : ''}`);
+  log(healthMode ? `mode: boot-health (modType=${modType}, ${label})`
+    : `mode: match — select ${fighter} costume ${color} (${label})`);
 
   // 3. Launch -----------------------------------------------------------------
   log('killing any running Dolphin');
@@ -130,22 +136,22 @@ function main() {
   log(`pipe up; waiting ${MENU_WAIT_MS / 1000}s for the menu`);
   sleepSync(MENU_WAIT_MS);
 
-  // 4. Drive the menus to start the match ------------------------------------
-  const smArgs = ['startmatch', fighter, '--color', String(color)];
-  if (flags['no-cpu']) smArgs.push('--nocpu');
-  log(`pipe.js ${smArgs.join(' ')}`);
-  node(PIPE, smArgs);
-
-  // 5. Observe the match for crashes/hangs -----------------------------------
-  // observe.py reads live RAM: it waits for the in-game scene, then watches the
-  // frame counter (freeze = hang), the process (death = crash), and the scene
-  // (leaving in-game = ended). Exit 0 = healthy, non-zero = crash/hang/ended.
-  const label = (manifest.costumeId || `${fighter}-c${color}`).replace(/[^a-z0-9_-]/gi, '-');
-  log(`observing the match for ${OBSERVE_SECONDS}s (mod: ${label})...`);
-  const res = cp.spawnSync(VENV_PY, [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label], {
-    stdio: 'inherit',
-  });
-  node(CONTROL, ['shot', '--label', 'modded-match-verify']);
+  // 4. Drive the menus + 5. observe ------------------------------------------
+  let observeArgs;
+  if (healthMode) {
+    log('navigating to the CSS so the mod loads, then watching boot health...');
+    node(PIPE, ['gotocss']);
+    observeArgs = [OBSERVE, '--health', '--seconds', String(OBSERVE_SECONDS), '--label', label];
+  } else {
+    const smArgs = ['startmatch', fighter, '--color', String(color)];
+    if (flags['no-cpu']) smArgs.push('--nocpu');
+    log(`pipe.js ${smArgs.join(' ')}`);
+    node(PIPE, smArgs);
+    observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
+  }
+  log(`observing for ${OBSERVE_SECONDS}s (${label})...`);
+  const res = cp.spawnSync(VENV_PY, observeArgs, { stdio: 'inherit' });
+  node(CONTROL, ['shot', '--label', 'modded-verify']);
   if (res.status === 0) {
     log(`PASS: ${label} loaded and ran without crash/hang.`);
   } else {

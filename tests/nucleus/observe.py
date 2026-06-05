@@ -62,6 +62,39 @@ class Observer:
             "in_game": major == 0x02 and sub == 0x02,
         }
 
+    def watch_health(self, seconds=20.0, freeze_secs=3.0, log=None):
+        """Watch process + frame-counter health on ANY screen (boot/menu/game).
+        Catches boot- and load-time crashes for any mod type without needing to
+        select it -- the global frame counter (0x80479D60) advances on every
+        screen, so a freeze or process death is a crash/hang regardless of where
+        we are. Used for character/stage mods we can't yet auto-select."""
+        start = time.time()
+        last_frame = None
+        last_change = start
+
+        def emit(event, **kw):
+            rec = {"t": round(time.time() - start, 2), "event": event, **kw}
+            if log:
+                log.write(json.dumps(rec) + "\n")
+                log.flush()
+
+        emit("health_watch_start", seconds=seconds)
+        while time.time() - start < seconds:
+            st = self.status()
+            if st is None or not st.get("alive"):
+                return "crashed", "dolphin process exited", st
+            if not st.get("mem"):
+                return "crashed", "emulated RAM unreadable", st
+            f = st.get("frame")
+            if f != last_frame:
+                last_frame = f
+                last_change = time.time()
+            elif time.time() - last_change > freeze_secs:
+                emit("frame_frozen", frame=f, major=st.get("major"), sub=st.get("sub"))
+                return "hung", f"frame counter frozen at {f} for >{freeze_secs}s", st
+            time.sleep(0.2)
+        return "healthy", f"alive and advancing for {seconds:.0f}s", self.status()
+
     def watch(self, seconds=20.0, freeze_secs=2.0, min_ingame=4.0, log=None, require_ingame=True):
         """Poll until the watch window elapses or a crash/hang is detected.
         Returns (verdict, reason, last_status). verdict in
@@ -151,12 +184,17 @@ def main():
     pid = int(args[args.index("--pid") + 1]) if "--pid" in args else None
     label = args[args.index("--label") + 1] if "--label" in args else "observe"
 
+    health_only = "--health" in args
     d = Dolphin(pid)
     obs = Observer(d)
-    print(f"observing pid {d.pid} for {seconds:.0f}s...")
+    mode = "boot-health" if health_only else "match"
+    print(f"observing pid {d.pid} for {seconds:.0f}s ({mode})...")
     os.makedirs(REPORT_DIR, exist_ok=True)
     with open(os.path.join(REPORT_DIR, f"{label}.jsonl"), "w", encoding="utf-8") as logf:
-        verdict, reason, last = obs.watch(seconds=seconds, log=logf)
+        if health_only:
+            verdict, reason, last = obs.watch_health(seconds=seconds, log=logf)
+        else:
+            verdict, reason, last = obs.watch(seconds=seconds, log=logf)
     print(f"VERDICT: {verdict} -- {reason}")
     print(f"last status: {last}")
     if verdict in ("crashed", "hung", "ended", "never_started"):
