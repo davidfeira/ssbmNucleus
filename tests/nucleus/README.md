@@ -32,6 +32,7 @@ Mod types and how each is triggered in-game (all end in PASS/FAIL):
 | `stage` | custom m-ex stage | R to its SSS page + select |
 | `das` | stage skins (Dynamic Alternate Stages) | hold X/Y/Z on stage-select; many per ISO |
 | `effect` | blaster/laser/sword model | select fighter, perform the move (neutral-B) |
+| `menu` | CSS background / icon grid / doors | reach the CSS (boot-health + screenshot) |
 
 ```sh
 # Build a modded ISO by type (no game):
@@ -40,6 +41,7 @@ node tests/nucleus/build-modded-iso.js --type character --mod wolf
 node tests/nucleus/build-modded-iso.js --type stage --mod "Hyrule Castle 64"
 node tests/nucleus/build-modded-iso.js --type das --variants-per-stage 3   # up to 18 skins/ISO
 node tests/nucleus/build-modded-iso.js --type effect --fighter Fox --extra gun
+node tests/nucleus/build-modded-iso.js --type menu --menu icon_grid   # or background / doors
 
 # Build AND run a crash-test match, ending in PASS/FAIL:
 node tests/nucleus/run-modded-match.js --build
