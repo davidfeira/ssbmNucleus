@@ -29,6 +29,19 @@ ALIASES = {
 }
 
 
+# CSS grid index (Dr.Mario=0 ... Fox=10 ... Roy=24) -- the value at 0x803F0E0A,
+# used to CONFIRM the cursor is on the right character (grid-layout-independent,
+# verified 10/10 against libmelee's menu-info gecko encoding).
+CSS_INDEX = {
+    "drmario": 0, "mario": 1, "luigi": 2, "bowser": 3, "peach": 4, "yoshi": 5,
+    "dk": 6, "falcon": 7, "ganondorf": 8,
+    "falco": 9, "fox": 10, "ness": 11, "iceclimbers": 12, "kirby": 13,
+    "samus": 14, "zelda": 15, "link": 16, "younglink": 17,
+    "pichu": 18, "pikachu": 19, "jigglypuff": 20, "mewtwo": 21,
+    "gameandwatch": 22, "marth": 23, "roy": 24,
+}
+
+
 def load_grid():
     with open(GRID_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -37,6 +50,10 @@ def load_grid():
 def norm(name):
     key = "".join(ch for ch in name.lower() if ch.isalnum())
     return ALIASES.get(key, key)
+
+
+def css_index(name):
+    return CSS_INDEX.get(norm(name))
 
 
 def cell(grid, name):

@@ -16,6 +16,12 @@ P1_CURSOR_X = 0x804A85FC
 P1_CURSOR_Y = 0x804A860C
 P1_COSTUME = 0x80480823
 P1_LOCKED = 0x804AA162  # 0 = hovering, 1 = locked in (coin down)
+# Hovered character as a CSS GRID INDEX (Dr.Mario=0, Mario=1 ... Fox=10 ...
+# Roy=24). Per port: P1_HOVERED + 0x24*(port-1). This is the value libmelee's
+# "Extract Menu Info" gecko code reads (0x803F0E0A) and feeds to to_internal --
+# it lets us CONFIRM which character the cursor is actually over (vs trusting
+# coordinates), which is what makes selection robust + custom-char-capable.
+P1_HOVERED = 0x803F0E0A
 
 
 def clamp(v, lo, hi):
@@ -47,6 +53,12 @@ class Cursor:
     def costume(self):
         return self.d.u8(P1_COSTUME)
 
+    def hovered(self):
+        """The CSS grid index of the character the cursor is currently over
+        (Dr.Mario=0 ... Fox=10 ... Roy=24). Ground truth, grid-layout-independent
+        -- use it to confirm a selection or to scan for a custom character."""
+        return self.d.u8(P1_HOVERED)
+
     def locked(self):
         return self.d.u8(P1_LOCKED) == 1
 
@@ -70,20 +82,30 @@ class Cursor:
             time.sleep(0.22)
         return self.costume() == target
 
-    def select(self, tx, ty, costume=0, lock=True):
+    def select(self, tx, ty, costume=0, lock=True, css_index=None):
         """Closed-loop character selection: release any prior lock, steer to the
-        cell, set the costume by reading it, then lock with A and confirm."""
+        cell, set the costume by reading it, then lock with A. If css_index is
+        given, CONFIRM the cursor is on the right character via the hovered-index
+        read (move_to can stop on a neighbour cell) and retry a few times -- this
+        is what makes selection robust against grid drift."""
         self.unlock()
-        arrived = self.move_to(tx, ty)
+        self.move_to(tx, ty)
+        if css_index is not None:
+            for _ in range(4):
+                time.sleep(0.15)
+                if self.hovered() == css_index:
+                    break
+                self.move_to(tx, ty, tol=0.6)
         time.sleep(0.1)
         got_costume = self.set_costume(costume)
+        on_target = (self.hovered() == css_index) if css_index is not None else True
         if lock:
             for _ in range(3):
                 self.p.tap("A", 0.05)
                 time.sleep(0.2)
                 if self.locked():
                     break
-        return arrived and got_costume and (self.locked() if lock else True)
+        return on_target and got_costume and (self.locked() if lock else True)
 
     def move_to(self, tx, ty, tol=1.0, timeout=8.0, kp=0.05, kd=0.18, verbose=False):
         """Closed-loop PD control: steer the cursor to (tx,ty) with stick

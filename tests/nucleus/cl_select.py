@@ -17,7 +17,7 @@ import sys
 from melee_mem import Dolphin
 from melee_pipe import Pipe
 from melee_css import Cursor
-from char_select import load_grid, cell
+from char_select import load_grid, cell, css_index
 
 
 def main():
@@ -38,10 +38,10 @@ def main():
     time.sleep(0.4)
     grid = load_grid()
     x, y = cell(grid, name)
-    ok = c.select(x, y, costume=costume, lock=True)
+    ok = c.select(x, y, costume=costume, lock=True, css_index=css_index(name))
     locked = c.locked()
     print(f"cl_select {name} costume {costume}: ok={ok} locked={locked} "
-          f"pos={c.read_pos()} costume_read={c.costume()}")
+          f"hovered_idx={c.hovered()} (want {css_index(name)}) costume_read={c.costume()}")
     # Release the persistent pipe cleanly so the next (node, per-frame) step's
     # first input isn't dropped on the connection handoff.
     p.close()
