@@ -62,14 +62,18 @@ class Observer:
             "in_game": major == 0x02 and sub == 0x02,
         }
 
-    def watch(self, seconds=20.0, freeze_secs=2.0, log=None, require_ingame=True):
+    def watch(self, seconds=20.0, freeze_secs=2.0, min_ingame=4.0, log=None, require_ingame=True):
         """Poll until the watch window elapses or a crash/hang is detected.
         Returns (verdict, reason, last_status). verdict in
-        {healthy, crashed, hung, ended, never_started}."""
+        {healthy, crashed, hung, ended, never_started}. A mod that loads and
+        runs past min_ingame seconds is a PASS even if the match then ends
+        (e.g. an idle character gets KO'd) -- only a *quick* exit from in-game
+        is treated as a possible soft crash."""
         start = time.time()
         last_frame = None
         last_frame_change = start
         reached_ingame = False
+        ingame_start = None
         prev_scene = None
 
         def emit(event, **kw):
@@ -99,6 +103,7 @@ class Observer:
             if st["in_game"]:
                 if not reached_ingame:
                     reached_ingame = True
+                    ingame_start = time.time()
                     emit("reached_ingame", frame=st["frame"])
                 # freeze detection (only meaningful in-game)
                 if st["frame"] != last_frame:
@@ -109,8 +114,11 @@ class Observer:
                     return "hung", f"frame counter frozen at {st['frame']} for >{freeze_secs}s", st
             elif reached_ingame:
                 # we were in-game and the scene changed away from it
-                emit("left_ingame", major=st["major"], sub=st["sub"])
-                return "ended", "left the match (ended or soft crash to menu)", st
+                dur = time.time() - ingame_start
+                emit("left_ingame", major=st["major"], sub=st["sub"], ingame_secs=round(dur, 1))
+                if dur < min_ingame:
+                    return "ended", f"left in-game after only {dur:.1f}s (possible soft crash)", st
+                return "healthy", f"loaded and ran {dur:.1f}s in-game before the match ended", st
 
             time.sleep(0.2)
 
