@@ -48,9 +48,17 @@ character + costume AND the stage by reading the cursors in RAM** and starts the
 match — deterministic, immune to cursor acceleration/frame timing. `--stage
 <name>` chooses the stage (battlefield, fd, dreamland, yoshis, stadium,
 fountain; default battlefield). The default (non-closed-loop) path uses
-`pipe.js startmatch` (timing). Non-costume mods auto-fall back to a
-**boot-health** check (boot + reach CSS + watch process/frame health), which
-crash-tests any mod type without selecting it.
+`pipe.js startmatch` (timing).
+
+**Custom m-ex characters and stages are selected in-match too**, using the app's
+own layout as ground truth (not empirical calibration): the build places the new
+icon into a real roster slot / stage page (the app's "add to grid / new page"
+step) and records its coordinate in the manifest (`cssIcon` / `sssIcon`).
+`run-modded-match.js` then does the closed-loop match — for a custom fighter,
+steer to its CSS icon `(x, y-3.5)`; for a custom stage, press **R** to its SSS
+page then steer to its coordinate. (DAS mods still fall back to **boot-health**:
+boot + reach CSS + watch process/frame health, which crash-tests any mod without
+selecting it.)
 
 The build writes the ISO to `output/<project>.iso` and a manifest to
 `tests/artifacts/nucleus/last-build.json`, e.g.:
