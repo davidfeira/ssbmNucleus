@@ -16,9 +16,10 @@ import runpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.abspath(os.path.join(HERE, "..", "..", "backend"))
-# mex_api.py is normally run as `python backend/mex_api.py`, which puts
-# backend/ on sys.path[0]; replicate that so its `from core...`/`from
-# blueprints...` imports resolve.
+# Drop tests/nucleus from sys.path so its modules (e.g. select.py, which would
+# shadow the stdlib `select` that socket/selectors import) don't leak into the
+# backend. Then add backend/ as mex_api.py expects (run as backend/mex_api.py).
+sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != HERE]
 sys.path.insert(0, BACKEND_DIR)
 
 

@@ -7,11 +7,15 @@
  * app's UI calls) to produce a playable, modded Melee ISO end to end:
  *
  *   1. create a fresh project from a vanilla 1.02 ISO
- *   2. install a costume mod from the storage vault into that project
+ *   2. install a mod from the storage vault into that project, by --type:
+ *        costume   -> POST /api/mex/import        (a fighter costume slot)
+ *        character -> POST /custom-characters/install (a new m-ex roster slot)
+ *        stage     -> POST /custom-stages/install  (a new stage)
  *   3. export a playable ISO
  *
- * It then emits a manifest { iso, fighter, colorIndex, ... } so the Dolphin
- * harness (tests/dolphin) can boot the ISO and select the modded costume.
+ * It emits a manifest { iso, modType, ... } describing how to trigger the mod
+ * in-game, so the match harness (run-modded-match.js) can boot, select it, and
+ * observe for crashes.
  *
  * The backend runs standalone in DEV mode (venv Python, no Electron) and is
  * fully isolated from the installed app: dev mode roots all data in the repo
@@ -19,11 +23,11 @@
  *
  * Usage:
  *   node build-modded-iso.js [options]
- *     --iso <path>       vanilla 1.02 ISO to build from
- *                        (default: melee working ISO used by the dolphin tests)
- *     --fighter <name>   character to install a costume for (default: Fox)
- *     --costume <id>     specific vault costume id/filename (default: first
- *                        slippi-safe costume for the fighter)
+ *     --type <kind>      costume | character | stage (default: costume)
+ *     --mod <id>         specific vault item: costume id, or character/stage
+ *                        slug or name (default: first slippi-safe of the type)
+ *     --fighter <name>   for --type costume: which character (default: Fox)
+ *     --iso <path>       vanilla 1.02 ISO to build from (default: working ISO)
  *     --name <project>   project name (default: harness-test)
  *     --backend <url>    use an already-running backend instead of spawning one
  *     --keep-backend     do not shut down a spawned backend on exit
@@ -175,6 +179,23 @@ function pickCostume(fighter, wanted) {
   return { skin, costumePath };
 }
 
+// Pick a slug-based vault item (custom_characters / custom_stages) from
+// metadata.json: the requested one by slug/name, else the first slippi-safe.
+function pickFromMeta(key, wanted) {
+  const meta = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'metadata.json'), 'utf8'));
+  const list = meta[key] || [];
+  if (!list.length) throw new Error(`no ${key} in vault metadata.json`);
+  let item;
+  if (wanted) {
+    const w = String(wanted).toLowerCase();
+    item = list.find((x) => x.slug === wanted || (x.name || '').toLowerCase() === w);
+    if (!item) throw new Error(`requested ${key} "${wanted}" not found`);
+  } else {
+    item = list.find((x) => x.slippi_safe !== false) || list[0];
+  }
+  return item;
+}
+
 // --- Export wait ------------------------------------------------------------
 
 // The export runs in a background thread and only reports done over SocketIO,
@@ -221,7 +242,10 @@ async function main() {
   const isoPath = flags.iso || DEFAULT_ISO;
   const fighter = flags.fighter || 'Fox';
   const projectName = flags.name || 'harness-test';
-  const wantedCostume = flags.costume && flags.costume !== true ? flags.costume : null;
+  const modType = (flags.type && flags.type !== true) ? flags.type : 'costume';
+  // The specific mod to install: costume id (for costume), or slug/name (for
+  // custom-character/custom-stage). --costume kept as an alias for back-compat.
+  const wantedTarget = [flags.mod, flags.costume, flags.target].find((v) => v && v !== true) || null;
 
   if (!fs.existsSync(isoPath)) throw new Error(`vanilla ISO not found: ${isoPath}`);
 
@@ -274,20 +298,40 @@ async function main() {
     const opened = await api(baseUrl, 'POST', '/api/mex/project/open', { projectPath });
     if (!opened.json.success) throw new Error(`open failed: ${JSON.stringify(opened.json)}`);
 
-    // 3. Install costume mod -------------------------------------------------
-    const { skin, costumePath } = pickCostume(fighter, wantedCostume);
-    log(`installing costume "${skin.id}" (${skin.costume_code}) onto ${fighter}`);
-    const imported = await api(baseUrl, 'POST', '/api/mex/import', { fighter, costumePath });
-    if (!imported.json.success) throw new Error(`import failed: ${JSON.stringify(imported.json)}`);
-
-    // The import appends a new costume slot, so it is the LAST entry in the
-    // fighter's costume list. That list index is also the in-game X-cycle order
-    // (0 = default), so it's the number of X presses to reach the mod.
-    const costumes = await api(baseUrl, 'GET', `/api/mex/fighters/${encodeURIComponent(fighter)}/costumes`);
-    const list = (costumes.json && costumes.json.costumes) || [];
-    const modCostume = list[list.length - 1] || {};
-    const colorIndex = modCostume.index !== undefined ? modCostume.index : list.length - 1;
-    log(`${fighter} now has ${list.length} costumes; mod at index ${colorIndex} (${modCostume.name || '?'})`);
+    // 3. Install the mod (routed by --type) ----------------------------------
+    // modInfo carries the mod type + how to trigger it in-game (for the match
+    // harness): costume -> {fighter, colorIndex}; character -> {characterName}
+    // (a new roster slot); stage -> {stageName} (pick it on stage select).
+    let modInfo;
+    if (modType === 'costume') {
+      const { skin, costumePath } = pickCostume(fighter, wantedTarget);
+      log(`installing costume "${skin.id}" (${skin.costume_code}) onto ${fighter}`);
+      const imported = await api(baseUrl, 'POST', '/api/mex/import', { fighter, costumePath });
+      if (!imported.json.success) throw new Error(`import failed: ${JSON.stringify(imported.json)}`);
+      // The import appends a costume slot -> it's the LAST entry, and that index
+      // is the in-game X-cycle position (0 = default).
+      const costumes = await api(baseUrl, 'GET', `/api/mex/fighters/${encodeURIComponent(fighter)}/costumes`);
+      const list = (costumes.json && costumes.json.costumes) || [];
+      const modCostume = list[list.length - 1] || {};
+      const colorIndex = modCostume.index !== undefined ? modCostume.index : list.length - 1;
+      log(`${fighter} now has ${list.length} costumes; mod at index ${colorIndex} (${modCostume.name || '?'})`);
+      modInfo = { modType, fighter, colorIndex, costumeId: skin.id, costumeCode: skin.costume_code, costumeCount: list.length };
+    } else if (modType === 'character') {
+      const item = pickFromMeta('custom_characters', wantedTarget);
+      log(`installing custom character "${item.name}" (${item.slug})`);
+      const r = await api(baseUrl, 'POST', '/api/mex/custom-characters/install', { slug: item.slug });
+      if (!r.json.success) throw new Error(`character install failed: ${JSON.stringify(r.json)}`);
+      log(`added fighter "${item.name}" (${(r.json.costumeCount || item.costume_count || '?')} costumes)`);
+      modInfo = { modType, characterName: item.name, characterSlug: item.slug };
+    } else if (modType === 'stage') {
+      const item = pickFromMeta('custom_stages', wantedTarget);
+      log(`installing custom stage "${item.name}" (${item.slug})`);
+      const r = await api(baseUrl, 'POST', '/api/mex/custom-stages/install', { slug: item.slug });
+      if (!r.json.success) throw new Error(`stage install failed: ${JSON.stringify(r.json)}`);
+      modInfo = { modType, stageName: item.name, stageSlug: item.slug };
+    } else {
+      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage)`);
+    }
 
     // 4. Export ISO ----------------------------------------------------------
     const comp = await api(baseUrl, 'GET', '/api/mex/recommended-compression');
@@ -307,11 +351,7 @@ async function main() {
     // 5. Manifest ------------------------------------------------------------
     const manifest = {
       iso: outIso,
-      fighter,
-      colorIndex: importedIndex,
-      costumeId: skin.id,
-      costumeCode: skin.costume_code,
-      costumeCount: list.length,
+      ...modInfo,
       projectName,
       builtFrom: isoPath,
       bytes: finalBytes,
