@@ -23,16 +23,29 @@ last-build.json (manifest)
 
 ## Usage
 
+Mod types and how each is triggered in-game (all end in PASS/FAIL):
+
+| `--type` | what | in-game trigger |
+|---|---|---|
+| `costume` | fighter skin | select fighter + color |
+| `character` | custom m-ex fighter | select its CSS grid slot (app's placement) |
+| `stage` | custom m-ex stage | R to its SSS page + select |
+| `das` | stage skins (Dynamic Alternate Stages) | hold X/Y/Z on stage-select; many per ISO |
+| `effect` | blaster/laser/sword model | select fighter, perform the move (neutral-B) |
+
 ```sh
 # Build a modded ISO by type (no game):
 node tests/nucleus/build-modded-iso.js                      # Fox + first vault costume
-node tests/nucleus/build-modded-iso.js --fighter Falco --mod <costume-id>
 node tests/nucleus/build-modded-iso.js --type character --mod wolf
 node tests/nucleus/build-modded-iso.js --type stage --mod "Hyrule Castle 64"
+node tests/nucleus/build-modded-iso.js --type das --variants-per-stage 3   # up to 18 skins/ISO
+node tests/nucleus/build-modded-iso.js --type effect --fighter Fox --extra gun
 
-# Build AND run a crash-test match (costume mods), ending in PASS/FAIL:
+# Build AND run a crash-test match, ending in PASS/FAIL:
 node tests/nucleus/run-modded-match.js --build
 node tests/nucleus/run-modded-match.js --build --type character --mod sonic
+node tests/nucleus/run-modded-match.js --build --type das          # tests every skin in one boot
+node tests/nucleus/run-modded-match.js --build --type effect --fighter Falco --extra gun
 
 # Re-use the last build:
 node tests/nucleus/run-modded-match.js
