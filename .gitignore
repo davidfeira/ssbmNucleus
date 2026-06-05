@@ -70,3 +70,6 @@ scripts/build/build/
 
 # Local screenshots
 /Screenshot 2026-01-21 150635.png
+
+# libmelee/memory-probe harness venv
+tests/nucleus/melee_venv/
