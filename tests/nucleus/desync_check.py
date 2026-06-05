@@ -1,4 +1,4 @@
-"""
+r"""
 desync_check.py -- diff the live game state of TWO Slippi Dolphin instances to
 detect and localize desyncs. This is the observability foundation for the
 netplay desync debugger (the user's idea): in a netplay match the two clients
@@ -7,11 +7,18 @@ each frame -- wherever it diverges is the desync, and the differing addresses
 point at what diverged.
 
 Reads each instance's MEM1 via melee_mem (attach by PID) -- no libmelee, no
-Slippi stream, version-independent. The netplay CONNECTION between the two
-clients (matchmaking / direct-connect) is SEPARATE setup that this does not do;
-this is the read+diff half. Until that's wired up you can sanity-check the diff
-mechanism against two instances of the same ISO (they will differ everywhere
-since they aren't synced -- that just exercises the plumbing).
+Slippi stream, version-independent. Reports a semantic diff (named canaries:
+frame, RNG seed, scene) on top of the raw MEM1 byte diff, so a divergence reads
+as "rng_seed: A=.. B=.." rather than just an offset.
+
+Two-instance launch is ready: `driver.js --pipe-index 2` gives a 2nd emulator a
+distinct controller pipe (\\.\pipe\slippibot2) so the two don't collide, and
+`pipe.js --port 2` drives it. What's still SEPARATE setup (and needs a design
+call -- the user's "sleepy server + two clients") is the netplay CONNECTION that
+keeps the two clients in lockstep; local two-instance play can't stay
+bit-identical without frame-perfect input sync, which only the netplay/rollback
+path provides. Until then you can exercise the plumbing against two instances of
+the same ISO (they differ everywhere since they aren't synced).
 
     python desync_check.py <pid1> <pid2>            # one snapshot diff
     python desync_check.py <pid1> <pid2> --watch 30 # poll, report divergence
@@ -33,6 +40,26 @@ import numpy as np
 from melee_mem import Dolphin, GC_BASE, MEM1_VALID
 
 FRAME_COUNTER = 0x80479D60
+
+# Named state canaries -- decoded alongside the raw byte diff so a divergence
+# reads semantically, not just as an offset. The RNG seed is the classic desync
+# canary: in a synced match it's identical every frame, and it's the first thing
+# to diverge when physics/inputs desync. (frame/scene are validated by this
+# harness; the RNG seed is Melee 1.02's canonical 0x804D5F90 -- confirm against a
+# genuinely-synced pair when the netplay connection is wired up.)
+NAMED = [
+    ("frame",     FRAME_COUNTER, "u32"),
+    ("rng_seed",  0x804D5F90,    "u32"),
+    ("scene_maj", 0x80479D30,    "u8"),
+    ("scene_min", 0x80479D33,    "u8"),
+]
+
+
+def read_named(d):
+    out = {}
+    for name, addr, typ in NAMED:
+        out[name] = (d.u32(addr) if typ == "u32" else d.u8(addr))
+    return out
 
 # GC address ranges that may differ between synced clients (NOT desyncs).
 # Placeholder -- refine once we can observe two genuinely-synced clients.
@@ -73,14 +100,21 @@ def diff(a, b, max_report=20):
 
 
 def report(da, db):
-    fa, fb = da.u32(FRAME_COUNTER), db.u32(FRAME_COUNTER)
-    print(f"frame: pid{da.pid}={fa}  pid{db.pid}={fb}  {'(aligned)' if fa == fb else '(NOT aligned!)'}")
+    na, nb = read_named(da), read_named(db)
+    aligned = na["frame"] == nb["frame"]
+    print(f"frame: pid{da.pid}={na['frame']}  pid{db.pid}={nb['frame']}  "
+          f"{'(aligned)' if aligned else '(NOT aligned!)'}")
+    # Named-state diff first -- the semantic, human-readable view.
+    named_diffs = [k for k in na if na[k] != nb[k] and k != "frame"]
+    for k in named_diffs:
+        print(f"  ! {k}: A={na[k]} B={nb[k]}")
     a, b = snapshot(da), snapshot(db)
     if a is None or b is None:
         print("  could not read one instance's RAM")
         return None
     count, runs = diff(a, b)
-    print(f"  {count:,} differing bytes across MEM1")
+    print(f"  {count:,} differing bytes across MEM1"
+          f"{' (RNG seed diverged!)' if 'rng_seed' in named_diffs else ''}")
     for s, e, av, bv in runs:
         print(f"    0x{s:08x}-0x{e:08x}: A={av.hex()} B={bv.hex()}")
     return count

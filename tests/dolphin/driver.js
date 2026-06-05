@@ -223,7 +223,7 @@ function copyTemplateUserData(templateUserDir, targetUserDir) {
   fs.cpSync(source, target, { recursive: true });
 }
 
-function patchDolphinConfig(userDir) {
+function patchDolphinConfig(userDir, pipeName = 'slippibot1') {
   const dolphinIni = path.join(userDir, 'Config', 'Dolphin.ini');
   writeIni(dolphinIni, (sections) => {
     upsertIniValue(sections, 'Input', 'BackgroundInput', 'True');
@@ -242,15 +242,17 @@ function patchDolphinConfig(userDir) {
     upsertIniValue(sections, 'Core', 'SIDevice3', '0');
   });
 
-  // Drive port 1 from Dolphin's always-open named pipe (\\.\pipe\slippibot1 on
-  // Windows). Bindings mirror libmelee's controller profile: digital buttons
-  // map to `Button <NAME>` and the sticks to `Axis MAIN/C X|Y +|-`, so the pipe
-  // protocol (PRESS/RELEASE <btn>, SET MAIN <x> <y>, FLUSH) reaches the game.
+  // Drive port 1 from Dolphin's always-open named pipe (\\.\pipe\<pipeName>;
+  // slippibot1 by default). A 2nd instance (for the desync debugger) uses a
+  // distinct name e.g. slippibot2 so the two emulators don't collide on the
+  // global named pipe. Bindings mirror libmelee's controller profile: digital
+  // buttons map to `Button <NAME>` and the sticks to `Axis MAIN/C X|Y +|-`, so
+  // the pipe protocol (PRESS/RELEASE <btn>, SET MAIN <x> <y>, FLUSH) reaches it.
   const gcPadIni = path.join(userDir, 'Config', 'GCPadNew.ini');
   writeIni(gcPadIni, (sections) => {
     const p = 'GCPad1';
     sections.set(p, new Map()); // wipe any inherited keyboard mapping
-    upsertIniValue(sections, p, 'Device', 'Pipe/0/slippibot1');
+    upsertIniValue(sections, p, 'Device', `Pipe/0/${pipeName}`);
     upsertIniValue(sections, p, 'Buttons/A', 'Button A');
     upsertIniValue(sections, p, 'Buttons/B', 'Button B');
     upsertIniValue(sections, p, 'Buttons/X', 'Button X');
@@ -503,7 +505,10 @@ async function main() {
   fs.mkdirSync(path.join(runDir, 'screenshots'), { recursive: true });
   copyTemplateConfig(templateUserDir, userDir);
   copyTemplateUserData(templateUserDir, userDir);
-  patchDolphinConfig(userDir);
+  // --pipe-index N drives port 1 over \\.\pipe\slippibot<N> (default 1); a 2nd
+  // instance uses 2 so two emulators don't fight over the same named pipe.
+  const pipeIndex = args['pipe-index'] ? parseInt(args['pipe-index'], 10) : 1;
+  patchDolphinConfig(userDir, `slippibot${pipeIndex}`);
 
   const metadata = {
     createdAt: new Date().toISOString(),
