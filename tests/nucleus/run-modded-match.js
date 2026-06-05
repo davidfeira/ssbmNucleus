@@ -33,6 +33,7 @@ const CONTROL = path.join(HERE, '..', 'dolphin', 'control.js');
 const PIPE = path.join(HERE, '..', 'dolphin', 'pipe.js');
 const OBSERVE = path.join(HERE, 'observe.py');
 const CL_MATCH = path.join(HERE, 'cl_match.py');
+const CL_DAS = path.join(HERE, 'cl_das.py');
 const VENV_PY = path.join(HERE, 'melee_venv', 'Scripts', 'python.exe');
 const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json');
 const PIPE_READY_TIMEOUT_MS = 45000; // wait this long for Dolphin's input pipe
@@ -120,19 +121,49 @@ function main() {
   // data loads + watch process/frame health).
   const customChar = modType === 'character' && manifest.cssIcon && !flags.health;
   const customStage = modType === 'stage' && manifest.sssIcon && !flags.health;
-  const healthMode = !!flags.health || (modType !== 'costume' && !customChar && !customStage);
+  const customDas = modType === 'das' && manifest.dasVariants && !flags.health;
+  const healthMode = !!flags.health || (modType !== 'costume' && !customChar && !customStage && !customDas);
   const stageFighter = (fighter && fighter !== true) ? fighter : 'fox';  // a vanilla pick to reach the SSS
+  // Select a stage by its REAL coordinate from the build's SSS layout (accurate
+  // on any layout); fall back to the libmelee-named target if not recorded.
+  const stageArgsFor = (stage) => {
+    const sl = manifest.stageLayout && manifest.stageLayout[stage];
+    return sl ? ['--stage-icon', `${sl.page || 0},${sl.x},${sl.y}`] : [stage];
+  };
   const label = (manifest.costumeId || manifest.characterName || manifest.stageName
     || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);
-  if (!healthMode && !customChar && !customStage && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
+  if (!healthMode && !customChar && !customStage && !customDas && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
   log(`ISO: ${iso}`);
   if (healthMode) log(`mode: boot-health (modType=${modType}, ${label})`);
   else if (customStage) log(`mode: match — custom stage ${label} @page${manifest.sssIcon.page}(${manifest.sssIcon.x},${manifest.sssIcon.y})`);
   else if (customChar) log(`mode: match — select custom fighter ${label} @icon(${manifest.cssIcon.x},${manifest.cssIcon.y})`);
+  else if (customDas) log(`mode: DAS stage skins — ${manifest.dasVariants.length} variant(s) on ${path.basename(iso)}`);
   else log(`mode: match — select ${fighter} costume ${color} (${label})`);
+
+  // DAS special case: one ISO holds many stage skins (each legal stage can carry
+  // several alternates, each behind a different HOLD button). Boot ONCE and test
+  // every variant in a single session (cl_das.py): select the stage holding its
+  // button, watch it load+run, then quit back to the CSS with L+R+A+START (which
+  // keeps the fighter locked) and do the next -- no relaunch between skins.
+  if (customDas) {
+    const only = (flags.stage && flags.stage !== true) ? flags.stage : null;
+    const variants = manifest.dasVariants.filter((v) => !only || v.stage === only);
+    if (!variants.length) throw new Error(`no DAS variant for stage "${only}"`);
+    log(`DAS: testing ${variants.length} stage skin(s) in one session (L+R+A+START reset between)`);
+    try { node(CONTROL, ['kill']); } catch (e) { /* none */ }
+    node(CONTROL, ['launch', '--iso', iso]);
+    if (!waitForPipeReady(PIPE_READY_TIMEOUT_MS)) throw new Error('input pipe never appeared');
+    sleepSync(MENU_WAIT_MS);
+    node(PIPE, ['gotocss']);   // a CLEAN CSS (fighter NOT yet locked) -- cl_das locks it
+    node(PIPE, ['cpustep']);
+    const m = cp.spawnSync(VENV_PY, [CL_DAS, JSON.stringify(variants)], { stdio: 'inherit' });
+    try { node(CONTROL, ['kill']); } catch (e) { /* none */ }
+    process.exitCode = m.status === 0 ? 0 : 1;
+    return;
+  }
 
   // 3. Launch -----------------------------------------------------------------
   log('killing any running Dolphin');
@@ -161,7 +192,7 @@ function main() {
     node(PIPE, ['gotocss']);
     node(PIPE, ['cpustep']);
     const m = cp.spawnSync(VENV_PY,
-      [CL_MATCH, label, '--icon', `${ic.x},${ic.y},${ic.index}`, stage], { stdio: 'inherit' });
+      [CL_MATCH, label, '--icon', `${ic.x},${ic.y},${ic.index}`, ...stageArgsFor(stage)], { stdio: 'inherit' });
     if (m.status !== 0) throw new Error(`closed-loop custom-fighter select failed (${label})`);
     observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else if (customStage) {
@@ -186,7 +217,7 @@ function main() {
     log(`closed-loop: gotocss -> CPU -> cl_match ${fighter} c${color} stage ${stage}`);
     node(PIPE, ['gotocss']);
     node(PIPE, ['cpustep']);
-    const m = cp.spawnSync(VENV_PY, [CL_MATCH, fighter, String(color), stage], { stdio: 'inherit' });
+    const m = cp.spawnSync(VENV_PY, [CL_MATCH, fighter, String(color), ...stageArgsFor(stage)], { stdio: 'inherit' });
     if (m.status !== 0) throw new Error(`closed-loop match setup failed (${fighter}/${stage})`);
     observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else {

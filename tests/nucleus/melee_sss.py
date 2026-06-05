@@ -207,7 +207,7 @@ class StageCursor:
         self.p.center()
         return False
 
-    def select(self, name, press=True):
+    def select(self, name, press=True, hold=None):
         """Steer to a stage by name and press A to pick it (which, with a
         locked CSS, starts the match on that stage). Navigation is purely by
         the cursor coordinate -- like libmelee, since the hovered-stage byte
@@ -215,7 +215,8 @@ class StageCursor:
         pre-press check. When press=True, confirms the match actually started
         (the scene leaves stage-select), re-pressing A if a tap didn't take, and
         returns whether it started; with press=False, returns whether the cursor
-        reached the stage's cell."""
+        reached the stage's cell. `hold` (e.g. 'X') is held through the load to
+        trigger a DAS alternate stage."""
         key = norm(name)
         if key not in STAGE_TARGET:
             raise KeyError(f"no stage target for '{name}' "
@@ -229,22 +230,35 @@ class StageCursor:
         reached = self.move_to(tx, ty)
         if not press:
             return reached
-        return self._confirm(tx, ty)
+        return self._confirm(tx, ty, hold=hold)
 
-    def _confirm(self, tx, ty):
+    def _confirm(self, tx, ty, hold=None):
         """Press A and verify the match actually starts (the scene leaves
         stage-select). A single tap occasionally doesn't take, so re-center on
-        the cell and re-press a few times. Returns True once the match starts."""
-        for _ in range(5):
-            self.p.center()
-            time.sleep(0.12)
-            self.p.tap("A", 0.08)
-            time.sleep(0.4)
-            if not self.on_stage_select():
-                return True
-            # cursor may have drifted off the tile -- nudge back on before retry
-            self.move_to(tx, ty, timeout=2.0)
-        return False
+        the cell and re-press a few times. If `hold` is a button (e.g. 'X'),
+        keep it held through the confirm + load -- that's the DAS (Dynamic
+        Alternate Stages) trigger: holding the button as the stage loads makes
+        the game load that stage's alternate. Returns True once the match
+        starts. (Don't use A/B/R here -- A selects, B backs out, R flips m-ex
+        pages; X/Y/Z/L are safe to hold.)"""
+        if hold:
+            self.p.press(hold)
+        try:
+            for _ in range(6):
+                self.p.center()   # only re-centers the stick; keeps `hold` down
+                time.sleep(0.12)
+                self.p.tap("A", 0.08)
+                time.sleep(0.4)
+                if not self.on_stage_select():
+                    if hold:
+                        time.sleep(0.7)  # keep holding so DAS reads it at load
+                    return True
+                # cursor may have drifted off the tile -- nudge back on before retry
+                self.move_to(tx, ty, timeout=2.0)
+            return False
+        finally:
+            if hold:
+                self.p.release(hold)
 
     def switch_page(self, n, settle=0.6):
         """Advance n m-ex stage-select pages by pressing R (the page-switch
@@ -254,18 +268,21 @@ class StageCursor:
             self.p.tap("R", 0.08)
             time.sleep(settle)
 
-    def select_at(self, x, y, page=0, press=True):
-        """Select a stage by its explicit SSS icon coordinate (and page) -- for
-        a CUSTOM stage, whose coordinate comes from the build manifest (the app's
-        own SSS layout) rather than the hardcoded vanilla targets. Advances to
-        the stage's page with R first, then steers to (x,y) and confirms."""
+    def select_at(self, x, y, page=0, press=True, hold=None):
+        """Select a stage by its explicit SSS icon coordinate (and page) -- from
+        the build manifest (the app's own SSS layout) rather than the hardcoded
+        vanilla targets, which only match a stock layout. Use this for any stage
+        whose real coordinate we know (custom stages, and vanilla stages on a
+        build whose layout differs from libmelee's). Advances to the stage's
+        page with R first, then steers to (x,y) and confirms. `hold` (e.g. 'X')
+        triggers a DAS alternate."""
         if not self.ensure_stage_select():
             return False
         self.switch_page(page)
         reached = self.move_to(x, y)
         if not press:
             return reached
-        return self._confirm(x, y)
+        return self._confirm(x, y, hold=hold)
 
 
 if __name__ == "__main__":

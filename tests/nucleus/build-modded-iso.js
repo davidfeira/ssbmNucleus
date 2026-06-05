@@ -271,6 +271,32 @@ async function placeCustomStageIcon(baseUrl, stageName) {
   return { page: found.pi, x: slot.x, y: slot.y };
 }
 
+// --- SSS layout query (accurate stage-cursor coords) ------------------------
+
+// The in-game stage cursor ~= the SSS icon coordinate, but a build's SSS layout
+// can differ from libmelee's hardcoded vanilla targets (esp. Yoshi's Story,
+// Fountain, Stadium) -- so selecting by the hardcoded coord mis-hits the wrong
+// stage. Read the build's REAL layout (the SSS analog of the CSS icon fix) and
+// map the 6 legal stages to their actual (x, y, page).
+const SSS_LEGAL_NAMES = {
+  Battlefield: 'battlefield', 'Final Destination': 'finaldestination',
+  'Dream Land N64': 'dreamland', "Yoshi's Story": 'yoshisstory',
+  'Pokemon Stadium': 'pokemonstadium', 'Fountain of Dreams': 'fountainofdreams',
+};
+
+async function queryStageLayout(baseUrl) {
+  const got = await api(baseUrl, 'GET', '/api/mex/menus/sss/layout');
+  const pages = (got.json && got.json.pages) || [];
+  const layout = {};
+  pages.forEach((pg, pi) => {
+    for (const ic of (pg.icons || pg.stageIcons || [])) {
+      const key = SSS_LEGAL_NAMES[ic.stageName];
+      if (key && layout[key] === undefined) layout[key] = { x: ic.x, y: ic.y, page: pi };
+    }
+  });
+  return layout;
+}
+
 // --- Export wait ------------------------------------------------------------
 
 // The export runs in a background thread and only reports done over SocketIO,
@@ -413,8 +439,68 @@ async function main() {
       const sssIcon = await placeCustomStageIcon(baseUrl, item.name);
       log(`placed stage "${item.name}" SSS icon at (${sssIcon.x}, ${sssIcon.y}) on page ${sssIcon.page}`);
       modInfo = { modType, stageName: item.name, stageSlug: item.slug, sssIcon };
+    } else if (modType === 'das') {
+      // Dynamic Alternate Stages: install the framework + one variant per legal
+      // stage, each behind a HOLD button -- so ONE ISO crash-tests up to 6 stage
+      // skins (hold the button on stage-select to load that stage's variant).
+      const inst = await api(baseUrl, 'POST', '/api/mex/das/install', {});
+      if (!inst.json.success) throw new Error(`das install failed: ${JSON.stringify(inst.json)}`);
+      const meta = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'metadata.json'), 'utf8'));
+      // stage code -> (vault folder, the name my stage selector uses)
+      const DAS = {
+        GrNBa: ['battlefield', 'battlefield'], GrNLa: ['final_destination', 'finaldestination'],
+        GrSt: ['yoshis_story', 'yoshisstory'], GrOp: ['dreamland', 'dreamland'],
+        GrPs: ['pokemon_stadium', 'pokemonstadium'], GrIz: ['fountain_of_dreams', 'fountainofdreams'],
+      };
+      // X/Y/Z have no stage-select function (A=select, B=back, R=m-ex page-
+      // switch), so they're safe to HOLD while confirming the stage. Each stage
+      // can carry several alternates -- one per button -- so --variants-per-stage
+      // N installs N skins on each legal stage (N<=3). One ISO -> up to 18 skins.
+      const BUTTONS = ['X', 'Y', 'Z'];
+      const perStage = flags['variants-per-stage'] && flags['variants-per-stage'] !== true
+        ? Math.min(parseInt(flags['variants-per-stage'], 10) || 1, BUTTONS.length) : 1;
+      const only = (flags.stage && flags.stage !== true) ? flags.stage : null; // limit to one stage
+      const dasVariants = [];
+      for (const [code, [folder, selName]] of Object.entries(DAS)) {
+        if (only && selName !== only) continue;
+        const list = ((meta.stages || {})[folder] || {}).variants || [];
+        // prefer slippi-safe, then fill with the rest; one variant per button
+        const ordered = [...list].sort((a, b) => (b.slippi_safe ? 1 : 0) - (a.slippi_safe ? 1 : 0));
+        const picks = ordered.slice(0, perStage);
+        if (!picks.length) { log(`  no DAS variant in vault for ${folder}, skipping`); continue; }
+        for (let k = 0; k < picks.length; k += 1) {
+          const v = picks[k];
+          const button = BUTTONS[k];
+          const variantPath = `storage/das/${folder}/${v.filename}`;
+          const imp = await api(baseUrl, 'POST', '/api/mex/das/import', { stageCode: code, variantPath });
+          if (!imp.json.success) { log(`  das import failed (${folder}/${v.id}): ${JSON.stringify(imp.json)}`); continue; }
+          const importedName = path.basename(imp.json.path || '', '.dat');
+          const newName = `${importedName}(${button})`;
+          const ren = await api(baseUrl, 'POST', '/api/mex/das/rename', { stageCode: code, oldName: importedName, newName });
+          if (!ren.json.success) { log(`  das rename failed (${folder}/${v.id}): ${JSON.stringify(ren.json)}`); continue; }
+          dasVariants.push({ stage: selName, stageCode: code, button, variant: v.name || v.id });
+          log(`  DAS ${folder}: "${v.name || v.id}" -> hold ${button} on ${selName}`);
+        }
+      }
+      if (!dasVariants.length) throw new Error('no DAS variants installed');
+      // Attach each variant's REAL stage-cursor coordinate from the build's SSS
+      // layout, so the selector lands on the right stage (not a libmelee guess).
+      const stageLayout = await queryStageLayout(baseUrl);
+      for (const v of dasVariants) {
+        const sl = stageLayout[v.stage];
+        if (sl) { v.x = sl.x; v.y = sl.y; v.page = sl.page; }
+        else log(`  WARN: no SSS layout coord for ${v.stage}; will use vanilla target`);
+      }
+      modInfo = { modType, dasVariants, stageLayout };
     } else {
-      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage)`);
+      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das)`);
+    }
+
+    // Record the build's REAL stage-cursor coords for the 6 legal stages, so the
+    // match harness selects stages accurately on any SSS layout (the SSS analog
+    // of the CSS icon fix) -- not just for DAS.
+    if (!modInfo.stageLayout) {
+      modInfo.stageLayout = await queryStageLayout(baseUrl);
     }
 
     // 4. Export ISO ----------------------------------------------------------

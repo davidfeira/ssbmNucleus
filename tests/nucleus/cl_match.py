@@ -96,6 +96,8 @@ def main():
     name = sys.argv[1]
     icon = parse_icon(sys.argv)
     stage_icon = parse_stage_icon(sys.argv)
+    # --hold <button> keeps a button held through stage load -> the DAS trigger.
+    hold = sys.argv[sys.argv.index("--hold") + 1].upper() if "--hold" in sys.argv else None
     costume = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 0
     stage = "battlefield"
     for a in sys.argv[2:]:
@@ -132,8 +134,9 @@ def main():
         started = sc.select_at(sx, sy, page=spage, press=True)
         print(f"  custom stage @page{spage}({sx},{sy}): match_started={started}")
     else:
-        started = sc.select(stage, press=True)
-        print(f"  stage {stage}: match_started={started}")
+        started = sc.select(stage, press=True, hold=hold)
+        tag = f" (hold {hold} -> DAS alt)" if hold else ""
+        print(f"  stage {stage}{tag}: match_started={started}")
 
     p.center()
     p.close()
