@@ -79,12 +79,23 @@ def parse_icon(argv):
     return None
 
 
+def parse_stage_icon(argv):
+    """--stage-icon page,x,y -> (page, x, y) for a CUSTOM stage (off the main
+    page), from the build manifest's sssIcon."""
+    if "--stage-icon" in argv:
+        spec = argv[argv.index("--stage-icon") + 1]
+        page, x, y = spec.split(",")
+        return (int(page), float(x), float(y))
+    return None
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     name = sys.argv[1]
     icon = parse_icon(sys.argv)
+    stage_icon = parse_stage_icon(sys.argv)
     costume = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 0
     stage = "battlefield"
     for a in sys.argv[2:]:
@@ -115,9 +126,14 @@ def main():
 
     # Same pipe: advance to stage select (START is also the functional lock
     # check -- it only transitions if the character actually locked) and pick
-    # the stage. select() returns True iff the match actually started.
-    started = sc.select(stage, press=True)
-    print(f"  stage {stage}: match_started={started}")
+    # the stage. select()/select_at() returns True iff the match started.
+    if stage_icon is not None:
+        spage, sx, sy = stage_icon
+        started = sc.select_at(sx, sy, page=spage, press=True)
+        print(f"  custom stage @page{spage}({sx},{sy}): match_started={started}")
+    else:
+        started = sc.select(stage, press=True)
+        print(f"  stage {stage}: match_started={started}")
 
     p.center()
     p.close()

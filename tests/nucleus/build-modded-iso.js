@@ -234,6 +234,43 @@ async function placeCustomFighterIcon(baseUrl, fighterName) {
   return { x: slot.x, y: slot.y, index: idx };
 }
 
+// --- SSS icon placement for custom stages -----------------------------------
+
+// m-ex's add-stage puts a custom stage on a NEW page (e.g. "Custom") at the
+// default (0,0,0). In-game you reach that page by pressing R (the m-ex SSS
+// page-switch). We keep the stage on its own page (matching the app) but move
+// its icon to a clear, reachable coordinate so the cursor can land + select it.
+// Returns { page, x, y }: the page index to R-switch to, and the stage-cursor
+// target (SSS layout coords ~= the in-game stage cursor, validated on the
+// bottom-row legal stages).
+async function placeCustomStageIcon(baseUrl, stageName) {
+  const got = await api(baseUrl, 'GET', '/api/mex/menus/sss/layout');
+  const layout = got.json || {};
+  const pages = layout.pages || [];
+  if (!pages.length) throw new Error('sss layout returned no pages');
+  const iconsOf = (pg) => pg.icons || pg.stageIcons || [];
+  // Locate the custom stage icon (by name, else the unplaced one at 0,0 on a
+  // non-main page).
+  let found = null;
+  for (let pi = 0; pi < pages.length; pi += 1) {
+    const icons = iconsOf(pages[pi]);
+    let ii = icons.findIndex((ic) => (ic.stageName || '') === stageName);
+    if (ii < 0 && pi > 0) ii = icons.findIndex((ic) => Math.round(ic.x) === 0 && Math.round(ic.y) === 0);
+    if (ii >= 0) { found = { pi, ii }; break; }
+  }
+  if (!found) throw new Error(`could not find custom stage icon for "${stageName}"`);
+  // A clear, reachable spot: the bottom-row legal-stage position (page 0's
+  // Battlefield slot) -- same screen coords on any page, easy for the cursor.
+  const slot = { x: 1.3, y: -9.1, z: 0.0 };
+  const icons = iconsOf(pages[found.pi]);
+  icons[found.ii] = { ...icons[found.ii], x: slot.x, y: slot.y, z: slot.z };
+  const post = await api(baseUrl, 'POST', '/api/mex/menus/sss/layout', { pages });
+  if (!post.json || !post.json.success) {
+    throw new Error(`sss layout save failed: ${JSON.stringify(post.json)}`);
+  }
+  return { page: found.pi, x: slot.x, y: slot.y };
+}
+
 // --- Export wait ------------------------------------------------------------
 
 // The export runs in a background thread and only reports done over SocketIO,
@@ -370,7 +407,12 @@ async function main() {
       log(`installing custom stage "${item.name}" (${item.slug})`);
       const r = await api(baseUrl, 'POST', '/api/mex/custom-stages/install', { slug: item.slug });
       if (!r.json.success) throw new Error(`stage install failed: ${JSON.stringify(r.json)}`);
-      modInfo = { modType, stageName: item.name, stageSlug: item.slug };
+      // Place its SSS icon onto page 0 at a free slot (add-stage puts it on a
+      // separate "Custom" page at (0,0), which needs in-game page nav) so it's
+      // selectable like a vanilla stage.
+      const sssIcon = await placeCustomStageIcon(baseUrl, item.name);
+      log(`placed stage "${item.name}" SSS icon at (${sssIcon.x}, ${sssIcon.y}) on page ${sssIcon.page}`);
+      modInfo = { modType, stageName: item.name, stageSlug: item.slug, sssIcon };
     } else {
       throw new Error(`unknown --type "${modType}" (expected: costume | character | stage)`);
     }

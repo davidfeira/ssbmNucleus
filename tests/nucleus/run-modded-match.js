@@ -119,15 +119,18 @@ function main() {
   // falls back to a boot-health crash-test (boot + reach the CSS so the mod's
   // data loads + watch process/frame health).
   const customChar = modType === 'character' && manifest.cssIcon && !flags.health;
-  const healthMode = !!flags.health || (modType !== 'costume' && !customChar);
+  const customStage = modType === 'stage' && manifest.sssIcon && !flags.health;
+  const healthMode = !!flags.health || (modType !== 'costume' && !customChar && !customStage);
+  const stageFighter = (fighter && fighter !== true) ? fighter : 'fox';  // a vanilla pick to reach the SSS
   const label = (manifest.costumeId || manifest.characterName || manifest.stageName
     || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);
-  if (!healthMode && !customChar && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
+  if (!healthMode && !customChar && !customStage && !fighter) throw new Error('no fighter to select (set --char or build a costume manifest)');
   log(`ISO: ${iso}`);
   if (healthMode) log(`mode: boot-health (modType=${modType}, ${label})`);
+  else if (customStage) log(`mode: match — custom stage ${label} @page${manifest.sssIcon.page}(${manifest.sssIcon.x},${manifest.sssIcon.y})`);
   else if (customChar) log(`mode: match — select custom fighter ${label} @icon(${manifest.cssIcon.x},${manifest.cssIcon.y})`);
   else log(`mode: match — select ${fighter} costume ${color} (${label})`);
 
@@ -160,6 +163,17 @@ function main() {
     const m = cp.spawnSync(VENV_PY,
       [CL_MATCH, label, '--icon', `${ic.x},${ic.y},${ic.index}`, stage], { stdio: 'inherit' });
     if (m.status !== 0) throw new Error(`closed-loop custom-fighter select failed (${label})`);
+    observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
+  } else if (customStage) {
+    // Custom m-ex stage: pick a vanilla fighter to reach the SSS, then select
+    // the custom stage by its SSS icon coordinate + page (R-switch to its page).
+    const si = manifest.sssIcon;
+    log(`closed-loop: gotocss -> CPU -> cl_match ${stageFighter} -> custom stage @page${si.page}(${si.x},${si.y})`);
+    node(PIPE, ['gotocss']);
+    node(PIPE, ['cpustep']);
+    const m = cp.spawnSync(VENV_PY,
+      [CL_MATCH, stageFighter, '--stage-icon', `${si.page},${si.x},${si.y}`], { stdio: 'inherit' });
+    if (m.status !== 0) throw new Error(`closed-loop custom-stage select failed (${label})`);
     observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else if (flags['closed-loop']) {
     // Robust path: discrete per-frame steps to reach the CSS + add a CPU

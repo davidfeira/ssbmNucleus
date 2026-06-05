@@ -229,9 +229,12 @@ class StageCursor:
         reached = self.move_to(tx, ty)
         if not press:
             return reached
-        # Confirm with A and verify the match actually starts (the scene leaves
-        # stage-select). A single tap occasionally doesn't take, so re-center
-        # onto the cell and re-press a few times.
+        return self._confirm(tx, ty)
+
+    def _confirm(self, tx, ty):
+        """Press A and verify the match actually starts (the scene leaves
+        stage-select). A single tap occasionally doesn't take, so re-center on
+        the cell and re-press a few times. Returns True once the match starts."""
         for _ in range(5):
             self.p.center()
             time.sleep(0.12)
@@ -242,6 +245,27 @@ class StageCursor:
             # cursor may have drifted off the tile -- nudge back on before retry
             self.move_to(tx, ty, timeout=2.0)
         return False
+
+    def switch_page(self, n, settle=0.6):
+        """Advance n m-ex stage-select pages by pressing R (the page-switch
+        input). Custom stages live on a page after the main Melee page, so we
+        R to that page before steering to the stage. No-op when n <= 0."""
+        for _ in range(max(0, n)):
+            self.p.tap("R", 0.08)
+            time.sleep(settle)
+
+    def select_at(self, x, y, page=0, press=True):
+        """Select a stage by its explicit SSS icon coordinate (and page) -- for
+        a CUSTOM stage, whose coordinate comes from the build manifest (the app's
+        own SSS layout) rather than the hardcoded vanilla targets. Advances to
+        the stage's page with R first, then steers to (x,y) and confirms."""
+        if not self.ensure_stage_select():
+            return False
+        self.switch_page(page)
+        reached = self.move_to(x, y)
+        if not press:
+            return reached
+        return self._confirm(x, y)
 
 
 if __name__ == "__main__":
