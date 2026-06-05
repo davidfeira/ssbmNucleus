@@ -105,6 +105,22 @@ closed-loop control.
   layout (Battlefield + Dreamland screenshot-confirmed); a stage mod that
   replaces a vanilla slot is selected by picking that slot.
 
+## Desync debugging (`desync_check.py`, `replay_diff.py`)
+
+Two complementary desync localizers, both decoupled from libmelee's live stream:
+
+- **`replay_diff.py <a.slp> <b.slp>`** — offline, no account needed. Each netplay
+  client records its own `.slp`; on a desync the two recordings part. This diffs
+  them frame-aligned (libmelee's offline reader) and prints the first frame +
+  player + field that differs. Validated: a replay vs itself → `synced`; two
+  different replays → desync localized. Exit 0 synced / 1 desync.
+- **`desync_check.py <pid1> <pid2> [--watch N]`** — live, two running instances.
+  Diffs MEM1 + named canaries (frame, RNG seed `0x804D5F90`, scene). Validated
+  live: two coexisting Dolphins (`driver.js --pipe-index 2` → `\\.\pipe\slippibot2`,
+  `pipe.js --port 2`) both attach + drive, and the RNG canary flags divergence.
+  The remaining piece for a synced live pair is the netplay connection (needs a
+  2nd Slippi account / design call); the read+diff foundation is done.
+
 ## How it drives the app
 
 - **Backend, not UI** — calls the Flask REST API the desktop app's frontend uses,
