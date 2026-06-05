@@ -509,8 +509,38 @@ async function main() {
       // The in-game move that exercises the effect: blaster (gun/laser) = neutral-B.
       const move = (extraType === 'sword') ? 'sideb' : 'neutralb';
       modInfo = { modType, fighter: effFighter, extraType, extraName: mod.name || mod.id, colorIndex: 0, move };
+    } else if (modType === 'menu') {
+      // CSS menu mods (cosmetic): a background, a door/portal image, or an icon
+      // grid (replacement character portraits). All visible just by reaching the
+      // CSS -- so the match harness boot-health-tests them + screenshots the CSS.
+      const menuType = (flags.menu && flags.menu !== true) ? flags.menu : 'background';
+      const dirs = { background: 'background', doors: 'doors', icon_grid: 'icon_grid' };
+      const dir = dirs[menuType];
+      if (!dir) throw new Error(`unknown --menu "${menuType}" (background | doors | icon_grid)`);
+      const raw = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'menus', 'css', dir, 'metadata.json'), 'utf8'));
+      const mods = Array.isArray(raw) ? raw : (raw.mods || []);
+      const mod = (wantedTarget && mods.find((m) => m.id === wantedTarget || m.name === wantedTarget)) || mods[0];
+      if (!mod) throw new Error(`no ${menuType} menu mod in the vault`);
+      log(`installing ${menuType} menu mod "${mod.name || mod.id}"`);
+      if (menuType === 'icon_grid') {
+        // install returns the plan (which fighter icons to set); set each one.
+        const plan = await api(baseUrl, 'POST', `/api/mex/menus/css/icon_grid/install/${mod.id}`);
+        if (!plan.json.success) throw new Error(`icon_grid plan failed: ${JSON.stringify(plan.json)}`);
+        let n = 0;
+        for (const ic of (plan.json.icons || [])) {
+          const r = await api(baseUrl, 'POST', `/api/mex/menus/css/icon_grid/install/${mod.id}/icon`,
+            { character: ic.character, icon: ic.icon });
+          if (r.json && r.json.success) n += 1;
+          else log(`  icon failed (${ic.character}): ${JSON.stringify(r.json)}`);
+        }
+        log(`  installed ${n}/${(plan.json.icons || []).length} icons`);
+      } else {
+        const r = await api(baseUrl, 'POST', `/api/mex/menus/css/${dir}/install/${mod.id}`);
+        if (!r.json.success) throw new Error(`${menuType} install failed: ${JSON.stringify(r.json)}`);
+      }
+      modInfo = { modType, menuType, menuName: mod.name || mod.id };
     } else {
-      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das | effect)`);
+      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das | effect | menu)`);
     }
 
     // Record the build's REAL stage-cursor coords for the 6 legal stages, so the

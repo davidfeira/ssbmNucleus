@@ -132,7 +132,7 @@ function main() {
     return sl ? ['--stage-icon', `${sl.page || 0},${sl.x},${sl.y}`] : [stage];
   };
   const label = (manifest.costumeId || manifest.characterName || manifest.stageName
-    || manifest.extraName || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
+    || manifest.extraName || manifest.menuName || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);
