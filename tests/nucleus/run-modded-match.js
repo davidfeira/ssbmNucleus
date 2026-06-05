@@ -32,8 +32,7 @@ const BUILD = path.join(HERE, 'build-modded-iso.js');
 const CONTROL = path.join(HERE, '..', 'dolphin', 'control.js');
 const PIPE = path.join(HERE, '..', 'dolphin', 'pipe.js');
 const OBSERVE = path.join(HERE, 'observe.py');
-const CL_SELECT = path.join(HERE, 'cl_select.py');
-const CL_STAGE = path.join(HERE, 'cl_stage.py');
+const CL_MATCH = path.join(HERE, 'cl_match.py');
 const VENV_PY = path.join(HERE, 'melee_venv', 'Scripts', 'python.exe');
 const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json');
 const PIPE_READY_TIMEOUT_MS = 45000; // wait this long for Dolphin's input pipe
@@ -147,21 +146,18 @@ function main() {
     node(PIPE, ['gotocss']);
     observeArgs = [OBSERVE, '--health', '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else if (flags['closed-loop']) {
-    // Robust path: discrete steps (nav + CPU + start) via the per-frame pipe,
-    // analog character AND stage positioning via memory feedback (cl_select.py,
-    // cl_stage.py). Each selector is a separate process so its persistent pipe
-    // opens after the node per-frame connections have closed.
+    // Robust path: discrete per-frame steps to reach the CSS + add a CPU
+    // (gotocss, cpustep), then a SINGLE memory-feedback process (cl_match.py)
+    // that locks the character, advances to stage select, and picks the stage --
+    // all on one persistent pipe. Splitting char- and stage-select into two
+    // processes raced the character lock across the connection handoff (the
+    // lock flag needs ~0.4s to settle); one pipe avoids that entirely.
     const stage = (flags.stage && flags.stage !== true) ? flags.stage : 'battlefield';
-    log(`closed-loop: gotocss -> CPU -> select ${fighter} -> stage ${stage} -> start`);
+    log(`closed-loop: gotocss -> CPU -> cl_match ${fighter} c${color} stage ${stage}`);
     node(PIPE, ['gotocss']);
     node(PIPE, ['cpustep']);
-    const sel = cp.spawnSync(VENV_PY, [CL_SELECT, fighter, String(color)], { stdio: 'inherit' });
-    if (sel.status !== 0) throw new Error('closed-loop select did not lock the character');
-    // cl_stage advances from the locked CSS to stage select itself (START over
-    // its own persistent pipe, then verifies) -- no separate per-frame step,
-    // whose connection handoff was dropping the START.
-    const st = cp.spawnSync(VENV_PY, [CL_STAGE, stage], { stdio: 'inherit' });
-    if (st.status !== 0) throw new Error(`closed-loop stage select did not reach ${stage}`);
+    const m = cp.spawnSync(VENV_PY, [CL_MATCH, fighter, String(color), stage], { stdio: 'inherit' });
+    if (m.status !== 0) throw new Error(`closed-loop match setup failed (${fighter}/${stage})`);
     observeArgs = [OBSERVE, '--seconds', String(OBSERVE_SECONDS), '--label', label];
   } else {
     const smArgs = ['startmatch', fighter, '--color', String(color)];
