@@ -37,16 +37,20 @@ node tests/nucleus/run-modded-match.js --build --type character --mod sonic
 # Re-use the last build:
 node tests/nucleus/run-modded-match.js
 
-# Robust path: select the character by memory feedback instead of timing:
+# Robust path: select the character AND stage by memory feedback (default BF):
 node tests/nucleus/run-modded-match.js --closed-loop
+node tests/nucleus/run-modded-match.js --closed-loop --stage dreamland
 ```
 
-`--closed-loop` does the discrete steps (menu nav, port-2 CPU, start) via the
-per-frame pipe and the **analog character positioning + costume by reading the
-cursor/costume in RAM** (`cl_select.py`) — deterministic, immune to cursor
-acceleration/frame timing. The default path uses `pipe.js startmatch` (timing).
-Non-costume mods auto-fall back to a **boot-health** check (boot + reach CSS +
-watch process/frame health), which crash-tests any mod type without selecting it.
+`--closed-loop` does the discrete steps (menu nav, port-2 CPU) via the per-frame
+pipe, then a single memory-feedback process (`cl_match.py`) that **selects the
+character + costume AND the stage by reading the cursors in RAM** and starts the
+match — deterministic, immune to cursor acceleration/frame timing. `--stage
+<name>` chooses the stage (battlefield, fd, dreamland, yoshis, stadium,
+fountain; default battlefield). The default (non-closed-loop) path uses
+`pipe.js startmatch` (timing). Non-costume mods auto-fall back to a
+**boot-health** check (boot + reach CSS + watch process/frame health), which
+crash-tests any mod type without selecting it.
 
 The build writes the ISO to `output/<project>.iso` and a manifest to
 `tests/artifacts/nucleus/last-build.json`, e.g.:
@@ -77,14 +81,29 @@ On failure it writes a JSON report + screenshot to
 `tests/artifacts/nucleus/crash-reports/`. `run-modded-match.js` runs it for 25s
 right after the match starts.
 
-## Memory-feedback CSS control (`melee_mem.py`, `melee_pipe.py`, `melee_css.py`)
+## Memory-feedback CSS + stage control
 
 Reimplements libmelee's approach directly on Slippi, decoupled from libmelee and
 Slippi's stream format: locate MEM1 in the Dolphin process (`GALE01` signature),
-read cursor/costume/lock, and drive a **persistent** controller pipe with PD
-closed-loop control. `calibrate.py` builds `grid.json` (char → cursor cell);
-`char_select.py` selects by name. Positioning is deterministic; see the memory
-note for the lock/2nd-player integration detail.
+read the cursors from RAM, and drive a **persistent** controller pipe with
+closed-loop control.
+
+- `melee_mem.py` / `melee_pipe.py` — RAM reads + persistent input pipe.
+- `melee_css.py` (`Cursor`) — character select: PD cursor control, costume by
+  reading the costume index, hovered-character confirmation (`0x803F0E0A`, a
+  grid-independent CSS index). `calibrate.py` builds `grid.json`;
+  `char_select.py` / `cl_select.py` select by name.
+- `melee_sss.py` (`StageCursor`) — stage select: cursor X/Y from a pointer chain
+  (`*(*(*(*(0x804D7820)+0x10)+0x28)+0x38/+0x3C)`), bang-bang steering to
+  libmelee's per-stage coordinates (the cursor has a deadzone that eats small
+  PD pushes), then A to start. `cl_stage.py` selects by name.
+- `cl_match.py` — the integrated path the orchestrator uses: lock the character
+  and pick the stage on **one** persistent pipe. The "locked" byte (`0x804AA162`)
+  is noise, so it presses A exactly once (a loop's random count toggles the coin
+  off) and verifies the lock *functionally* — START only reaches stage select
+  when the character is actually locked. Stage coordinates are libmelee's vanilla
+  layout (Battlefield + Dreamland screenshot-confirmed); a stage mod that
+  replaces a vanilla slot is selected by picking that slot.
 
 ## How it drives the app
 
