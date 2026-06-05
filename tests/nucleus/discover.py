@@ -124,11 +124,43 @@ def find_character(d):
     return None
 
 
+def find_lock(d, p):
+    """Find the per-port 'locked in' flag (coin_down): 0 hovering, 1 locked.
+    Start with a character hovered but NOT locked."""
+    snaps, states = [], []
+
+    def snap(label):
+        time.sleep(0.3)
+        snaps.append(u8(d.snapshot()))
+        states.append(label)
+
+    snap("unlock")
+    p.tap("A", 0.05); snap("lock")
+    p.tap("B", 0.05); snap("unlock")
+    p.tap("A", 0.05); snap("lock")
+    p.tap("B", 0.05); snap("unlock")
+    n = min(len(x) for x in snaps)
+    s = [x[:n] for x in snaps]
+    u_stable = (s[0] == s[2]) & (s[2] == s[4])  # unlocked value consistent
+    l_stable = (s[1] == s[3])                   # locked value consistent
+    differ = s[0] != s[1]
+    small = (s[0] < 8) & (s[1] < 8)             # plausible flag values
+    idx = np.where(u_stable & l_stable & differ & small)[0]
+    print(f"[lock] states={states}; {len(idx)} byte(s) (unlocked->locked value):")
+    for i in idx:
+        print(f"  0x{GC_BASE + int(i):08x}: {int(s[0][i])}->{int(s[1][i])}")
+    return [GC_BASE + int(i) for i in idx]
+
+
 def main():
     d = Dolphin()
     p = Pipe()
     print(f"attached pid {d.pid}, MEM1 base 0x{d.base:012x}")
     what = sys.argv[1] if len(sys.argv) > 1 else "cursor"
+
+    if what == "lock":
+        find_lock(d, p)
+        return
 
     if what in ("cursor", "all"):
         find_axis(d, p, (0.0, 0.5), (1.0, 0.5), "cursor.X (right)")

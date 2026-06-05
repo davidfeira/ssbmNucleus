@@ -2,12 +2,12 @@
 melee_pipe.py -- send controller input to Slippi Dolphin's named pipe from
 Python, for closed-loop (memory-feedback) control.
 
-Same per-frame model as ../dolphin/pipe.js: Dolphin reads one FLUSH batch per
-pipe connection then closes it, and HOLDS the last input until the next batch.
-So each call opens a fresh connection, writes its lines + FLUSH, and closes;
-a held tilt/press persists until you send a new value (e.g. recenter/release).
-That hold-until-next is what makes closed-loop work: tilt toward a target, poll
-the target's position from RAM, then recenter when it arrives.
+Holds ONE persistent connection open (libmelee's model). Dolphin reads every
+FLUSH batch from a live connection and HOLDS the last input until the next, so
+a held tilt/press persists until you change it. This is essential for
+closed-loop control: a fresh connection per frame (the pipe.js model) churns
+connect/close at ~30 Hz and desyncs Dolphin's controller -- inputs stop
+registering (notably A no longer locks). A single open connection avoids that.
 
 Buttons: A B X Y Z L R START D_UP D_DOWN D_LEFT D_RIGHT. Sticks 0.0-1.0, 0.5
 center; control stick y=0.0 UP, y=1.0 DOWN, x=0.0 LEFT, x=1.0 RIGHT.
@@ -23,17 +23,32 @@ BUTTONS = ["A", "B", "X", "Y", "Z", "L", "R", "START",
 class Pipe:
     def __init__(self, port=1):
         self.path = rf"\\.\pipe\slippibot{port}"
+        self._h = None
+        self._open()
 
-    def frame(self, lines):
-        """One input frame: fresh connection, write all lines + close."""
-        h = win32file.CreateFile(
+    def _open(self):
+        self._h = win32file.CreateFile(
             self.path, win32file.GENERIC_WRITE, 0, None,
             win32file.OPEN_EXISTING, 0, None,
         )
+
+    def frame(self, lines):
+        """Write one input frame to the persistent connection (reconnect once
+        if the handle has gone stale, e.g. Dolphin restarted)."""
+        data = ("\n".join(lines) + "\n").encode("ascii")
         try:
-            win32file.WriteFile(h, ("\n".join(lines) + "\n").encode("ascii"))
-        finally:
-            win32file.CloseHandle(h)
+            win32file.WriteFile(self._h, data)
+        except Exception:
+            self._open()
+            win32file.WriteFile(self._h, data)
+
+    def close(self):
+        if self._h is not None:
+            try:
+                win32file.CloseHandle(self._h)
+            except Exception:
+                pass
+            self._h = None
 
     # --- buttons -------------------------------------------------------------
     def press(self, btn):
