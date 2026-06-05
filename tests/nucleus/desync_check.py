@@ -11,14 +11,17 @@ Slippi stream, version-independent. Reports a semantic diff (named canaries:
 frame, RNG seed, scene) on top of the raw MEM1 byte diff, so a divergence reads
 as "rng_seed: A=.. B=.." rather than just an offset.
 
-Two-instance launch is ready: `driver.js --pipe-index 2` gives a 2nd emulator a
-distinct controller pipe (\\.\pipe\slippibot2) so the two don't collide, and
-`pipe.js --port 2` drives it. What's still SEPARATE setup (and needs a design
-call -- the user's "sleepy server + two clients") is the netplay CONNECTION that
-keeps the two clients in lockstep; local two-instance play can't stay
-bit-identical without frame-perfect input sync, which only the netplay/rollback
-path provides. Until then you can exercise the plumbing against two instances of
-the same ISO (they differ everywhere since they aren't synced).
+Two-instance launch is VALIDATED: `driver.js --pipe-index 2` gives a 2nd
+emulator a distinct controller pipe (\\.\pipe\slippibot2) so the two don't
+collide, `pipe.js --port 2` drives it, and this script diffs across the two
+PIDs -- confirmed live with two coexisting instances (both attach, both
+drivable, the byte diff + the rng_seed canary both fire). What's still SEPARATE
+setup (and needs a design call -- the user's "sleepy server + two clients") is
+the netplay CONNECTION that keeps the two clients in lockstep; local
+two-instance play can't stay bit-identical without frame-perfect input sync,
+which only the netplay/rollback path provides. So today the diff shows a large
+baseline (the two aren't synced); once they ARE, the baseline drops near 0 and
+the first frame it jumps -- with rng_seed leading -- localizes the desync.
 
     python desync_check.py <pid1> <pid2>            # one snapshot diff
     python desync_check.py <pid1> <pid2> --watch 30 # poll, report divergence
