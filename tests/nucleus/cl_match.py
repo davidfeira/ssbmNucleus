@@ -28,8 +28,39 @@ from melee_mem import Dolphin
 from melee_pipe import Pipe
 from melee_css import Cursor
 from melee_sss import StageCursor
+import os
+import subprocess
+
 from char_select import load_grid, cell, css_index
 from melee_sss import norm as norm_stage, STAGE_TARGET
+
+CONTROL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dolphin", "control.js")
+
+
+def perform_move(p, move, reps=6):
+    """After a match starts, perform the in-game move that exercises an effect
+    mod (so its model/data actually loads). Waits out the GO! countdown first.
+    neutralb = the blaster (Fox/Falco gun/laser); sideb = the side special."""
+    time.sleep(3.5)
+    if move == "neutralb":
+        for _ in range(reps):
+            p.tap("B", 0.06)
+            time.sleep(0.5)
+    elif move == "sideb":
+        for _ in range(reps):
+            p.frame(["SET MAIN 1.000 0.500", "PRESS B", "FLUSH"])
+            time.sleep(0.12)
+            p.frame(["RELEASE B", "SET MAIN 0.500 0.500", "FLUSH"])
+            time.sleep(0.6)
+    p.center()
+
+
+def screenshot(label):
+    try:
+        subprocess.run(["node", CONTROL, "shot", "--label", label],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    except Exception:
+        pass
 
 
 def lock_character(cur, name, costume):
@@ -98,6 +129,8 @@ def main():
     stage_icon = parse_stage_icon(sys.argv)
     # --hold <button> keeps a button held through stage load -> the DAS trigger.
     hold = sys.argv[sys.argv.index("--hold") + 1].upper() if "--hold" in sys.argv else None
+    # --move <name> performs an in-game move after the match starts (effect mods).
+    move = sys.argv[sys.argv.index("--move") + 1] if "--move" in sys.argv else None
     costume = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 0
     stage = "battlefield"
     for a in sys.argv[2:]:
@@ -137,6 +170,13 @@ def main():
         started = sc.select(stage, press=True, hold=hold)
         tag = f" (hold {hold} -> DAS alt)" if hold else ""
         print(f"  stage {stage}{tag}: match_started={started}")
+
+    # Effect mods: perform the move that exercises the effect in-game (so its
+    # model/data actually loads), and screenshot it.
+    if started and move:
+        perform_move(p, move)
+        screenshot(f"effect-{move}-{name}")
+        print(f"  performed {move} (effect trigger)")
 
     p.center()
     p.close()

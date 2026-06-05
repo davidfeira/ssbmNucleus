@@ -492,8 +492,25 @@ async function main() {
         else log(`  WARN: no SSS layout coord for ${v.stage}; will use vanilla target`);
       }
       modInfo = { modType, dasVariants, stageLayout };
+    } else if (modType === 'effect') {
+      // A character EFFECT/extra (e.g. Fox/Falco's blaster "gun" model, laser
+      // colors, sword trails). Installed into the fighter's effect data; tested
+      // by selecting the fighter and performing the move that uses it in-game.
+      const effFighter = (flags.fighter && flags.fighter !== true) ? flags.fighter : 'Fox';
+      const extraType = (flags.extra && flags.extra !== true) ? flags.extra : 'gun';
+      const meta = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'metadata.json'), 'utf8'));
+      const extras = ((((meta.characters || {})[effFighter] || {}).extras) || {})[extraType] || [];
+      const mod = (wantedTarget && extras.find((x) => x.id === wantedTarget || x.name === wantedTarget)) || extras[0];
+      if (!mod) throw new Error(`no "${extraType}" extra for ${effFighter} in the vault`);
+      log(`installing ${effFighter} ${extraType} model "${mod.name || mod.id}"`);
+      const r = await api(baseUrl, 'POST', '/api/mex/storage/models/install',
+        { character: effFighter, extraType, modId: mod.id });
+      if (!r.json.success) throw new Error(`effect install failed: ${JSON.stringify(r.json)}`);
+      // The in-game move that exercises the effect: blaster (gun/laser) = neutral-B.
+      const move = (extraType === 'sword') ? 'sideb' : 'neutralb';
+      modInfo = { modType, fighter: effFighter, extraType, extraName: mod.name || mod.id, colorIndex: 0, move };
     } else {
-      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das)`);
+      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das | effect)`);
     }
 
     // Record the build's REAL stage-cursor coords for the 6 legal stages, so the
