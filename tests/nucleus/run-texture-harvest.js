@@ -59,6 +59,7 @@ const MANIFEST = path.join(HERE, '..', 'artifacts', 'nucleus', 'last-build.json'
 const TABLE_PATH = path.join(HERE, '..', 'artifacts', 'nucleus', 'texture_filename_table.json');
 const COMPUTED_TABLE_PATH = path.join(HERE, '..', 'artifacts', 'nucleus', 'texture_filename_table_computed.json');
 const COMPUTE_TABLE = path.join(HERE, 'compute_texture_table.py');
+const MAKE_COVER = path.join(HERE, 'make_cover.py');
 const TEXPACK_RUNDIR = path.join(REPO_ROOT, 'tests', 'artifacts', 'dolphin', 'texpack-run');
 
 const PIPE_READY_TIMEOUT_MS = 45000;
@@ -140,6 +141,36 @@ async function waitForReady(baseUrl) {
   throw new Error('backend never became ready');
 }
 
+// --- bundle (.ssbm) creation ------------------------------------------------
+
+// POST /bundle/export as multipart so we can embed a cover image. Node's global
+// FormData/Blob drive fetch's multipart encoding; the backend reads request.form
+// + request.files['image'].
+async function createBundle(baseUrl, fields, coverPath) {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+  if (coverPath && fs.existsSync(coverPath)) {
+    fd.append('image', new Blob([fs.readFileSync(coverPath)], { type: 'image/png' }), 'cover.png');
+  }
+  const res = await fetch(`${baseUrl}/api/mex/bundle/export`, { method: 'POST', body: fd });
+  return res.json();
+}
+
+// The export runs in a background thread (WebSocket-only), so poll /bundle/list
+// until the new bundle id lands (xdelta-diffing two ~1.4GB ISOs takes a minute+).
+async function waitForBundle(baseUrl, bundleId, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const { json } = await api(baseUrl, 'GET', '/api/mex/bundle/list');
+      const b = (json.bundles || []).find((x) => x.id === bundleId);
+      if (b && b.size > 0) return b;
+    } catch (e) { /* retry */ }
+    await sleep(2500);
+  }
+  return null;
+}
+
 function waitForPipeReady(timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -200,7 +231,7 @@ async function main() {
 
     // 2. Build a texture-pack ISO (reuse our backend; build writes last-build.json)
     const buildArgs = ['--texture-pack', '--slippi', TEXPACK_RUNDIR, '--backend', baseUrl, '--name', projectName];
-    for (const k of ['type', 'count', 'skip', 'mod', 'fighter', 'iso']) {
+    for (const k of ['type', 'count', 'skip', 'mod', 'fighter', 'iso', 'mp-char', 'mp-stage', 'mp-menu', 'costume-fighter']) {
       if (flags[k] && flags[k] !== true) buildArgs.push(`--${k}`, flags[k]);
     }
     log(`building texture-pack ISO: build-modded-iso.js ${buildArgs.join(' ')}`);
@@ -235,6 +266,38 @@ async function main() {
         log(`OFFLINE: ${ap.json.missingFromTable.length} indices not in table (need harvest/compute): ${ap.json.missingFromTable.join(', ')}`);
       }
       if (ap.json.copyFailed && ap.json.copyFailed.length) log(`OFFLINE: ${ap.json.copyFailed.length} copy-failed: ${ap.json.copyFailed.join(', ')}`);
+
+      // 2c. BUNDLE: package the modded ISO (xdelta vs vanilla) + the named texture
+      // pack + a cover image into a shareable .ssbm that shows up in the app's
+      // Patches -> Bundles section (Install button).
+      if (flags.bundle) {
+        const bundleName = (flags['bundle-name'] && flags['bundle-name'] !== true) ? flags['bundle-name'] : 'NUCLEUS GENESIS';
+        const subtitle = (flags.subtitle && flags.subtitle !== true) ? flags.subtitle : "Claude's first modpack · one of everything";
+        const contents = manifest.contents || [];
+        const desc = 'One of every mod type, assembled & verified by the Nucleus harness: '
+          + contents.map((c) => c.label).join(' · ');
+        const coverPath = path.join(path.dirname(MANIFEST), 'modpack-cover.png');
+        const pyc = fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : VENV_PY_MELEE;
+        log(`BUNDLE: rendering cover "${bundleName}"`);
+        spawnSync(pyc, [MAKE_COVER, coverPath, bundleName, subtitle, JSON.stringify(contents)], { stdio: 'inherit', cwd: HERE });
+
+        log('BUNDLE: creating .ssbm (xdelta patch vs vanilla + texture pack + cover)...');
+        const resp = await createBundle(baseUrl, {
+          name: bundleName,
+          description: desc,
+          buildName: projectName,
+          vanillaIsoPath: manifest.builtFrom,
+          exportedIsoPath: manifest.iso,
+          texturePackPath: ap.json.texturePackPath,
+        }, coverPath);
+        if (!resp.success) throw new Error(`bundle export failed: ${JSON.stringify(resp)}`);
+        log(`BUNDLE: export ${resp.export_id} running (diffing two ~1.4GB ISOs)...`);
+        const b = await waitForBundle(baseUrl, resp.export_id, 6 * 60 * 1000);
+        if (!b) throw new Error('bundle did not appear in /bundle/list within 6min');
+        log(`BUNDLE READY: "${b.name}" — ${b.size_mb} MB, ${b.texture_count} HD portraits`);
+        log(`  file: storage/bundles/${b.filename}  (id ${b.id})`);
+        log('  -> appears in the app under Patches → Bundles (Install to test).');
+      }
       return;
     }
 

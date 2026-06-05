@@ -580,6 +580,100 @@ async function main() {
         if (!r.json.success) throw new Error(`${menuType} install failed: ${JSON.stringify(r.json)}`);
       }
       modInfo = { modType, menuType, menuName: mod.name || mod.id };
+    } else if (modType === 'modpack') {
+      // THE MODPACK -- one of EVERY mod type in a single ISO. A showcase build
+      // that exercises the whole harness: a costume, a custom roster fighter, a
+      // custom stage, a DAS stage skin, a character effect, and a CSS menu mod.
+      // Reuses the same install helpers/endpoints as the single-type branches.
+      const meta = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'metadata.json'), 'utf8'));
+      const pick = (k, d) => (flags[k] && flags[k] !== true) ? flags[k] : d;
+      const contents = [];
+      log('assembling THE MODPACK (one of every mod type)...');
+
+      // 1) COSTUME -- a fresh skin on a vanilla fighter
+      try {
+        const cf = pick('costume-fighter', 'Fox');
+        const { skin, costumePath } = pickCostume(cf, pick('costume', null));
+        const imp = await api(baseUrl, 'POST', '/api/mex/import', { fighter: cf, costumePath });
+        if (!imp.json.success) throw new Error(JSON.stringify(imp.json));
+        const cl = await api(baseUrl, 'GET', `/api/mex/fighters/${encodeURIComponent(cf)}/costumes`);
+        const list = (cl.json && cl.json.costumes) || [];
+        const colorIndex = list.length - 1;
+        modInfo.costume = { fighter: cf, colorIndex, costumeId: skin.id };
+        contents.push({ type: 'costume', label: `${cf} skin "${skin.id}"`, trigger: `pick ${cf}, costume slot ${colorIndex}` });
+        log(`  [1/6] costume: ${cf} "${skin.id}" at color ${colorIndex}`);
+      } catch (e) { log(`  [1/6] costume skipped: ${e.message}`); }
+
+      // 2) CUSTOM CHARACTER -- a brand-new roster slot (placed into the grid)
+      try {
+        const ch = pickFromMeta('custom_characters', pick('mp-char', 'Sonic'));
+        const r = await api(baseUrl, 'POST', '/api/mex/custom-characters/install', { slug: ch.slug });
+        if (!r.json.success) throw new Error(JSON.stringify(r.json));
+        const cssIcon = await placeCustomFighterIcon(baseUrl, ch.name);
+        modInfo.character = { name: ch.name, slug: ch.slug, cssIcon };
+        contents.push({ type: 'character', label: `new fighter ${ch.name}`, trigger: `CSS icon (${cssIcon.x.toFixed(0)},${cssIcon.y.toFixed(0)})` });
+        log(`  [2/6] character: ${ch.name} at grid slot (${cssIcon.x.toFixed(1)},${cssIcon.y.toFixed(1)})`);
+      } catch (e) { log(`  [2/6] character skipped: ${e.message}`); }
+
+      // 3) CUSTOM STAGE -- a new stage (placed onto its own SSS page)
+      try {
+        const st = pickFromMeta('custom_stages', pick('mp-stage', "Peach's Castle 64"));
+        const r = await api(baseUrl, 'POST', '/api/mex/custom-stages/install', { slug: st.slug });
+        if (!r.json.success) throw new Error(JSON.stringify(r.json));
+        const sssIcon = await placeCustomStageIcon(baseUrl, st.name);
+        modInfo.customStage = { name: st.name, slug: st.slug, sssIcon };
+        contents.push({ type: 'stage', label: `new stage ${st.name}`, trigger: `SSS page ${sssIcon.page}` });
+        log(`  [3/6] stage: ${st.name} on SSS page ${sssIcon.page}`);
+      } catch (e) { log(`  [3/6] stage skipped: ${e.message}`); }
+
+      // 4) DAS STAGE SKIN -- a Battlefield reskin behind HOLD X
+      try {
+        const di = await api(baseUrl, 'POST', '/api/mex/das/install', {});
+        if (!di.json.success) throw new Error(JSON.stringify(di.json));
+        const variants = ((meta.stages || {}).battlefield || {}).variants || [];
+        const ordered = [...variants].sort((a, b) => (b.slippi_safe ? 1 : 0) - (a.slippi_safe ? 1 : 0));
+        const v = ordered[0];
+        if (!v) throw new Error('no Battlefield DAS variant in vault');
+        const imp = await api(baseUrl, 'POST', '/api/mex/das/import', { stageCode: 'GrNBa', variantPath: `storage/das/battlefield/${v.filename}` });
+        if (!imp.json.success) throw new Error(JSON.stringify(imp.json));
+        const importedName = path.basename(imp.json.path || '', '.dat');
+        await api(baseUrl, 'POST', '/api/mex/das/rename', { stageCode: 'GrNBa', oldName: importedName, newName: `${importedName}(X)` });
+        modInfo.das = { stage: 'battlefield', button: 'X', variant: v.name || v.id };
+        contents.push({ type: 'das', label: `Battlefield skin "${v.name || v.id}"`, trigger: 'hold X choosing Battlefield' });
+        log(`  [4/6] DAS: Battlefield "${v.name || v.id}" (hold X)`);
+      } catch (e) { log(`  [4/6] DAS skipped: ${e.message}`); }
+
+      // 5) EFFECT -- Fox's blaster "gun" model, fired with neutral-B
+      try {
+        const extras = ((((meta.characters || {}).Fox || {}).extras) || {}).gun || [];
+        const mod = extras[0];
+        if (!mod) throw new Error('no Fox gun extra in vault');
+        const r = await api(baseUrl, 'POST', '/api/mex/storage/models/install', { character: 'Fox', extraType: 'gun', modId: mod.id });
+        if (!r.json.success) throw new Error(JSON.stringify(r.json));
+        modInfo.effect = { fighter: 'Fox', extraType: 'gun', name: mod.name || mod.id, move: 'neutralb' };
+        contents.push({ type: 'effect', label: `Fox gun "${mod.name || mod.id}"`, trigger: 'neutral-B in a match' });
+        log(`  [5/6] effect: Fox gun "${mod.name || mod.id}"`);
+      } catch (e) { log(`  [5/6] effect skipped: ${e.message}`); }
+
+      // 6) MENU -- a CSS background (kept to background, not icon_grid, so it
+      //    doesn't fight the custom fighter's icon placement)
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'menus', 'css', 'background', 'metadata.json'), 'utf8'));
+        const mods = Array.isArray(raw) ? raw : (raw.mods || []);
+        const want = pick('mp-menu', 'Holographic');
+        const mod = mods.find((m) => (m.name || '').includes(want) || m.id === want) || mods[0];
+        if (!mod) throw new Error('no CSS background in vault');
+        const r = await api(baseUrl, 'POST', `/api/mex/menus/css/background/install/${mod.id}`);
+        if (!r.json.success) throw new Error(JSON.stringify(r.json));
+        modInfo.menu = { menuType: 'background', name: mod.name || mod.id };
+        contents.push({ type: 'menu', label: `CSS background "${mod.name || mod.id}"`, trigger: 'visible on the character-select screen' });
+        log(`  [6/6] menu: CSS background "${mod.name || mod.id}"`);
+      } catch (e) { log(`  [6/6] menu skipped: ${e.message}`); }
+
+      modInfo.modType = 'modpack';
+      modInfo.contents = contents;
+      log(`MODPACK assembled: ${contents.length}/6 mod types installed`);
+      if (!contents.length) throw new Error('modpack installed nothing');
     } else if (modType === 'stress') {
       // Compression stress test: install N costumes across fighters (to push CSP
       // memory), then export at a chosen --compression. Used to find where the

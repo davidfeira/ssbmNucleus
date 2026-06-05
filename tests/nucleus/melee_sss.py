@@ -163,9 +163,19 @@ class StageCursor:
         return self.on_stage_select()
 
     def hovered_stage(self):
-        """The enums.Stage id the cursor is currently over (ground truth, used
-        to confirm a selection). Returns the raw byte; compare to STAGE_ID."""
-        return self.d.u8(SSS_HOVERED_STAGE)
+        """The enums.Stage id the cursor is currently over (ground truth, used to
+        confirm a selection). Returns the raw byte; compare to STAGE_ID.
+
+        Address note: on standard / 20XX / DAS builds the id is the byte at
+        SSS_HOVERED_STAGE (0x804D6CAD). On the full m-ex roster build the SSS
+        struct is shifted one byte -- 0x804D6CAD reads 0x00 and the real id is at
+        +1 (0x804D6CAE). Read 0x804D6CAD and fall back to +1, which works on both
+        (verified: 0x804D6CAE gave 0x18=Battlefield, 0x06=Yoshi's on the m-ex
+        grid, matching the on-screen names)."""
+        v = self.d.u8(SSS_HOVERED_STAGE)
+        if not v:
+            v = self.d.u8(SSS_HOVERED_STAGE + 1)
+        return v
 
     def hovered_name(self):
         v = self.hovered_stage()
@@ -280,9 +290,82 @@ class StageCursor:
             return False
         self.switch_page(page)
         reached = self.move_to(x, y)
+        # A page-switch R tap can be dropped (esp. the first one right after the
+        # START->SSS transition), silently leaving us on page 0 -- where (x,y) is
+        # a VANILLA stage, not the custom one we meant. VERIFY: if we asked for a
+        # non-zero (custom) page but the hovered tile is a known vanilla stage,
+        # the switch didn't take -- R again and re-steer until the tile is custom
+        # (an id NOT in STAGE_ID). This is what made the modpack land on
+        # Battlefield instead of the custom stage before the guard existed.
+        if page > 0:
+            vanilla_ids = set(STAGE_ID.values())
+            for _ in range(4):
+                hv = self.hovered_stage()
+                if hv and hv not in vanilla_ids:
+                    break  # on a custom tile -> page switch worked
+                self.switch_page(1)
+                reached = self.move_to(x, y)
         if not press:
             return reached
         return self._confirm(x, y, hold=hold)
+
+    # --- layout-INDEPENDENT selection by hovered-stage id --------------------
+    #
+    # Fixed-coordinate selection (select/select_at) assumes a known SSS layout.
+    # It breaks on builds whose layout differs -- notably a FULL m-ex stage
+    # roster (all stages on one screen), where Battlefield etc. are nowhere near
+    # the tournament-layout coords. The robust fix mirrors character selection:
+    # steer by the ground-truth hovered id (0x804D6CAD) rather than coordinates,
+    # sweeping the cursor until it's actually over the target stage.
+
+    def find_stage_pos(self, target_id, pages=1, verbose=False):
+        """Closed-loop, layout-INDEPENDENT search: SETTLE the cursor at a grid of
+        points and read the hovered-stage id at each, until the target stage is
+        under the cursor; return that (x,y) -- or None. Settle-read is required
+        because the hovered byte only updates when the cursor RESTS on a tile, not
+        mid-glide. `pages` sweeps that many m-ex pages (R between them).
+
+        NOTE: depends on hovered_stage() (0x804D6CAD) being populated. That holds
+        on standard / 20XX / DAS builds, but NOT on this modpack's full-m-ex SSS
+        where the byte reads 0x00 (the live highlight is index-driven from a
+        relocated field) -- that build needs the real hovered field discovered
+        first (a discover.py-style snapshot diff between two known stages)."""
+        if not self.ensure_stage_select():
+            return None
+        xs = [-26, -21, -16, -11, -6, -1, 4, 9, 14, 19, 24]
+        ys = [-16, -11, -6, -1, 4, 9, 14]
+        for page in range(max(1, pages)):
+            for yi, y in enumerate(ys):
+                row = xs if yi % 2 == 0 else list(reversed(xs))
+                for x in row:
+                    self.move_to(x, y, wiggle=1.2, timeout=1.5)
+                    time.sleep(0.06)
+                    if self.hovered_stage() == target_id:
+                        return self.read_pos()
+                if verbose:
+                    print(f"  page {page} row y={y:+.0f}: scanned")
+            if page + 1 < pages:
+                self.switch_page(1)
+        return None
+
+    def select_by_id(self, target_id, press=True, hold=None, pages=1):
+        """Select a stage by its hovered-stage id via closed-loop settle-read
+        search -- robust to ANY SSS layout (tournament, full m-ex roster, custom
+        pages), as long as hovered_stage() is populated on the build (see
+        find_stage_pos). target_id is an enums.Stage byte (STAGE_ID['battlefield']
+        =0x18, or a custom stage's id). `hold` (e.g. 'X') triggers a DAS alternate.
+        Returns whether the match started (press=True) / cursor is on it (False)."""
+        pos = self.find_stage_pos(target_id, pages=pages)
+        if pos is None or pos[0] is None:
+            return False
+        for _ in range(3):
+            self.move_to(pos[0], pos[1], wiggle=0.9)
+            if self.hovered_stage() == target_id:
+                break
+            time.sleep(0.1)
+        if not press:
+            return self.hovered_stage() == target_id
+        return self._confirm(pos[0], pos[1], hold=hold)
 
 
 if __name__ == "__main__":
