@@ -297,6 +297,37 @@ async function queryStageLayout(baseUrl) {
   return layout;
 }
 
+// --- Bulk costume install (compression stress test) -------------------------
+
+// Flatten the vault into a list of {fighter, costumePath} across all fighters,
+// for installing many costumes at once (to stress CSP memory).
+function allVaultCostumes() {
+  const meta = JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'metadata.json'), 'utf8'));
+  const list = [];
+  for (const [fighter, info] of Object.entries(meta.characters || {})) {
+    for (const skin of (info.skins || [])) {
+      if (skin.filename && fs.existsSync(path.join(STORAGE_DIR, fighter, skin.filename))) {
+        list.push({ fighter, costumePath: `storage/${fighter}/${skin.filename}`, id: skin.id });
+      }
+    }
+  }
+  return list;
+}
+
+async function installManyCostumes(baseUrl, count) {
+  const all = allVaultCostumes();
+  let installed = 0;
+  for (const c of all) {
+    if (installed >= count) break;
+    const r = await api(baseUrl, 'POST', '/api/mex/import', { fighter: c.fighter, costumePath: c.costumePath });
+    if (r.json && r.json.success) {
+      installed += 1;
+      if (installed % 25 === 0) log(`  installed ${installed}/${count} costumes...`);
+    }
+  }
+  return installed;
+}
+
 // --- Export wait ------------------------------------------------------------
 
 // The export runs in a background thread and only reports done over SocketIO,
@@ -378,23 +409,27 @@ async function main() {
     }
     log('setup complete; backend ready');
 
-    // 2. Create project ------------------------------------------------------
-    const projDir = path.join(PROJECTS_DIR, projectName);
-    if (fs.existsSync(projDir) && !flags['keep-project']) {
-      log(`removing existing project dir ${projDir}`);
-      fs.rmSync(projDir, { recursive: true, force: true });
+    // 2. Create + open project (or just open, for --export-only re-exports) ---
+    let projectPath;
+    if (flags['export-only']) {
+      // Re-export an EXISTING project at a new --compression, without re-creating
+      // or re-installing -- for the compression sweep (same costumes, vary C).
+      projectPath = path.join(PROJECTS_DIR, projectName, 'project.mexproj');
+      if (!fs.existsSync(projectPath)) throw new Error(`--export-only: project not found at ${projectPath}`);
+      log(`opening existing project "${projectName}" for re-export (no install)`);
+    } else {
+      const projDir = path.join(PROJECTS_DIR, projectName);
+      if (fs.existsSync(projDir) && !flags['keep-project']) {
+        log(`removing existing project dir ${projDir}`);
+        fs.rmSync(projDir, { recursive: true, force: true });
+      }
+      log(`creating project "${projectName}" from ${path.basename(isoPath)}`);
+      const created = await api(baseUrl, 'POST', '/api/mex/project/create', { isoPath, projectName });
+      if (!created.json.success) throw new Error(`create failed: ${JSON.stringify(created.json)}`);
+      projectPath = created.json.projectPath;
     }
-    log(`creating project "${projectName}" from ${path.basename(isoPath)}`);
-    const created = await api(baseUrl, 'POST', '/api/mex/project/create', {
-      isoPath,
-      projectName,
-    });
-    if (!created.json.success) throw new Error(`create failed: ${JSON.stringify(created.json)}`);
-    log(`project created: ${created.json.projectDirectory}`);
-
-    // create only writes the project; it does NOT load it into the MexManager.
-    // The manager (needed by import/export) is loaded by an explicit open.
-    const projectPath = created.json.projectPath;
+    // create only writes the project; the manager (needed by import/export) is
+    // loaded by an explicit open.
     log(`opening project ${path.basename(projectPath)}`);
     const opened = await api(baseUrl, 'POST', '/api/mex/project/open', { projectPath });
     if (!opened.json.success) throw new Error(`open failed: ${JSON.stringify(opened.json)}`);
@@ -403,8 +438,10 @@ async function main() {
     // modInfo carries the mod type + how to trigger it in-game (for the match
     // harness): costume -> {fighter, colorIndex}; character -> {characterName}
     // (a new roster slot); stage -> {stageName} (pick it on stage select).
-    let modInfo;
-    if (modType === 'costume') {
+    let modInfo = { modType };
+    if (flags['export-only']) {
+      // no install -- just re-export the existing project at the new compression
+    } else if (modType === 'costume') {
       const { skin, costumePath } = pickCostume(fighter, wantedTarget);
       log(`installing costume "${skin.id}" (${skin.costume_code}) onto ${fighter}`);
       const imported = await api(baseUrl, 'POST', '/api/mex/import', { fighter, costumePath });
@@ -539,8 +576,17 @@ async function main() {
         if (!r.json.success) throw new Error(`${menuType} install failed: ${JSON.stringify(r.json)}`);
       }
       modInfo = { modType, menuType, menuName: mod.name || mod.id };
+    } else if (modType === 'stress') {
+      // Compression stress test: install N costumes across fighters (to push CSP
+      // memory), then export at a chosen --compression. Used to find where the
+      // online CSS crashes vs the auto-compression formula.
+      const count = parseInt(flags.count, 10) || 50;
+      log(`stress: installing ${count} costumes across the vault...`);
+      const n = await installManyCostumes(baseUrl, count);
+      log(`stress: installed ${n} costumes (added beyond vanilla)`);
+      modInfo = { modType: 'stress', addedCostumes: n };
     } else {
-      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das | effect | menu)`);
+      throw new Error(`unknown --type "${modType}" (expected: costume | character | stage | das | effect | menu | stress)`);
     }
 
     // Record the build's REAL stage-cursor coords for the 6 legal stages, so the
@@ -552,14 +598,23 @@ async function main() {
 
     // 4. Export ISO ----------------------------------------------------------
     const comp = await api(baseUrl, 'GET', '/api/mex/recommended-compression');
-    const ratio = (comp.json && comp.json.ratio) || 1.0;
+    const recommended = (comp.json && comp.json.ratio) || 1.0;
+    // --compression C overrides the auto ratio (for the compression sweep);
+    // --color-smash matches the app's quality/memory tradeoff (default off).
+    const ratio = (flags.compression && flags.compression !== true) ? parseFloat(flags.compression) : recommended;
+    const colorSmash = !!flags['color-smash'];
+    modInfo.compression = ratio;
+    modInfo.recommendedCompression = recommended;
+    modInfo.addedCostumes = (comp.json && comp.json.addedCostumes) !== undefined ? comp.json.addedCostumes : modInfo.addedCostumes;
+    modInfo.colorSmash = colorSmash;
     const isoName = `${projectName}.iso`;
     const outIso = path.join(OUTPUT_DIR, isoName);
     if (fs.existsSync(outIso)) fs.rmSync(outIso, { force: true });
-    log(`exporting ISO "${isoName}" (cspCompression ${ratio})`);
+    log(`exporting ISO "${isoName}" (cspCompression ${ratio}, colorSmash ${colorSmash}, recommended ${recommended})`);
     const exp = await api(baseUrl, 'POST', '/api/mex/export/start', {
       filename: isoName,
       cspCompression: ratio,
+      useColorSmash: colorSmash,
     });
     if (!exp.json.success) throw new Error(`export start failed: ${JSON.stringify(exp.json)}`);
     const finalBytes = await waitForIso(outIso, backend && backend.tail);

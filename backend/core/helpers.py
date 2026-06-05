@@ -3,6 +3,7 @@ Shared utility functions for the MEX API backend.
 """
 
 import json
+import math
 import logging
 import hashlib
 import zipfile
@@ -16,19 +17,34 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_auto_compression(added_costume_count: int) -> float:
-    """Calculate recommended CSP compression based on ADDED costume count.
+    """Recommended CSP compression based on ADDED costume count (total - vanilla).
 
-    Formula: ratio = max(0.1, 1.0 - (addedSkinCount * 0.003))
+    Derived empirically by crash-testing the ONLINE character-select screen
+    (the worst case for memory -- it uses more than offline VS), exported with
+    color-smash OFF == the Quick Export config. CSP textures are resized to
+    (136*r x 188*r), so the CSP memory the CSS loads scales as
+    (vanilla + added) * r^2; the heap left for it also SHRINKS as the costume
+    tables grow. The online CSS freezes (hard hang) when that overflows.
 
-    Only new costumes (beyond vanilla) affect memory, so we use:
-    added_costumes = total_costumes - vanilla_costumes
+    Measured crash boundaries (r at which it starts to freeze):
+        added   0 -> stable at 1.0      added 125 -> ~0.735
+        added  55 -> ~0.84              added 255 -> ~0.525
+    These fit a drooping budget:  (128 + added) * r_crash^2 ~= 135 - 0.12*added.
 
-    Data points (for added costumes):
-    - 20 added -> 0.94
-    - 40 added -> 0.88
-    - 120 added -> 0.64
+    We keep ~15% memory margin below that and never exceed 1.0:
+        r = sqrt( (135 - 0.12*added) * 0.85 / (128 + added) )
+          = sqrt( (114.8 - 0.102*added) / (128 + added) )
+
+    This REPLACES the old linear `1 - 0.003*added`, which was borderline-UNSAFE
+    at low-mid counts (55 added -> 0.83 vs ~0.84 crash, ~1% margin) and massively
+    OVER-compressed at high counts (255 added -> 0.25 when ~0.48 is safe).
+    All outputs here sit below the confirmed-healthy points.
     """
-    ratio = 1.0 - (added_costume_count * 0.003)
+    if added_costume_count <= 0:
+        return 1.0
+    vanilla = VANILLA_COSTUME_COUNT  # 128
+    safe_budget = (135.0 - 0.12 * added_costume_count) * 0.85  # 15% margin
+    ratio = math.sqrt(max(0.0, safe_budget) / (vanilla + added_costume_count))
     return max(0.1, min(1.0, ratio))
 
 
