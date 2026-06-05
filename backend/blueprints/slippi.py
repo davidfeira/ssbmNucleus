@@ -570,6 +570,57 @@ def stop_texture_listening():
         }), 500
 
 
+@slippi_bp.route('/api/mex/texture-pack/apply-offline', methods=['POST'])
+def apply_texture_pack_offline():
+    """Name a build's texture pack from a harvested index->filename table -- NO
+    ISO boot, NO CSS scroll. The 16x16 placeholder for a global costume index is
+    byte-identical in every build, so the Dolphin load filename it produces is a
+    pure function of the index. Given that table (harvested once via the texture
+    harness), copy each real CSP straight into Load/ under table[index].
+
+    Body: { buildId, slippiPath, tablePath }
+    """
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+
+        data = request.json or {}
+        build_id = data.get('buildId')
+        slippi_path = data.get('slippiPath')
+        table_path = data.get('tablePath')
+        if not build_id or not slippi_path or not table_path:
+            return jsonify({'success': False, 'error': 'buildId, slippiPath and tablePath are required'}), 400
+
+        slippi_path = convert_windows_to_wsl_path(slippi_path)
+        mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
+        if not mapping_file.exists():
+            return jsonify({'success': False, 'error': f'Mapping not found for build {build_id}'}), 404
+        table_file = _Path(convert_windows_to_wsl_path(table_path))
+        if not table_file.exists():
+            return jsonify({'success': False, 'error': f'Table not found: {table_file}'}), 404
+
+        from texture_pack import TexturePackMapping, apply_offline_texture_pack
+        mapping = TexturePackMapping.load(mapping_file)
+        with open(table_file, 'r') as f:
+            table = _json.load(f)
+        entries = table.get('entries', table)  # accept {"entries":{...}} or a bare index->record map
+
+        load_path = _Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
+        # Hires load on (so the pack appears next boot), dumping off (not needed here).
+        set_dolphin_texture_settings(slippi_path, dump_textures=False, hires_textures=True)
+
+        result = apply_offline_texture_pack(mapping, entries, load_path, STORAGE_PATH)
+        mapping.save(mapping_file)
+        result['success'] = True
+        logger.info(f"Offline texture pack for {build_id}: matched {result['matched']}/{result['total']} "
+                    f"({len(result['missingFromTable'])} missing from table, {len(result['copyFailed'])} copy-failed)")
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Apply offline texture pack error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @slippi_bp.route('/api/dolphin/texture-settings', methods=['GET', 'POST'])
 def dolphin_texture_settings():
     """GET: Read current texture settings. POST: Update texture settings."""

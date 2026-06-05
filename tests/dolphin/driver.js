@@ -56,6 +56,10 @@ function parseArgs(argv) {
       result.dryRun = true;
       continue;
     }
+    if (token === '--texture-dump') {
+      result['texture-dump'] = true;
+      continue;
+    }
     if (!token.startsWith('--')) {
       throw new Error(`Unexpected argument: ${token}`);
     }
@@ -285,6 +289,19 @@ function patchDolphinConfig(userDir, pipeName = 'slippibot1') {
   });
 }
 
+// Enable Dolphin's texture dump (and hires load) BEFORE boot, so a texture-pack
+// run dumps every CSP placeholder it renders. GFX.ini is read once at startup,
+// so this must be written into the isolated run User dir before Dolphin launches
+// (the backend's start-listening also sets it, but that lands after boot). Mirrors
+// backend set_dolphin_texture_settings: [Settings] DumpTextures / HiresTextures.
+function patchGfxTextureSettings(userDir, { dump = true, hires = true } = {}) {
+  const gfxIni = path.join(userDir, 'Config', 'GFX.ini');
+  writeIni(gfxIni, (sections) => {
+    upsertIniValue(sections, 'Settings', 'DumpTextures', dump ? 'True' : 'False');
+    upsertIniValue(sections, 'Settings', 'HiresTextures', hires ? 'True' : 'False');
+  });
+}
+
 function readScenario(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8');
   const data = JSON.parse(raw);
@@ -509,6 +526,12 @@ async function main() {
   // instance uses 2 so two emulators don't fight over the same named pipe.
   const pipeIndex = args['pipe-index'] ? parseInt(args['pipe-index'], 10) : 1;
   patchDolphinConfig(userDir, `slippibot${pipeIndex}`);
+  // --texture-dump: turn on texture dumping (+ hires load) for the texture-pack
+  // harvest flow, written before boot so Dolphin picks it up this session.
+  if (args['texture-dump']) {
+    patchGfxTextureSettings(userDir, { dump: true, hires: true });
+    log('Texture dump + hires load enabled in GFX.ini (texture-pack mode).');
+  }
 
   const metadata = {
     createdAt: new Date().toISOString(),

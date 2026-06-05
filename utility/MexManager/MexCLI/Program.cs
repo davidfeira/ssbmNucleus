@@ -66,6 +66,8 @@ namespace MexCLI
                         return Commands.RemoveFighterCommand.Execute(args);
                     case "add-stage":
                         return Commands.AddStageCommand.Execute(args);
+                    case "placeholder-bytes":
+                        return Commands.PlaceholderBytesCommand.Execute(args);
                     case "remove-stage":
                         return Commands.RemoveStageCommand.Execute(args);
                     case "help":

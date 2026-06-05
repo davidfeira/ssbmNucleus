@@ -489,3 +489,109 @@ class TexturePackWatcher:
             'total_count': len(self.mapping.costumes),
             'seen_files': len(self.seen_files)
         }
+
+
+# =============================================================================
+# Offline texture-pack naming (no ISO boot)
+# =============================================================================
+#
+# The placeholder for a given GLOBAL costume index is byte-identical in every
+# build (generate_encoded_placeholder is deterministic, compiled the same way),
+# so the Dolphin load filename it produces -- tex1_16x16_<texHash>_<tlutHash>_9.png
+# -- is a pure function of the index. Once that index -> filename relation has
+# been harvested ONCE (by booting any build and scrolling the CSS so Dolphin
+# dumps each placeholder; see tests/nucleus/run-texture-harvest.js), every future
+# build's texture pack can be named WITHOUT booting: read the build's own mapping
+# (index -> real CSP) and copy each CSP into Load/ under table[index].
+
+
+def _to_local_csp_path(real_csp_path: str) -> str:
+    """Mirror the watcher's Windows->WSL path fixup (no-op on Windows)."""
+    import os
+    if os.name != 'nt' and real_csp_path and len(real_csp_path) >= 2 and real_csp_path[1] == ':':
+        drive_letter = real_csp_path[0].lower()
+        rest = real_csp_path[2:].replace('\\', '/')
+        return f'/mnt/{drive_letter}{rest}'
+    return real_csp_path
+
+
+# imagehash is optional; if it's not installed we simply skip the HD upgrade and
+# use the project's regular CSP (exactly what the live watcher falls back to).
+try:
+    import imagehash as _imagehash
+except ImportError:
+    _imagehash = None
+
+
+def find_hd_csp_by_hash(storage_path: Path, backup_csp_path: str, character: str) -> Optional[Path]:
+    """Module-level twin of TexturePackWatcher._find_hd_csp_by_hash: find an HD
+    CSP in storage whose perceptual hash matches the project's backup CSP. Returns
+    None (no upgrade) if imagehash isn't available."""
+    if _imagehash is None:
+        return None
+    try:
+        imagehash = _imagehash
+        backup_hash = imagehash.phash(Image.open(backup_csp_path))
+        metadata_file = storage_path / 'metadata.json'
+        if not metadata_file.exists():
+            return None
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+        for skin in metadata.get('characters', {}).get(character, {}).get('skins', []):
+            if skin.get('has_hd_csp') and skin.get('csp_hash'):
+                if (backup_hash - imagehash.hex_to_hash(skin['csp_hash'])) < 10:
+                    hd_csp = storage_path / character / f"{skin['id']}_csp_hd.png"
+                    if hd_csp.exists():
+                        return hd_csp
+        return None
+    except Exception as e:
+        logger.error(f"Error finding HD CSP by hash: {e}", exc_info=True)
+        return None
+
+
+def place_costume_csp(costume: Dict, dest_filename: str, load_subdir: Path,
+                      storage_path: Optional[Path]) -> bool:
+    """Copy a costume's real (or HD) CSP into load_subdir as dest_filename.
+    Same resolution the live watcher uses, but the filename comes from the
+    harvested table instead of a freshly dumped texture. Returns True on copy."""
+    real_csp_path = _to_local_csp_path(costume['real_csp_path'])
+    if storage_path:
+        hd = find_hd_csp_by_hash(storage_path, real_csp_path, costume['character'])
+        if hd:
+            real_csp_path = str(hd)
+    real_csp = Path(real_csp_path)
+    if not real_csp.exists():
+        logger.warning(f"Real CSP not found for offline naming: {real_csp}")
+        return False
+    shutil.copy2(real_csp, load_subdir / dest_filename)
+    return True
+
+
+def apply_offline_texture_pack(mapping: 'TexturePackMapping', table_entries: Dict,
+                               load_path: Path, storage_path: Optional[Path]) -> Dict:
+    """Name a build's texture pack from a harvested index->filename table, with no
+    boot. table_entries maps str(index) -> {filename, ...}. Copies each costume's
+    CSP into load_path/<build_name>/<filename>, marks the mapping, and reports
+    which indices were missing from the table (e.g. Sheik, or indices past the
+    harvested range)."""
+    load_subdir = load_path / mapping.build_name
+    load_subdir.mkdir(parents=True, exist_ok=True)
+    matched, missing, copy_failed = 0, [], []
+    for costume in mapping.costumes:
+        rec = table_entries.get(str(costume['index']))
+        if not rec or not rec.get('filename'):
+            missing.append(costume['index'])
+            continue
+        if place_costume_csp(costume, rec['filename'], load_subdir, storage_path):
+            costume['matched'] = True
+            costume['dumped_filename'] = rec['filename']
+            matched += 1
+        else:
+            copy_failed.append(costume['index'])
+    return {
+        'matched': matched,
+        'total': len(mapping.costumes),
+        'missingFromTable': sorted(missing),
+        'copyFailed': sorted(copy_failed),
+        'texturePackPath': str(load_subdir),
+    }

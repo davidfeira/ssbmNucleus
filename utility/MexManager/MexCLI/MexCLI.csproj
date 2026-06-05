@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\mexLib\mexLib.csproj" />
+    <Reference Include="HSDRaw">
+      <HintPath>..\MexManager.Desktop\HSDRaw.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

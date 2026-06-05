@@ -46,6 +46,10 @@ const OUTPUT_DIR = path.join(REPO_ROOT, 'output');
 const PROJECTS_DIR = path.join(REPO_ROOT, 'projects');
 const ARTIFACTS_DIR = path.join(REPO_ROOT, 'tests', 'artifacts', 'nucleus');
 const DEFAULT_ISO = 'C:\\Users\\david\\projects\\melee\\working\\melee-vanilla-v1.02-working.iso';
+// The texture-pack harvest boots Dolphin into this fixed, KNOWN run dir (so the
+// backend texture watcher polls the right Dump folder, and GFX dump is enabled
+// before boot). slippiDolphinPath for the texture-pack export is this same dir.
+const TEXPACK_RUNDIR = path.join(REPO_ROOT, 'tests', 'artifacts', 'dolphin', 'texpack-run');
 
 function log(msg) {
   // eslint-disable-next-line no-console
@@ -314,8 +318,8 @@ function allVaultCostumes() {
   return list;
 }
 
-async function installManyCostumes(baseUrl, count) {
-  const all = allVaultCostumes();
+async function installManyCostumes(baseUrl, count, skip = 0) {
+  const all = allVaultCostumes().slice(skip);
   let installed = 0;
   for (const c of all) {
     if (installed >= count) break;
@@ -581,8 +585,9 @@ async function main() {
       // memory), then export at a chosen --compression. Used to find where the
       // online CSS crashes vs the auto-compression formula.
       const count = parseInt(flags.count, 10) || 50;
-      log(`stress: installing ${count} costumes across the vault...`);
-      const n = await installManyCostumes(baseUrl, count);
+      const skip = parseInt(flags.skip, 10) || 0;
+      log(`stress: installing ${count} costumes across the vault${skip ? ` (skip first ${skip})` : ''}...`);
+      const n = await installManyCostumes(baseUrl, count, skip);
       log(`stress: installed ${n} costumes (added beyond vanilla)`);
       modInfo = { modType: 'stress', addedCostumes: n };
     } else {
@@ -610,15 +615,41 @@ async function main() {
     const isoName = `${projectName}.iso`;
     const outIso = path.join(OUTPUT_DIR, isoName);
     if (fs.existsSync(outIso)) fs.rmSync(outIso, { force: true });
-    log(`exporting ISO "${isoName}" (cspCompression ${ratio}, colorSmash ${colorSmash}, recommended ${recommended})`);
-    const exp = await api(baseUrl, 'POST', '/api/mex/export/start', {
-      filename: isoName,
-      cspCompression: ratio,
-      useColorSmash: colorSmash,
-    });
+    // --texture-pack: export in texture-pack mode -- the backend swaps every CSP
+    // for a base-4 encoded 16x16 placeholder and writes a <buildId>_texture_mapping
+    // .json (global index -> character/costume/real CSP). Compression is skipped
+    // (placeholders stay 16x16). The harvest then boots this ISO, scrolls the CSS,
+    // and lets Dolphin reveal each placeholder's load filename.
+    const texturePack = !!flags['texture-pack'];
+    const slippiPath = (flags.slippi && flags.slippi !== true) ? flags.slippi : TEXPACK_RUNDIR;
+    const exportBody = { filename: isoName, cspCompression: ratio, useColorSmash: colorSmash };
+    if (texturePack) {
+      exportBody.texturePackMode = true;
+      exportBody.slippiDolphinPath = slippiPath;
+    }
+    log(`exporting ISO "${isoName}" (${texturePack ? 'TEXTURE-PACK mode' : `cspCompression ${ratio}, colorSmash ${colorSmash}`}, recommended ${recommended})`);
+    const exp = await api(baseUrl, 'POST', '/api/mex/export/start', exportBody);
     if (!exp.json.success) throw new Error(`export start failed: ${JSON.stringify(exp.json)}`);
     const finalBytes = await waitForIso(outIso, backend && backend.tail);
     log(`export complete: ${outIso} (${(finalBytes / 1024 / 1024).toFixed(0)} MB)`);
+    if (texturePack) {
+      // The build_id is timestamp-derived in the backend and returned by start; the
+      // mapping file lands at output/<buildId>_texture_mapping.json.
+      const buildId = exp.json.buildId;
+      if (!buildId) throw new Error(`texture-pack export returned no buildId: ${JSON.stringify(exp.json)}`);
+      const mappingPath = path.join(OUTPUT_DIR, `${buildId}_texture_mapping.json`);
+      // The export thread writes the mapping just before exporting; poll briefly.
+      let mapOk = false;
+      for (let i = 0; i < 20 && !mapOk; i += 1) { mapOk = fs.existsSync(mappingPath); if (!mapOk) await sleep(500); }
+      if (!mapOk) throw new Error(`texture mapping not found at ${mappingPath}`);
+      const map = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+      modInfo.texturePack = true;
+      modInfo.buildId = buildId;
+      modInfo.mappingPath = mappingPath;
+      modInfo.slippiPath = slippiPath;
+      modInfo.placeholderCount = (map.costumes || []).length;
+      log(`texture-pack: buildId ${buildId}, ${modInfo.placeholderCount} placeholders, mapping ${mappingPath}`);
+    }
 
     // 5. Manifest ------------------------------------------------------------
     const manifest = {
