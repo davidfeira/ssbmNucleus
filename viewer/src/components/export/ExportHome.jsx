@@ -73,7 +73,7 @@ const ExportHome = ({
         <ExportOption
           accent="teal"
           title="Export Patch"
-          desc="Builds the ISO and makes a small .xdelta patch to share."
+          desc="Create an .xdelta patch to share."
           button="Export"
           onClick={onExportPatch}
           disabled={!hasVanilla}
