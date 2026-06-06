@@ -227,9 +227,9 @@ function App() {
       {!skinCreatorOpen && (
         <header className="app-header">
           <div className="header-brand">
-            <img src="./nucleuslogo.png" alt="SSBM Vault" className="header-logo" />
-            <h1>SSBM <span className="vault-text">Vault</span></h1>
-            <span className="app-version" title={`SSBM Vault v${APP_VERSION}`}>v{APP_VERSION}</span>
+            <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
+            <h1>SSBM <span className="vault-text">Nucleus</span></h1>
+            <span className="app-version" title={`SSBM Nucleus v${APP_VERSION}`}>v{APP_VERSION}</span>
           </div>
           <nav className="app-tabs">
             <button

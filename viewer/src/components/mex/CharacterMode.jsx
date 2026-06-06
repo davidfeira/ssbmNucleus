@@ -1566,8 +1566,13 @@ export default function CharacterMode({
     onRefresh()
   }
 
+  const [removingFighter, setRemovingFighter] = useState(false)
+  const [removingFighterName, setRemovingFighterName] = useState('')
+
   const handleRemoveFighter = async (fighterName) => {
     if (!confirm(`Remove "${fighterName}" from the project?`)) return
+    setRemovingFighter(true)
+    setRemovingFighterName(fighterName)
     try {
       const response = await fetch(`${API_URL}/custom-characters/remove-from-project`, {
         method: 'POST',
@@ -1582,6 +1587,9 @@ export default function CharacterMode({
       }
     } catch (err) {
       alert(`Error: ${err.message}`)
+    } finally {
+      setRemovingFighter(false)
+      setRemovingFighterName('')
     }
   }
 
@@ -1986,6 +1994,32 @@ export default function CharacterMode({
             />
             <h3>Importing...</h3>
             <p className="import-status">Please wait...</p>
+          </div>
+        </div>
+      )}
+
+      {removingFighter && (
+        <div className="import-overlay">
+          <div className="import-modal import-modal--hexagon">
+            <HexagonLoader className="import-loader" size={112} label="Removing character" />
+            <h3>Removing {removingFighterName}...</h3>
+            <p className="import-status">Please wait...</p>
+          </div>
+        </div>
+      )}
+
+      {batchAddingChars && (
+        <div className="import-overlay">
+          <div className="import-modal import-modal--hexagon">
+            <HexagonLoader
+              className="import-loader"
+              size={112}
+              label="Adding characters"
+              progress={batchCharProgress.total > 0 ? (batchCharProgress.current / batchCharProgress.total) * 100 : null}
+              minimumVisibleProgress={6}
+            />
+            <h3>Adding Characters...</h3>
+            <p className="import-status">{batchCharProgress.current} / {batchCharProgress.total}</p>
           </div>
         </div>
       )}

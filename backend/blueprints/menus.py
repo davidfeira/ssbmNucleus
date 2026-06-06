@@ -863,6 +863,121 @@ def relabel_icon(mod_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@menus_bp.route('/api/mex/menus/css/icon_grid/<mod_id>/replace_icon', methods=['POST'])
+def replace_icon(mod_id):
+    """Replace a single icon image. Multipart form: character + file (image)."""
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        character = (request.form.get('character') or '').strip()
+        if not character:
+            return jsonify({'success': False, 'error': 'character is required'}), 400
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        img = request.files['file']
+        if not img.filename:
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        entry = next((e for e in mod.get('icons', []) if e.get('character') == character), None)
+        if not entry:
+            return jsonify({'success': False, 'error': f'No icon labeled "{character}"'}), 404
+
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
+        icon_name = entry['icon']
+        dest = icons_dir / icon_name
+        img.save(str(dest))
+
+        _save_mod_json(mod_id, mod)
+        return jsonify({'success': True, 'mod': _attach_urls(mod)})
+    except Exception as e:
+        logger.error(f'Replace icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/<mod_id>/delete_icon', methods=['POST'])
+def delete_icon(mod_id):
+    """Delete a single icon from the mod. Body: {character: "Mario"}."""
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        payload = request.json or {}
+        character = (payload.get('character') or '').strip()
+        if not character:
+            return jsonify({'success': False, 'error': 'character is required'}), 400
+
+        icons = mod.get('icons', [])
+        entry = next((e for e in icons if e.get('character') == character), None)
+        if not entry:
+            return jsonify({'success': False, 'error': f'No icon labeled "{character}"'}), 404
+
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
+        icon_file = icons_dir / entry['icon']
+        if icon_file.exists():
+            icon_file.unlink()
+
+        mod['icons'] = [e for e in icons if e.get('character') != character]
+        _save_mod_json(mod_id, mod)
+
+        catalog = _load_catalog()
+        for cat_entry in catalog.get('mods', []):
+            if cat_entry.get('id') == mod_id:
+                cat_entry['icon_count'] = len(mod['icons'])
+                break
+        _save_catalog(catalog)
+
+        return jsonify({'success': True, 'mod': _attach_urls(mod)})
+    except Exception as e:
+        logger.error(f'Delete icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/<mod_id>/add_icon', methods=['POST'])
+def add_icon(mod_id):
+    """Add a new icon to the mod. Multipart form: character + file (image)."""
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        character = (request.form.get('character') or '').strip()
+        if not character:
+            return jsonify({'success': False, 'error': 'character is required'}), 400
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        img = request.files['file']
+        if not img.filename:
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        existing = next((e for e in mod.get('icons', []) if e.get('character') == character), None)
+        if existing:
+            return jsonify({'success': False, 'error': f'Icon for "{character}" already exists. Use replace instead.'}), 400
+
+        icons_dir = ICON_GRID_PATH / mod_id / 'icons'
+        icons_dir.mkdir(parents=True, exist_ok=True)
+        icon_name = f'{_safe_filename(character)}.png'
+        dest = icons_dir / icon_name
+        img.save(str(dest))
+
+        mod.setdefault('icons', []).append({'character': character, 'icon': icon_name})
+        _save_mod_json(mod_id, mod)
+
+        catalog = _load_catalog()
+        for cat_entry in catalog.get('mods', []):
+            if cat_entry.get('id') == mod_id:
+                cat_entry['icon_count'] = len(mod['icons'])
+                break
+        _save_catalog(catalog)
+
+        return jsonify({'success': True, 'mod': _attach_urls(mod)})
+    except Exception as e:
+        logger.error(f'Add icon error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @menus_bp.route('/api/mex/menus/css/icon_grid/install/<mod_id>', methods=['POST'])
 def install_icon_grid_to_mex(mod_id):
     """Return the install plan (list of icons to install) without executing."""

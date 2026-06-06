@@ -1204,6 +1204,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onImportZip={handleCustomStageImport}
           onScanIso={handleCustomStageScanIso}
           importing={customStageImporting}
+          onRefresh={fetchCustomStages}
         />
       </div>
     )

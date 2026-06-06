@@ -105,12 +105,16 @@ function main() {
   if (fs.existsSync(MANIFEST)) {
     manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
   }
+  const explicitChar = flags.char && flags.char !== true;
+  const explicitColor = flags.color !== undefined && flags.color !== true;
+  const manualSelection = !!(explicitChar || explicitColor);
+  const manifestCostume = manifest.costume || {};
   const iso = (flags.iso && flags.iso !== true) ? flags.iso : manifest.iso;
-  const modType = manifest.modType || 'costume';
-  const fighter = (flags.char && flags.char !== true) ? flags.char : manifest.fighter;
-  let color = flags.color !== undefined && flags.color !== true
+  const modType = manualSelection ? 'costume' : (manifest.modType || 'costume');
+  const fighter = explicitChar ? flags.char : (manifest.fighter || manifestCostume.fighter);
+  let color = explicitColor
     ? parseInt(flags.color, 10)
-    : manifest.colorIndex;
+    : (manifest.colorIndex ?? manifestCostume.colorIndex);
   if (color === undefined || color === null) {
     color = manifest.costumeCount ? manifest.costumeCount - 1 : 0;
   }
@@ -128,11 +132,14 @@ function main() {
   // Select a stage by its REAL coordinate from the build's SSS layout (accurate
   // on any layout); fall back to the libmelee-named target if not recorded.
   const stageArgsFor = (stage) => {
+    if (manualSelection) return [stage];
     const sl = manifest.stageLayout && manifest.stageLayout[stage];
     return sl ? ['--stage-icon', `${sl.page || 0},${sl.x},${sl.y}`] : [stage];
   };
-  const label = (manifest.costumeId || manifest.characterName || manifest.stageName
-    || manifest.extraName || manifest.menuName || (fighter ? `${fighter}-c${color}` : 'run')).replace(/[^a-z0-9_-]/gi, '-');
+  const label = (manualSelection
+    ? (fighter ? `${fighter}-c${color}` : 'run')
+    : (manifest.costumeId || manifestCostume.costumeId || manifest.characterName || manifest.stageName
+      || manifest.extraName || manifest.menuName || (fighter ? `${fighter}-c${color}` : 'run'))).replace(/[^a-z0-9_-]/gi, '-');
 
   if (!iso) throw new Error('no ISO to launch (run with --build or --iso, or build one first)');
   if (!fs.existsSync(iso)) throw new Error(`ISO not found: ${iso}`);

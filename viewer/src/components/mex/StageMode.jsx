@@ -527,17 +527,18 @@ export default function StageMode({
       if (!data.success || !data.pages) return
       // Apply grid to each page that has icons
       const cols = 6
-      const baseW = 5.95, baseH = 5.21, centerX = 0, centerY = 5.5
-      const updatedPages = data.pages.map(page => {
+      const baseW = 5.95, baseH = 5.21, spacingX = 0.8, spacingY = 0.6, centerX = 0, centerY = 5.5
+      const updatedPages = data.pages.map((page, pageIdx) => {
+        if (pageIdx === 0) return page // leave vanilla page untouched
         const icons = page.icons || []
         if (icons.length === 0) return page
         const rows = Math.ceil(icons.length / cols)
         const sx = 1.0, sy = 1.0
-        const iw = baseW * sx, ih = baseH * sy
-        const totalW = Math.min(icons.length, cols) * iw, totalH = rows * ih
+        const iw = baseW + spacingX, ih = baseH + spacingY
+        const totalW = Math.min(icons.length, cols) * iw - spacingX, totalH = rows * ih - spacingY
         const gridIcons = icons.map((icon, i) => {
           const col = i % cols, row = Math.floor(i / cols)
-          return { ...icon, x: centerX - totalW / 2 + iw * col + iw / 2, y: centerY + totalH / 2 - ih * row - ih / 2, z: 0, scaleX: sx, scaleY: sy }
+          return { ...icon, x: centerX - totalW / 2 + iw * col + baseW / 2, y: centerY + totalH / 2 - ih * row - baseH / 2, z: 0, scaleX: sx, scaleY: sy }
         })
         return { ...page, icons: gridIcons }
       })
@@ -968,6 +969,22 @@ export default function StageMode({
             </div>
           )}
         </>
+      )}
+
+      {batchInstallingStages && (
+        <div className="import-overlay">
+          <div className="import-modal import-modal--hexagon">
+            <HexagonLoader
+              className="import-loader"
+              size={112}
+              label="Adding stages"
+              progress={batchStageProgress.total > 0 ? (batchStageProgress.current / batchStageProgress.total) * 100 : null}
+              minimumVisibleProgress={6}
+            />
+            <h3>Adding Stages...</h3>
+            <p className="import-status">{batchStageProgress.current} / {batchStageProgress.total}</p>
+          </div>
+        </div>
       )}
 
       <ConfirmDialog

@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 import zipfile
 import logging
 from pathlib import Path
@@ -75,14 +76,47 @@ def _write_metadata(data):
         json.dump(data, f, indent=2)
 
 
+def _is_folder(item):
+    return isinstance(item, dict) and item.get('type') == 'folder'
+
+
+def _find_folder(items, folder_id):
+    for i, item in enumerate(items):
+        if _is_folder(item) and item.get('id') == folder_id:
+            return item, i
+    return None, -1
+
+
+def _folder_id_at_position(items, position):
+    """Determine folder membership for a stage placed at `position`.
+
+    Mirrors get_folder_id_at_position from storage_costumes: look backwards
+    until we find either a folder header (we're in it) or a root-level stage
+    (we're at root).
+    """
+    for i in range(position - 1, -1, -1):
+        item = items[i]
+        if _is_folder(item):
+            return item['id']
+        if item.get('folder_id'):
+            return item['folder_id']
+        return None
+    return None
+
+
 @custom_stages_bp.route('/api/mex/custom-stages/list', methods=['GET'])
 def list_custom_stages():
     try:
         metadata = _read_metadata()
-        stages = metadata.get('custom_stages', [])
-        for stage in stages:
-            stage['icon_url'] = f"/api/mex/custom-stages/{stage['slug']}/icon"
-        return jsonify({'success': True, 'stages': stages})
+        items = metadata.get('custom_stages', [])
+        for item in items:
+            if _is_folder(item):
+                continue
+            # Stages keep slug as their stable identifier, but the frontend
+            # drag/drop code uses `id` uniformly. Mirror slug → id.
+            item['id'] = item.get('slug')
+            item['icon_url'] = f"/api/mex/custom-stages/{item['slug']}/icon"
+        return jsonify({'success': True, 'stages': items})
     except Exception as e:
         logger.error(f"List custom stages error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -280,7 +314,11 @@ def _extract_custom_stages_from_project(project_dir, source_label):
         return [], []
 
     metadata = _read_metadata()
-    existing_names = {s['name'].lower() for s in metadata.get('custom_stages', [])}
+    existing_names = {
+        s['name'].lower()
+        for s in metadata.get('custom_stages', [])
+        if not _is_folder(s) and s.get('name')
+    }
 
     imported = []
     skipped = []
@@ -457,7 +495,7 @@ def delete_custom_stage(slug):
 
         metadata = _read_metadata()
         metadata['custom_stages'] = [
-            s for s in metadata.get('custom_stages', []) if s['slug'] != slug
+            s for s in metadata.get('custom_stages', []) if s.get('slug') != slug
         ]
         _write_metadata(metadata)
 
@@ -479,12 +517,16 @@ def rename_custom_stage(slug):
         metadata = _read_metadata()
 
         for existing in metadata.get('custom_stages', []):
-            if existing['slug'] != slug and existing['name'].lower() == new_name.lower():
+            if _is_folder(existing):
+                continue
+            if existing.get('slug') != slug and existing.get('name', '').lower() == new_name.lower():
                 return jsonify({'success': False, 'error': f"A stage named '{existing['name']}' already exists"}), 400
 
         stage_entry = None
         for s in metadata.get('custom_stages', []):
-            if s['slug'] == slug:
+            if _is_folder(s):
+                continue
+            if s.get('slug') == slug:
                 s['name'] = new_name
                 stage_entry = s
                 break
@@ -606,4 +648,140 @@ def remove_custom_stage_from_project():
         return jsonify({'success': True, 'message': f'Removed {stage_name}'})
     except Exception as e:
         logger.error(f"Remove stage error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============= Reorder + Folder Endpoints =============
+
+@custom_stages_bp.route('/api/mex/custom-stages/reorder', methods=['POST'])
+def reorder_custom_stages():
+    """Reorder items (stages or folders) in the custom_stages list."""
+    try:
+        data = request.json or {}
+        from_index = data.get('fromIndex')
+        to_index = data.get('toIndex')
+
+        if from_index is None or to_index is None:
+            return jsonify({'success': False, 'error': 'Missing fromIndex or toIndex'}), 400
+
+        metadata = _read_metadata()
+        items = metadata.get('custom_stages', [])
+
+        if from_index < 0 or from_index >= len(items) or to_index < 0 or to_index >= len(items):
+            return jsonify({'success': False, 'error': 'Invalid fromIndex or toIndex'}), 400
+
+        item = items.pop(from_index)
+        items.insert(to_index, item)
+
+        # Update folder membership for stages (not folders)
+        if not _is_folder(item):
+            new_folder_id = _folder_id_at_position(items, to_index)
+            if new_folder_id:
+                item['folder_id'] = new_folder_id
+            elif 'folder_id' in item:
+                del item['folder_id']
+
+        metadata['custom_stages'] = items
+        _write_metadata(metadata)
+
+        logger.info(f"[OK] Reordered custom stages: {from_index} -> {to_index}")
+        return jsonify({'success': True, 'stages': items})
+    except Exception as e:
+        logger.error(f"Reorder custom stages error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/folders/create', methods=['POST'])
+def create_custom_stage_folder():
+    try:
+        data = request.json or {}
+        name = data.get('name', 'New Folder')
+
+        metadata = _read_metadata()
+        items = metadata.setdefault('custom_stages', [])
+
+        folder_id = f"folder_{uuid.uuid4().hex[:8]}"
+        new_folder = {'type': 'folder', 'id': folder_id, 'name': name, 'expanded': True}
+        items.append(new_folder)
+
+        _write_metadata(metadata)
+        logger.info(f"[OK] Created custom-stage folder '{name}'")
+        return jsonify({'success': True, 'folder': new_folder})
+    except Exception as e:
+        logger.error(f"Create custom-stage folder error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/folders/rename', methods=['POST'])
+def rename_custom_stage_folder():
+    try:
+        data = request.json or {}
+        folder_id = data.get('folderId')
+        new_name = data.get('newName')
+
+        if not folder_id or not new_name:
+            return jsonify({'success': False, 'error': 'Missing folderId or newName'}), 400
+
+        metadata = _read_metadata()
+        items = metadata.get('custom_stages', [])
+
+        folder, _idx = _find_folder(items, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        folder['name'] = new_name
+        _write_metadata(metadata)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Rename custom-stage folder error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/folders/delete', methods=['POST'])
+def delete_custom_stage_folder():
+    """Delete a folder. Stages inside lose their folder_id but are kept."""
+    try:
+        data = request.json or {}
+        folder_id = data.get('folderId')
+        if not folder_id:
+            return jsonify({'success': False, 'error': 'Missing folderId'}), 400
+
+        metadata = _read_metadata()
+        items = metadata.get('custom_stages', [])
+
+        folder, folder_idx = _find_folder(items, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        for it in items:
+            if not _is_folder(it) and it.get('folder_id') == folder_id:
+                del it['folder_id']
+
+        items.pop(folder_idx)
+        _write_metadata(metadata)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Delete custom-stage folder error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/folders/toggle', methods=['POST'])
+def toggle_custom_stage_folder():
+    try:
+        data = request.json or {}
+        folder_id = data.get('folderId')
+        if not folder_id:
+            return jsonify({'success': False, 'error': 'Missing folderId'}), 400
+
+        metadata = _read_metadata()
+        items = metadata.get('custom_stages', [])
+        folder, _idx = _find_folder(items, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        folder['expanded'] = not folder.get('expanded', True)
+        _write_metadata(metadata)
+        return jsonify({'success': True, 'expanded': folder['expanded']})
+    except Exception as e:
+        logger.error(f"Toggle custom-stage folder error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

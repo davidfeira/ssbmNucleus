@@ -280,6 +280,42 @@
   image-rendering: pixelated;
 }
 
+/* Drag/drop states for custom-stage cards (mirrors .skin-card behavior) */
+.custom-stages-grid .stage-card[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+.custom-stages-grid .stage-card[draggable="true"]:active:not(.dragging) {
+  transform: scale(0.98);
+}
+
+.custom-stages-grid .stage-card.dragging {
+  opacity: 1;
+  transform: scale(1.03);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.5),
+    0 10px 20px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(125, 211, 232, 0.3);
+  z-index: var(--z-dropdown);
+  cursor: grabbing;
+}
+
+.custom-stages-grid.is-dragging .stage-card,
+.custom-stages-grid.is-dragging .folder-card {
+  transition: transform 0.3s var(--ease-spring);
+}
+
+.custom-stages-grid.is-dragging .stage-card:not(.dragging),
+.custom-stages-grid.is-dragging .folder-card:not(.dragging) {
+  opacity: 0.85;
+  filter: brightness(0.95);
+}
+
+.custom-stages-grid .stage-card.just-dropped {
+  animation: dropSettle 0.4s var(--ease-spring);
+}
+
 .custom-stages-gateway .stage-placeholder {
   font-size: var(--text-2xl);
   font-weight: 700;
