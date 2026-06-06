@@ -256,13 +256,6 @@ const MexPanel = () => {
             )}
             <div className="action-buttons-group">
               <button
-                className="action-btn export-btn"
-                onMouseEnter={playHoverSound}
-                onClick={() => { playSound('start'); setShowIsoBuilder(true); }}
-              >
-                Export ISO
-              </button>
-              <button
                 className="action-btn"
                 onMouseEnter={playHoverSound}
                 onClick={() => { playSound('start'); handleOpenProjectFolder() }}
@@ -282,6 +275,13 @@ const MexPanel = () => {
                 onClick={() => { playSound('start'); setShowProjectModal(true); }}
               >
                 Switch Project
+              </button>
+              <button
+                className="action-btn export-btn"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); setShowIsoBuilder(true); }}
+              >
+                Export
               </button>
             </div>
           </div>
