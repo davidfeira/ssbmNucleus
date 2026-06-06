@@ -152,6 +152,14 @@ export function useXdeltaProgress({
       }
     })
 
+    // Bundle EXPORT complete (e.g. "Add Bundle" from the export modal). The
+    // metadata is already saved by the time this fires, so refresh the vault
+    // list right away — otherwise a freshly built bundle only shows up on the
+    // next incidental re-fetch (the "takes a few secs to appear" lag).
+    socket.on('bundle_export_complete', () => {
+      callbacksRef.current.fetchBundles?.()
+    })
+
     return () => {
       socket.disconnect()
     }
