@@ -1,16 +1,95 @@
 /**
- * PatchesGrid - XDelta patches and Bundles list display
+ * PatchesGrid - the vault's "Patches" view, as a Steam-style cover-art library.
  *
- * Features:
- * - List of patches with image, name, description, size
- * - List of bundles with image, name, description, size, texture count
- * - Edit, Download, Build ISO actions per patch
- * - Edit, Download, Install actions per bundle
- * - "Create New Patch" card to trigger creation modal
+ * Bundles and patches are rendered as portrait cover cards: a cover image is
+ * shown letterboxed over a blurred backdrop (so any aspect ratio looks good),
+ * and cards with no cover get a gradient monogram placeholder. Each card carries
+ * a primary Play action, a hover-reveal edit button, and (patches) a secondary
+ * "build & download ISO" action.
  */
 
+import { useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { BACKEND_URL } from '../../config'
+
+function CoverCard({
+  kind, // 'bundle' | 'patch'
+  name,
+  meta,
+  imageUrl,
+  playing,
+  playPercent,
+  onPlay,
+  onEdit,
+  secondaryLabel,
+  secondaryTitle,
+  onSecondary,
+}) {
+  const [imgError, setImgError] = useState(false)
+  const showImg = imageUrl && !imgError
+  const initial = (name?.trim()?.[0] || '?').toUpperCase()
+
+  return (
+    <div
+      className={`cover-card ${kind} ${playing ? 'is-playing' : ''}`}
+      onMouseEnter={playHoverSound}
+    >
+      <div className="cover-art">
+        {showImg ? (
+          <>
+            <div className="cover-art-blur" style={{ backgroundImage: `url("${imageUrl}")` }} />
+            <img className="cover-img" src={imageUrl} alt={name} onError={() => setImgError(true)} />
+          </>
+        ) : (
+          <div className="cover-placeholder">
+            <span className="cover-monogram">{initial}</span>
+          </div>
+        )}
+      </div>
+
+      <span className={`cover-tag ${kind}`}>{kind === 'bundle' ? 'Bundle' : 'Patch'}</span>
+
+      {onEdit && (
+        <button
+          className="cover-edit"
+          onMouseEnter={playHoverSound}
+          onClick={(e) => { e.stopPropagation(); playSound('boop'); onEdit() }}
+          title="Edit"
+        >
+          ✎
+        </button>
+      )}
+
+      <div className="cover-scrim" />
+
+      <div className="cover-body">
+        <h4 className="cover-title" title={name}>{name}</h4>
+        {meta && <p className="cover-meta">{meta}</p>}
+        <div className="cover-actions">
+          <button
+            className="cover-play"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onPlay() }}
+            disabled={playing}
+            title="Build (if needed) and launch in Slippi"
+          >
+            {playing ? `${playPercent}%` : '▶ Play'}
+          </button>
+          {onSecondary && (
+            <button
+              className="cover-secondary"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); onSecondary() }}
+              title={secondaryTitle}
+            >
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function PatchesGrid({
   xdeltaPatches,
@@ -19,171 +98,68 @@ export default function PatchesGrid({
   onBuildIso,
   onShowCreateModal,
   onEditBundle,
-  onInstallBundle,
   onPlayBundle,
   onPlayPatch,
   playingId = null,
-  playPercent = 0
+  playPercent = 0,
 }) {
+  const fmtMb = (mb, bytes) => {
+    const v = typeof mb === 'number' ? mb : (bytes ? bytes / (1024 * 1024) : 0)
+    return `${v.toFixed(1)} MB`
+  }
+
   return (
     <div className="patches-section">
-      {/* Bundles Section */}
       {bundles.length > 0 && (
         <>
-          <h3 style={{ margin: '0 0 1rem', color: 'var(--color-text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Bundles
-          </h3>
-          <div className="patches-list" style={{ marginBottom: '2rem' }}>
+          <h3 className="vault-section-title">Bundles</h3>
+          <div className="cover-grid">
             {bundles.map((bundle) => (
-              <div key={bundle.id} className="patch-row bundle-row">
-                <div className="patch-row-image">
-                  {bundle.imageUrl ? (
-                    <img
-                      src={`${BACKEND_URL}${bundle.imageUrl}`}
-                      alt={bundle.name}
-                      onError={(e) => {
-                        e.target.style.display = 'none'
-                        e.target.nextSibling.style.display = 'flex'
-                      }}
-                    />
-                  ) : null}
-                  <div className="patch-row-placeholder" style={{ display: bundle.imageUrl ? 'none' : 'flex', background: 'linear-gradient(135deg, #d4a574 0%, #c9956c 100%)' }}>
-                    {bundle.name[0]}
-                  </div>
-                  <button
-                    className="btn-edit-overlay"
-                    onMouseEnter={playHoverSound}
-                    onClick={(e) => { e.stopPropagation(); playSound('boop'); onEditBundle(bundle); }}
-                    title="Edit"
-                  >
-                    ✎
-                  </button>
-                </div>
-
-                <div className="patch-row-info">
-                  <h4 className="patch-row-name">{bundle.name}</h4>
-                  {bundle.description && (
-                    <p className="patch-row-description">{bundle.description}</p>
-                  )}
-                  <p className="patch-row-size" style={{ fontSize: '0.8em', color: 'var(--color-text-muted)', margin: 0 }}>
-                    {bundle.size_mb || (bundle.size / (1024 * 1024)).toFixed(2)} MB
-                    {bundle.texture_count > 0 && ` • ${bundle.texture_count} textures`}
-                  </p>
-                </div>
-
-                <div className="patch-row-actions">
-                  <button
-                    className="btn-play"
-                    onMouseEnter={playHoverSound}
-                    onClick={() => { playSound('start'); onPlayBundle?.(bundle); }}
-                    disabled={playingId === bundle.id}
-                    title="Build (if needed), load the texture pack, and launch in Slippi"
-                  >
-                    {playingId === bundle.id ? `${playPercent}%` : '▶ Play'}
-                  </button>
-                </div>
-              </div>
+              <CoverCard
+                key={bundle.id}
+                kind="bundle"
+                name={bundle.name}
+                meta={`${fmtMb(bundle.size_mb, bundle.size)}${bundle.texture_count > 0 ? ` · ${bundle.texture_count} HD` : ''}`}
+                imageUrl={bundle.imageUrl ? `${BACKEND_URL}${bundle.imageUrl}` : null}
+                playing={playingId === bundle.id}
+                playPercent={playPercent}
+                onPlay={() => onPlayBundle?.(bundle)}
+                onEdit={() => onEditBundle(bundle)}
+              />
             ))}
           </div>
         </>
       )}
 
-      {/* Patches Section */}
-      <h3 style={{ margin: '0 0 1rem', color: 'var(--color-text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        Patches
-      </h3>
-      <div className="patches-list">
+      <h3 className="vault-section-title">Patches</h3>
+      <div className="cover-grid">
         {xdeltaPatches.map((patch) => (
-          <div key={patch.id} className="patch-row">
-            <div className="patch-row-image">
-              {patch.imageUrl ? (
-                <img
-                  src={`${BACKEND_URL}${patch.imageUrl}`}
-                  alt={patch.name}
-                  onError={(e) => {
-                    e.target.style.display = 'none'
-                    e.target.nextSibling.style.display = 'flex'
-                  }}
-                />
-              ) : null}
-              <div className="patch-row-placeholder" style={{ display: patch.imageUrl ? 'none' : 'flex' }}>
-                {patch.name[0]}
-              </div>
-              <button
-                className="btn-edit-overlay"
-                onMouseEnter={playHoverSound}
-                onClick={(e) => { e.stopPropagation(); playSound('boop'); onEditPatch(patch); }}
-                title="Edit"
-              >
-                ✎
-              </button>
-            </div>
-
-            <div className="patch-row-info">
-              <h4 className="patch-row-name">{patch.name}</h4>
-              {patch.description && (
-                <p className="patch-row-description">{patch.description}</p>
-              )}
-              {patch.size && (
-                <p className="patch-row-size" style={{ fontSize: '0.8em', color: 'var(--color-text-muted)', margin: 0 }}>
-                  {(patch.size / (1024 * 1024)).toFixed(2)} MB
-                </p>
-              )}
-            </div>
-
-            <div className="patch-row-actions">
-              <button
-                className="btn-play"
-                onMouseEnter={playHoverSound}
-                onClick={() => { playSound('start'); onPlayPatch?.(patch); }}
-                disabled={playingId === patch.id}
-                title="Build the ISO (if needed) and launch it in Slippi"
-              >
-                {playingId === patch.id ? `${playPercent}%` : '▶ Play'}
-              </button>
-              <button
-                className="btn-build-iso"
-                onMouseEnter={playHoverSound}
-                onClick={() => { playSound('start'); onBuildIso(patch); }}
-              >
-                Build ISO
-              </button>
-            </div>
-          </div>
+          <CoverCard
+            key={patch.id}
+            kind="patch"
+            name={patch.name}
+            meta={patch.size ? fmtMb(null, patch.size) : null}
+            imageUrl={patch.imageUrl ? `${BACKEND_URL}${patch.imageUrl}` : null}
+            playing={playingId === patch.id}
+            playPercent={playPercent}
+            onPlay={() => onPlayPatch?.(patch)}
+            onEdit={() => onEditPatch(patch)}
+            secondaryLabel="ISO"
+            secondaryTitle="Build & download the ISO file"
+            onSecondary={() => onBuildIso(patch)}
+          />
         ))}
 
-        {/* Create New Patch Card */}
-        <div
-          className="patch-row create-patch-row"
+        {/* Create-new-patch tile */}
+        <button
+          className="cover-card cover-create"
           onMouseEnter={playHoverSound}
-          onClick={() => { playSound('boop'); onShowCreateModal(); }}
-          style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+          onClick={() => { playSound('boop'); onShowCreateModal() }}
         >
-          <div className="patch-row-image">
-            <div className="patch-row-placeholder" style={{ display: 'flex', fontSize: '2rem' }}>
-              +
-            </div>
-          </div>
-
-          <div className="patch-row-info">
-            <h4 className="patch-row-name">Create New Patch</h4>
-            <p className="patch-row-description">Create a patch from a modded ISO</p>
-          </div>
-
-          <div className="patch-row-actions">
-            <button
-              className="btn-build-iso"
-              onMouseEnter={playHoverSound}
-              onClick={(e) => {
-                e.stopPropagation()
-                playSound('boop')
-                onShowCreateModal()
-              }}
-            >
-              Create
-            </button>
-          </div>
-        </div>
+          <span className="cover-create-plus">+</span>
+          <span className="cover-create-label">New Patch</span>
+          <span className="cover-create-sub">From a modded ISO</span>
+        </button>
       </div>
     </div>
   )

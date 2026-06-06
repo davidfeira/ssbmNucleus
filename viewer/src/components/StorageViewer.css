@@ -1930,6 +1930,323 @@
   to { transform: rotate(360deg); }
 }
 
+/* =========================================================================
+   Vault cover-card library (Steam-style grid)
+   ========================================================================= */
+
+.vault-section-title {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-widest);
+}
+
+.patches-section .vault-section-title:not(:first-child) {
+  margin-top: var(--space-8);
+}
+
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-5);
+}
+
+.cover-card {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--color-bg-elevated, #1a2332);
+  border: 1px solid var(--color-border, #3d4f5c);
+  box-shadow: var(--shadow-md);
+  transition:
+    transform var(--transition-spring),
+    box-shadow var(--transition-normal),
+    border-color var(--transition-normal);
+  animation: cover-pop var(--duration-normal) var(--ease-out) backwards;
+}
+
+@keyframes cover-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+.cover-card:hover {
+  transform: translateY(-6px) scale(1.025);
+  box-shadow: var(--shadow-xl);
+  border-color: var(--color-text-tertiary, #8896a4);
+}
+
+.cover-card.bundle:hover {
+  box-shadow: var(--shadow-xl), var(--glow-gold-sm);
+  border-color: var(--color-gold, #ffc700);
+}
+
+.cover-card.patch:hover {
+  box-shadow: var(--shadow-xl), var(--glow-cyan-sm);
+  border-color: var(--color-cyan, #7dd3e8);
+}
+
+/* --- cover art (blurred backdrop + letterboxed image) --- */
+.cover-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--color-bg-deep, #0a1420);
+}
+
+.cover-art-blur {
+  position: absolute;
+  inset: -12%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(22px) brightness(0.45) saturate(1.1);
+  transform: scale(1.12);
+}
+
+.cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 1;
+  transition: transform var(--transition-slow);
+}
+
+.cover-card:hover .cover-img { transform: scale(1.04); }
+
+.cover-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(130% 90% at 50% -10%, rgba(255, 255, 255, 0.16), transparent 55%),
+    var(--gradient-cyan, linear-gradient(135deg, #00bcd4, #00838f));
+}
+
+.cover-card.bundle .cover-placeholder {
+  background:
+    radial-gradient(130% 90% at 50% -10%, rgba(255, 255, 255, 0.18), transparent 55%),
+    var(--gradient-gold, linear-gradient(135deg, #ffc700, #ff9500));
+}
+
+.cover-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.07) 0 14px,
+    transparent 14px 28px
+  );
+  mix-blend-mode: overlay;
+}
+
+.cover-monogram {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-weight: var(--font-extrabold);
+  color: rgba(10, 20, 32, 0.82);
+  letter-spacing: var(--tracking-tight);
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+
+/* --- overlays --- */
+.cover-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(8, 14, 24, 0.96) 0%,
+    rgba(8, 14, 24, 0.55) 32%,
+    rgba(8, 14, 24, 0) 58%
+  );
+}
+
+.cover-tag {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 3;
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  font-weight: var(--font-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-widest);
+  backdrop-filter: blur(6px);
+}
+
+.cover-tag.bundle {
+  color: var(--color-gold, #ffc700);
+  background: rgba(255, 199, 0, 0.16);
+  border: 1px solid rgba(255, 199, 0, 0.4);
+}
+
+.cover-tag.patch {
+  color: var(--color-cyan, #7dd3e8);
+  background: rgba(125, 211, 232, 0.14);
+  border: 1px solid rgba(125, 211, 232, 0.4);
+}
+
+.cover-edit {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 4;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(8, 14, 24, 0.6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  backdrop-filter: blur(6px);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.cover-card:hover .cover-edit { opacity: 1; transform: none; }
+.cover-edit:hover { background: var(--color-cyan, #7dd3e8); color: var(--color-bg-deep, #0a1420); }
+
+/* --- body / actions --- */
+.cover-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cover-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: var(--font-bold);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+
+.cover-meta {
+  margin: 0;
+  color: var(--color-text-secondary, #b8c5d0);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cover-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.cover-play {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--gradient-teal, linear-gradient(135deg, #00d4aa, #00b894));
+  color: var(--color-bg-deep, #0a1420);
+  font-family: var(--font-display);
+  font-weight: var(--font-bold);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: filter var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.cover-play:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: var(--glow-teal-sm);
+}
+
+.cover-play:active:not(:disabled) { transform: scale(0.97); }
+.cover-play:disabled { cursor: progress; }
+
+.cover-secondary {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: var(--font-semibold);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  cursor: pointer;
+  /* hover-reveal so the resting grid stays clean */
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity var(--transition-normal), transform var(--transition-normal), background var(--transition-fast), color var(--transition-fast);
+}
+
+.cover-card:hover .cover-secondary,
+.cover-card.is-playing .cover-secondary { opacity: 1; transform: none; }
+.cover-secondary:hover { background: var(--color-cyan, #7dd3e8); color: var(--color-bg-deep, #0a1420); border-color: transparent; }
+
+/* --- create-new tile --- */
+.cover-create {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  border-style: dashed;
+  background: var(--color-bg-surface, #283544);
+  color: var(--color-text-secondary, #b8c5d0);
+  cursor: pointer;
+  font-family: var(--font-display);
+}
+
+.cover-create:hover {
+  border-color: var(--color-cyan, #7dd3e8);
+  color: var(--color-text-primary, #f5f5f5);
+}
+
+.cover-create-plus {
+  font-size: 2.75rem;
+  font-weight: var(--font-light);
+  line-height: 1;
+  color: var(--color-cyan, #7dd3e8);
+}
+
+.cover-create-label { font-size: var(--text-base); font-weight: var(--font-semibold); }
+.cover-create-sub { font-size: var(--text-xs); color: var(--color-text-tertiary, #8896a4); }
+
 .btn-building {
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);

@@ -1754,7 +1754,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
               </>
             ) : playLaunched ? (
               <>
-                <div className="play-icon">🎮</div>
                 <p className="play-card-msg">Launched — switch to Dolphin!</p>
               </>
             ) : (
