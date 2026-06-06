@@ -1,50 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { playSound } from '../utils/sounds';
 import { API_URL, BACKEND_URL } from '../config';
-import HexagonLoader from './shared/HexagonLoader';
 import { getProgressMessage } from './shared/progressText';
+import ProgressPanel from './export/ProgressPanel';
+import ExportModePicker from './export/ExportModePicker';
+import AutoTexturePanel from './export/AutoTexturePanel';
+import ManualListenPanel from './export/ManualListenPanel';
+import BundleForm from './export/BundleForm';
+import TestInGamePanel from './export/TestInGamePanel';
 import './IsoBuilder.css';
 
-// CSS screen order for scanning - matches the character select screen layout
-// Sheik is at the end since she shares Zelda's CSP slot
+// CSS screen order for the manual scan — matches the character select layout.
+// Sheik is last since she shares Zelda's CSP slot.
 const CSS_SCAN_ORDER = [
   'Dr. Mario', 'Mario', 'Luigi', 'Bowser', 'Peach', 'Yoshi',
   'Donkey Kong', 'Captain Falcon', 'Ganondorf', 'Young Link', 'Link', 'Zelda',
   'Samus', 'Kirby', 'Ice Climbers', 'Ness', 'Fox', 'Falco',
   'Pichu', 'Pikachu', 'Jigglypuff', 'Mewtwo', 'Mr. Game & Watch', 'Marth', 'Roy',
-  'Sheik'
+  'Sheik',
 ];
 
-const TEST_VERDICT_LABEL = {
-  healthy: 'PASS',
-  ended: 'PASS — match ended',
-  never_started: 'DID NOT START',
-  hung: 'HUNG',
-  crashed: 'CRASH',
-  error: 'ERROR',
-};
-
+// phase: choose | exporting | autoTexture | listening | done | error
 const IsoBuilder = ({ onClose, projectName = 'game' }) => {
-  // Format: BUILDNAME_YYYY-MM-DD_HH-MM.iso
   const getDefaultFilename = () => {
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
     const time = now.toTimeString().slice(0, 5).replace(':', '-');
     return `${projectName}_${date}_${time}.iso`;
   };
+
+  // --- top-level flow ---
+  const [phase, setPhase] = useState('choose');
   const [filename, setFilename] = useState(getDefaultFilename());
+  const [error, setError] = useState(null);
+
+  // --- export options ---
   const [cspCompression, setCspCompression] = useState(1.0);
   const [useColorSmash, setUseColorSmash] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [recommendedCompression, setRecommendedCompression] = useState(1.0);
+  const [costumeCount, setCostumeCount] = useState(0);
+
+  // --- ISO export progress ---
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
-  const [complete, setComplete] = useState(false);
-  const [error, setError] = useState(null);
-  const [socket, setSocket] = useState(null);
   const [exportedIsoPath, setExportedIsoPath] = useState(null);
+  const [buildId, setBuildId] = useState(null);
+  const [usedTexturePack, setUsedTexturePack] = useState(false);
+  const [texturePackPath, setTexturePackPath] = useState(null);
 
-  // Patch creation state
+  // settings paths (read once)
+  const [slippiDolphinPath] = useState(() => localStorage.getItem('slippi_dolphin_path') || '');
+
+  // --- auto texture pack ---
+  const [autoProgress, setAutoProgress] = useState({ percentage: 0, message: '', stage: '' });
+  const [autoResult, setAutoResult] = useState(null);
+  const [autoError, setAutoError] = useState(null);
+
+  // --- manual scan (fallback) ---
+  const [textureProgress, setTextureProgress] = useState({ matched: 0, total: 0, percentage: 0 });
+  const [characters, setCharacters] = useState([]);
+  const [currentCharIndex, setCurrentCharIndex] = useState(0);
+  const textureModeRef = useRef('auto'); // 'auto' | 'manual'
+
+  // --- patch ---
   const [showPatchForm, setShowPatchForm] = useState(false);
   const [patchName, setPatchName] = useState('');
   const [patchDescription, setPatchDescription] = useState('');
@@ -54,39 +74,23 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [patchComplete, setPatchComplete] = useState(false);
   const [patchError, setPatchError] = useState(null);
   const [patchResult, setPatchResult] = useState(null);
-  const [patchCreateId, setPatchCreateId] = useState(null);
+  const patchCreateIdRef = useRef(null);
 
-  // Texture pack mode state
-  const [listeningMode, setListeningMode] = useState(false);
-  const [textureProgress, setTextureProgress] = useState({ matched: 0, total: 0, percentage: 0 });
-  const [matchedTextures, setMatchedTextures] = useState([]);
-  const [buildId, setBuildId] = useState(null);
-  const [slippiDolphinPath, setSlippiDolphinPath] = useState(localStorage.getItem('slippi_dolphin_path') || '');
-  const [characters, setCharacters] = useState([]);
-  const [currentCharIndex, setCurrentCharIndex] = useState(0);
-  const [confirmedChars, setConfirmedChars] = useState(new Set());
-
-  // New state for redesigned UI
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [recommendedCompression, setRecommendedCompression] = useState(1.0);
-  const [costumeCount, setCostumeCount] = useState(0);
-
-  // Bundle export state (inline, no separate modal)
-  const [texturePackPath, setTexturePackPath] = useState(null);
+  // --- bundle ---
   const [showBundleForm, setShowBundleForm] = useState(false);
   const [bundleName, setBundleName] = useState('');
   const [bundleDescription, setBundleDescription] = useState('');
   const [bundleImage, setBundleImage] = useState(null);
   const [bundleImagePreview, setBundleImagePreview] = useState(null);
   const [bundleExporting, setBundleExporting] = useState(false);
-  const [bundleExportId, setBundleExportId] = useState(null);
   const [bundleProgress, setBundleProgress] = useState(0);
   const [bundleMessage, setBundleMessage] = useState('');
   const [bundleComplete, setBundleComplete] = useState(false);
   const [bundleError, setBundleError] = useState(null);
   const [bundleResult, setBundleResult] = useState(null);
+  const bundleExportIdRef = useRef(null);
 
-  // Test-in-game state
+  // --- test in game ---
   const [testing, setTesting] = useState(false);
   const [testStage, setTestStage] = useState('');
   const [testProgress, setTestProgress] = useState(0);
@@ -96,150 +100,177 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [testManifestPath, setTestManifestPath] = useState('');
   const [showTestAdvanced, setShowTestAdvanced] = useState(false);
 
+  const socketRef = useRef(null);
+
+  // Functions the socket handlers need to call — kept on a ref so the socket
+  // effect can run once (deps []) without going stale.
+  const liveRef = useRef({});
+
+  // ---- texture pack: auto naming (no Dolphin) ----
+  const startAutoTexture = async (bId) => {
+    setAutoProgress({ percentage: 0, message: 'Starting…', stage: '' });
+    setAutoResult(null);
+    setAutoError(null);
+    setPhase('autoTexture');
+    try {
+      const res = await fetch(`${API_URL}/texture-pack/auto-apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buildId: bId, slippiPath: slippiDolphinPath }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setAutoError(data.error || 'Failed to start auto texture pack');
+        playSound('error');
+      }
+    } catch (err) {
+      setAutoError(`Failed to start auto texture pack: ${err.message}`);
+      playSound('error');
+    }
+  };
+
+  // ---- texture pack: manual live scan (fallback) ----
+  const startManualListening = async (bId) => {
+    setPhase('listening');
+    try {
+      const response = await fetch(`${API_URL}/texture-pack/start-listening`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buildId: bId, slippiPath: slippiDolphinPath }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        const chars = result.characters || [];
+        const sortedChars = [...chars].sort((a, b) => {
+          const aIdx = CSS_SCAN_ORDER.indexOf(a.name);
+          const bIdx = CSS_SCAN_ORDER.indexOf(b.name);
+          if (aIdx === -1 && bIdx === -1) return a.name.localeCompare(b.name);
+          if (aIdx === -1) return 1;
+          if (bIdx === -1) return -1;
+          return aIdx - bIdx;
+        });
+        const filteredTotal = sortedChars.reduce((sum, c) => sum + c.total, 0);
+        setTextureProgress({ matched: 0, total: filteredTotal, percentage: 0 });
+        setCharacters(sortedChars);
+        setCurrentCharIndex(0);
+      }
+    } catch (err) {
+      console.error('Failed to start texture listening:', err);
+    }
+  };
+
+  liveRef.current.startAutoTexture = startAutoTexture;
+  liveRef.current.startManualListening = startManualListening;
+
+  // ---- WebSocket wiring (connect once) ----
   useEffect(() => {
-    // Connect to WebSocket for progress updates
-    const newSocket = io(BACKEND_URL);
+    const socket = io(BACKEND_URL);
+    socketRef.current = socket;
 
-    newSocket.on('connect', () => {
-      console.log('Connected to WebSocket');
-    });
+    socket.on('connect', () => console.log('Connected to WebSocket'));
 
-    newSocket.on('export_progress', (data) => {
+    // ISO export
+    socket.on('export_progress', (data) => {
       setProgress(data.percentage);
       setMessage(data.message || 'Exporting assets...');
     });
 
-    newSocket.on('export_complete', async (data) => {
+    socket.on('export_complete', (data) => {
       setProgress(100);
       setMessage('Export complete!');
-      setComplete(true);
-      setExporting(false);
       setExportedIsoPath(data.path);
       playSound('achievement');
 
-      // If texture pack mode, start listening
       if (data.texturePackMode && data.buildId) {
         setBuildId(data.buildId);
-        setTextureProgress({ matched: 0, total: data.totalCostumes, percentage: 0 });
-
-        try {
-          const response = await fetch(`${API_URL}/texture-pack/start-listening`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              buildId: data.buildId,
-              slippiPath: localStorage.getItem('slippi_dolphin_path')
-            })
-          });
-
-          const result = await response.json();
-          if (result.success) {
-            setListeningMode(true);
-            const chars = result.characters || [];
-            // Sort by CSS screen order for intuitive scanning
-            const sortedChars = [...chars].sort((a, b) => {
-              const aIdx = CSS_SCAN_ORDER.indexOf(a.name);
-              const bIdx = CSS_SCAN_ORDER.indexOf(b.name);
-              // Put unknown characters at the end
-              if (aIdx === -1 && bIdx === -1) return a.name.localeCompare(b.name);
-              if (aIdx === -1) return 1;
-              if (bIdx === -1) return -1;
-              return aIdx - bIdx;
-            });
-            const filteredTotal = sortedChars.reduce((sum, c) => sum + c.total, 0);
-            setTextureProgress({ matched: 0, total: filteredTotal, percentage: 0 });
-            setCharacters(sortedChars);
-            setCurrentCharIndex(0);
-            setConfirmedChars(new Set());
-          }
-        } catch (err) {
-          console.error('Failed to start texture listening:', err);
+        setUsedTexturePack(true);
+        setTextureProgress({ matched: 0, total: data.totalCostumes || 0, percentage: 0 });
+        if (textureModeRef.current === 'manual') {
+          liveRef.current.startManualListening(data.buildId);
+        } else {
+          liveRef.current.startAutoTexture(data.buildId);
         }
+      } else {
+        setPhase('done');
       }
     });
 
-    // Texture pack events
-    newSocket.on('texture_matched', (data) => {
-      setMatchedTextures(prev => [...prev.slice(-9), data]); // Keep last 10
+    socket.on('export_error', (data) => {
+      playSound('error');
+      setError(data.error);
+      setPhase('error');
+    });
 
-      // Update character progress and auto-advance
-      setCharacters(prev => {
-        const updated = prev.map(char => {
-          if (char.name === data.character) {
-            return {
-              ...char,
-              matched: char.matched + 1,
-              costumes: char.costumes.map(c =>
-                c.index === data.costumeIndex ? { ...c, matched: true } : c
-              )
-            };
-          }
-          return char;
-        });
+    // auto texture pack
+    socket.on('texture_auto_progress', (data) => setAutoProgress(data));
+    socket.on('texture_auto_complete', (data) => {
+      setAutoResult(data);
+      if (data.texturePackPath) setTexturePackPath(data.texturePackPath);
+      playSound('achievement');
+    });
+    socket.on('texture_auto_error', (data) => {
+      setAutoError(data.error);
+      playSound('error');
+    });
 
-        // Auto-advance: find next character that still needs scanning
-        const matchedCharIdx = updated.findIndex(c => c.name === data.character);
+    // manual scan
+    socket.on('texture_matched', (data) => {
+      setCharacters((prev) => {
+        const updated = prev.map((char) =>
+          char.name === data.character
+            ? {
+                ...char,
+                matched: char.matched + 1,
+                costumes: char.costumes.map((c) =>
+                  c.index === data.costumeIndex ? { ...c, matched: true } : c
+                ),
+              }
+            : char
+        );
+        const matchedCharIdx = updated.findIndex((c) => c.name === data.character);
         const matchedChar = updated[matchedCharIdx];
-
-        // If current character is now complete, find next incomplete one
         if (matchedChar && matchedChar.matched + 1 >= matchedChar.total) {
-          const nextIncomplete = updated.findIndex(c => c.matched < c.total);
-          if (nextIncomplete !== -1) {
-            setCurrentCharIndex(nextIncomplete);
-          }
+          const nextIncomplete = updated.findIndex((c) => c.matched < c.total);
+          if (nextIncomplete !== -1) setCurrentCharIndex(nextIncomplete);
         } else if (matchedCharIdx !== -1) {
-          // Otherwise just show the character that got the match
           setCurrentCharIndex(matchedCharIdx);
         }
-
         return updated;
       });
     });
+    socket.on('texture_progress', (data) => setTextureProgress(data));
 
-    newSocket.on('texture_progress', (data) => {
-      setTextureProgress(data);
-    });
-
-    newSocket.on('export_error', (data) => {
-      playSound('error');
-      setError(data.error);
-      setExporting(false);
-    });
-
-    // Patch creation events
-    newSocket.on('xdelta_create_progress', (data) => {
-      if (patchCreateId && data.create_id === patchCreateId) {
+    // patch
+    socket.on('xdelta_create_progress', (data) => {
+      if (patchCreateIdRef.current && data.create_id === patchCreateIdRef.current) {
         setPatchProgress(data.percentage);
         setPatchMessage(data.message);
       }
     });
-
-    newSocket.on('xdelta_create_complete', (data) => {
-      if (patchCreateId && data.create_id === patchCreateId) {
+    socket.on('xdelta_create_complete', (data) => {
+      if (patchCreateIdRef.current && data.create_id === patchCreateIdRef.current) {
         setPatchProgress(100);
         setPatchResult(data);
         setPatchComplete(true);
         setCreatingPatch(false);
       }
     });
-
-    newSocket.on('xdelta_create_error', (data) => {
-      if (patchCreateId && data.create_id === patchCreateId) {
+    socket.on('xdelta_create_error', (data) => {
+      if (patchCreateIdRef.current && data.create_id === patchCreateIdRef.current) {
         setPatchError(data.error);
         setCreatingPatch(false);
       }
     });
 
-    // Bundle export events
-    newSocket.on('bundle_export_progress', (data) => {
-      if (bundleExportId && data.export_id === bundleExportId) {
+    // bundle
+    socket.on('bundle_export_progress', (data) => {
+      if (bundleExportIdRef.current && data.export_id === bundleExportIdRef.current) {
         setBundleProgress(data.percentage);
         setBundleMessage(data.message);
       }
     });
-
-    newSocket.on('bundle_export_complete', (data) => {
-      if (bundleExportId && data.export_id === bundleExportId) {
+    socket.on('bundle_export_complete', (data) => {
+      if (bundleExportIdRef.current && data.export_id === bundleExportIdRef.current) {
         setBundleProgress(100);
         setBundleComplete(true);
         setBundleExporting(false);
@@ -247,162 +278,129 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         playSound('achievement');
       }
     });
-
-    newSocket.on('bundle_export_error', (data) => {
-      if (bundleExportId && data.export_id === bundleExportId) {
+    socket.on('bundle_export_error', (data) => {
+      if (bundleExportIdRef.current && data.export_id === bundleExportIdRef.current) {
         setBundleError(data.error);
         setBundleExporting(false);
         playSound('error');
       }
     });
 
-    // Test-in-game events
-    newSocket.on('test_progress', (data) => {
+    // test in game
+    socket.on('test_progress', (data) => {
       setTestStage(data.stage || '');
       setTestProgress(data.percentage || 0);
       setTestMessage(data.message || 'Testing…');
     });
-
-    newSocket.on('test_complete', (data) => {
+    socket.on('test_complete', (data) => {
       setTesting(false);
       setTestResult(data);
       playSound(data.success ? 'achievement' : 'error');
     });
-
-    newSocket.on('test_error', (data) => {
+    socket.on('test_error', (data) => {
       setTesting(false);
       setTestError(data.error);
       playSound('error');
     });
 
-    setSocket(newSocket);
+    return () => socket.disconnect();
+  }, []);
 
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [patchCreateId, bundleExportId]);
-
-  // Fetch recommended compression on mount
+  // recommended compression on mount
   useEffect(() => {
     fetch(`${API_URL}/recommended-compression`)
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (data.success) {
           setRecommendedCompression(data.ratio);
           setCostumeCount(data.addedCostumes);
         }
       })
-      .catch(err => console.error('Failed to fetch recommended compression:', err));
+      .catch((err) => console.error('Failed to fetch recommended compression:', err));
   }, []);
 
-  const handleStartExport = async (options = {}) => {
-    const {
-      useTexturePack = false,
-      compressionOverride = null,
-      colorSmashOverride = null
-    } = options;
-
+  // ---- export start ----
+  const handleStartExport = async ({ useTexturePack = false, compressionOverride = null, colorSmashOverride = null } = {}) => {
     playSound('start');
-    setExporting(true);
+    setPhase('exporting');
     setProgress(0);
     setMessage('Starting export...');
     setError(null);
-    setComplete(false);
-    setListeningMode(false);
-    setMatchedTextures([]);
+    setAutoResult(null);
+    setAutoError(null);
+    setCharacters([]);
 
-    // Determine compression: override > manual slider value
     const finalCompression = compressionOverride !== null ? compressionOverride : cspCompression;
     const finalColorSmash = colorSmashOverride !== null ? colorSmashOverride : useColorSmash;
 
     try {
       const response = await fetch(`${API_URL}/export/start`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filename,
           cspCompression: finalCompression,
           useColorSmash: finalColorSmash,
           texturePackMode: useTexturePack,
-          slippiDolphinPath: useTexturePack ? slippiDolphinPath : null
-        })
+          slippiDolphinPath: useTexturePack ? slippiDolphinPath : null,
+        }),
       });
-
       const data = await response.json();
-
       if (!data.success) {
         playSound('error');
         setError(data.error);
-        setExporting(false);
+        setPhase('error');
       } else if (data.buildId) {
         setBuildId(data.buildId);
       }
     } catch (err) {
       playSound('error');
       setError(`Failed to start export: ${err.message}`);
-      setExporting(false);
+      setPhase('error');
     }
   };
 
   const handleQuickExport = () => {
-    handleStartExport({
-      useTexturePack: false,
-      compressionOverride: recommendedCompression,
-      colorSmashOverride: false
-    });
+    textureModeRef.current = 'auto';
+    handleStartExport({ useTexturePack: false, compressionOverride: recommendedCompression, colorSmashOverride: false });
   };
-
-  const handleTexturePackExport = () => {
-    handleStartExport({
-      useTexturePack: true,
-      compressionOverride: 1.0,
-      colorSmashOverride: false
-    });
+  const handleTexturePackExport = (mode = 'auto') => {
+    textureModeRef.current = mode;
+    handleStartExport({ useTexturePack: true, compressionOverride: 1.0, colorSmashOverride: false });
   };
-
   const handleAdvancedExport = () => {
-    handleStartExport({
-      useTexturePack: false,
-      compressionOverride: cspCompression,
-      colorSmashOverride: useColorSmash
-    });
+    textureModeRef.current = 'auto';
+    handleStartExport({ useTexturePack: false, compressionOverride: cspCompression, colorSmashOverride: useColorSmash });
   };
 
+  // ---- manual scan controls ----
   const handleStopListening = async () => {
     try {
-      const response = await fetch(`${API_URL}/texture-pack/stop-listening`, {
-        method: 'POST'
-      });
-
+      const response = await fetch(`${API_URL}/texture-pack/stop-listening`, { method: 'POST' });
       const data = await response.json();
-      if (data.success) {
-        setListeningMode(false);
-        // Save texture pack path for bundle export
-        if (data.texturePackPath) {
-          setTexturePackPath(data.texturePackPath);
-        }
-        // Show success message with path
-        setMessage(`Texture pack created! ${data.matchedCount}/${data.totalCount} textures matched.`);
-      }
+      if (data.success && data.texturePackPath) setTexturePackPath(data.texturePackPath);
     } catch (err) {
       console.error('Failed to stop listening:', err);
     }
+    setPhase('done');
   };
 
-  // Handle modal close - cleanup texture listening if active
+  // ---- close ----
   const handleClose = async () => {
     playSound('back');
-    if (listeningMode) {
-      await handleStopListening();
+    if (phase === 'listening') {
+      try {
+        await fetch(`${API_URL}/texture-pack/stop-listening`, { method: 'POST' });
+      } catch (err) {
+        /* best effort */
+      }
     }
     onClose();
   };
 
+  // ---- download ----
   const handleDownload = () => {
     playSound('start');
-    // Create a temporary anchor element to trigger download without opening new window
     const link = document.createElement('a');
     link.href = `${API_URL}/export/download/${filename}`;
     link.download = filename;
@@ -411,90 +409,54 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
+  // ---- bundle ----
+  const vanillaIsoPath = () => localStorage.getItem('vanilla_iso_path');
   const handleShowBundleForm = () => {
-    // Initialize with project name
     setBundleName(projectName || 'My Mod Pack');
     setBundleDescription('');
     setBundleImage(null);
     setBundleImagePreview(null);
     setShowBundleForm(true);
+    setPhase('done');
     playSound('select');
   };
-
   const handleBundleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setBundleImage(file);
-      // Create preview URL
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setBundleImagePreview(reader.result);
-      };
+      reader.onloadend = () => setBundleImagePreview(reader.result);
       reader.readAsDataURL(file);
     }
   };
-
   const handleStartBundleExport = async () => {
-    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path');
-    if (!vanillaIsoPath) {
-      alert('Vanilla ISO path not set. Please configure it in Settings.');
-      return;
-    }
-
-    if (!bundleName.trim()) {
-      alert('Please enter a name for the bundle');
-      return;
-    }
+    const vanilla = vanillaIsoPath();
+    if (!vanilla) return; // form disables submit, but guard anyway
+    if (!bundleName.trim()) return;
 
     setShowBundleForm(false);
     setBundleExporting(true);
     setBundleProgress(0);
-    setBundleMessage('Finalizing texture pack...');
+    setBundleMessage('Creating bundle...');
     setBundleError(null);
     setBundleComplete(false);
     setBundleResult(null);
     playSound('start');
 
     try {
-      // First, stop listening to finalize the texture pack and get the path
-      let finalTexturePackPath = texturePackPath;
-      if (listeningMode) {
-        const stopResponse = await fetch(`${API_URL}/texture-pack/stop-listening`, {
-          method: 'POST'
-        });
-        const stopData = await stopResponse.json();
-        if (stopData.success && stopData.texturePackPath) {
-          finalTexturePackPath = stopData.texturePackPath;
-          setTexturePackPath(stopData.texturePackPath);
-        }
-        setListeningMode(false);
-      }
-
-      setBundleMessage('Creating bundle...');
-
-      // Use FormData to support image upload
       const formData = new FormData();
       formData.append('name', bundleName.trim());
       formData.append('description', bundleDescription.trim());
       formData.append('buildName', buildId || bundleName.trim().toLowerCase().replace(/\s+/g, '-'));
-      formData.append('vanillaIsoPath', vanillaIsoPath);
+      formData.append('vanillaIsoPath', vanilla);
       formData.append('exportedIsoPath', exportedIsoPath);
-      if (finalTexturePackPath) {
-        formData.append('texturePackPath', finalTexturePackPath);
-      }
-      if (bundleImage) {
-        formData.append('image', bundleImage);
-      }
+      if (texturePackPath) formData.append('texturePackPath', texturePackPath);
+      if (bundleImage) formData.append('image', bundleImage);
 
-      const response = await fetch(`${API_URL}/bundle/export`, {
-        method: 'POST',
-        body: formData
-      });
-
+      const response = await fetch(`${API_URL}/bundle/export`, { method: 'POST', body: formData });
       const data = await response.json();
-
       if (data.success) {
-        setBundleExportId(data.export_id);
+        bundleExportIdRef.current = data.export_id;
       } else {
         setBundleError(data.error);
         setBundleExporting(false);
@@ -506,7 +468,6 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       playSound('error');
     }
   };
-
   const handleDownloadBundle = () => {
     if (!bundleResult?.bundle_id) return;
     playSound('start');
@@ -518,46 +479,33 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
+  // ---- patch ----
   const handleStartCreatePatch = async () => {
-    if (!patchName.trim()) {
-      alert('Please enter a name for the patch');
+    if (!patchName.trim()) return;
+    const vanilla = vanillaIsoPath();
+    if (!vanilla) {
+      setPatchError('No vanilla ISO path set. Set it in Settings first.');
       return;
     }
-
-    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path');
-    if (!vanillaIsoPath) {
-      alert('No vanilla ISO path set. Please set it in Settings first.');
-      return;
-    }
-
     if (!exportedIsoPath) {
-      alert('No exported ISO path available');
+      setPatchError('No exported ISO path available.');
       return;
     }
-
     setCreatingPatch(true);
     setPatchProgress(0);
     setPatchMessage('Starting...');
     setPatchError(null);
     setPatchComplete(false);
     setPatchResult(null);
-
     try {
       const response = await fetch(`${API_URL}/xdelta/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vanillaIsoPath,
-          moddedIsoPath: exportedIsoPath,
-          name: patchName,
-          description: patchDescription
-        })
+        body: JSON.stringify({ vanillaIsoPath: vanilla, moddedIsoPath: exportedIsoPath, name: patchName, description: patchDescription }),
       });
-
       const data = await response.json();
-
       if (data.success) {
-        setPatchCreateId(data.create_id);
+        patchCreateIdRef.current = data.create_id;
       } else {
         setPatchError(data.error);
         setCreatingPatch(false);
@@ -567,7 +515,6 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       setCreatingPatch(false);
     }
   };
-
   const handleDownloadPatch = () => {
     if (!patchResult?.patch_id) return;
     const link = document.createElement('a');
@@ -577,6 +524,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
+  // ---- test ----
   const handleTestInGame = async () => {
     playSound('start');
     setTesting(true);
@@ -585,18 +533,13 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     setTestMessage('Starting in-game test…');
     setTestResult(null);
     setTestError(null);
-
     try {
-      const body = {
-        isoPath: exportedIsoPath,
-        slippiDolphinPath: slippiDolphinPath,
-      };
+      const body = { isoPath: exportedIsoPath, slippiDolphinPath };
       if (testManifestPath.trim()) body.manifestPath = testManifestPath.trim();
-
       const response = await fetch(`${API_URL}/test-in-game/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       if (!data.success) {
@@ -611,690 +554,255 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     }
   };
 
-  const renderTestResult = () => {
-    const r = testResult;
-    if (!r) return null;
-    const pass = !!r.success;
-    const headline = pass
-      ? '✓ PASS'
-      : `✕ ${TEST_VERDICT_LABEL[r.verdict] || String(r.verdict || '').toUpperCase()}`;
-    return (
-      <div className="test-result" style={{ textAlign: 'center' }}>
-        <div style={{
-          display: 'inline-block', padding: '0.35rem 1rem',
-          borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '1.1em',
-          marginBottom: '0.75rem', color: '#fff',
-          background: pass ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)'
-        }}>
-          {headline}
+  const canBundle = usedTexturePack && !!texturePackPath;
+
+  // ---- render the post-export "what next" screen ----
+  const renderDone = () => {
+    if (creatingPatch) {
+      return (
+        <ProgressPanel
+          title="Creating Patch..."
+          label="Patch creation progress"
+          progressValue={patchProgress > 0 ? patchProgress : null}
+          messageText={getProgressMessage(patchMessage, 'Comparing ISOs...')}
+        />
+      );
+    }
+    if (patchComplete && patchResult) {
+      return (
+        <div className="export-complete">
+          <div className="success-icon">✓</div>
+          <h3>Patch Created!</h3>
+          <p>Your patch "{patchResult.name}" has been saved.</p>
+          <p className="subtle-line">
+            Size: {patchResult.size_mb} MB
+            {patchResult.size_mb < 25 && <span className="discord-ok"> (Discord-friendly!)</span>}
+          </p>
+          <div className="complete-actions">
+            <button className="btn-download" onClick={handleDownloadPatch}>Download Patch</button>
+            <button className="btn-download btn-gold" onClick={handleDownload}>Download ISO</button>
+            <button className="btn-secondary" onClick={handleClose}>Close</button>
+          </div>
         </div>
-        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>{r.reason}</p>
-        {r.onlineAborted && (
-          <p style={{ color: 'var(--color-warning, #f39c12)', marginBottom: '1rem' }}>
-            Stopped before going online — no matchmaking occurred.
+      );
+    }
+    if (patchError) {
+      return (
+        <div className="export-error">
+          <div className="error-icon">✕</div>
+          <h3>Patch Creation Failed</h3>
+          <p className="error-message">{patchError}</p>
+          <div className="complete-actions">
+            <button className="btn-download" onClick={handleDownload}>Download ISO Anyway</button>
+            <button className="btn-secondary" onClick={() => setPatchError(null)}>Back</button>
+          </div>
+        </div>
+      );
+    }
+    if (bundleExporting) {
+      return (
+        <ProgressPanel
+          title="Creating Bundle..."
+          label="Bundle export progress"
+          progressValue={bundleProgress > 0 ? bundleProgress : null}
+          messageText={getProgressMessage(bundleMessage, 'Preparing bundle assets...')}
+        />
+      );
+    }
+    if (bundleComplete && bundleResult) {
+      return (
+        <div className="export-complete">
+          <div className="success-icon">✓</div>
+          <h3>Bundle Created!</h3>
+          <p className="subtle-line">{bundleResult.filename}</p>
+          <p className="subtle-line">
+            Size: {bundleResult.size_mb} MB
+            {bundleResult.texture_count > 0 && ` • ${bundleResult.texture_count} textures`}
+          </p>
+          <p className="share-note">Share this file — friends can install it with one click!</p>
+          <div className="complete-actions">
+            <button className="btn-download btn-gold" onClick={handleDownloadBundle}>Download Bundle</button>
+            <button className="btn-secondary" onClick={handleClose}>Done</button>
+          </div>
+        </div>
+      );
+    }
+    if (bundleError) {
+      return (
+        <div className="export-error">
+          <div className="error-icon">✕</div>
+          <h3>Bundle Export Failed</h3>
+          <p className="error-message">{bundleError}</p>
+          <div className="complete-actions">
+            <button className="btn-download" onClick={handleDownload}>Download ISO Anyway</button>
+            <button className="btn-secondary" onClick={() => setBundleError(null)}>Back</button>
+          </div>
+        </div>
+      );
+    }
+    if (showBundleForm) {
+      return (
+        <BundleForm
+          bundleName={bundleName}
+          setBundleName={setBundleName}
+          bundleDescription={bundleDescription}
+          setBundleDescription={setBundleDescription}
+          bundleImagePreview={bundleImagePreview}
+          onImageChange={handleBundleImageChange}
+          onRemoveImage={() => { setBundleImage(null); setBundleImagePreview(null); }}
+          onSubmit={handleStartBundleExport}
+          onCancel={() => setShowBundleForm(false)}
+          vanillaMissing={!vanillaIsoPath()}
+        />
+      );
+    }
+
+    // Default: success + chained actions
+    return (
+      <div className="export-complete export-done">
+        <div className="success-icon">✓</div>
+        <h3>Export Complete!</h3>
+        <p>Your modified ISO is ready to download.</p>
+        {canBundle && (
+          <p className="auto-applied-summary">
+            HD texture pack applied to your Slippi Load folder — it’ll show next boot.
           </p>
         )}
-        {r.screenshot && (
-          <img
-            src={r.screenshot}
-            alt="In-game screenshot"
-            style={{
-              maxWidth: '100%', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)', marginBottom: '1rem'
-            }}
+        <div className="complete-actions">
+          <button className="btn-download" onClick={handleDownload}>Download {filename}</button>
+          <button className="btn-secondary" onClick={handleClose}>Close</button>
+        </div>
+
+        <div className="action-section">
+          <TestInGamePanel
+            testing={testing}
+            testProgress={testProgress}
+            testStage={testStage}
+            testMessage={testMessage}
+            testResult={testResult}
+            testError={testError}
+            slippiPath={slippiDolphinPath}
+            manifestPath={testManifestPath}
+            setManifestPath={setTestManifestPath}
+            showTestAdvanced={showTestAdvanced}
+            setShowTestAdvanced={setShowTestAdvanced}
+            onTest={handleTestInGame}
           />
+        </div>
+
+        <div className="action-section">
+          {!showPatchForm ? (
+            <>
+              <h4 className="action-heading">Create shareable patch</h4>
+              <p className="action-blurb">
+                A small <code>.xdelta</code> file others apply to their vanilla ISO to recreate this build.
+              </p>
+              <button className="btn-secondary full" onClick={() => setShowPatchForm(true)}>
+                Create Patch
+              </button>
+            </>
+          ) : (
+            <div className="patch-form">
+              <h4 className="action-heading">Create Patch</h4>
+              <div className="form-field">
+                <label>Patch Name</label>
+                <input type="text" value={patchName} onChange={(e) => setPatchName(e.target.value)} placeholder="My Awesome Mod Pack" />
+              </div>
+              <div className="form-field">
+                <label>Description (optional)</label>
+                <textarea value={patchDescription} onChange={(e) => setPatchDescription(e.target.value)} placeholder="Describe what's in this patch..." rows={2} />
+              </div>
+              <div className="form-actions">
+                <button className="btn-export" onClick={handleStartCreatePatch} disabled={!patchName.trim()}>Create Patch</button>
+                <button className="btn-secondary" onClick={() => setShowPatchForm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {canBundle && (
+          <div className="action-section">
+            <h4 className="action-heading">Export as bundle</h4>
+            <p className="action-blurb">
+              A <code>.ssbm</code> file (patch + texture pack) friends install in one click.
+            </p>
+            <button className="btn-download btn-gold full" onClick={handleShowBundleForm}>
+              Export Bundle
+            </button>
+          </div>
         )}
-        {Array.isArray(r.checks) && r.checks.length > 0 && (
-          <ul style={{ listStyle: 'none', padding: 0, textAlign: 'left', marginBottom: '1rem' }}>
-            {r.checks.map((c, i) => {
-              const ok = c.verdict === 'healthy';
-              return (
-                <li key={i} style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--color-border)' }}>
-                  <span style={{
-                    color: ok ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)',
-                    marginRight: '0.5rem', fontWeight: 700
-                  }}>
-                    {ok ? '✓' : '✕'}
-                  </span>
-                  <span style={{ color: 'var(--color-text-primary)' }}>{c.label}</span>
-                  {Array.isArray(c.covers) && c.covers.length > 0 && (
-                    <span style={{ fontSize: '0.75em', color: 'var(--color-text-secondary)', marginLeft: '0.5rem' }}>
-                      [{c.covers.join(', ')}]
-                    </span>
-                  )}
-                  {!ok && c.reason && (
-                    <div style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginLeft: '1.5rem' }}>
-                      {c.reason}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <button className="btn-secondary" onClick={handleTestInGame} disabled={!slippiDolphinPath}>
-          Test again
-        </button>
       </div>
     );
   };
-
-  const renderProgressPanel = ({
-    title,
-    label,
-    progressValue = null,
-    messageText,
-    metaText = null,
-    size = 120,
-    className = ''
-  }) => (
-    <div className={['export-progress', className].filter(Boolean).join(' ')}>
-      <HexagonLoader
-        className="progress-loader"
-        size={size}
-        label={label}
-        progress={progressValue}
-      />
-      <div className="hexagon-progress-copy">
-        <h3>{title}</h3>
-        {metaText && <p className="hexagon-progress-meta">{metaText}</p>}
-        <p className="progress-message">{messageText}</p>
-      </div>
-    </div>
-  );
 
   return (
     <div className="iso-builder-overlay">
       <div className="iso-builder-modal">
         <div className="modal-header">
-          <h2>Export ISO</h2>
+          <h2>Export Project</h2>
           <button className="close-btn" onClick={handleClose}>×</button>
         </div>
 
         <div className="modal-body">
-          {!exporting && !complete && !error && (
-            <>
-              {/* Export Mode Cards */}
-              <div className="export-mode-cards">
-                {/* Quick Export Card */}
-                <div className="export-mode-card">
-                  <div className="card-header">
-                    <h3>Quick Export</h3>
-                  </div>
-                  <div className="card-body">
-                    <p className="card-description">
-                      Auto-optimized for {costumeCount} added costume{costumeCount !== 1 ? 's' : ''}
-                    </p>
-                    <div className="compression-badge">
-                      Compression: {recommendedCompression}x
-                    </div>
-                    <p className="card-note">
-                      Required for console/Wii
-                    </p>
-                  </div>
-                  <button
-                    className="btn-card-export"
-                    onClick={handleQuickExport}
-                  >
-                    Export
-                  </button>
-                </div>
-
-                {/* Texture Pack Card */}
-                <div className={`export-mode-card texture-pack-card ${!slippiDolphinPath ? 'disabled' : ''}`}>
-                  <div className="card-header">
-                    <h3>Texture Pack</h3>
-                    <span className="recommended-badge">Recommended</span>
-                  </div>
-                  <div className="card-body">
-                    <p className="card-description">
-                      Best quality, no compression
-                    </p>
-                    <ol className="workflow-steps">
-                      <li>Export ISO</li>
-                      <li>Scroll through CSS in Dolphin</li>
-                      <li>Done - textures auto-apply</li>
-                    </ol>
-                    {!slippiDolphinPath && (
-                      <p className="card-warning">
-                        Set Slippi path in Settings first
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    className="btn-card-export btn-texture-pack"
-                    onClick={handleTexturePackExport}
-                    disabled={!slippiDolphinPath}
-                  >
-                    Export
-                  </button>
-                </div>
-              </div>
-
-              {/* Advanced Options (Collapsible) */}
-              <div className="advanced-section">
-                <button
-                  className="advanced-toggle"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                >
-                  <span className="toggle-arrow">{showAdvanced ? '▼' : '▶'}</span>
-                  Advanced Options
-                </button>
-
-                {showAdvanced && (
-                  <div className="advanced-content">
-                    <div className="form-group">
-                      <label htmlFor="compression">
-                        Manual CSP Compression
-                      </label>
-                      <div className="compression-input-group">
-                        <input
-                          type="number"
-                          id="compression-input"
-                          min="0.1"
-                          max="1.0"
-                          step="0.01"
-                          value={cspCompression}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            if (!isNaN(val) && val >= 0.1 && val <= 1.0) {
-                              setCspCompression(val);
-                            }
-                          }}
-                          className="compression-number-input"
-                        />
-                        <span className="compression-multiplier">x</span>
-                      </div>
-                      <input
-                        type="range"
-                        id="compression"
-                        min="0.1"
-                        max="1.0"
-                        step="0.01"
-                        value={cspCompression}
-                        onChange={(e) => setCspCompression(parseFloat(e.target.value))}
-                        className="compression-slider"
-                      />
-                      <div className="compression-hints">
-                        <span className="hint-label">0.1 (Tiny)</span>
-                        <span className="hint-label">1.0 (Full)</span>
-                      </div>
-                    </div>
-
-                    <div className="form-group color-smash-group">
-                      <label className="color-smash-label">
-                        <input
-                          type="checkbox"
-                          checked={useColorSmash}
-                          onChange={(e) => setUseColorSmash(e.target.checked)}
-                          className="color-smash-checkbox"
-                        />
-                        <span>Enable Color Smash</span>
-                      </label>
-                      <p className="color-smash-info">
-                        Saves memory but adds artifacts
-                      </p>
-                    </div>
-
-                    <button
-                      className="btn-export btn-advanced-export"
-                      onClick={handleAdvancedExport}
-                    >
-                      Export with Custom Settings
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
+          {phase === 'choose' && (
+            <ExportModePicker
+              filename={filename}
+              setFilename={setFilename}
+              recommendedCompression={recommendedCompression}
+              costumeCount={costumeCount}
+              slippiPath={slippiDolphinPath}
+              cspCompression={cspCompression}
+              setCspCompression={setCspCompression}
+              useColorSmash={useColorSmash}
+              setUseColorSmash={setUseColorSmash}
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              onQuickExport={handleQuickExport}
+              onTexturePackExport={handleTexturePackExport}
+              onAdvancedExport={handleAdvancedExport}
+            />
           )}
 
-          {exporting && (
-            renderProgressPanel({
-              title: 'Exporting ISO...',
-              label: 'ISO export progress',
-              progressValue: progress > 0 ? progress : null,
-              messageText: getProgressMessage(message, 'Preparing export pipeline...')
-            })
+          {phase === 'exporting' && (
+            <ProgressPanel
+              title="Exporting ISO..."
+              label="ISO export progress"
+              progressValue={progress > 0 ? progress : null}
+              messageText={getProgressMessage(message, 'Preparing export pipeline...')}
+            />
           )}
 
-          {complete && !creatingPatch && !patchComplete && !patchError && !listeningMode && (
-            <div className="export-complete">
-              <div className="success-icon">✓</div>
-              <h3>Export Complete!</h3>
-              <p>Your modified ISO is ready to download.</p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownload}>
-                  Download {filename}
-                </button>
-                <button className="btn-secondary" onClick={handleClose}>
-                  Close
-                </button>
-              </div>
-
-              {/* Test In Game Section */}
-              <div className="test-in-game-section" style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
-                {testing ? (
-                  renderProgressPanel({
-                    title: 'Testing in game…',
-                    label: 'In-game test progress',
-                    progressValue: testProgress > 0 ? testProgress : null,
-                    metaText: testStage ? testStage.replace(/_/g, ' ') : null,
-                    messageText: getProgressMessage(testMessage, 'Booting an isolated Dolphin…')
-                  })
-                ) : testResult ? (
-                  renderTestResult()
-                ) : testError ? (
-                  <div className="test-error" style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--color-error, #e74c3c)' }}>Test failed: {testError}</p>
-                    <button className="btn-secondary" onClick={handleTestInGame} disabled={!slippiDolphinPath}>
-                      Try again
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>Test in game</h4>
-                    <p style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-                      Boots this ISO in a throwaway Dolphin, plays a short automated match to verify your mods load,
-                      and reports PASS / CRASH with a screenshot. Your own Slippi setup is untouched, and it never goes online.
-                    </p>
-                    {!slippiDolphinPath && (
-                      <p className="card-warning" style={{ marginBottom: '0.75rem' }}>
-                        Set the Slippi path in Settings first
-                      </p>
-                    )}
-                    <button
-                      className="btn-export"
-                      style={{ width: '100%' }}
-                      onClick={handleTestInGame}
-                      disabled={!slippiDolphinPath}
-                    >
-                      🎮 Test in game
-                    </button>
-                    <button
-                      className="advanced-toggle"
-                      style={{ marginTop: '0.5rem' }}
-                      onClick={() => setShowTestAdvanced(v => !v)}
-                    >
-                      <span className="toggle-arrow">{showTestAdvanced ? '▼' : '▶'}</span>
-                      Drive specific mods (optional)
-                    </button>
-                    {showTestAdvanced && (
-                      <div style={{ marginTop: '0.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85em', color: 'var(--color-text-secondary)' }}>
-                          Build manifest path — a JSON file describing which character / stage / effect to drive.
-                          Leave blank to just boot and watch for a crash.
-                        </label>
-                        <input
-                          type="text"
-                          value={testManifestPath}
-                          onChange={(e) => setTestManifestPath(e.target.value)}
-                          placeholder="C:\\...\\last-build.json"
-                          style={{
-                            width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--color-border)', background: 'var(--color-bg-surface)',
-                            color: 'var(--color-text-primary)'
-                          }}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Patch Creation Section */}
-              <div className="patch-creation-section" style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
-                {!showPatchForm ? (
-                  <button
-                    className="btn-secondary"
-                    onClick={() => setShowPatchForm(true)}
-                    style={{ width: '100%' }}
-                  >
-                    Create Shareable Patch
-                  </button>
-                ) : (
-                  <div className="patch-form">
-                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-text-primary)' }}>Create Patch</h4>
-                    <p style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-                      Create a small patch file that others can use to recreate this ISO.
-                    </p>
-
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9em' }}>Patch Name</label>
-                      <input
-                        type="text"
-                        value={patchName}
-                        onChange={(e) => setPatchName(e.target.value)}
-                        placeholder="My Awesome Mod Pack"
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--color-border)',
-                          background: 'var(--color-bg-surface)',
-                          color: 'var(--color-text-primary)'
-                        }}
-                      />
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9em' }}>Description (optional)</label>
-                      <textarea
-                        value={patchDescription}
-                        onChange={(e) => setPatchDescription(e.target.value)}
-                        placeholder="Describe what's in this patch..."
-                        rows={2}
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--color-border)',
-                          background: 'var(--color-bg-surface)',
-                          color: 'var(--color-text-primary)',
-                          resize: 'vertical'
-                        }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        className="btn-export"
-                        onClick={handleStartCreatePatch}
-                        disabled={!patchName.trim()}
-                        style={{ flex: 1 }}
-                      >
-                        Create Patch
-                      </button>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setShowPatchForm(false)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+          {phase === 'autoTexture' && (
+            <AutoTexturePanel
+              progress={autoProgress}
+              result={autoResult}
+              error={autoError}
+              onContinue={() => setPhase('done')}
+              onManualFallback={() => startManualListening(buildId)}
+              onRetry={() => startAutoTexture(buildId)}
+            />
           )}
 
-          {creatingPatch && (
-            renderProgressPanel({
-              title: 'Creating Patch...',
-              label: 'Patch creation progress',
-              progressValue: patchProgress > 0 ? patchProgress : null,
-              messageText: getProgressMessage(patchMessage, 'Comparing ISOs...')
-            })
+          {phase === 'listening' && (
+            <ManualListenPanel
+              textureProgress={textureProgress}
+              characters={characters}
+              currentCharIndex={currentCharIndex}
+              setCurrentCharIndex={setCurrentCharIndex}
+              onDownload={handleDownload}
+              onDone={handleStopListening}
+              onShowBundle={async () => { await handleStopListening(); handleShowBundleForm(); }}
+            />
           )}
 
-          {patchComplete && patchResult && (
-            <div className="export-complete">
-              <div className="success-icon">✓</div>
-              <h3>Patch Created!</h3>
-              <p>Your patch "{patchResult.name}" has been created and saved.</p>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
-                Size: {patchResult.size_mb} MB
-                {patchResult.size_mb < 25 && (
-                  <span style={{ color: 'var(--color-success)', marginLeft: '0.5rem' }}>
-                    (Discord-friendly!)
-                  </span>
-                )}
-              </p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownloadPatch}>
-                  Download Patch
-                </button>
-                <button className="btn-download" onClick={handleDownload} style={{ background: 'var(--gradient-gold)' }}>
-                  Download ISO
-                </button>
-                <button className="btn-secondary" onClick={handleClose}>
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
+          {phase === 'done' && renderDone()}
 
-          {patchError && (
-            <div className="export-error">
-              <div className="error-icon">✕</div>
-              <h3>Patch Creation Failed</h3>
-              <p className="error-message">{patchError}</p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownload}>
-                  Download ISO Anyway
-                </button>
-                <button className="btn-secondary" onClick={handleClose}>
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
-
-          {listeningMode && (
-            <div className="listening-mode">
-              {renderProgressPanel({
-                title: 'Texture Pack Mode',
-                label: 'Texture pack scan progress',
-                progressValue: textureProgress.percentage > 0 ? textureProgress.percentage : null,
-                messageText: `${textureProgress.matched} / ${textureProgress.total} textures matched`,
-                metaText: characters.length > 0 && currentCharIndex < characters.length
-                  ? `Current focus: ${characters[currentCharIndex]?.name}`
-                  : 'Preparing scan targets...',
-                className: 'listening-progress-shell'
-              })}
-
-              {/* Current Character Focus */}
-              {characters.length > 0 && currentCharIndex < characters.length && (
-                <div className="current-character-section">
-                  <div className="current-char-header">
-                    <span className="current-label">
-                      {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total
-                        ? 'Complete!'
-                        : 'Scan next:'}
-                    </span>
-                    <span className="current-char-name">{characters[currentCharIndex]?.name}</span>
-                  </div>
-                  <div className="costume-dots">
-                    {characters[currentCharIndex]?.costumes.map((costume, i) => (
-                      <div
-                        key={i}
-                        className={`costume-dot ${costume.matched ? 'matched' : ''}`}
-                        title={`Costume ${costume.index + 1}`}
-                      />
-                    ))}
-                  </div>
-                  <p className="current-char-progress">
-                    {characters[currentCharIndex]?.matched} / {characters[currentCharIndex]?.total} costumes
-                    {characters[currentCharIndex]?.matched === characters[currentCharIndex]?.total && ' ✓'}
-                  </p>
-                </div>
-              )}
-
-              {/* Character List */}
-              <div className="character-list">
-                <div className="char-list-header">All Characters</div>
-                <div className="char-list-scroll">
-                  {characters.map((char, idx) => (
-                    <div
-                      key={char.name}
-                      className={`char-list-item ${idx === currentCharIndex ? 'current' : ''} ${char.matched === char.total ? 'complete' : ''} ${char.matched > 0 && char.matched < char.total ? 'partial' : ''}`}
-                      onClick={() => setCurrentCharIndex(idx)}
-                    >
-                      <span className="char-name">{char.name}</span>
-                      <span className="char-progress">
-                        {char.matched}/{char.total}
-                        {char.matched === char.total && ' ✓'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="listening-instructions">
-                Open the ISO in Dolphin and scroll through each character's costumes on the CSS.
-                The view will auto-update as textures are matched.
-              </p>
-
-              <div className="listening-actions">
-                <button className="btn-download" onClick={handleDownload}>
-                  Download ISO
-                </button>
-                <button className="btn-done" onClick={handleStopListening}>
-                  Done - Finish Texture Pack
-                </button>
-                <button
-                  className="btn-export-bundle"
-                  onClick={handleShowBundleForm}
-                  style={{ background: 'var(--gradient-gold)' }}
-                >
-                  Export as Bundle
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Bundle export form */}
-          {showBundleForm && (
-            <div className="bundle-form">
-              <h3>Export as Bundle</h3>
-              <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                Create a shareable .ssbm file that friends can install with one click!
-              </p>
-
-              <div className="form-field">
-                <label>Bundle Name</label>
-                <input
-                  type="text"
-                  value={bundleName}
-                  onChange={(e) => setBundleName(e.target.value)}
-                  placeholder="My Awesome Mod Pack"
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Description (optional)</label>
-                <textarea
-                  value={bundleDescription}
-                  onChange={(e) => setBundleDescription(e.target.value)}
-                  placeholder="Describe what's in this bundle..."
-                  rows={2}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Cover Image (optional)</label>
-                <div className="image-input-row">
-                  {bundleImagePreview ? (
-                    <div className="image-preview">
-                      <img src={bundleImagePreview} alt="Bundle preview" />
-                      <button
-                        className="remove-image"
-                        onClick={() => {
-                          setBundleImage(null);
-                          setBundleImagePreview(null);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="image-select-btn">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleBundleImageChange}
-                        style={{ display: 'none' }}
-                      />
-                      Select Image
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-actions">
-                <button
-                  className="btn-export"
-                  onClick={handleStartBundleExport}
-                  disabled={!bundleName.trim()}
-                  style={{ background: 'var(--gradient-gold)' }}
-                >
-                  Create Bundle
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => setShowBundleForm(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Bundle export in progress */}
-          {bundleExporting && (
-            renderProgressPanel({
-              title: 'Creating Bundle...',
-              label: 'Bundle export progress',
-              progressValue: bundleProgress > 0 ? bundleProgress : null,
-              messageText: getProgressMessage(bundleMessage, 'Preparing bundle assets...')
-            })
-          )}
-
-          {/* Bundle export complete */}
-          {bundleComplete && bundleResult && (
-            <div className="export-complete">
-              <div className="success-icon">✓</div>
-              <h3>Bundle Created!</h3>
-              <p style={{ marginBottom: '0.5rem' }}>{bundleResult.filename}</p>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
-                Size: {bundleResult.size_mb} MB
-                {bundleResult.texture_count > 0 && ` • ${bundleResult.texture_count} textures`}
-              </p>
-              <p style={{
-                color: 'var(--color-text-muted)',
-                fontSize: '0.85rem',
-                marginTop: '1rem',
-                padding: '0.75rem',
-                background: 'var(--color-bg-surface)',
-                borderRadius: 'var(--radius-md)'
-              }}>
-                Share this file with friends - they can install it with one click!
-              </p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownloadBundle} style={{ background: 'var(--gradient-gold)' }}>
-                  Download Bundle
-                </button>
-                <button className="btn-secondary" onClick={handleClose}>
-                  Done
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Bundle export error */}
-          {bundleError && (
-            <div className="export-error">
-              <div className="error-icon">✕</div>
-              <h3>Bundle Export Failed</h3>
-              <p className="error-message">{bundleError}</p>
-              <div className="complete-actions">
-                <button className="btn-download" onClick={handleDownload}>
-                  Download ISO Anyway
-                </button>
-                <button className="btn-secondary" onClick={handleClose}>
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
-
-          {error && (
+          {phase === 'error' && (
             <div className="export-error">
               <div className="error-icon">✕</div>
               <h3>Export Failed</h3>
               <p className="error-message">{error}</p>
-              <button className="btn-secondary" onClick={handleClose}>
-                Close
-              </button>
+              <button className="btn-secondary" onClick={handleClose}>Close</button>
             </div>
           )}
         </div>
