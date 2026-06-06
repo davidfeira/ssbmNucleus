@@ -1410,27 +1410,6 @@
   --accent-tint: rgba(255, 199, 0, 0.13); --accent-line: rgba(255, 199, 0, 0.45); --accent-glow: rgba(255, 199, 0, 0.35);
 }
 
-.option-icon {
-  flex-shrink: 0;
-  width: 46px;
-  height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md, 10px);
-  color: var(--accent);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent-line);
-  transition: transform var(--transition-normal, 0.25s), box-shadow var(--transition-normal, 0.25s);
-}
-
-.option-icon svg { width: 24px; height: 24px; display: block; }
-
-.export-option:not(.disabled):hover .option-icon {
-  transform: scale(1.06);
-  box-shadow: 0 0 18px var(--accent-glow);
-}
-
 .option-text {
   flex: 1;
   min-width: 0;
