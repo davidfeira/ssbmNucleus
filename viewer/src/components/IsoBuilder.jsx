@@ -29,10 +29,14 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   // The name box edits a base name (no extension); ".iso" is appended on save.
   const [baseName, setBaseName] = useState(getDefaultName());
   const filename = `${baseName.trim() || 'game'}.iso`;
-  const [cspCompression, setCspCompression] = useState(1.0);
-  const [useColorSmash, setUseColorSmash] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [recommendedCompression, setRecommendedCompression] = useState(1.0);
+  // Per-action Advanced settings (ISO and Patch each scope their own).
+  const [isoCompression, setIsoCompression] = useState(1.0);
+  const [isoColorSmash, setIsoColorSmash] = useState(false);
+  const [isoAdvancedOpen, setIsoAdvancedOpen] = useState(false);
+  const [patchCompression, setPatchCompression] = useState(1.0);
+  const [patchColorSmash, setPatchColorSmash] = useState(false);
+  const [patchAdvancedOpen, setPatchAdvancedOpen] = useState(false);
 
   // unified working-panel state
   const [progress, setProgress] = useState(0);
@@ -215,14 +219,15 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
       .then((data) => {
         if (data.success) {
           setRecommendedCompression(data.ratio);
-          setCspCompression(data.ratio);
+          setIsoCompression(data.ratio);
+          setPatchCompression(data.ratio);
         }
       })
       .catch((err) => console.error('Failed to fetch recommended compression:', err));
   }, []);
 
   // ---- kick off a pipeline ----
-  const runExport = async ({ act, useTexturePack }) => {
+  const runExport = async ({ act, useTexturePack, compression = 1.0, colorSmash = false }) => {
     actionRef.current = act;
     setAction(act);
     playSound('start');
@@ -241,8 +246,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filename,
-          cspCompression,
-          useColorSmash,
+          cspCompression: compression,
+          useColorSmash: colorSmash,
           texturePackMode: useTexturePack,
           slippiDolphinPath: useTexturePack ? slippiDolphinPath : null,
         }),
@@ -255,8 +260,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     }
   };
 
-  const onExportIso = () => runExport({ act: 'iso', useTexturePack: false });
-  const onExportPatch = () => runExport({ act: 'patch', useTexturePack: false });
+  const onExportIso = () => runExport({ act: 'iso', useTexturePack: false, compression: isoCompression, colorSmash: isoColorSmash });
+  const onExportPatch = () => runExport({ act: 'patch', useTexturePack: false, compression: patchCompression, colorSmash: patchColorSmash });
   const onAddBundle = () => runExport({ act: 'bundle', useTexturePack: true });
 
   const handleClose = () => {
@@ -362,12 +367,16 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
               recommendedCompression={recommendedCompression}
               slippiPath={slippiDolphinPath}
               vanillaPath={vanillaIsoPath}
-              cspCompression={cspCompression}
-              setCspCompression={setCspCompression}
-              useColorSmash={useColorSmash}
-              setUseColorSmash={setUseColorSmash}
-              showAdvanced={showAdvanced}
-              setShowAdvanced={setShowAdvanced}
+              iso={{
+                compression: isoCompression, setCompression: setIsoCompression,
+                colorSmash: isoColorSmash, setColorSmash: setIsoColorSmash,
+                open: isoAdvancedOpen, setOpen: setIsoAdvancedOpen,
+              }}
+              patch={{
+                compression: patchCompression, setCompression: setPatchCompression,
+                colorSmash: patchColorSmash, setColorSmash: setPatchColorSmash,
+                open: patchAdvancedOpen, setOpen: setPatchAdvancedOpen,
+              }}
               onExportIso={onExportIso}
               onExportPatch={onExportPatch}
               onAddBundle={onAddBundle}

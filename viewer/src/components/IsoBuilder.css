@@ -1466,8 +1466,8 @@
   cursor: not-allowed;
 }
 
-/* Export ISO card with its Advanced options attached underneath */
-.export-option.iso-card {
+/* Option cards that carry an attached Advanced section (Export ISO / Patch) */
+.export-option.has-advanced {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
@@ -1481,29 +1481,22 @@
   padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
 }
 
-.iso-advanced {
+.card-advanced {
   border-top: 1px solid var(--color-border-subtle, #2d3d4c);
 }
 
-.iso-advanced .advanced-toggle {
+.card-advanced .advanced-toggle {
   width: 100%;
   margin: 0;
   padding: var(--space-3, 0.75rem) var(--space-5, 1.25rem);
 }
 
-.iso-advanced .advanced-content {
+.card-advanced .advanced-content {
   margin: 0;
   padding: 0 var(--space-5, 1.25rem) var(--space-4, 1rem);
   background: transparent;
   border: none;
   border-radius: 0;
-}
-
-.advanced-note {
-  margin: 0.75rem 0 0;
-  font-size: var(--text-xs, 0.75rem);
-  color: var(--color-text-tertiary, #8896a4);
-  line-height: var(--leading-snug, 1.4);
 }
 
 /* Output name field with a fixed ".iso" suffix */
