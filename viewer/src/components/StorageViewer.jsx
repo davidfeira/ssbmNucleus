@@ -79,6 +79,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [showBundleEditModal, setShowBundleEditModal] = useState(false)
   const [editingBundle, setEditingBundle] = useState(null)
 
+  // "Play" (launch in real Slippi) state — shared by bundles and patches
+  const [playingId, setPlayingId] = useState(null)
+  const [playPercent, setPlayPercent] = useState(0)
+  const [playMessage, setPlayMessage] = useState('')
+  const [playError, setPlayError] = useState(null)
+  const [playLaunched, setPlayLaunched] = useState(false)
+
   // Custom stages state (sub-page within stages mode)
   const [customStages, setCustomStages] = useState([])
   const [showCustomStages, setShowCustomStages] = useState(false)
@@ -454,7 +461,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setBundleResult,
     setBundleImporting,
     setBundleError,
-    fetchBundles
+    fetchBundles,
+    // Play (launch in real Slippi)
+    playingId,
+    setPlayPercent,
+    setPlayMessage,
+    setPlayError,
+    setPlayLaunched
   })
 
   // Ref for setEditingItem - used by CSP manager callback (initialized after useEditModal)
@@ -751,6 +764,44 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       setBundleImporting(false)
     }
   }
+
+  // "Play": build the ISO if missing, (bundles) load the texture pack, then launch
+  // the user's real Slippi Dolphin. Progress arrives via play_* socket events.
+  const startPlay = async (kind, id) => {
+    const slippiPath = localStorage.getItem('slippi_dolphin_path')
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
+    if (!slippiPath) {
+      alert('Slippi Dolphin path not set. Please configure it in Settings.')
+      return
+    }
+    setPlayingId(id)
+    setPlayPercent(0)
+    setPlayMessage('Starting...')
+    setPlayError(null)
+    setPlayLaunched(false)
+    try {
+      const route = kind === 'bundle' ? `bundle/play/${id}` : `xdelta/play/${id}`
+      const response = await fetch(`${API_URL}/${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slippiPath, vanillaIsoPath })
+      })
+      const data = await response.json()
+      if (!data.success) setPlayError(data.error || 'Failed to start')
+    } catch (err) {
+      setPlayError(`Play error: ${err.message}`)
+    }
+  }
+  const handlePlayBundle = (bundle) => startPlay('bundle', bundle.id)
+  const handlePlayPatch = (patch) => startPlay('patch', patch.id)
+  const dismissPlay = () => { setPlayingId(null); setPlayError(null); setPlayLaunched(false) }
+
+  // Auto-dismiss the overlay shortly after a successful launch.
+  useEffect(() => {
+    if (!playLaunched) return
+    const t = setTimeout(() => { setPlayingId(null); setPlayLaunched(false) }, 2500)
+    return () => clearTimeout(t)
+  }, [playLaunched])
 
   // Fetch xdelta patches and bundles when in patches mode
   useEffect(() => {
@@ -1491,6 +1542,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onShowCreateModal={() => setShowXdeltaCreateModal(true)}
           onEditBundle={handleEditBundle}
           onInstallBundle={handleInstallBundle}
+          onPlayBundle={handlePlayBundle}
+          onPlayPatch={handlePlayPatch}
+          playingId={playingId}
+          playPercent={playPercent}
         />
       ) : selectedMenuType ? (
         <div className="grid-wrapper">
@@ -1687,6 +1742,32 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         onClose={closeXdeltaBuildModal}
         onDownload={handleDownloadXdeltaIso}
       />
+
+      {playingId && (
+        <div className="play-overlay" onClick={(playError || playLaunched) ? dismissPlay : undefined}>
+          <div className="play-card" onClick={(e) => e.stopPropagation()}>
+            {playError ? (
+              <>
+                <div className="play-icon error">✕</div>
+                <p className="play-card-msg">{playError}</p>
+                <button className="btn-secondary" onClick={dismissPlay}>Close</button>
+              </>
+            ) : playLaunched ? (
+              <>
+                <div className="play-icon">🎮</div>
+                <p className="play-card-msg">Launched — switch to Dolphin!</p>
+              </>
+            ) : (
+              <>
+                <div className="play-spinner" />
+                <p className="play-card-msg">{playMessage}</p>
+                <div className="play-bar"><div className="play-bar-fill" style={{ width: `${playPercent}%` }} /></div>
+                <p className="play-card-pct">{playPercent}%</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

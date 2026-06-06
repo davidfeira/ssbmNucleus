@@ -19,7 +19,11 @@ export default function PatchesGrid({
   onBuildIso,
   onShowCreateModal,
   onEditBundle,
-  onInstallBundle
+  onInstallBundle,
+  onPlayBundle,
+  onPlayPatch,
+  playingId = null,
+  playPercent = 0
 }) {
   return (
     <div className="patches-section">
@@ -68,6 +72,15 @@ export default function PatchesGrid({
                 </div>
 
                 <div className="patch-row-actions">
+                  <button
+                    className="btn-play"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('start'); onPlayBundle?.(bundle); }}
+                    disabled={playingId === bundle.id}
+                    title="Build (if needed), load the texture pack, and launch in Slippi"
+                  >
+                    {playingId === bundle.id ? `${playPercent}%` : '▶ Play'}
+                  </button>
                   <button
                     className="btn-build-iso"
                     onMouseEnter={playHoverSound}
@@ -126,6 +139,15 @@ export default function PatchesGrid({
             </div>
 
             <div className="patch-row-actions">
+              <button
+                className="btn-play"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('start'); onPlayPatch?.(patch); }}
+                disabled={playingId === patch.id}
+                title="Build the ISO (if needed) and launch it in Slippi"
+              >
+                {playingId === patch.id ? `${playPercent}%` : '▶ Play'}
+              </button>
               <button
                 className="btn-build-iso"
                 onMouseEnter={playHoverSound}

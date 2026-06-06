@@ -503,6 +503,136 @@ def run_bundle_import(import_id, bundle_path, slippi_path, vanilla_iso_path, del
         })
 
 
+def _resolve_xdelta_exe():
+    """Path to the xdelta3 executable (bundled on Windows, else rely on PATH)."""
+    if os.name == 'nt':
+        base = RESOURCES_DIR if getattr(sys, 'frozen', False) else PROJECT_ROOT
+        exe = base / "utility" / "xdelta" / "xdelta3.exe"
+        return str(exe) if exe.exists() else "xdelta3"
+    return "xdelta3"
+
+
+def run_bundle_play(bundle_id, slippi_path, vanilla_iso_path):
+    """Background worker for 'Play' on a bundle: build the ISO into the user's
+    Dolphin ISO folder if it's missing, (re)load this bundle's texture pack, and
+    boot it in the user's REAL Slippi Dolphin. Emits play_progress / play_launched
+    / play_error keyed by the bundle id."""
+    socketio = get_socketio()
+
+    def emit(pct, msg):
+        socketio.emit('play_progress', {'id': bundle_id, 'percentage': int(pct), 'message': msg})
+
+    def err(msg):
+        socketio.emit('play_error', {'id': bundle_id, 'error': msg})
+
+    temp_dir = None
+    try:
+        from ingame.boot import launch_real, iso_dir_from_slippi
+
+        bundle_path = BUNDLE_PATH / f"{bundle_id}.ssbm"
+        if not bundle_path.exists():
+            err('Bundle file not found'); return
+
+        emit(5, 'Reading bundle...')
+        with zipfile.ZipFile(bundle_path, 'r') as zf:
+            names = zf.namelist()
+            if 'manifest.json' not in names:
+                err('Invalid bundle: manifest.json missing'); return
+            manifest = json.loads(zf.read('manifest.json'))
+            build_name = manifest.get('build_name', 'imported-mod')
+            mod_name = manifest.get('name', 'Imported Mod')
+
+            iso_folder = iso_dir_from_slippi(slippi_path)
+            safe_name = re.sub(r'[^\w\-_]', '_', mod_name)
+            iso_path = Path(iso_folder) / f"{safe_name}.iso"
+
+            # 1. Build the ISO only if it isn't already in the user's ISO folder.
+            if iso_path.exists():
+                emit(65, 'ISO already built - skipping build')
+            else:
+                if not vanilla_iso_path:
+                    err('ISO not built yet and no vanilla ISO path is set (Settings).'); return
+                if 'patch.xdelta' not in names:
+                    err('Invalid bundle: patch.xdelta missing'); return
+                emit(10, 'Building ISO from patch...')
+                temp_dir = Path(tempfile.mkdtemp(prefix='bundle_play_'))
+                zf.extract('patch.xdelta', temp_dir)
+                cmd = [_resolve_xdelta_exe(), '-d', '-f', '-s', str(vanilla_iso_path),
+                       str(temp_dir / 'patch.xdelta'), str(iso_path)]
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **get_subprocess_args())
+                expected = Path(vanilla_iso_path).stat().st_size
+                last = 0
+                while proc.poll() is None:
+                    time.sleep(0.3)
+                    try:
+                        if iso_path.exists():
+                            p = min(int(iso_path.stat().st_size / expected * 55) + 10, 65)
+                            if p != last:
+                                emit(p, f'Building ISO... {p - 10}%'); last = p
+                    except Exception:
+                        pass
+                out, errout = proc.communicate()
+                if proc.returncode != 0:
+                    msg = (errout or out or b'').decode(errors='replace') or 'xdelta error'
+                    err(f'Failed to build ISO: {msg}'); return
+
+            # 2. Texture pack: clear ours, then load THIS bundle's portraits.
+            emit(75, 'Loading texture pack...')
+            load_root = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
+            if load_root.exists():
+                for item in load_root.iterdir():
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        try:
+                            item.unlink()
+                        except OSError:
+                            pass
+            dest = load_root / build_name
+            dest.mkdir(parents=True, exist_ok=True)
+            tex_members = [n for n in names if n.startswith('textures/') and n.lower().endswith('.png')]
+            for n in tex_members:
+                with zf.open(n) as src, open(dest / Path(n).name, 'wb') as dst:
+                    shutil.copyfileobj(src, dst)
+            set_dolphin_texture_settings(slippi_path, dump_textures=False, hires_textures=True)
+
+        # 3. Launch the user's real Slippi Dolphin on the ISO.
+        emit(95, 'Launching Slippi...')
+        launch_real(slippi_path, iso_path)
+        logger.info(f"[PLAY] bundle '{mod_name}': launched {iso_path} ({len(tex_members)} textures)")
+        socketio.emit('play_launched', {
+            'id': bundle_id, 'iso_path': str(iso_path), 'texture_count': len(tex_members)
+        })
+    except Exception as e:
+        logger.error(f"Bundle play error: {str(e)}", exc_info=True)
+        err(str(e))
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@bundles_bp.route('/api/mex/bundle/play/<bundle_id>', methods=['POST'])
+def play_bundle(bundle_id):
+    """Build (if missing) + load texture pack + launch a bundle in the real Slippi.
+
+    Body: { slippiPath, vanillaIsoPath }
+    """
+    try:
+        data = request.json or {}
+        slippi_path = data.get('slippiPath')
+        vanilla_iso_path = data.get('vanillaIsoPath')
+        if not slippi_path:
+            return jsonify({'success': False, 'error': 'slippiPath is required'}), 400
+        if not (BUNDLE_PATH / f"{bundle_id}.ssbm").exists():
+            return jsonify({'success': False, 'error': 'Bundle not found'}), 404
+        threading.Thread(target=run_bundle_play,
+                         args=(bundle_id, slippi_path, vanilla_iso_path), daemon=True).start()
+        return jsonify({'success': True, 'play_id': bundle_id})
+    except Exception as e:
+        logger.error(f"Play bundle start error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bundles_bp.route('/api/mex/bundle/list', methods=['GET'])
 def list_bundles():
     """List all bundles in storage"""

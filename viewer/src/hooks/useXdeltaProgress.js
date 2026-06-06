@@ -32,7 +32,13 @@ export function useXdeltaProgress({
   setBundleResult,
   setBundleImporting,
   setBundleError,
-  fetchBundles
+  fetchBundles,
+  // Play (launch in real Slippi)
+  playingId,
+  setPlayPercent,
+  setPlayMessage,
+  setPlayError,
+  setPlayLaunched
 }) {
   const socketRef = useRef(null)
 
@@ -60,7 +66,12 @@ export function useXdeltaProgress({
     setBundleResult,
     setBundleImporting,
     setBundleError,
-    fetchBundles
+    fetchBundles,
+    playingId,
+    setPlayPercent,
+    setPlayMessage,
+    setPlayError,
+    setPlayLaunched
   }
 
   useEffect(() => {
@@ -158,6 +169,30 @@ export function useXdeltaProgress({
     // next incidental re-fetch (the "takes a few secs to appear" lag).
     socket.on('bundle_export_complete', () => {
       callbacksRef.current.fetchBundles?.()
+    })
+
+    // Play (launch in real Slippi) — match the bundle/patch currently playing
+    socket.on('play_progress', (data) => {
+      const c = callbacksRef.current
+      if (c.playingId && data.id === c.playingId) {
+        c.setPlayPercent?.(data.percentage)
+        c.setPlayMessage?.(data.message)
+      }
+    })
+
+    socket.on('play_launched', (data) => {
+      const c = callbacksRef.current
+      if (c.playingId && data.id === c.playingId) {
+        c.setPlayPercent?.(100)
+        c.setPlayLaunched?.(true)
+      }
+    })
+
+    socket.on('play_error', (data) => {
+      const c = callbacksRef.current
+      if (c.playingId && data.id === c.playingId) {
+        c.setPlayError?.(data.error)
+      }
     })
 
     return () => {

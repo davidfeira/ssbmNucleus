@@ -138,6 +138,63 @@ def run_xdelta_build(patch_id, patch_name, vanilla_iso_path, xdelta_path, output
         })
 
 
+def run_xdelta_play(patch_id, patch_name, slippi_path, vanilla_iso_path):
+    """Background worker for 'Play' on a patch: build the ISO into the user's
+    Dolphin ISO folder if it's missing, then boot it in the user's REAL Slippi
+    Dolphin (no texture pack). Emits play_progress / play_launched / play_error."""
+    socketio = get_socketio()
+
+    def emit(pct, msg):
+        socketio.emit('play_progress', {'id': patch_id, 'percentage': int(pct), 'message': msg})
+
+    def err(msg):
+        socketio.emit('play_error', {'id': patch_id, 'error': msg})
+
+    try:
+        from ingame.boot import launch_real, iso_dir_from_slippi
+
+        emit(5, 'Preparing...')
+        iso_folder = iso_dir_from_slippi(slippi_path)
+        safe_name = re.sub(r'[^\w\-_]', '_', patch_name)
+        iso_path = Path(iso_folder) / f"{safe_name}.iso"
+
+        if iso_path.exists():
+            emit(85, 'ISO already built - skipping build')
+        else:
+            if not vanilla_iso_path:
+                err('ISO not built yet and no vanilla ISO path is set (Settings).'); return
+            xdelta_path = XDELTA_PATH / f"{patch_id}.xdelta"
+            if not xdelta_path.exists():
+                err('Xdelta file not found'); return
+            emit(10, 'Building ISO from patch...')
+            cmd = [str(get_xdelta_exe()), '-d', '-f', '-s', str(vanilla_iso_path),
+                   str(xdelta_path), str(iso_path)]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **get_subprocess_args())
+            expected = Path(vanilla_iso_path).stat().st_size
+            last = 0
+            while proc.poll() is None:
+                time.sleep(0.3)
+                try:
+                    if iso_path.exists():
+                        p = min(int(iso_path.stat().st_size / expected * 80) + 10, 90)
+                        if p != last:
+                            emit(p, f'Building ISO... {p - 10}%'); last = p
+                except Exception:
+                    pass
+            out, errout = proc.communicate()
+            if proc.returncode != 0:
+                msg = (errout or out or b'').decode(errors='replace') or 'xdelta error'
+                err(f'Failed to build ISO: {msg}'); return
+
+        emit(95, 'Launching Slippi...')
+        launch_real(slippi_path, iso_path)
+        logger.info(f"[PLAY] patch '{patch_name}': launched {iso_path}")
+        socketio.emit('play_launched', {'id': patch_id, 'iso_path': str(iso_path)})
+    except Exception as e:
+        logger.error(f"Xdelta play error: {str(e)}", exc_info=True)
+        err(str(e))
+
+
 def run_xdelta_create(create_id, name, description, vanilla_iso_path, modded_iso_path, output_path, image_path=None):
     """Background thread function to create xdelta patch and emit progress"""
     socketio = get_socketio()
@@ -522,6 +579,30 @@ def build_xdelta_iso(patch_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@xdelta_bp.route('/api/mex/xdelta/play/<patch_id>', methods=['POST'])
+def play_xdelta(patch_id):
+    """Build (if missing) + launch a patch's ISO in the user's real Slippi.
+
+    Body: { slippiPath, vanillaIsoPath }
+    """
+    try:
+        data = request.json or {}
+        slippi_path = data.get('slippiPath')
+        vanilla_iso_path = data.get('vanillaIsoPath')
+        if not slippi_path:
+            return jsonify({'success': False, 'error': 'slippiPath is required'}), 400
+        patches = load_xdelta_metadata()
+        patch = next((p for p in patches if p['id'] == patch_id), None)
+        if not patch:
+            return jsonify({'success': False, 'error': 'Patch not found'}), 404
+        threading.Thread(target=run_xdelta_play,
+                         args=(patch_id, patch['name'], slippi_path, vanilla_iso_path), daemon=True).start()
+        return jsonify({'success': True, 'play_id': patch_id})
+    except Exception as e:
+        logger.error(f"Play xdelta start error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @xdelta_bp.route('/api/mex/xdelta/download/<filename>', methods=['GET'])

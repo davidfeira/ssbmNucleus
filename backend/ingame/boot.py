@@ -95,6 +95,48 @@ def resolve_dolphin(slippi_path):
     return exe, (str(template_user) if template_user else None)
 
 
+def iso_dir_from_slippi(slippi_path):
+    """Return the user's Dolphin ISO directory -- the folder Slippi scans for
+    games -- from User/Config/Dolphin.ini (ISOPath0..9 or DefaultISO's parent).
+    Falls back to <slippi>/User/Games (created if needed)."""
+    import configparser
+    ini_path = os.path.join(slippi_path, "User", "Config", "Dolphin.ini")
+    try:
+        cfg = configparser.ConfigParser()
+        cfg.read(ini_path, encoding="utf-8")
+        if "General" in cfg:
+            g = cfg["General"]
+            for i in range(10):
+                key = f"ISOPath{i}"
+                if key in g and g[key] and Path(g[key]).is_dir():
+                    return g[key]
+            if "DefaultISO" in g and g["DefaultISO"]:
+                parent = str(Path(g["DefaultISO"]).parent)
+                if Path(parent).is_dir():
+                    return parent
+    except Exception:
+        pass
+    fallback = os.path.join(slippi_path, "User", "Games")
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+
+def launch_real(slippi_path, iso_path):
+    """Launch the user's REAL Slippi Dolphin booting `iso_path` for normal play:
+    their own User dir / config / controllers, a visible window, and NO pipe
+    controller (unlike DolphinBoot, which is the isolated test harness). Detached
+    so the game keeps running independently of the backend. Returns the exe used."""
+    exe, _ = resolve_dolphin(slippi_path)
+    args = [str(exe), "-e", str(iso_path)]
+    creationflags = 0
+    if os.name == "nt":
+        # Detach from the backend so the game survives backend churn, but keep
+        # the Dolphin window visible -- do NOT use CREATE_NO_WINDOW here.
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(args, cwd=str(Path(exe).parent), creationflags=creationflags)
+    return exe
+
+
 # --------------------------------------------------------------------------- #
 # Tiny Dolphin-INI reader/writer (section -> ordered key/value), matching       #
 # driver.js's writeIni semantics: parse, upsert keys, re-stringify.             #

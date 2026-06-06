@@ -1820,6 +1820,116 @@
   cursor: not-allowed;
 }
 
+/* Play button (launch in real Slippi) + a couple of action buttons per row */
+.patch-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.btn-play {
+  background: var(--gradient-teal, linear-gradient(135deg, #00d4aa, #00b894));
+  color: var(--color-bg-deep);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 4.5rem;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.btn-play:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+
+.btn-play:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-play:disabled {
+  opacity: 0.85;
+  cursor: progress;
+}
+
+/* Play progress overlay */
+.play-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 32, 0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.play-card {
+  background: var(--color-bg-base, #0d1929);
+  border: 1px solid var(--color-border, #3d4f5c);
+  border-radius: 14px;
+  padding: 2rem;
+  width: min(100%, 22rem);
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.play-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.play-icon.error {
+  color: var(--color-danger, #ff4757);
+}
+
+.play-card-msg {
+  color: var(--color-text-primary, #f5f5f5);
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.play-card-pct {
+  color: var(--color-teal, #00d4aa);
+  font-weight: 700;
+  margin: 0.5rem 0 0 0;
+}
+
+.play-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-bg-surface, #283544);
+  overflow: hidden;
+}
+
+.play-bar-fill {
+  height: 100%;
+  background: var(--gradient-teal, linear-gradient(135deg, #00d4aa, #00b894));
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.play-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 1rem;
+  border: 4px solid var(--color-bg-surface, #283544);
+  border-top-color: var(--color-teal, #00d4aa);
+  border-radius: 50%;
+  animation: play-spin 0.8s linear infinite;
+}
+
+@keyframes play-spin {
+  to { transform: rotate(360deg); }
+}
+
 .btn-building {
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
