@@ -47,8 +47,6 @@ function CoverCard({
         )}
       </div>
 
-      <span className={`cover-tag ${kind}`}>{kind === 'bundle' ? 'Bundle' : 'Patch'}</span>
-
       {onEdit && (
         <button
           className="cover-edit"
@@ -144,7 +142,7 @@ export default function PatchesGrid({
             playPercent={playPercent}
             onPlay={() => onPlayPatch?.(patch)}
             onEdit={() => onEditPatch(patch)}
-            secondaryLabel="ISO"
+            secondaryLabel="Export ISO"
             secondaryTitle="Build & download the ISO file"
             onSecondary={() => onBuildIso(patch)}
           />
