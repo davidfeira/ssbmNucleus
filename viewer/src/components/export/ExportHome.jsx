@@ -151,6 +151,15 @@ const ExportHome = ({
           adv={iso}
           recommendedCompression={recommendedCompression}
         />
+        <ExportOption
+          accent="gold"
+          title="Save Bundle"
+          desc="HD texture pack + patch, saved to your Patches library."
+          button="Save"
+          onClick={onAddBundle}
+          disabled={!hasVanilla || !hasSlippi}
+          reason={bundleReason}
+        />
         <CardWithAdvanced
           accent="teal"
           title="Export Patch"
@@ -161,15 +170,6 @@ const ExportHome = ({
           reason={!hasVanilla ? 'Set your vanilla ISO path in Settings' : null}
           adv={patch}
           recommendedCompression={recommendedCompression}
-        />
-        <ExportOption
-          accent="gold"
-          title="Save Bundle"
-          desc="HD texture pack + patch, saved to your Patches library."
-          button="Save"
-          onClick={onAddBundle}
-          disabled={!hasVanilla || !hasSlippi}
-          reason={bundleReason}
         />
       </div>
     </div>
