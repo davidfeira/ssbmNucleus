@@ -9,9 +9,28 @@ import React from 'react';
  *
  * Compression / Color Smash live behind a low-key Advanced disclosure.
  */
-const ExportOption = ({ emoji, title, desc, button, onClick, disabled, reason }) => (
-  <div className={`export-option ${disabled ? 'disabled' : ''}`}>
-    <div className="option-emoji">{emoji}</div>
+// Inline line-icons (stroke = currentColor, tinted per accent) — no emoji.
+const svgProps = {
+  viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+  strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
+};
+const IconDisc = () => (
+  <svg {...svgProps}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" /></svg>
+);
+const IconDelta = () => (
+  <svg {...svgProps}><path d="M12 4 L20.5 19.5 H3.5 Z" /><path d="M9 14 h6" /></svg>
+);
+const IconBox = () => (
+  <svg {...svgProps}>
+    <path d="M12 3 L20 7.5 V16.5 L12 21 L4 16.5 V7.5 Z" />
+    <path d="M4 7.5 L12 12 L20 7.5" />
+    <path d="M12 12 V21" />
+  </svg>
+);
+
+const ExportOption = ({ icon, accent, title, desc, button, onClick, disabled, reason }) => (
+  <div className={`export-option accent-${accent} ${disabled ? 'disabled' : ''}`}>
+    <div className="option-icon">{icon}</div>
     <div className="option-text">
       <h3>{title}</h3>
       <p>{desc}</p>
@@ -65,14 +84,16 @@ const ExportHome = ({
 
       <div className="export-options">
         <ExportOption
-          emoji="💿"
+          icon={<IconDisc />}
+          accent="cyan"
           title="Export ISO"
           desc="A ready-to-play ISO, auto-compressed to fit console / Wii."
           button="Export"
           onClick={onExportIso}
         />
         <ExportOption
-          emoji="🩹"
+          icon={<IconDelta />}
+          accent="teal"
           title="Export Patch"
           desc="Builds the ISO and makes a small .xdelta patch to share."
           button="Export"
@@ -81,7 +102,8 @@ const ExportHome = ({
           reason={!hasVanilla ? 'Set your vanilla ISO path in Settings' : null}
         />
         <ExportOption
-          emoji="📦"
+          icon={<IconBox />}
+          accent="gold"
           title="Add Bundle"
           desc="HD texture pack + patch, saved to your Patches library."
           button="Add"

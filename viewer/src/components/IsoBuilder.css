@@ -1347,34 +1347,88 @@
 .export-options {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
+  gap: var(--space-3, 0.75rem);
+  margin-bottom: var(--space-5, 1.25rem);
 }
 
 .export-option {
+  --accent: var(--color-cyan, #7dd3e8);
+  --accent-grad: var(--gradient-cyan);
+  --accent-tint: rgba(125, 211, 232, 0.13);
+  --accent-line: rgba(125, 211, 232, 0.4);
+  --accent-glow: rgba(125, 211, 232, 0.35);
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  background: var(--color-bg-elevated, #1a2332);
+  gap: var(--space-4, 1rem);
+  padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
+  background:
+    linear-gradient(120% 120% at 0% 50%, var(--accent-tint), transparent 42%),
+    var(--color-bg-elevated, #1a2332);
   border: 1px solid var(--color-border, #3d4f5c);
-  border-radius: 12px;
-  transition: border-color 0.2s, transform 0.15s;
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  transition:
+    border-color var(--transition-normal, 0.25s),
+    transform var(--transition-spring, 0.25s),
+    box-shadow var(--transition-normal, 0.25s);
+}
+
+/* accent edge stripe */
+.export-option::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-grad);
+  opacity: 0.65;
+  transition: width var(--transition-normal, 0.25s), opacity var(--transition-normal, 0.25s);
 }
 
 .export-option:not(.disabled):hover {
-  border-color: var(--color-cyan, #7dd3e8);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-lg);
 }
 
-.export-option.disabled {
-  opacity: 0.55;
+.export-option:not(.disabled):hover::before { width: 5px; opacity: 1; }
+
+.export-option.disabled { opacity: 0.55; }
+
+.export-option.accent-cyan {
+  --accent: var(--color-cyan, #7dd3e8); --accent-grad: var(--gradient-cyan);
+  --accent-tint: rgba(125, 211, 232, 0.13); --accent-line: rgba(125, 211, 232, 0.4); --accent-glow: rgba(125, 211, 232, 0.35);
+}
+.export-option.accent-teal {
+  --accent: var(--color-teal, #00d4aa); --accent-grad: var(--gradient-teal);
+  --accent-tint: rgba(0, 212, 170, 0.13); --accent-line: rgba(0, 212, 170, 0.4); --accent-glow: rgba(0, 212, 170, 0.35);
+}
+.export-option.accent-gold {
+  --accent: var(--color-gold, #ffc700); --accent-grad: var(--gradient-gold);
+  --accent-tint: rgba(255, 199, 0, 0.13); --accent-line: rgba(255, 199, 0, 0.45); --accent-glow: rgba(255, 199, 0, 0.35);
 }
 
-.option-emoji {
-  font-size: 1.6rem;
-  line-height: 1;
+.option-icon {
   flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 10px);
+  color: var(--accent);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  transition: transform var(--transition-normal, 0.25s), box-shadow var(--transition-normal, 0.25s);
+}
+
+.option-icon svg { width: 24px; height: 24px; display: block; }
+
+.export-option:not(.disabled):hover .option-icon {
+  transform: scale(1.06);
+  box-shadow: 0 0 18px var(--accent-glow);
 }
 
 .option-text {
@@ -1383,48 +1437,52 @@
 }
 
 .option-text h3 {
-  margin: 0 0 0.2rem 0;
+  margin: 0 0 0.15rem 0;
   color: #fff;
-  font-size: 1.05rem;
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-md, 1rem);
+  font-weight: var(--font-bold, 700);
+  letter-spacing: var(--tracking-tight, -0.01em);
 }
 
 .option-text p {
   margin: 0;
   color: var(--color-text-secondary, #b8c5d0);
-  font-size: 0.85rem;
-  line-height: 1.4;
+  font-size: var(--text-sm, 0.85rem);
+  line-height: var(--leading-snug, 1.4);
 }
 
 .option-reason {
   color: var(--color-warning, #ffa502) !important;
   font-style: italic;
   margin-top: 0.3rem !important;
+  font-size: var(--text-xs, 0.75rem) !important;
 }
 
 .btn-option {
   flex-shrink: 0;
-  padding: 0.6rem 1.4rem;
-  background: var(--gradient-cyan, linear-gradient(135deg, #00bcd4, #00838f));
+  min-width: 5.25rem;
+  padding: var(--space-2, 0.55rem) var(--space-5, 1.3rem);
+  background: var(--accent-grad);
   color: var(--color-bg-deep, #0a1420);
   border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  border-radius: var(--radius-md, 8px);
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-sm, 0.95rem);
+  font-weight: var(--font-bold, 700);
   cursor: pointer;
-  transition: transform 0.15s, filter 0.2s;
+  transition: transform var(--transition-fast, 0.15s), filter var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s);
 }
 
 .btn-option:hover:not(:disabled) {
   transform: translateY(-1px);
-  filter: brightness(1.1);
+  filter: brightness(1.08);
+  box-shadow: 0 0 16px var(--accent-glow);
 }
+
+.btn-option:active:not(:disabled) { transform: scale(0.97); }
 
 .btn-option:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* The bundle row gets a gold action to echo the vault look */
-.export-option:last-child .btn-option {
-  background: var(--gradient-gold, linear-gradient(135deg, #ffc700, #ff9500));
 }
