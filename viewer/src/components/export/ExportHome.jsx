@@ -2,12 +2,14 @@ import React from 'react';
 
 /**
  * Minimalist export home — three one-shot actions:
- *   Export ISO    : build a ready-to-play ISO.
+ *   Export ISO    : build a ready-to-play ISO. (Advanced compression options
+ *                   live in this card, since they only shape the ISO build.)
  *   Export Patch  : build the ISO, then make a small .xdelta patch (one click).
  *   Add Bundle    : build a texture-pack ISO, auto-apply HD portraits, make the
  *                   patch, and save a .ssbm into the Patches library.
  *
- * Compression / Color Smash live behind a low-key Advanced disclosure.
+ * The name box edits a base name only; the ".iso" extension is shown as a fixed
+ * suffix and appended at save time (and stripped if the user types it).
  */
 const ExportOption = ({ accent, title, desc, button, onClick, disabled, reason }) => (
   <div className={`export-option accent-${accent} ${disabled ? 'disabled' : ''}`}>
@@ -23,8 +25,8 @@ const ExportOption = ({ accent, title, desc, button, onClick, disabled, reason }
 );
 
 const ExportHome = ({
-  filename,
-  setFilename,
+  name,
+  setName,
   recommendedCompression,
   slippiPath,
   vanillaPath,
@@ -52,24 +54,98 @@ const ExportHome = ({
   return (
     <div className="export-home">
       <div className="form-group filename-group">
-        <label htmlFor="export-filename">Output file name</label>
-        <input
-          id="export-filename"
-          type="text"
-          value={filename}
-          onChange={(e) => setFilename(e.target.value)}
-          spellCheck={false}
-        />
+        <label htmlFor="export-name">Output name</label>
+        <div className="name-input-wrap">
+          <input
+            id="export-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value.replace(/\.iso$/i, ''))}
+            spellCheck={false}
+          />
+          <span className="name-suffix">.iso</span>
+        </div>
       </div>
 
       <div className="export-options">
-        <ExportOption
-          accent="cyan"
-          title="Export ISO"
-          desc="A ready-to-play ISO, auto-compressed to fit console / Wii."
-          button="Export"
-          onClick={onExportIso}
-        />
+        {/* Export ISO — with its Advanced options attached directly below */}
+        <div className="export-option accent-cyan iso-card">
+          <div className="export-option-main">
+            <div className="option-text">
+              <h3>Export ISO</h3>
+              <p>A ready-to-play ISO, auto-compressed to fit console / Wii.</p>
+            </div>
+            <button className="btn-option" onClick={onExportIso}>Export</button>
+          </div>
+
+          <div className="iso-advanced">
+            <button className="advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+              <span className="toggle-arrow">{showAdvanced ? '▼' : '▶'}</span>
+              Advanced
+            </button>
+
+            {showAdvanced && (
+              <div className="advanced-content">
+                <div className="form-group">
+                  <label htmlFor="compression">
+                    CSP Compression
+                    {recommendedCompression < 1 && (
+                      <span className="hint-recommended"> · {recommendedCompression}x recommended</span>
+                    )}
+                  </label>
+                  <div className="compression-input-group">
+                    <input
+                      type="number"
+                      id="compression-input"
+                      min="0.1"
+                      max="1.0"
+                      step="0.01"
+                      value={cspCompression}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val >= 0.1 && val <= 1.0) setCspCompression(val);
+                      }}
+                      className="compression-number-input"
+                    />
+                    <span className="compression-multiplier">x</span>
+                  </div>
+                  <input
+                    type="range"
+                    id="compression"
+                    min="0.1"
+                    max="1.0"
+                    step="0.01"
+                    value={cspCompression}
+                    onChange={(e) => setCspCompression(parseFloat(e.target.value))}
+                    className="compression-slider"
+                  />
+                  <div className="compression-hints">
+                    <span className="hint-label">0.1 (Tiny)</span>
+                    <span className="hint-label">1.0 (Full)</span>
+                  </div>
+                </div>
+
+                <div className="form-group color-smash-group">
+                  <label className="color-smash-label">
+                    <input
+                      type="checkbox"
+                      checked={useColorSmash}
+                      onChange={(e) => setUseColorSmash(e.target.checked)}
+                      className="color-smash-checkbox"
+                    />
+                    <span>Enable Color Smash</span>
+                  </label>
+                  <p className="color-smash-info">Saves memory but adds artifacts.</p>
+                </div>
+
+                <p className="advanced-note">
+                  Also shapes the ISO inside an Export Patch. Bundles always ship full-res textures.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         <ExportOption
           accent="teal"
           title="Export Patch"
@@ -88,72 +164,6 @@ const ExportHome = ({
           disabled={!hasVanilla || !hasSlippi}
           reason={bundleReason}
         />
-      </div>
-
-      <div className="advanced-section">
-        <button className="advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
-          <span className="toggle-arrow">{showAdvanced ? '▼' : '▶'}</span>
-          Advanced
-        </button>
-
-        {showAdvanced && (
-          <div className="advanced-content">
-            <div className="form-group">
-              <label htmlFor="compression">
-                CSP Compression
-                {recommendedCompression < 1 && (
-                  <span className="hint-recommended"> · {recommendedCompression}x recommended</span>
-                )}
-              </label>
-              <div className="compression-input-group">
-                <input
-                  type="number"
-                  id="compression-input"
-                  min="0.1"
-                  max="1.0"
-                  step="0.01"
-                  value={cspCompression}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    if (!isNaN(val) && val >= 0.1 && val <= 1.0) setCspCompression(val);
-                  }}
-                  className="compression-number-input"
-                />
-                <span className="compression-multiplier">x</span>
-              </div>
-              <input
-                type="range"
-                id="compression"
-                min="0.1"
-                max="1.0"
-                step="0.01"
-                value={cspCompression}
-                onChange={(e) => setCspCompression(parseFloat(e.target.value))}
-                className="compression-slider"
-              />
-              <div className="compression-hints">
-                <span className="hint-label">0.1 (Tiny)</span>
-                <span className="hint-label">1.0 (Full)</span>
-              </div>
-              <p className="color-smash-info">
-                Applies to Export ISO / Patch. Bundles always use full-res textures.
-              </p>
-            </div>
-
-            <div className="form-group color-smash-group">
-              <label className="color-smash-label">
-                <input
-                  type="checkbox"
-                  checked={useColorSmash}
-                  onChange={(e) => setUseColorSmash(e.target.checked)}
-                  className="color-smash-checkbox"
-                />
-                <span>Enable Color Smash</span>
-              </label>
-              <p className="color-smash-info">Saves memory but adds artifacts.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

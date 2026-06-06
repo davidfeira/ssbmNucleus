@@ -15,18 +15,20 @@ import './IsoBuilder.css';
 //
 // phase: home | working | done | error
 const IsoBuilder = ({ onClose, projectName = 'game' }) => {
-  const getDefaultFilename = () => {
+  const getDefaultName = () => {
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
     const time = now.toTimeString().slice(0, 5).replace(':', '-');
-    return `${projectName}_${date}_${time}.iso`;
+    return `${projectName}_${date}_${time}`;
   };
 
   const [phase, setPhase] = useState('home');
   const [action, setAction] = useState(null); // iso | patch | bundle
   const [error, setError] = useState(null);
 
-  const [filename, setFilename] = useState(getDefaultFilename());
+  // The name box edits a base name (no extension); ".iso" is appended on save.
+  const [baseName, setBaseName] = useState(getDefaultName());
+  const filename = `${baseName.trim() || 'game'}.iso`;
   const [cspCompression, setCspCompression] = useState(1.0);
   const [useColorSmash, setUseColorSmash] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -355,8 +357,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         <div className="modal-body">
           {phase === 'home' && (
             <ExportHome
-              filename={filename}
-              setFilename={setFilename}
+              name={baseName}
+              setName={setBaseName}
               recommendedCompression={recommendedCompression}
               slippiPath={slippiDolphinPath}
               vanillaPath={vanillaIsoPath}
