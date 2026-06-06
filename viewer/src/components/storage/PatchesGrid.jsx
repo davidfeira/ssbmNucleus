@@ -81,13 +81,6 @@ export default function PatchesGrid({
                   >
                     {playingId === bundle.id ? `${playPercent}%` : '▶ Play'}
                   </button>
-                  <button
-                    className="btn-build-iso"
-                    onMouseEnter={playHoverSound}
-                    onClick={() => { playSound('start'); onInstallBundle(bundle); }}
-                  >
-                    Install
-                  </button>
                 </div>
               </div>
             ))}
