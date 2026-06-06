@@ -164,9 +164,9 @@ const ExportHome = ({
         />
         <ExportOption
           accent="gold"
-          title="Add Bundle"
+          title="Save Bundle"
           desc="HD texture pack + patch, saved to your Patches library."
-          button="Add"
+          button="Save"
           onClick={onAddBundle}
           disabled={!hasVanilla || !hasSlippi}
           reason={bundleReason}
