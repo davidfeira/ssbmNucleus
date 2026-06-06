@@ -8,6 +8,7 @@ import os
 import shutil
 import configparser
 import logging
+import threading
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 
@@ -618,6 +619,99 @@ def apply_texture_pack_offline():
 
     except Exception as e:
         logger.error(f"Apply offline texture pack error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@slippi_bp.route('/api/mex/texture-pack/auto-apply', methods=['POST'])
+def auto_apply_texture_pack():
+    """Name a texture-pack build's entire pack with NO Dolphin and NO scrolling.
+
+    The 16x16 placeholder for each global costume index is byte-identical in every
+    build, so its Dolphin load filename is a pure function of the index. We keep a
+    managed, build-independent index->filename table (seeded from a shipped, proven
+    table and extended on demand by pure computation), look up every costume in this
+    build's mapping, and copy each real HD CSP straight into Load/ under its name.
+
+    Runs in a background thread and reports progress over WebSocket:
+      texture_auto_progress  { stage, percentage, message }
+      texture_auto_complete  { matched, total, missingFromTable, copyFailed, texturePackPath }
+      texture_auto_error     { error }
+
+    Body: { buildId, slippiPath }
+    """
+    try:
+        data = request.json or {}
+        build_id = data.get('buildId')
+        slippi_path = data.get('slippiPath')
+        if not build_id or not slippi_path:
+            return jsonify({'success': False, 'error': 'buildId and slippiPath are required'}), 400
+
+        slippi_path = convert_windows_to_wsl_path(slippi_path)
+        mapping_file = OUTPUT_PATH / f"{build_id}_texture_mapping.json"
+        if not mapping_file.exists():
+            return jsonify({'success': False, 'error': f'Mapping not found for build {build_id}'}), 404
+
+        socketio = get_socketio()
+
+        def run():
+            try:
+                from texture_pack import TexturePackMapping, apply_offline_texture_pack
+                from texture_filename_table import ensure_table_covers
+
+                def emit_progress(stage, percentage, message):
+                    socketio.emit('texture_auto_progress', {
+                        'stage': stage,
+                        'percentage': int(percentage),
+                        'message': message,
+                    })
+
+                emit_progress('preparing', 3, 'Reading build mapping…')
+                mapping = TexturePackMapping.load(mapping_file)
+                indices = [c['index'] for c in mapping.costumes]
+                total = len(indices)
+                if total == 0:
+                    socketio.emit('texture_auto_error', {'error': 'This build has no costume CSPs to name.'})
+                    return
+
+                # Most indices are already in the table (instant); only new ones are
+                # computed (a few seconds each, paid once). Map compute work to 5..85%.
+                def compute_progress(done, missing_total, index):
+                    pct = 5 + (done / missing_total) * 80 if missing_total else 85
+                    emit_progress('computing', pct,
+                                  f'Computing texture names ({done}/{missing_total})…')
+
+                emit_progress('computing', 5, 'Looking up texture names…')
+                entries, computed = ensure_table_covers(indices, compute_progress)
+
+                emit_progress('placing', 90, f'Placing {total} HD portraits…')
+                load_path = Path(slippi_path) / 'User' / 'Load' / 'Textures' / 'GALE01' / 'ssbm-nucleus'
+                # Hires load on so the pack appears next boot; dumping off (not needed).
+                set_dolphin_texture_settings(slippi_path, dump_textures=False, hires_textures=True)
+
+                result = apply_offline_texture_pack(mapping, entries, load_path, STORAGE_PATH)
+                mapping.save(mapping_file)
+
+                logger.info(f"Auto texture pack for {build_id}: matched {result['matched']}/{result['total']} "
+                            f"({len(computed)} indices computed, {len(result['missingFromTable'])} missing, "
+                            f"{len(result['copyFailed'])} copy-failed)")
+                socketio.emit('texture_auto_complete', {
+                    'success': True,
+                    'matched': result['matched'],
+                    'total': result['total'],
+                    'computed': len(computed),
+                    'missingFromTable': result['missingFromTable'],
+                    'copyFailed': result['copyFailed'],
+                    'texturePackPath': result['texturePackPath'],
+                })
+            except Exception as e:
+                logger.error(f"Auto texture pack error: {str(e)}", exc_info=True)
+                socketio.emit('texture_auto_error', {'error': str(e)})
+
+        threading.Thread(target=run, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Auto texture pack started'})
+
+    except Exception as e:
+        logger.error(f"Auto texture pack start error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
