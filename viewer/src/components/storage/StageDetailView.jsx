@@ -15,6 +15,7 @@ import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ContextMenu from './ContextMenu'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
+import { useInGameTest } from '../../hooks/useInGameTest'
 
 export default function StageDetailView({
   selectedStage,
@@ -101,6 +102,9 @@ export default function StageDetailView({
 }) {
   const stageInfo = selectedStage
   const variants = stageVariants[selectedStage.code] || []
+
+  // In-game test (per stage skin / DAS variant)
+  const inGameTest = useInGameTest()
 
   // Smooth reorder animations
   const [animateRef] = useAutoAnimate({ duration: 200 })
@@ -206,7 +210,7 @@ export default function StageDetailView({
         slippiAdvancedOpen={slippiAdvancedOpen}
         onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
         onSave={handleSave}
-        onCancel={handleCancel}
+        onCancel={() => { inGameTest.resetTest(); handleCancel(); }}
         onDelete={handleDelete}
         onExport={handleExport}
         onCspChange={handleCspChange}
@@ -217,6 +221,17 @@ export default function StageDetailView({
         onOpenCspManager={openCspManager}
         onStartSkinCreator={startSkinCreatorFromVault}
         onView3D={() => setShow3DViewer(true)}
+        onTestInGame={() => inGameTest.startStageSkinTest({
+          stageCode: editingItem?.data?.stageCode,
+          stageFolder: editingItem?.data?.stageFolder,
+          variantId: editingItem?.data?.id,
+          name: editingItem?.data?.name
+        })}
+        testingInGame={inGameTest.testingInGame}
+        testStatus={inGameTest.testStatus}
+        testResult={inGameTest.testResult}
+        testError={inGameTest.testError}
+        onResetTest={inGameTest.resetTest}
         API_URL={API_URL}
       />
       {show3DViewer && editingItem && editingItem.type === 'costume' && (

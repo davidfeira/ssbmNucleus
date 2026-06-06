@@ -16,6 +16,15 @@ const CSS_SCAN_ORDER = [
   'Sheik'
 ];
 
+const TEST_VERDICT_LABEL = {
+  healthy: 'PASS',
+  ended: 'PASS — match ended',
+  never_started: 'DID NOT START',
+  hung: 'HUNG',
+  crashed: 'CRASH',
+  error: 'ERROR',
+};
+
 const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   // Format: BUILDNAME_YYYY-MM-DD_HH-MM.iso
   const getDefaultFilename = () => {
@@ -76,6 +85,16 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const [bundleComplete, setBundleComplete] = useState(false);
   const [bundleError, setBundleError] = useState(null);
   const [bundleResult, setBundleResult] = useState(null);
+
+  // Test-in-game state
+  const [testing, setTesting] = useState(false);
+  const [testStage, setTestStage] = useState('');
+  const [testProgress, setTestProgress] = useState(0);
+  const [testMessage, setTestMessage] = useState('');
+  const [testResult, setTestResult] = useState(null);
+  const [testError, setTestError] = useState(null);
+  const [testManifestPath, setTestManifestPath] = useState('');
+  const [showTestAdvanced, setShowTestAdvanced] = useState(false);
 
   useEffect(() => {
     // Connect to WebSocket for progress updates
@@ -235,6 +254,25 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
         setBundleExporting(false);
         playSound('error');
       }
+    });
+
+    // Test-in-game events
+    newSocket.on('test_progress', (data) => {
+      setTestStage(data.stage || '');
+      setTestProgress(data.percentage || 0);
+      setTestMessage(data.message || 'Testing…');
+    });
+
+    newSocket.on('test_complete', (data) => {
+      setTesting(false);
+      setTestResult(data);
+      playSound(data.success ? 'achievement' : 'error');
+    });
+
+    newSocket.on('test_error', (data) => {
+      setTesting(false);
+      setTestError(data.error);
+      playSound('error');
     });
 
     setSocket(newSocket);
@@ -539,6 +577,108 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
+  const handleTestInGame = async () => {
+    playSound('start');
+    setTesting(true);
+    setTestProgress(0);
+    setTestStage('starting');
+    setTestMessage('Starting in-game test…');
+    setTestResult(null);
+    setTestError(null);
+
+    try {
+      const body = {
+        isoPath: exportedIsoPath,
+        slippiDolphinPath: slippiDolphinPath,
+      };
+      if (testManifestPath.trim()) body.manifestPath = testManifestPath.trim();
+
+      const response = await fetch(`${API_URL}/test-in-game/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setTesting(false);
+        setTestError(data.error || 'Failed to start test');
+        playSound('error');
+      }
+    } catch (err) {
+      setTesting(false);
+      setTestError(`Failed to start test: ${err.message}`);
+      playSound('error');
+    }
+  };
+
+  const renderTestResult = () => {
+    const r = testResult;
+    if (!r) return null;
+    const pass = !!r.success;
+    const headline = pass
+      ? '✓ PASS'
+      : `✕ ${TEST_VERDICT_LABEL[r.verdict] || String(r.verdict || '').toUpperCase()}`;
+    return (
+      <div className="test-result" style={{ textAlign: 'center' }}>
+        <div style={{
+          display: 'inline-block', padding: '0.35rem 1rem',
+          borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '1.1em',
+          marginBottom: '0.75rem', color: '#fff',
+          background: pass ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)'
+        }}>
+          {headline}
+        </div>
+        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>{r.reason}</p>
+        {r.onlineAborted && (
+          <p style={{ color: 'var(--color-warning, #f39c12)', marginBottom: '1rem' }}>
+            Stopped before going online — no matchmaking occurred.
+          </p>
+        )}
+        {r.screenshot && (
+          <img
+            src={r.screenshot}
+            alt="In-game screenshot"
+            style={{
+              maxWidth: '100%', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)', marginBottom: '1rem'
+            }}
+          />
+        )}
+        {Array.isArray(r.checks) && r.checks.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, textAlign: 'left', marginBottom: '1rem' }}>
+            {r.checks.map((c, i) => {
+              const ok = c.verdict === 'healthy';
+              return (
+                <li key={i} style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--color-border)' }}>
+                  <span style={{
+                    color: ok ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)',
+                    marginRight: '0.5rem', fontWeight: 700
+                  }}>
+                    {ok ? '✓' : '✕'}
+                  </span>
+                  <span style={{ color: 'var(--color-text-primary)' }}>{c.label}</span>
+                  {Array.isArray(c.covers) && c.covers.length > 0 && (
+                    <span style={{ fontSize: '0.75em', color: 'var(--color-text-secondary)', marginLeft: '0.5rem' }}>
+                      [{c.covers.join(', ')}]
+                    </span>
+                  )}
+                  {!ok && c.reason && (
+                    <div style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginLeft: '1.5rem' }}>
+                      {c.reason}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <button className="btn-secondary" onClick={handleTestInGame} disabled={!slippiDolphinPath}>
+          Test again
+        </button>
+      </div>
+    );
+  };
+
   const renderProgressPanel = ({
     title,
     label,
@@ -729,6 +869,76 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
                 <button className="btn-secondary" onClick={handleClose}>
                   Close
                 </button>
+              </div>
+
+              {/* Test In Game Section */}
+              <div className="test-in-game-section" style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
+                {testing ? (
+                  renderProgressPanel({
+                    title: 'Testing in game…',
+                    label: 'In-game test progress',
+                    progressValue: testProgress > 0 ? testProgress : null,
+                    metaText: testStage ? testStage.replace(/_/g, ' ') : null,
+                    messageText: getProgressMessage(testMessage, 'Booting an isolated Dolphin…')
+                  })
+                ) : testResult ? (
+                  renderTestResult()
+                ) : testError ? (
+                  <div className="test-error" style={{ textAlign: 'center' }}>
+                    <p style={{ color: 'var(--color-error, #e74c3c)' }}>Test failed: {testError}</p>
+                    <button className="btn-secondary" onClick={handleTestInGame} disabled={!slippiDolphinPath}>
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>Test in game</h4>
+                    <p style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+                      Boots this ISO in a throwaway Dolphin, plays a short automated match to verify your mods load,
+                      and reports PASS / CRASH with a screenshot. Your own Slippi setup is untouched, and it never goes online.
+                    </p>
+                    {!slippiDolphinPath && (
+                      <p className="card-warning" style={{ marginBottom: '0.75rem' }}>
+                        Set the Slippi path in Settings first
+                      </p>
+                    )}
+                    <button
+                      className="btn-export"
+                      style={{ width: '100%' }}
+                      onClick={handleTestInGame}
+                      disabled={!slippiDolphinPath}
+                    >
+                      🎮 Test in game
+                    </button>
+                    <button
+                      className="advanced-toggle"
+                      style={{ marginTop: '0.5rem' }}
+                      onClick={() => setShowTestAdvanced(v => !v)}
+                    >
+                      <span className="toggle-arrow">{showTestAdvanced ? '▼' : '▶'}</span>
+                      Drive specific mods (optional)
+                    </button>
+                    {showTestAdvanced && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85em', color: 'var(--color-text-secondary)' }}>
+                          Build manifest path — a JSON file describing which character / stage / effect to drive.
+                          Leave blank to just boot and watch for a crash.
+                        </label>
+                        <input
+                          type="text"
+                          value={testManifestPath}
+                          onChange={(e) => setTestManifestPath(e.target.value)}
+                          placeholder="C:\\...\\last-build.json"
+                          style={{
+                            width: '100%', padding: '0.5rem', borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--color-border)', background: 'var(--color-bg-surface)',
+                            color: 'var(--color-text-primary)'
+                          }}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Patch Creation Section */}

@@ -46,6 +46,14 @@ export default function EditModal({
   onStartSkinCreator,
   onView3D,
 
+  // In-game test (costumes only)
+  onTestInGame,
+  testingInGame,
+  testStatus,
+  testResult,
+  testError,
+  onResetTest,
+
   API_URL
 }) {
   if (!show || !editingItem) return null
@@ -225,6 +233,25 @@ export default function EditModal({
                   </svg>
                   <span>Edit Textures</span>
                 </button>
+
+                {/* Test In Game Button */}
+                {onTestInGame && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={onTestInGame}
+                    disabled={saving || deleting || exporting || testingInGame}
+                    title="Build a one-costume test ISO and play a short match to verify it loads"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+                      <line x1="6" y1="12" x2="10" y2="12"></line>
+                      <line x1="8" y1="10" x2="8" y2="14"></line>
+                      <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                      <line x1="18" y1="11" x2="18.01" y2="11"></line>
+                    </svg>
+                    <span>Test in Game</span>
+                  </button>
+                )}
               </div>
 
               {/* RIGHT: Controls Panel */}
@@ -379,6 +406,26 @@ export default function EditModal({
                   />
                 </div>
 
+                {/* Test In Game (stage skin) */}
+                {onTestInGame && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={onTestInGame}
+                    disabled={saving || deleting || exporting || testingInGame}
+                    title="Build a one-skin test ISO and play a short match (holds the DAS button) to verify it loads"
+                    style={{ marginBottom: '1rem' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+                      <line x1="6" y1="12" x2="10" y2="12"></line>
+                      <line x1="8" y1="10" x2="8" y2="14"></line>
+                      <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                      <line x1="18" y1="11" x2="18.01" y2="11"></line>
+                    </svg>
+                    <span>Test in Game</span>
+                  </button>
+                )}
+
                 {/* Slippi Status Badge for Stages */}
                 <div className="edit-modal-slippi-section">
                   <div className={`edit-modal-slippi-badge ${
@@ -528,6 +575,76 @@ export default function EditModal({
             Cancel
           </button>
         </div>
+
+        {/* In-game test overlay (progress / result / error) */}
+        {(testingInGame || testResult || testError) && (
+          <div
+            className="edit-modal-test-overlay"
+            style={{
+              position: 'absolute', inset: 0, zIndex: 20, borderRadius: 'inherit',
+              background: 'rgba(8,8,16,0.92)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <div style={{ width: '90%', maxWidth: '560px', maxHeight: '92%', overflowY: 'auto', textAlign: 'center', padding: '1.5rem' }}>
+              {testingInGame ? (
+                <>
+                  <div className="edit-modal-action-spinner" style={{ width: 40, height: 40, margin: '0 auto 1rem' }}></div>
+                  <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '0.5rem' }}>Testing in game…</h3>
+                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+                    {testStatus?.message || 'Working…'}
+                  </p>
+                  <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', marginBottom: '1rem' }}>
+                    <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }}></div>
+                  </div>
+                  <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)' }}>
+                    Builds a one-costume ISO and plays a short match in a throwaway Dolphin.
+                    Your Slippi setup is untouched, and it never goes online.
+                  </p>
+                </>
+              ) : testError ? (
+                <>
+                  <h3 style={{ color: 'var(--color-error, #e74c3c)', marginBottom: '0.75rem' }}>Test error</h3>
+                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.25rem' }}>{testError}</p>
+                  <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onResetTest}>
+                    Close
+                  </button>
+                </>
+              ) : testResult ? (
+                <>
+                  <div style={{
+                    display: 'inline-block', padding: '0.35rem 1.1rem', borderRadius: 'var(--radius-md)',
+                    fontWeight: 700, fontSize: '1.15em', marginBottom: '0.75rem', color: '#fff',
+                    background: testResult.success ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)'
+                  }}>
+                    {testResult.success ? '✓ PASS' : `✕ ${String(testResult.verdict || '').toUpperCase()}`}
+                  </div>
+                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>{testResult.reason}</p>
+                  {testResult.onlineAborted && (
+                    <p style={{ color: 'var(--color-warning, #f39c12)', marginBottom: '1rem' }}>
+                      Stopped before going online — no matchmaking occurred.
+                    </p>
+                  )}
+                  {testResult.screenshot && (
+                    <img
+                      src={testResult.screenshot}
+                      alt="In-game screenshot"
+                      style={{ maxWidth: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: '1rem' }}
+                    />
+                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                    <button className="edit-modal-action-btn edit-modal-action-btn--export" onClick={onTestInGame}>
+                      Test again
+                    </button>
+                    <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onResetTest}>
+                      Close
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

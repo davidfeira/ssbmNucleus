@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import InGameTestPanel from '../shared/InGameTestPanel'
+import { useInGameTest } from '../../hooks/useInGameTest'
 
 export default function CustomCharacterDetailView({ character, onBack, onDelete, onRename, API_URL }) {
   const [editingName, setEditingName] = useState(false)
@@ -9,6 +11,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [detail, setDetail] = useState(null)
+  const inGameTest = useInGameTest()
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -225,6 +228,14 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           >
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
+        </div>
+
+        {/* Test In Game */}
+        <div className="custom-stage-test" style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+          <InGameTestPanel
+            test={inGameTest}
+            onStart={() => inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })}
+          />
         </div>
       </div>
 

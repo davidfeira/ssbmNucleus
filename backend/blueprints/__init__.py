@@ -25,6 +25,7 @@ from .iso_scan import iso_scan_bp
 from .menus import menus_bp
 from .custom_stages import custom_stages_bp
 from .custom_characters import custom_characters_bp
+from .test_in_game import test_in_game_bp
 
 __all__ = [
     'assets_bp',
@@ -48,4 +49,5 @@ __all__ = [
     'menus_bp',
     'custom_stages_bp',
     'custom_characters_bp',
+    'test_in_game_bp',
 ]

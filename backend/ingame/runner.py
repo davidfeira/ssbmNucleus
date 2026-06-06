@@ -1,0 +1,456 @@
+"""
+runner.py -- the in-app "Test in game" orchestrator.
+
+Boots a freshly-built ISO in an isolated throwaway Dolphin (boot.py), drives the
+menus to the OFFLINE character-select screen by scene feedback (nav.py), then
+runs a PLAN of checks derived from the build manifest -- each check selects the
+modded character/stage (closed-loop, melee_css/melee_sss), optionally triggers an
+effect move, and watches RAM for a crash/hang (observe.py) -- and returns a
+structured PASS/CRASH/HUNG result with screenshots.
+
+Smart plan: a modpack (all six mod types in one ISO) is covered by just TWO
+matches that share fighters --
+  A) the custom character on the custom stage      -> character + stage + menu bg
+  B) the modded fighter's costume on the DAS stage holding its button, then the
+     effect move in-match                          -> costume + DAS + effect
+Single-type builds get one matching check; anything we can't drive specifically
+falls back to a boot-health watch (boot -> reach the CSS so the mod's data loads
+-> watch process/frame health), which still catches the vast majority of broken
+builds. NOTHING ever enters the online screen (nav.py aborts on scene 0x08).
+
+Public entry: run_test(...). Designed to be called from a background thread in
+the backend; it emits progress through the `emit` callback and always cleans up
+Dolphin + the temp User dir.
+"""
+
+import base64
+import time
+
+from .boot import DolphinBoot
+from .melee_mem import Dolphin
+from .melee_pipe import Pipe
+from .melee_css import Cursor
+from .melee_sss import StageCursor
+from .observe import Observer
+from . import nav
+from . import screenshot as _screenshot
+from .char_select import load_grid, cell, css_index
+
+
+# severity for aggregating the overall verdict (higher = worse)
+_SEVERITY = {"healthy": 0, "ended": 1, "never_started": 2, "hung": 3, "crashed": 4, "error": 5}
+
+
+def _noop(*_a, **_k):
+    pass
+
+
+# --------------------------------------------------------------------------- #
+# Plan building                                                                 #
+# --------------------------------------------------------------------------- #
+def _icon(d):
+    """Normalise a cssIcon / sssIcon dict (tolerate missing keys)."""
+    if not isinstance(d, dict):
+        return None
+    return d
+
+
+def build_plan(manifest):
+    """Turn a build manifest into a list of checks. See module docstring for the
+    smart 2-match modpack coverage. Returns [] for boot-health-only (handled by
+    the caller)."""
+    if not manifest:
+        return []
+
+    costume = manifest.get("costume") or None
+    character = manifest.get("character") or None
+    custom_stage = manifest.get("customStage") or None
+    das = manifest.get("das") or None
+    effect = manifest.get("effect") or None
+
+    css_icon = _icon(character.get("cssIcon")) if character else None
+    sss_icon = _icon(custom_stage.get("sssIcon")) if custom_stage else None
+
+    checks = []
+
+    # --- Match A: custom character (+ custom stage if present) ---------------
+    if css_icon:
+        stage = None
+        covers = ["character"]
+        label_stage = "Battlefield"
+        if sss_icon:
+            stage = {"kind": "icon", "page": int(sss_icon.get("page", 0)),
+                     "x": float(sss_icon["x"]), "y": float(sss_icon["y"])}
+            covers.append("stage")
+            label_stage = custom_stage.get("name", "custom stage")
+        checks.append({
+            "label": f"{character.get('name', 'custom fighter')} on {label_stage}",
+            "covers": covers + ["menu"],
+            "char": {"kind": "custom", "x": float(css_icon["x"]),
+                     "y": float(css_icon["y"]), "index": int(css_icon["index"])},
+            "stage": stage,
+            "hold": None,
+            "move": None,
+        })
+    elif sss_icon:
+        # custom stage but no custom character -> a vanilla fighter reaches the SSS
+        checks.append({
+            "label": f"Fox on {custom_stage.get('name', 'custom stage')}",
+            "covers": ["stage", "menu"],
+            "char": {"kind": "vanilla", "name": "fox", "costume": 0},
+            "stage": {"kind": "icon", "page": int(sss_icon.get("page", 0)),
+                      "x": float(sss_icon["x"]), "y": float(sss_icon["y"])},
+            "hold": None,
+            "move": None,
+        })
+
+    # --- Match B: the modded fighter's abilities (costume + DAS + effect) ----
+    ability_covers = []
+    ability_fighter = None
+    if effect and effect.get("fighter"):
+        ability_fighter = effect["fighter"]
+    elif costume and costume.get("fighter"):
+        ability_fighter = costume["fighter"]
+
+    if ability_fighter:
+        ccostume = 0
+        if costume and str(costume.get("fighter", "")).lower() == str(ability_fighter).lower():
+            ccostume = int(costume.get("colorIndex", 0) or 0)
+            ability_covers.append("costume")
+        stage = {"kind": "name", "name": "battlefield"}
+        hold = None
+        if das and das.get("button"):
+            stage = {"kind": "name", "name": das.get("stage", "battlefield")}
+            hold = str(das["button"]).upper()
+            ability_covers.append("das")
+        move = None
+        if effect and effect.get("move"):
+            move = effect["move"]
+            ability_covers.append("effect")
+        if ability_covers:  # only add if it actually exercises something
+            stage_label = das.get("stage", "Battlefield") if das else "Battlefield"
+            checks.append({
+                "label": f"{ability_fighter} abilities ({', '.join(ability_covers)}) on {stage_label}",
+                "covers": ability_covers + ["menu"],
+                "char": {"kind": "vanilla", "name": ability_fighter, "costume": ccostume},
+                "stage": stage,
+                "hold": hold,
+                "move": move,
+            })
+
+    # --- Standalone costume mod (its own match if not folded into B) ---------
+    folded_costume = any("costume" in c["covers"] for c in checks)
+    if costume and costume.get("fighter") and not folded_costume:
+        checks.append({
+            "label": f"{costume['fighter']} costume {costume.get('colorIndex', 0)}",
+            "covers": ["costume", "menu"],
+            "char": {"kind": "vanilla", "name": costume["fighter"],
+                     "costume": int(costume.get("colorIndex", 0) or 0)},
+            "stage": {"kind": "name", "name": "battlefield"},
+            "hold": None,
+            "move": None,
+        })
+
+    # --- Standalone DAS mod (no costume/effect to fold into) -----------------
+    folded_das = any("das" in c["covers"] for c in checks)
+    if das and das.get("button") and not folded_das:
+        checks.append({
+            "label": f"DAS {das.get('stage', 'stage')} (hold {das['button']})",
+            "covers": ["das", "menu"],
+            "char": {"kind": "vanilla", "name": "fox", "costume": 0},
+            "stage": {"kind": "name", "name": das.get("stage", "battlefield")},
+            "hold": str(das["button"]).upper(),
+            "move": None,
+        })
+
+    return checks
+
+
+# --------------------------------------------------------------------------- #
+# Selection + move helpers (ported from cl_match.py)                            #
+# --------------------------------------------------------------------------- #
+def _lock_vanilla(cur, name, costume):
+    """Steer to a vanilla character cell + set costume, then ONE deliberate A to
+    lock (an even A count silently unlocks; START downstream is the real check)."""
+    grid = load_grid()
+    x, y = cell(grid, name)
+    cur.select(x, y, costume=costume, lock=False, css_index=css_index(name))
+    cur.p.center()
+    time.sleep(0.15)
+    cur.p.tap("A", 0.08)
+    time.sleep(0.35)
+    return cur.hovered() == css_index(name)
+
+
+def _lock_custom(cur, x, y, index):
+    """Lock a custom m-ex fighter by its CSS icon coordinate (target = (x, y-3.5),
+    the validated icon->cursor offset); confirm the hovered grid index."""
+    tx, ty = x, y - 3.5
+    cur.unlock()
+    cur.move_to(tx, ty)
+    for _ in range(4):
+        if cur.hovered() == index:
+            break
+        cur.move_to(tx, ty, tol=0.7)
+        time.sleep(0.12)
+    cur.p.center()
+    time.sleep(0.15)
+    cur.p.tap("A", 0.08)
+    time.sleep(0.35)
+    return cur.hovered() == index
+
+
+def _select_char(cur, char):
+    if char["kind"] == "custom":
+        return _lock_custom(cur, char["x"], char["y"], char["index"])
+    return _lock_vanilla(cur, char["name"], int(char.get("costume", 0)))
+
+
+def _select_stage(sc, stage, hold):
+    if stage is None or stage.get("kind") == "name":
+        name = stage["name"] if stage else "battlefield"
+        return sc.select(name, press=True, hold=hold)
+    if stage["kind"] == "icon":
+        return sc.select_at(stage["x"], stage["y"], page=int(stage.get("page", 0)),
+                            press=True, hold=hold)
+    if stage["kind"] == "id":
+        return sc.select_by_id(int(stage["id"]), press=True, hold=hold,
+                               pages=int(stage.get("pages", 1)))
+    return False
+
+
+def _ensure_on_sss(d, p, sc, cur, log):
+    """Get onto the stage-select screen, which only happens once a character is
+    locked AND a 2nd player is present. Both are RAM-verified: nav.any_extra_player
+    reads the per-port controller status, and add_cpu opens a port door closed-loop
+    if one is missing. Then press START. Returns True once on the SSS."""
+    for attempt in range(4):
+        if sc.on_stage_select():
+            return True
+        if not nav.any_extra_player(d):
+            log("no 2nd player present; opening a port door")
+            nav.add_cpu(d, p, cur=cur, log=log)
+        p.tap("START", 0.1)
+        if sc.wait_for_stage_select(timeout=2.5):
+            return True
+        time.sleep(0.2)
+    return sc.on_stage_select()
+
+
+def _perform_move(p, move, reps=6):
+    """After a match starts, perform the in-game move that exercises an effect
+    mod (so its model/data actually loads). Waits out the GO! countdown first."""
+    time.sleep(3.5)
+    if move == "neutralb":
+        for _ in range(reps):
+            p.tap("B", 0.06)
+            time.sleep(0.5)
+    elif move == "sideb":
+        for _ in range(reps):
+            p.frame(["SET MAIN 1.000 0.500", "PRESS B", "FLUSH"])
+            time.sleep(0.12)
+            p.frame(["RELEASE B", "SET MAIN 0.500 0.500", "FLUSH"])
+            time.sleep(0.6)
+    p.center()
+
+
+def _shot_b64(pid):
+    try:
+        png = _screenshot.capture_png(pid)
+        if png:
+            return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    except Exception:
+        pass
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Main entry                                                                    #
+# --------------------------------------------------------------------------- #
+def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=None,
+             observe_seconds=9, hires_textures=False, load_seed=None):
+    """Boot the ISO, drive it, and return a result dict:
+        {
+          "verdict": "healthy"|"ended"|"never_started"|"hung"|"crashed"|"error",
+          "pass": bool,
+          "reason": str,
+          "checks": [ {label, covers, verdict, reason, started, screenshot} ],
+          "screenshot": <data-uri of the CSS / last frame>,
+          "drove": [check labels],
+          "online_aborted": bool,
+        }
+    emit(stage, percentage, message) reports progress; log(msg) is for the log.
+    """
+    emit = emit or _noop
+    log = log or _noop
+
+    result = {
+        "verdict": "error", "pass": False, "reason": "", "checks": [],
+        "screenshot": None, "drove": [], "online_aborted": False,
+    }
+
+    boot = DolphinBoot(iso_path, slippi_path, runs_root,
+                       hires_textures=hires_textures, load_seed=load_seed, log=log)
+    try:
+        emit("booting", 5, "Preparing an isolated Dolphin (your Slippi setup is untouched)…")
+        boot.prepare()
+        emit("booting", 12, "Launching the build…")
+        boot.launch()
+
+        emit("booting", 18, "Waiting for the controller pipe…")
+        if not boot.wait_for_pipe(timeout=45):
+            result.update(verdict="crashed",
+                          reason="Dolphin never opened its input pipe (the build may have failed to boot).")
+            return result
+
+        # Attach to RAM (wait for MEM1 to be mapped).
+        emit("booting", 24, "Attaching to emulated memory…")
+        d = Dolphin(boot.pid)
+        t0 = time.time()
+        while not d.locate() and time.time() - t0 < 20:
+            if not d.alive():
+                result.update(verdict="crashed", reason="Dolphin process exited during boot.")
+                return result
+            time.sleep(0.4)
+        if d.base is None:
+            result.update(verdict="crashed", reason="Could not read the game's memory after boot.")
+            return result
+
+        p = Pipe(boot.pipe_index)
+        obs = Observer(d)
+
+        # Drive to the OFFLINE character-select screen (never online).
+        emit("at_css", 32, "Navigating to the offline character-select screen…")
+        try:
+            if not nav.nav_to_css(d, p, log=log):
+                # Couldn't confirm the CSS -- fall back to a boot-health verdict.
+                emit("observing", 60, "Couldn't confirm the menu; watching boot health instead…")
+                verdict, reason, _ = obs.watch_health(seconds=observe_seconds, log=log)
+                result["screenshot"] = _shot_b64(boot.pid)
+                result.update(verdict=verdict,
+                              reason="boot-health (menu nav inconclusive): " + reason)
+                result["pass"] = verdict == "healthy"
+                return result
+        except nav.OnlineAbort as oa:
+            result.update(verdict="error", online_aborted=True, reason=str(oa))
+            result["screenshot"] = _shot_b64(boot.pid)
+            return result
+
+        cur = Cursor(d, p)
+        sc = StageCursor(d, p)
+
+        # The offline-CSS scene flag flips a beat BEFORE the screen is actually
+        # interactive -- wait for the cursor to come alive (and settle) before
+        # driving anything, or the add-CPU press is dropped into a dead screen and
+        # the match never starts (no 2nd player). This was the harness's implicit
+        # 3s post-nav delay.
+        nav.wait_css_ready(d, cur, log=log)
+
+        # Snapshot the (now-settled) CSS (shows the menu background + portraits).
+        result["screenshot"] = _shot_b64(boot.pid)
+
+        plan = build_plan(manifest)
+        if not plan:
+            # No manifest / nothing specific to drive -> boot-health at the CSS.
+            emit("observing", 70, "Watching boot health at the character-select screen…")
+            verdict, reason, _ = obs.watch_health(seconds=max(observe_seconds, 12), log=log)
+            result.update(verdict=verdict, reason="boot-health: " + reason)
+            result["pass"] = verdict == "healthy"
+            return result
+
+        # Open the port-2 door (2nd player) before character select, as in the
+        # harness flow. Best-effort here -- the per-check START step verifies a
+        # 2nd player actually exists and reliably opens one (panel-row sweep with
+        # START verification) if this missed.
+        nav.add_cpu(d, p, cur=cur, log=log)
+
+        n = len(plan)
+        for i, check in enumerate(plan):
+            base_pct = 36 + int(48 * i / max(1, n))
+            label = check["label"]
+            result["drove"].append(label)
+            sub = {"label": label, "covers": check["covers"], "verdict": "error",
+                   "reason": "", "started": False, "screenshot": None}
+            try:
+                if i > 0:
+                    emit("selecting_char", base_pct, f"Returning to the CSS for: {label}…")
+                    if not nav.reset_to_css(d, p, log=log):
+                        sub.update(verdict="error", reason="could not return to the CSS for this check")
+                        result["checks"].append(sub)
+                        continue
+
+                emit("selecting_char", base_pct + 2, f"Selecting: {label}…")
+                on_cell = _select_char(cur, check["char"])
+                log(f"[{label}] char on_cell={on_cell} hovered={cur.hovered()}")
+
+                emit("selecting_stage", base_pct + 6, f"Choosing the stage for: {label}…")
+                # Make sure the port door opened (2nd player present) + the
+                # character locked, landing us on the stage-select screen, before
+                # we try to pick the stage.
+                if not _ensure_on_sss(d, p, sc, cur, log):
+                    sub.update(verdict="never_started",
+                               reason="couldn't reach stage select (no 2nd player, or the character didn't lock)")
+                    sub["screenshot"] = _shot_b64(boot.pid)
+                    result["checks"].append(sub)
+                    continue
+                started = _select_stage(sc, check.get("stage"), check.get("hold"))
+                sub["started"] = bool(started)
+                log(f"[{label}] match_started={started}")
+
+                if not started:
+                    sub.update(verdict="never_started",
+                               reason="couldn't start the match (selection failed)")
+                    sub["screenshot"] = _shot_b64(boot.pid)
+                    result["checks"].append(sub)
+                    continue
+
+                if check.get("move"):
+                    emit("in_match", base_pct + 9, f"Triggering {check['move']} for: {label}…")
+                    _perform_move(p, check["move"])
+
+                emit("observing", base_pct + 11, f"Watching for crashes/hangs: {label}…")
+                verdict, reason, _ = obs.watch(seconds=observe_seconds, require_ingame=True, log=log)
+                sub.update(verdict=verdict, reason=reason)
+                sub["screenshot"] = _shot_b64(boot.pid)
+                result["checks"].append(sub)
+                log(f"[{label}] VERDICT {verdict} -- {reason}")
+            except nav.OnlineAbort as oa:
+                result["online_aborted"] = True
+                sub.update(verdict="error", reason=str(oa))
+                result["checks"].append(sub)
+                break
+            except Exception as e:  # one check failing shouldn't abort the rest
+                sub.update(verdict="error", reason=f"{type(e).__name__}: {e}")
+                result["checks"].append(sub)
+                log(f"[{label}] ERROR {e}")
+
+        # Aggregate.
+        if result["checks"]:
+            worst = max(result["checks"], key=lambda c: _SEVERITY.get(c["verdict"], 5))
+            result["verdict"] = worst["verdict"]
+            result["reason"] = worst["reason"] if worst["verdict"] != "healthy" else \
+                "every modded element loaded and ran without a crash or hang."
+            result["pass"] = all(c["verdict"] == "healthy" for c in result["checks"])
+            # Prefer a gameplay screenshot for the headline image if we have one.
+            for c in result["checks"]:
+                if c.get("screenshot"):
+                    result["screenshot"] = c["screenshot"]
+                    break
+        else:
+            result.update(verdict="error", reason="no checks ran")
+
+        emit("done", 96, "Wrapping up…")
+        return result
+    except Exception as e:
+        result.update(verdict="error", reason=f"{type(e).__name__}: {e}")
+        try:
+            result["screenshot"] = _shot_b64(boot.pid)
+        except Exception:
+            pass
+        return result
+    finally:
+        try:
+            p.close()  # noqa: F821 - best effort if it exists
+        except Exception:
+            pass
+        boot.cleanup()

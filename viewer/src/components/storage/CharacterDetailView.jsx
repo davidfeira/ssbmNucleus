@@ -11,6 +11,7 @@
 
 import { useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
+import { useInGameTest } from '../../hooks/useInGameTest'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import FolderCard from './FolderCard'
@@ -153,6 +154,9 @@ export default function CharacterDetailView({
   } else {
     enableAnimations(true)
   }
+
+  // In-game test (per costume)
+  const inGameTest = useInGameTest()
 
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
@@ -318,7 +322,7 @@ export default function CharacterDetailView({
         slippiAdvancedOpen={slippiAdvancedOpen}
         onSlippiAdvancedToggle={() => setSlippiAdvancedOpen(!slippiAdvancedOpen)}
         onSave={handleSave}
-        onCancel={handleCancel}
+        onCancel={() => { inGameTest.resetTest(); handleCancel(); }}
         onDelete={handleDelete}
         onExport={handleExport}
         onCspChange={handleCspChange}
@@ -329,6 +333,16 @@ export default function CharacterDetailView({
         onOpenCspManager={openCspManager}
         onStartSkinCreator={startSkinCreatorFromVault}
         onView3D={() => setShow3DViewer(true)}
+        onTestInGame={() => inGameTest.startCostumeTest({
+          character: editingItem?.data?.character,
+          skinId: editingItem?.data?.id,
+          colorName: editingItem?.data?.color
+        })}
+        testingInGame={inGameTest.testingInGame}
+        testStatus={inGameTest.testStatus}
+        testResult={inGameTest.testResult}
+        testError={inGameTest.testError}
+        onResetTest={inGameTest.resetTest}
         API_URL={API_URL}
       />
       {show3DViewer && editingItem && editingItem.type === 'costume' && (

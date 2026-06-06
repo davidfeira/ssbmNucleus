@@ -65,6 +65,7 @@ from blueprints import (
     menus_bp,
     custom_stages_bp,
     custom_characters_bp,
+    test_in_game_bp,
 )
 
 # Import extras API (existing blueprint)
@@ -131,6 +132,7 @@ app.register_blueprint(iso_scan_bp)
 app.register_blueprint(menus_bp)
 app.register_blueprint(custom_stages_bp)
 app.register_blueprint(custom_characters_bp)
+app.register_blueprint(test_in_game_bp)
 
 
 # SocketIO connection handlers

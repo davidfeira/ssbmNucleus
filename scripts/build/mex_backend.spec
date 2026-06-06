@@ -64,6 +64,7 @@ hiddenimports = [
     'PIL.ImageFont',
     'PIL.ImageEnhance',
     'PIL.ImageStat',
+    'PIL.ImageGrab',  # in-game test screenshots
 
     # NumPy for image processing
     'numpy',
@@ -83,8 +84,24 @@ hiddenimports = [
     'backend.stage_detector',
     'backend.mex_api',
 
+    # In-game test engine (backend/ingame/*, imported lazily so not auto-found)
+    'ingame',
+    'ingame.runner',
+    'ingame.boot',
+    'ingame.nav',
+    'ingame.observe',
+    'ingame.screenshot',
+    'ingame.melee_mem',
+    'ingame.melee_pipe',
+    'ingame.melee_css',
+    'ingame.melee_sss',
+    'ingame.char_select',
+
     # MexBridge - CRITICAL module
     'mex_bridge',
+
+    # Single-costume temp ISO builder for the per-mod in-game test
+    'test_build',
 
     # Utility modules (dynamically imported)
     'generate_csp',
@@ -153,6 +170,12 @@ if build_assets_dir.exists():
 das_dir = project_root / 'utility' / 'DynamicAlternateStages'
 if das_dir.exists():
     datas.append((str(das_dir), 'utility/DynamicAlternateStages'))
+
+# In-game test engine data: the calibrated CSS cursor grid (ingame loads it via
+# dirname(__file__)/grid.json, so it must land in the bundle's ingame/ folder).
+grid_json = project_root / 'backend' / 'ingame' / 'grid.json'
+if grid_json.exists():
+    datas.append((str(grid_json), 'ingame'))
 
 # =============================================================================
 # BINARIES

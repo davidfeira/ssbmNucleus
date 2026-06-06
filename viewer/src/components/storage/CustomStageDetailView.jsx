@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import InGameTestPanel from '../shared/InGameTestPanel'
+import { useInGameTest } from '../../hooks/useInGameTest'
 
 export default function CustomStageDetailView({ stage, onBack, onDelete, onRename, API_URL }) {
   const [editingName, setEditingName] = useState(false)
@@ -8,6 +10,7 @@ export default function CustomStageDetailView({ stage, onBack, onDelete, onRenam
   const [saving, setSaving] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const inGameTest = useInGameTest()
 
   const handleSaveRename = async () => {
     const trimmed = nameValue.trim()
@@ -182,6 +185,14 @@ export default function CustomStageDetailView({ stage, onBack, onDelete, onRenam
           >
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
+        </div>
+
+        {/* Test In Game */}
+        <div className="custom-stage-test" style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+          <InGameTestPanel
+            test={inGameTest}
+            onStart={() => inGameTest.startCustomStageTest({ slug: stage.slug, name: stage.name })}
+          />
         </div>
       </div>
 
