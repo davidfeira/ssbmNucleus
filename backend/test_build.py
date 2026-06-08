@@ -281,3 +281,77 @@ def build_stage_skin_iso(vanilla_iso, stage_code, stage_folder, variant_id, out_
         return {"stage": DAS_STAGES[stage_code][1], "button": button}
     finally:
         shutil.rmtree(proj_dir, ignore_errors=True)
+
+
+# Hold buttons that reliably trigger a DAS alternate during a memory-driven capture.
+# VERIFIED over a 3-round stress test (each held button loads ITS OWN variant every
+# round, all mutually distinct): X, Y, Z, L, R, B. R is safe even though it flips the
+# SSS page in cursor mode -- force_stage_id is layout/page-independent, so the flip
+# is a no-op. B is kept LAST (only the 6th variant in a stage uses it) since it's the
+# "back out" button -- it tested clean but is the riskiest. EXCLUDED: A -- it's the
+# stage-select confirm, so holding it triggers a cursor pick -> RANDOM alternate
+# (measured flaky). So one ISO holds up to 6 variants of a base stage; a stage with
+# more needs additional ISOs.
+BATCH_BUTTONS = ["X", "Y", "Z", "L", "R", "B"]
+
+
+def build_stage_skin_multibatch_iso(vanilla_iso, groups, out_iso,
+                                    progress_cb=None, log=lambda m: None, buttons=None):
+    """Fresh project + DAS framework + variants for one OR MORE base stages packed
+    into a SINGLE ISO -- up to len(buttons or BATCH_BUTTONS) (=6) per stage, each
+    behind its own hold button. The DAS framework installs a loader for ALL six
+    base stages, so ONE boot can then screenshot every (stage, variant) combo (up
+    to 6 x 6 = 36 per ISO) -- only one build + one boot for a whole selection,
+    instead of an ISO per stage.
+
+    `groups` is a list of {"stageCode", "stageFolder", "variantIds"} (each
+    variantIds list trimmed to len(buttons) by the caller). Returns the placed
+    list: [{"stageCode", "stageFolder", "variantId", "button"}]."""
+    buttons = buttons or BATCH_BUTTONS
+    proj_dir, proj = create_temp_project(vanilla_iso, log=log)
+    placed = []
+    try:
+        files_dir = proj_dir / "files"
+        log("Installing the DAS framework…")
+        _das_install_framework(files_dir, log=log)
+        for g in groups:
+            stage_code, stage_folder = g["stageCode"], g["stageFolder"]
+            if stage_code not in DAS_STAGES:
+                log(f"skip unknown DAS stage {stage_code}")
+                continue
+            stage_dir = files_dir / stage_code
+            stage_dir.mkdir(parents=True, exist_ok=True)
+            for vid, button in zip(g.get("variantIds", []), buttons):
+                variant_zip = DAS_STORAGE_PATH / stage_folder / f"{vid}.zip"
+                if not variant_zip.exists():
+                    log(f"skip missing variant {stage_folder}/{vid}")
+                    continue
+                with zipfile.ZipFile(variant_zip) as z:
+                    dat_name = next((n for n in z.namelist()
+                                     if n.lower().endswith((".dat", ".usd"))), None)
+                    if not dat_name:
+                        log(f"skip {vid}: no .dat/.usd in archive")
+                        continue
+                    data = z.read(dat_name)
+                (stage_dir / f"NucleusTestSkin({button}).dat").write_bytes(data)
+                placed.append({"stageCode": stage_code, "stageFolder": stage_folder,
+                               "variantId": vid, "button": button})
+                log(f"Placed {stage_folder}/{vid} behind HOLD {button}")
+        if not placed:
+            raise RuntimeError("no variants were placed into the ISO")
+        mex = MexManager(str(MEXCLI_PATH), str(proj))
+        _export(mex, out_iso, progress_cb, log)
+        return placed
+    finally:
+        shutil.rmtree(proj_dir, ignore_errors=True)
+
+
+def build_stage_skin_batch_iso(vanilla_iso, stage_code, stage_folder, variant_ids, out_iso,
+                               progress_cb=None, log=lambda m: None, buttons=None):
+    """Single-stage convenience wrapper over build_stage_skin_multibatch_iso;
+    returns the legacy [{"id", "button"}] shape."""
+    placed = build_stage_skin_multibatch_iso(
+        vanilla_iso,
+        [{"stageCode": stage_code, "stageFolder": stage_folder, "variantIds": variant_ids}],
+        out_iso, progress_cb=progress_cb, log=log, buttons=buttons)
+    return [{"id": p["variantId"], "button": p["button"]} for p in placed]

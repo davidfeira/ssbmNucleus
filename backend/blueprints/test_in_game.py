@@ -34,6 +34,33 @@ _test_lock = threading.Lock()
 _test_running = False
 
 
+@test_in_game_bp.before_request
+def _guard_dolphin_already_open():
+    """Every test-start endpoint launches its OWN throwaway Dolphin and drives it
+    over a pipe. If the user already has a Slippi/Dolphin window open, the second
+    one steals the foreground and the test just sits on the menu (never pressing a
+    button) -- so refuse early with a clear message. Skipped for GETs (e.g.
+    /status) and while a test is already running (the per-endpoint one-at-a-time
+    guard answers that case, and our own harness Dolphin would be running)."""
+    if request.method != 'POST' or os.name != 'nt' or _test_running:
+        return None
+    try:
+        from ingame.boot import dolphin_running
+        open_pids = dolphin_running()
+    except Exception:
+        return None
+    if open_pids:
+        return jsonify({
+            'success': False,
+            'dolphinOpen': True,
+            'error': ('A Dolphin window is already open. Close any running Slippi '
+                      'Dolphin first — the in-game test launches its own Dolphin, '
+                      'and a second one steals focus so the test just sits on the '
+                      'menu.'),
+        }), 409
+    return None
+
+
 def _load_manifest(data):
     """Resolve the build manifest (what to drive) from the request, tolerating
     its absence -- without one we fall back to a boot-health check."""
@@ -558,6 +585,156 @@ def start_capture_stage_screenshot():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({'success': True, 'message': 'Stage screenshot capture started'})
+
+
+@test_in_game_bp.route('/api/mex/test-in-game/capture-stage-batch', methods=['POST'])
+def start_capture_stage_batch():
+    """BULK-capture clean in-game screenshots for many DAS variants at once. The
+    selected variants are grouped by base stage and packed up to BATCH_BUTTONS
+    (=4) per ISO, each behind its own HOLD button, so a single boot screenshots
+    them all -- far fewer builds/boots than one ISO per variant. Images are
+    RETURNED (not saved); the frontend shows a review grid and the user saves the
+    ones they want via /storage/stages/update-screenshot. Streams capture_progress
+    and a final capture_batch_complete carrying every result (with image or an
+    error per variant); capture_error only on a fatal failure.
+    Body: { variants: [{stageCode, stageFolder, variantId, name}], vanillaIsoPath,
+    slippiDolphinPath }."""
+    global _test_running
+    if os.name != 'nt':
+        return jsonify({'success': False,
+                        'error': 'In-game capture is only supported on Windows.'}), 400
+    data = request.json or {}
+    variants = data.get('variants') or []
+    variants = [v for v in variants
+                if v.get('stageCode') and v.get('stageFolder') and v.get('variantId')]
+    if not variants:
+        return jsonify({'success': False, 'error': 'No valid variants selected.'}), 400
+    vanilla, slippi, _obs, err = _common_inputs(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+
+    with _test_lock:
+        if _test_running:
+            return jsonify({'success': False, 'error': 'A test is already running.'}), 409
+        _test_running = True
+
+    runs_root = STORAGE_PATH / 'test-runs'
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    def run():
+        global _test_running
+        socketio = get_socketio()
+
+        def emit(stage, percentage, message):
+            socketio.emit('capture_progress', {
+                'stage': stage, 'percentage': percentage, 'message': message})
+
+        results = []  # one entry per requested variant, in input order
+        try:
+            from test_build import build_stage_skin_multibatch_iso, BATCH_BUTTONS, DAS_STAGES
+            from ingame.capture import capture_stage_batch
+            from ingame.melee_sss import INTERNAL_STAGE_ID
+
+            total = len(variants)
+
+            # Group by base stage (preserve input order within each).
+            groups = {}
+            for v in variants:
+                groups.setdefault((v['stageCode'], v['stageFolder']), []).append(v)
+            # Set aside variants on stages we can't drive.
+            unknown = set()
+            for key in list(groups):
+                if key[0] not in DAS_STAGES:
+                    for v in groups.pop(key):
+                        unknown.add((v['stageCode'], v['variantId']))
+
+            # One ISO per ROUND packs up to BATCH_BUTTONS (6) variants of EACH base
+            # stage (the DAS framework loads all six stages), so a whole selection
+            # usually needs just ONE build + ONE boot -- a stage with >6 selected
+            # spills into extra rounds. Far fewer ISOs than one-per-stage.
+            chunk = max(1, len(BATCH_BUTTONS))
+            rounds = max(((len(vs) + chunk - 1) // chunk for vs in groups.values()), default=0)
+            shots_by_id = {}   # "<stageCode>:<variantId>" -> png
+
+            for k in range(rounds):
+                round_groups = []
+                for (stage_code, stage_folder), vs in groups.items():
+                    sub = vs[k * chunk:(k + 1) * chunk]
+                    if sub:
+                        round_groups.append({'stageCode': stage_code, 'stageFolder': stage_folder,
+                                             'variantIds': [v['variantId'] for v in sub]})
+                if not round_groups:
+                    continue
+                base = 4 + int(90 * k / max(1, rounds))
+                n_round = sum(len(g['variantIds']) for g in round_groups)
+                emit('building', base,
+                     f'Building ISO {k + 1}/{rounds} ({n_round} variants across '
+                     f'{len(round_groups)} stage{"s" if len(round_groups) != 1 else ""})…')
+                out_iso = (STORAGE_PATH / 'test-builds'
+                           / f'capbatch_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.iso')
+                try:
+                    placed = build_stage_skin_multibatch_iso(
+                        vanilla, round_groups, str(out_iso),
+                        log=lambda m: logger.info(f"[capture-batch] {m}"))
+                    cap_variants = []
+                    for pv in placed:
+                        stage_name = DAS_STAGES[pv['stageCode']][1]
+                        cap_variants.append({
+                            'id': f"{pv['stageCode']}:{pv['variantId']}",
+                            'button': pv['button'],
+                            'internal_id': INTERNAL_STAGE_ID.get(stage_name),
+                            'framing_key': stage_name,
+                        })
+                    span = 90.0 / max(1, rounds)
+                    res = capture_stage_batch(
+                        str(out_iso), slippi, str(runs_root), cap_variants,
+                        emit=lambda s, p, m: emit(s, base + int(span * (p / 100.0)), m),
+                        log=lambda m: logger.info(f"[capture-batch] {m}"))
+                    for shot in res.get('shots', []):
+                        shots_by_id[shot['id']] = shot['png']
+                except Exception:
+                    logger.exception("[capture-batch] round failed")
+                finally:
+                    try:
+                        if out_iso.exists():
+                            out_iso.unlink()
+                    except Exception:
+                        pass
+
+            # Assemble a result for every requested variant, in input order.
+            for v in variants:
+                if (v['stageCode'], v['variantId']) in unknown:
+                    results.append({**_vmeta(v), 'ok': False, 'reason': 'unsupported stage'})
+                    continue
+                png = shots_by_id.get(f"{v['stageCode']}:{v['variantId']}")
+                if png:
+                    results.append({**_vmeta(v), 'ok': True,
+                                    'screenshot': "data:image/png;base64,"
+                                    + base64.b64encode(png).decode('ascii')})
+                else:
+                    results.append({**_vmeta(v), 'ok': False, 'reason': 'capture failed'})
+
+            ok_n = sum(1 for r in results if r.get('ok'))
+            socketio.emit('capture_batch_complete', {
+                'success': ok_n > 0, 'results': results,
+                'captured': ok_n, 'total': total})
+            logger.info(f"[capture-batch] done: {ok_n}/{total} captured")
+        except Exception as e:
+            logger.exception("[capture-batch] failed")
+            socketio.emit('capture_error', {'success': False, 'error': str(e)})
+        finally:
+            with _test_lock:
+                _test_running = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Bulk stage screenshot capture started',
+                    'count': len(variants)})
+
+
+def _vmeta(v):
+    """The identity fields echoed back for each variant in a batch result."""
+    return {'stageCode': v.get('stageCode'), 'stageFolder': v.get('stageFolder'),
+            'variantId': v.get('variantId'), 'name': v.get('name')}
 
 
 @test_in_game_bp.route('/api/mex/test-in-game/status', methods=['GET'])

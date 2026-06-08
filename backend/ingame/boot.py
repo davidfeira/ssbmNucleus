@@ -274,6 +274,35 @@ def _patch_gfx_textures(user_dir, dump=False, hires=True):
     _write_ini(path, mutate)
 
 
+def dolphin_running():
+    """Return the pids of any already-running Dolphin EMULATOR process (the user's
+    own Slippi window). The in-game harness launches and drives its OWN throwaway
+    Dolphin, so a second one open at the same time steals the foreground -- the test
+    then just sits on the menu, never pressing a button. Windows-only; returns []
+    elsewhere or on error. Note: the Slippi LAUNCHER ("Slippi Launcher.exe") is a
+    different process and is intentionally NOT matched."""
+    if os.name != "nt":
+        return []
+    pids = []
+    for name in DOLPHIN_EXE_NAMES:  # "Slippi Dolphin.exe", "Dolphin.exe", "DolphinWx.exe"
+        try:
+            out = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {name}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True,
+                creationflags=_k32_creationflags, timeout=10,
+            ).stdout or ""
+        except Exception:
+            continue
+        for line in out.splitlines():
+            line = line.strip()
+            if not line or line.upper().startswith("INFO:"):
+                continue
+            cells = [c.strip().strip('"') for c in line.split('","')]
+            if cells and cells[0].lower() == name.lower() and len(cells) > 1:
+                pids.append(cells[1])
+    return pids
+
+
 def pick_pipe_index(max_index=8):
     """Pick a slippibot<N> pipe index NOT currently in use, so we never collide
     with a Slippi instance the user already has open."""

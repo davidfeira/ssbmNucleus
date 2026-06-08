@@ -16,6 +16,8 @@ NTSC 1.02 addresses (doldecomp/melee):
 Always RPM-read the gate first and only patch the exact expected opcode.
 """
 
+import time
+
 HOOK_1P = 0x80263064
 HOOK_1P_ORIG = 0x2C040002        # cmpwi r4, 2  (require >= 2 players)
 HOOK_1P_PATCH = 0x2C040001       # cmpwi r4, 1  (allow a solo start)
@@ -44,18 +46,27 @@ def _noop(*_a, **_k):
     pass
 
 
-def patch_one_player(d, log=_noop):
+def patch_one_player(d, log=_noop, retries=15):
     """Relax the CSS start gate to allow a SOLO match. Returns True if 1-player
-    starts are enabled (patched now or already), False if the hook didn't read as
-    expected (caller should fall back to adding a 2nd player)."""
-    cur = d.u32(HOOK_1P)
-    if cur == HOOK_1P_PATCH:
-        return True
-    if cur == HOOK_1P_ORIG:
-        d.write_u32(HOOK_1P, HOOK_1P_PATCH)
-        log("1-player start enabled (patched 0x80263064 cmpwi r4,2 -> r4,1)")
-        return d.u32(HOOK_1P) == HOOK_1P_PATCH
-    log(f"1-player hook unexpected at 0x80263064 (0x{(cur or 0):08X}); "
+    starts are enabled (patched now or already), False if the hook never read as
+    expected (caller should fall back to adding a 2nd player).
+
+    Retries the read: right after attaching, that memory can momentarily read as
+    0 / garbage, and a single bad read would silently drop us onto the slower
+    cursor+CPU path. We re-check for a few seconds until the opcode appears."""
+    last = None
+    for _ in range(max(1, retries)):
+        cur = d.u32(HOOK_1P)
+        last = cur
+        if cur == HOOK_1P_PATCH:
+            return True
+        if cur == HOOK_1P_ORIG:
+            d.write_u32(HOOK_1P, HOOK_1P_PATCH)
+            if d.u32(HOOK_1P) == HOOK_1P_PATCH:
+                log("1-player start enabled (patched 0x80263064 cmpwi r4,2 -> r4,1)")
+                return True
+        time.sleep(0.2)
+    log(f"1-player hook never settled at 0x80263064 (last 0x{(last or 0):08X}); "
         f"falling back to a 2nd player")
     return False
 

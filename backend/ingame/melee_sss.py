@@ -329,7 +329,7 @@ class StageCursor:
         return self._confirm(pos[0], pos[1], hold=hold)
 
     # --- direct force-select (no cursor, layout/page independent) -------------
-    def force_select(self, internal_id, hold=None, timeout=4.0):
+    def force_select(self, internal_id, hold=None, timeout=4.0, hold_settle=0.5):
         """Select + start a stage by writing the engine's own force_stage_id field
         (SSSData+0x03) instead of moving the cursor: the SSS frame handler sees a
         non-negative value, copies it into the match rules and starts the match
@@ -339,15 +339,21 @@ class StageCursor:
 
         `internal_id` is Melee's INTERNAL stage id (0..0x7F, the signed-byte
         field; from get-sss-layout 'stageID' / INTERNAL_STAGE_ID). `hold` (e.g.
-        'X') is held through the load to trigger a DAS alternate. Requires a
-        Dolphin handle opened for writing (melee_mem PROCESS_VM_WRITE). Returns
-        whether the match started."""
+        'X') is held through the load to trigger a DAS alternate; `hold_settle` is
+        how long to keep it held on the live stage-select screen BEFORE triggering
+        the load, so the engine actually polls the button (without this, the
+        memory-fast load fires before the press registers and DAS reads no/stale
+        button -- loading the wrong alternate). Requires a Dolphin handle opened
+        for writing (melee_mem PROCESS_VM_WRITE). Returns whether the match
+        started."""
         if internal_id is None or not (0 <= int(internal_id) <= 0x7F):
             return False
         if not self.ensure_stage_select():
             return False
         if hold:
             self.p.press(hold)
+            if hold_settle > 0:
+                time.sleep(hold_settle)   # let the held button register before the load fires
         try:
             start = time.time()
             while time.time() - start < timeout:

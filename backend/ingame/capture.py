@@ -166,6 +166,8 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
                 if not (not solo and _ensure_on_sss(d, p, sc, cur, log)):
                     result["reason"] = "Could not reach the stage-select screen."
                     return result
+        p.neutral()                  # start from a clean controller state before the held load
+        time.sleep(0.15)
         if not sc.force_select(internal_id, hold=hold):
             result["reason"] = "Could not start the match on the stage."
             return result
@@ -199,6 +201,128 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
         result["png"] = png
         result["reason"] = "captured"
         result["solo"] = solo
+        return result
+    except Exception as e:
+        result["reason"] = f"{type(e).__name__}: {e}"
+        return result
+    finally:
+        try:
+            if p is not None:
+                p.close()
+        except Exception:
+            pass
+        boot.cleanup()
+
+
+def _frame_and_shot(boot, d, fr, settle=4.0):
+    """Settle past the GO! zoom, pose the DEBUG_FREE camera + re-assert the
+    clean-shot state every frame, then grab the window's client area. The scene is
+    static (solo, no timer, frozen camera) so the frame is stable. Returns PNG
+    bytes, or None if Dolphin died / the grab failed."""
+    time.sleep(max(0.0, settle))
+    for _ in range(15):
+        _set_free_camera(d, fr["eye"], fr["interest"], fr["fov"])
+        _apply_code_patches(d)
+        d.write_u8(HUD_FLAG_ADDR, 0x01)
+        time.sleep(0.016)
+    if not d.alive():
+        return None
+    return _screenshot.capture_png(boot.pid, max_width=960)
+
+
+def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
+                        emit=None, log=None, settle=4.0, hires_textures=False):
+    """Boot ONE ISO and screenshot many DAS variants -- possibly spanning SEVERAL
+    base stages -- in a single session. Each variant carries its own stage + hold:
+    `variants` = [{"id", "button", "internal_id", "framing_key"}] (as placed by
+    build_stage_skin_multibatch_iso; `id` should be globally unique, e.g.
+    "<stageCode>:<variantId>"). Build + boot happen once; between shots we quit to
+    the CSS, re-enter, force-select that variant's stage holding its button.
+    Returns {"ok": bool, "shots": [{"id","button","png"}], "reason": str}."""
+    emit = emit or _noop
+    log = log or _noop
+    result = {"ok": False, "shots": [], "reason": ""}
+
+    boot = DolphinBoot(iso_path, slippi_path, runs_root,
+                       hires_textures=hires_textures, clean_osd=True, log=log)
+    p = None
+    try:
+        emit("booting", 8, "Preparing an isolated Dolphin (capture mode)…")
+        boot.prepare()
+        boot.launch()
+        emit("booting", 16, "Waiting for the controller pipe…")
+        if not boot.wait_for_pipe(timeout=45):
+            result["reason"] = "Dolphin never opened its input pipe."
+            return result
+
+        emit("booting", 22, "Attaching to emulated memory…")
+        d = Dolphin(boot.pid)
+        t0 = time.time()
+        while not d.locate() and time.time() - t0 < 20:
+            if not d.alive():
+                result["reason"] = "Dolphin exited during boot."
+                return result
+            time.sleep(0.4)
+        if d.base is None:
+            result["reason"] = "Could not read the game's memory after boot."
+            return result
+
+        _apply_code_patches(d, log=log)
+        solo = match_setup.patch_one_player(d, log=log)
+        p = Pipe(boot.pipe_index)
+        cur = Cursor(d, p)
+        sc = StageCursor(d, p)
+
+        emit("at_css", 26, "Navigating to the character-select screen…")
+        try:
+            if not nav.nav_to_css(d, p, log=log):
+                result["reason"] = "Could not reach the character-select screen."
+                return result
+        except nav.OnlineAbort as oa:
+            result["reason"] = str(oa)
+            return result
+        nav.wait_css_ready(d, cur, log=log)
+        match_setup.force_time_infinite(d, log=log)
+
+        n = len(variants)
+        for i, v in enumerate(variants):
+            vid, button = v["id"], v["button"]
+            internal_id = v["internal_id"]
+            fr = STAGE_FRAMING.get(v.get("framing_key"), DEFAULT_FRAMING)
+            emit("capturing", 30 + int(60 * i / max(1, n)),
+                 f"Capturing variant {i + 1}/{n}…")
+            if i > 0:
+                # Quit the previous match back to the CSS before the next variant.
+                if not nav.reset_to_css(d, p, log=log):
+                    result["reason"] = "Could not return to the CSS between variants."
+                    break
+            on_sss = _memory_select_to_sss(d, sc, CKIND_FOX, 0, log) if solo else False
+            if not on_sss:  # fallback to the cursor path (stays on CSS if warp missed)
+                if not solo:
+                    nav.add_cpu(d, p, cur=cur, log=log)
+                _lock_vanilla(cur, "fox", 0)
+                if not sc.ensure_stage_select():
+                    if not (not solo and _ensure_on_sss(d, p, sc, cur, log)):
+                        log(f"could not reach the SSS for {vid}; skipping")
+                        continue
+            p.neutral()              # clear any residual held button from the prior variant
+            time.sleep(0.15)
+            if not sc.force_select(internal_id, hold=button):
+                log(f"could not start the match for {vid} (hold {button}); skipping")
+                continue
+            png = _frame_and_shot(boot, d, fr, settle=settle)
+            if png:
+                result["shots"].append({"id": vid, "button": button, "png": png})
+                log(f"captured {vid} (hold {button})")
+            else:
+                log(f"screenshot failed for {vid}")
+            if not d.alive():
+                result["reason"] = "Dolphin exited mid-batch."
+                break
+
+        result["ok"] = len(result["shots"]) > 0
+        if not result["reason"]:
+            result["reason"] = f"captured {len(result['shots'])}/{n}"
         return result
     except Exception as e:
         result["reason"] = f"{type(e).__name__}: {e}"

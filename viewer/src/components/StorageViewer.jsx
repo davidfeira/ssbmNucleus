@@ -22,6 +22,7 @@ import ModeToolbar from './storage/ModeToolbar'
 import ImportToolbar from './storage/ImportToolbar'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
+import BulkStageCaptureModal from './storage/BulkStageCaptureModal'
 import PatchesGrid from './storage/PatchesGrid'
 import MenusGrid from './storage/MenusGrid'
 import CssMenuTypesGrid from './storage/CssMenuTypesGrid'
@@ -75,6 +76,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [selectedMenuModType, setSelectedMenuModType] = useState(null) // e.g. 'icon_grid'
   const [menuDetailOpen, setMenuDetailOpen] = useState(false)
   const [stageVariants, setStageVariants] = useState({})
+  const [showBulkCapture, setShowBulkCapture] = useState(false)
   const [bundles, setBundles] = useState([])
   const [showBundleEditModal, setShowBundleEditModal] = useState(false)
   const [editingBundle, setEditingBundle] = useState(null)
@@ -1528,13 +1530,25 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           onOpenCustomCharacters={() => setShowCustomCharacters(true)}
         />
       ) : mode === 'stages' ? (
-        <StagesGrid
-          stageVariants={stageVariants}
-          isLoading={isLoading}
-          onSelectStage={setSelectedStage}
-          customStageCount={customStages.length}
-          onOpenCustomStages={() => setShowCustomStages(true)}
-        />
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+            <button
+              className="mode-btn"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowBulkCapture(true) }}
+              title="Capture clean in-game screenshots for many DAS variants at once"
+            >
+              📸 Bulk Capture Screenshots
+            </button>
+          </div>
+          <StagesGrid
+            stageVariants={stageVariants}
+            isLoading={isLoading}
+            onSelectStage={setSelectedStage}
+            customStageCount={customStages.length}
+            onOpenCustomStages={() => setShowCustomStages(true)}
+          />
+        </>
       ) : mode === 'patches' ? (
         <PatchesGrid
           xdeltaPatches={xdeltaPatches}
@@ -1769,6 +1783,12 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           </div>
         </div>
       )}
+
+      <BulkStageCaptureModal
+        show={showBulkCapture}
+        onClose={() => setShowBulkCapture(false)}
+        onSaved={() => { fetchStageVariants(); setLastImageUpdate(Date.now()) }}
+      />
     </div>
   )
 }
