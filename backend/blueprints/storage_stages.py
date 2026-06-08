@@ -155,6 +155,13 @@ def update_stage_screenshot():
 
         das_folder = STORAGE_PATH / 'das' / stage_folder
         das_folder.mkdir(parents=True, exist_ok=True)
+        # Remove any existing screenshot of ANY extension first, so a stale .jpg
+        # can't shadow the new .png (the listing serves whichever file it finds).
+        for old in das_folder.glob(f"{variant_id}_screenshot.*"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
         storage_screenshot_path = das_folder / f"{variant_id}_screenshot.png"
         storage_screenshot_path.write_bytes(screenshot_data)
 
@@ -170,6 +177,8 @@ def update_stage_screenshot():
                 for variant in variants:
                     if variant['id'] == variant_id:
                         variant['has_screenshot'] = True
+                        # keep metadata's recorded filename in sync (now always .png)
+                        variant['screenshot_filename'] = f"{variant_id}_screenshot.png"
                         break
 
                 with open(metadata_file, 'w') as f:

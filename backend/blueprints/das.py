@@ -127,19 +127,30 @@ def find_stage_screenshot(folder_path: Path, variant_id: str):
     """
     Find a stage screenshot with any image extension.
     Returns (exists: bool, path: Path or None, extension: str or None)
+
+    When several extensions exist for the same variant (e.g. an original .jpg and a
+    freshly-captured .png), prefer .png, then the most recently modified -- so a new
+    capture is never shadowed by a stale screenshot of a different extension. (Plain
+    "first glob match" returned .jpg before .png alphabetically, which made captured
+    screenshots appear not to save.)
     """
-    # Look for screenshot with any common image extension
     pattern = str(folder_path / f"{variant_id}_screenshot.*")
-    matches = glob.glob(pattern)
-
-    # Filter to only image extensions
     image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-    for match in matches:
-        ext = os.path.splitext(match)[1].lower()
-        if ext in image_extensions:
-            return True, Path(match), ext
+    matches = [m for m in glob.glob(pattern)
+               if os.path.splitext(m)[1].lower() in image_extensions]
+    if not matches:
+        return False, None, None
 
-    return False, None, None
+    def rank(m):
+        ext = os.path.splitext(m)[1].lower()
+        try:
+            mtime = os.path.getmtime(m)
+        except OSError:
+            mtime = 0
+        return (ext == '.png', mtime)   # .png wins; then newest
+
+    best = max(matches, key=rank)
+    return True, Path(best), os.path.splitext(best)[1].lower()
 
 
 @das_bp.route('/api/mex/das/status', methods=['GET'])
