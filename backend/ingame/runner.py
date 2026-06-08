@@ -31,7 +31,7 @@ from .melee_mem import Dolphin
 from .melee_pipe import Pipe
 from .melee_css import Cursor
 from .melee_sss import StageCursor, INTERNAL_STAGE_ID, norm as _norm_stage
-from .observe import Observer
+from .observe import Observer, wait_in_game, wait_game_frames
 from . import nav
 from . import match_setup
 from . import screenshot as _screenshot
@@ -273,10 +273,14 @@ def _ensure_on_sss(d, p, sc, cur, log, solo=False):
     return sc.on_stage_select()
 
 
-def _perform_move(p, move, reps=6):
+def _perform_move(d, p, move, reps=6):
     """After a match starts, perform the in-game move that exercises an effect
-    mod (so its model/data actually loads). Waits out the GO! countdown first."""
-    time.sleep(3.5)
+    mod (so its model/data actually loads). Waits out the load + GO! countdown
+    first -- gated on the game's own state (in-game scene, then a fixed number of
+    GAME frames) so the inputs land after controls are live on ANY machine, not a
+    fixed wall-clock sleep that fires too early on a slow one."""
+    wait_in_game(d, timeout=20.0)
+    wait_game_frames(d, 180)   # ~3s of game time: past READY/GO so inputs register
     if move == "neutralb":
         for _ in range(reps):
             p.tap("B", 0.06)
@@ -290,13 +294,22 @@ def _perform_move(p, move, reps=6):
     p.center()
 
 
-def _shot_b64(pid):
+def _shot_b64(boot):
+    """Capture a screenshot as a data-URI. Prefers PrintWindow on the render
+    window (clean pixels even when the throwaway Dolphin is occluded / unfocused);
+    falls back to the desktop window grab if that comes back empty."""
+    png = None
     try:
-        png = _screenshot.capture_png(pid)
-        if png:
-            return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        png = _screenshot.capture_via_printwindow(boot.pid, max_width=640)
     except Exception:
-        pass
+        png = None
+    if not png:
+        try:
+            png = _screenshot.capture_png(boot.pid, max_width=640)
+        except Exception:
+            png = None
+    if png:
+        return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
     return None
 
 
@@ -327,6 +340,7 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
 
     boot = DolphinBoot(iso_path, slippi_path, runs_root,
                        hires_textures=hires_textures, load_seed=load_seed, log=log)
+    p = None  # so the error-path screenshots / finally can reference it safely
     try:
         emit("booting", 5, "Preparing an isolated Dolphin (your Slippi setup is untouched)…")
         boot.prepare()
@@ -367,14 +381,14 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
                 # Couldn't confirm the CSS -- fall back to a boot-health verdict.
                 emit("observing", 60, "Couldn't confirm the menu; watching boot health instead…")
                 verdict, reason, _ = obs.watch_health(seconds=observe_seconds, log=log)
-                result["screenshot"] = _shot_b64(boot.pid)
+                result["screenshot"] = _shot_b64(boot)
                 result.update(verdict=verdict,
                               reason="boot-health (menu nav inconclusive): " + reason)
                 result["pass"] = verdict == "healthy"
                 return result
         except nav.OnlineAbort as oa:
             result.update(verdict="error", online_aborted=True, reason=str(oa))
-            result["screenshot"] = _shot_b64(boot.pid)
+            result["screenshot"] = _shot_b64(boot)
             return result
 
         cur = Cursor(d, p)
@@ -390,7 +404,7 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
             match_setup.force_time_infinite(d, log=log)  # a 1-player match won't end
 
         # Snapshot the (now-settled) CSS (shows the menu background + portraits).
-        result["screenshot"] = _shot_b64(boot.pid)
+        result["screenshot"] = _shot_b64(boot)
 
         plan = build_plan(manifest)
         if not plan:
@@ -453,7 +467,7 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
                     if not _ensure_on_sss(d, p, sc, cur, log, solo=solo):
                         sub.update(verdict="never_started",
                                    reason="couldn't reach stage select (no 2nd player, or the character didn't lock)")
-                        sub["screenshot"] = _shot_b64(boot.pid)
+                        sub["screenshot"] = _shot_b64(boot)
                         result["checks"].append(sub)
                         continue
                 started = _select_stage(sc, check.get("stage"), check.get("hold"))
@@ -463,18 +477,18 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
                 if not started:
                     sub.update(verdict="never_started",
                                reason="couldn't start the match (selection failed)")
-                    sub["screenshot"] = _shot_b64(boot.pid)
+                    sub["screenshot"] = _shot_b64(boot)
                     result["checks"].append(sub)
                     continue
 
                 if check.get("move"):
                     emit("in_match", base_pct + 9, f"Triggering {check['move']} for: {label}…")
-                    _perform_move(p, check["move"])
+                    _perform_move(d, p, check["move"])
 
                 emit("observing", base_pct + 11, f"Watching for crashes/hangs: {label}…")
                 verdict, reason, _ = obs.watch(seconds=observe_seconds, require_ingame=True, log=log)
                 sub.update(verdict=verdict, reason=reason)
-                sub["screenshot"] = _shot_b64(boot.pid)
+                sub["screenshot"] = _shot_b64(boot)
                 result["checks"].append(sub)
                 log(f"[{label}] VERDICT {verdict} -- {reason}")
             except nav.OnlineAbort as oa:
@@ -507,7 +521,7 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
     except Exception as e:
         result.update(verdict="error", reason=f"{type(e).__name__}: {e}")
         try:
-            result["screenshot"] = _shot_b64(boot.pid)
+            result["screenshot"] = _shot_b64(boot)
         except Exception:
             pass
         return result

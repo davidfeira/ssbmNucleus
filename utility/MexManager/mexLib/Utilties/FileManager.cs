@@ -1,4 +1,4 @@
-﻿namespace mexLib.Utilties
+namespace mexLib.Utilties
 {
     public class FileManager
     {
@@ -6,8 +6,16 @@
 
         private readonly List<string> ToRemove = new();
 
+        // Guards ToAdd/ToRemove. These are mutated concurrently -- e.g.
+        // MexCharacterSelect.ApplyCompression resizes CSPs on several ThreadPool
+        // work items at once, each calling Set() -- and a plain Dictionary/List is
+        // not thread-safe, so concurrent access corrupted its internal state
+        // ("Operations that change non-concurrent collections must have exclusive
+        // access"). Every method that touches the collections takes this lock.
+        private readonly object _sync = new();
+
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="filePath"></param>
         /// <returns></returns>
@@ -35,7 +43,7 @@
             return uniqueFilePath;
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
@@ -46,16 +54,19 @@
 
             path = Path.GetFullPath(path);
 
-            if (ToRemove.Contains(path))
-                return false;
+            lock (_sync)
+            {
+                if (ToRemove.Contains(path))
+                    return false;
 
-            if (ToAdd.ContainsKey(path))
-                return true;
+                if (ToAdd.ContainsKey(path))
+                    return true;
+            }
 
             return File.Exists(path);
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
@@ -66,16 +77,19 @@
 
             path = Path.GetFullPath(path);
 
-            if (ToRemove.Contains(path))
-                return 0;
+            lock (_sync)
+            {
+                if (ToRemove.Contains(path))
+                    return 0;
 
-            if (ToAdd.ContainsKey(path))
-                return ToAdd[path].Length;
+                if (ToAdd.TryGetValue(path, out byte[]? pending))
+                    return pending.Length;
+            }
 
             return new FileInfo(path).Length;
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
@@ -83,8 +97,11 @@
         {
             path = Path.GetFullPath(path);
 
-            if (ToAdd.ContainsKey(path))
-                return new MemoryStream(ToAdd[path]);
+            lock (_sync)
+            {
+                if (ToAdd.TryGetValue(path, out byte[]? pending))
+                    return new MemoryStream(pending);
+            }
 
             if (File.Exists(path))
                 return new FileStream(path, FileMode.Open);
@@ -92,7 +109,7 @@
             return null;
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
@@ -100,16 +117,19 @@
         {
             path = Path.GetFullPath(path);
 
-            if (ToAdd.ContainsKey(path))
-                return ToAdd[path];
+            lock (_sync)
+            {
+                if (ToAdd.TryGetValue(path, out byte[]? pending))
+                    return pending;
 
-            if (File.Exists(path) && !ToRemove.Contains(path))
-                return File.ReadAllBytes(path);
+                if (File.Exists(path) && !ToRemove.Contains(path))
+                    return File.ReadAllBytes(path);
+            }
 
             return Array.Empty<byte>();
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <param name="data"></param>
@@ -117,55 +137,61 @@
         {
             path = Path.GetFullPath(path);
 
-            if (ToAdd.ContainsKey(path))
+            lock (_sync)
             {
                 ToAdd[path] = data;
+                ToRemove.Remove(path);
             }
-            else
-            {
-                ToAdd.Add(path, data);
-            }
-            ToRemove.Remove(path);
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         public void Remove(string path)
         {
             path = Path.GetFullPath(path);
 
-            ToRemove.Add(path);
-            ToAdd.Remove(path);
+            lock (_sync)
+            {
+                ToRemove.Add(path);
+                ToAdd.Remove(path);
+            }
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         public void Save()
         {
-            foreach (KeyValuePair<string, byte[]> v in ToAdd)
+            lock (_sync)
             {
-                string? dir = Path.GetDirectoryName(v.Key);
-                if (dir != null)
-                    Directory.CreateDirectory(dir);
-                File.WriteAllBytes(v.Key, v.Value);
-            }
+                foreach (KeyValuePair<string, byte[]> v in ToAdd)
+                {
+                    string? dir = Path.GetDirectoryName(v.Key);
+                    if (dir != null)
+                        Directory.CreateDirectory(dir);
+                    File.WriteAllBytes(v.Key, v.Value);
+                }
 
-            foreach (string v in ToRemove)
-            {
-                if (File.Exists(v))
-                    File.Delete(v);
-            }
+                foreach (string v in ToRemove)
+                {
+                    if (File.Exists(v))
+                        File.Delete(v);
+                }
 
-            Clear();
+                ToAdd.Clear();
+                ToRemove.Clear();
+            }
         }
         /// <summary>
-        /// 
+        ///
         /// </summary>
         public void Clear()
         {
-            ToAdd.Clear();
-            ToRemove.Clear();
+            lock (_sync)
+            {
+                ToAdd.Clear();
+                ToRemove.Clear();
+            }
         }
     }
 }

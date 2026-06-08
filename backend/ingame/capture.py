@@ -31,6 +31,7 @@ from .melee_sss import StageCursor
 from . import nav
 from . import match_setup
 from . import screenshot as _screenshot
+from .observe import wait_in_game, wait_game_frames, FRAME_COUNTER
 from .runner import _lock_vanilla, _ensure_on_sss, _memory_select_to_sss
 
 CKIND_FOX = 0x02   # external char id; the fighter is invisible for the shot anyway
@@ -172,30 +173,12 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
             result["reason"] = "Could not start the match on the stage."
             return result
 
-        emit("framing", 75, "Framing the shot…")
-        time.sleep(max(0.0, settle))             # past the GO! intro zoom
-        std_eye = _read_vec3(d, CAM_STD_EYE)
-        std_int = _read_vec3(d, CAM_STD_INT)
-        std_fov = d.f32(CAM_STD_FOV)
-        log(f"default cam eye={std_eye} interest={std_int} fov={std_fov}")
+        emit("framing", 75, "Waiting for the stage to finish loading…")
         fr = STAGE_FRAMING.get(framing_key, DEFAULT_FRAMING)
-
         emit("capturing", 90, "Capturing the screenshot…")
-        # Settle the pose + clean-shot state, then grab the window's CLIENT area
-        # (no title bar). The scene is static (solo, no timer, frozen DEBUG_FREE
-        # camera), so the frame is stable; DEBUG_FREE sticks but the HUD flag is
-        # re-read each frame, so we keep asserting it right up to the grab.
-        for _ in range(15):
-            _set_free_camera(d, fr["eye"], fr["interest"], fr["fov"])
-            _apply_code_patches(d)
-            d.write_u8(HUD_FLAG_ADDR, 0x01)
-            time.sleep(0.016)
-        if not d.alive():
-            result["reason"] = "Dolphin exited before the screenshot."
-            return result
-        png = _screenshot.capture_png(boot.pid, max_width=960)
+        png, reason = _frame_and_shot(boot, d, fr, settle=settle, log=log)
         if not png:
-            result["reason"] = "Screenshot capture returned no image."
+            result["reason"] = reason
             return result
         result["ok"] = True
         result["png"] = png
@@ -214,20 +197,55 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
         boot.cleanup()
 
 
-def _frame_and_shot(boot, d, fr, settle=4.0):
-    """Settle past the GO! zoom, pose the DEBUG_FREE camera + re-assert the
-    clean-shot state every frame, then grab the window's client area. The scene is
-    static (solo, no timer, frozen camera) so the frame is stable. Returns PNG
-    bytes, or None if Dolphin died / the grab failed."""
-    time.sleep(max(0.0, settle))
-    for _ in range(15):
+def _hold_clean_pose(d, fr, frames=12):
+    """Re-assert the DEBUG_FREE camera + clean-shot patches + HUD-off flag over
+    `frames` real GAME frames right before the grab. DEBUG_FREE has no per-frame
+    callback so the camera sticks, but the HUD flag is re-read every frame -- so
+    we keep asserting it, counted in GAME frames (not wall-clock) so a slow
+    machine can't grab the frame before the HUD-off flag has taken effect."""
+    last = d.u32(FRAME_COUNTER)
+    advanced = 0
+    deadline = time.time() + max(1.5, frames / 10.0 + 1.0)
+    while advanced < frames and time.time() < deadline and d.alive():
         _set_free_camera(d, fr["eye"], fr["interest"], fr["fov"])
         _apply_code_patches(d)
         d.write_u8(HUD_FLAG_ADDR, 0x01)
-        time.sleep(0.016)
+        f = d.u32(FRAME_COUNTER)
+        if f is not None and last is not None:
+            if f > last:
+                advanced += f - last
+            last = f
+        time.sleep(0.008)
+
+
+def _frame_and_shot(boot, d, fr, settle=4.0, log=_noop):
+    """Wait for the match to actually be IN-GAME (absorbs host-variable stage load
+    time), then wait a fixed number of GAME frames past the intro zoom -- both
+    read from the game's own RAM, so this is host-SPEED independent (a slow
+    Dolphin just takes more wall-clock for the same game frames; the old fixed
+    time.sleep() grabbed too early on a slow machine). Then pose the DEBUG_FREE
+    camera + re-assert the clean-shot state and grab. The scene is static (solo,
+    no timer, frozen camera) so the frame is stable. Returns (png_bytes, reason);
+    png_bytes is None on failure."""
+    if not wait_in_game(d, timeout=30.0, log=log):
+        return None, "stage never finished loading into a match"
+    wait_game_frames(d, max(1, round(settle * 60)), log=log)   # past the GO! intro zoom
+    log(f"default cam eye={_read_vec3(d, CAM_STD_EYE)} "
+        f"interest={_read_vec3(d, CAM_STD_INT)} fov={d.f32(CAM_STD_FOV)}")
+    _hold_clean_pose(d, fr)
     if not d.alive():
-        return None
-    return _screenshot.capture_png(boot.pid, max_width=960)
+        return None, "Dolphin exited before the screenshot"
+
+    # Grab the render window's own pixels (PrintWindow) -- clean even though the
+    # throwaway Dolphin never takes the foreground. _hold_clean_pose just asserted
+    # the DEBUG_FREE camera + HUD-off over the last frames, and the scene is static
+    # (solo, no timer, frozen camera), so the grabbed frame is clean and stable.
+    png = _screenshot.capture_via_printwindow(boot.pid, max_width=960)
+    if not png:  # last resort: desktop grab of the window rect
+        png = _screenshot.capture_png(boot.pid, max_width=960)
+    if not png:
+        return None, "screenshot capture returned no image"
+    return png, "captured"
 
 
 def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
@@ -310,12 +328,12 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
             if not sc.force_select(internal_id, hold=button):
                 log(f"could not start the match for {vid} (hold {button}); skipping")
                 continue
-            png = _frame_and_shot(boot, d, fr, settle=settle)
+            png, reason = _frame_and_shot(boot, d, fr, settle=settle, log=log)
             if png:
                 result["shots"].append({"id": vid, "button": button, "png": png})
                 log(f"captured {vid} (hold {button})")
             else:
-                log(f"screenshot failed for {vid}")
+                log(f"screenshot failed for {vid}: {reason}")
             if not d.alive():
                 result["reason"] = "Dolphin exited mid-batch."
                 break

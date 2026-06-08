@@ -754,8 +754,6 @@ export default function ProjectSelector({
   const viewConfig = showModal
     ? {
         title: 'Switch Project',
-        subtitle: 'Choose a project to open or create a new one.',
-        subtitleClassName: 'modal-subtitle',
         headingTag: 'h2',
         projectListClassName: 'recent-projects-list-modal',
         projectItemClassName: 'recent-project-item-modal',
@@ -765,8 +763,6 @@ export default function ProjectSelector({
       }
     : {
         title: 'Install',
-        subtitle: 'Choose a project to get started.',
-        subtitleClassName: 'subtitle',
         headingTag: 'h1',
         projectListClassName: 'recent-projects-list',
         projectItemClassName: 'recent-project-item',
@@ -821,16 +817,11 @@ export default function ProjectSelector({
     <div className={`project-management-shell${showModal ? ' project-management-shell--modal' : ''}`}>
       <div className="project-management-header">
         <HeadingTag>{viewConfig.title}</HeadingTag>
-        <p className={viewConfig.subtitleClassName}>{viewConfig.subtitle}</p>
       </div>
 
       <div className={`project-management-body${showModal ? ' project-management-body--modal' : ''}`}>
         <section className="project-list-panel">
           <div className="project-section-heading">
-            <div>
-              <h3>All Projects</h3>
-              <p className="project-section-copy">Choose a project to open.</p>
-            </div>
             <span className="project-list-count">{projectCountLabel}</span>
           </div>
 
@@ -842,13 +833,6 @@ export default function ProjectSelector({
         </section>
 
         <section className="project-actions-panel">
-          <div className="project-section-heading">
-            <div>
-              <h3>Project Actions</h3>
-              <p className="project-section-copy">Open an existing project or create a new one.</p>
-            </div>
-          </div>
-
           <div className={viewConfig.projectOptionsClassName}>
             {projectActions.map((action) => (
               <div key={action.key} className={viewConfig.projectOptionClassName}>

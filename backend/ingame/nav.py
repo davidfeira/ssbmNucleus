@@ -24,11 +24,15 @@ the proven button recipe to reach the offline CSS is: B,B (out to the main menu)
 
 import time
 
+from .observe import wait_game_frames
+
 SCENE_MAJOR = 0x80479D30
 SCENE_MINOR = 0x80479D33
 ONLINE_CSS = 0x08
 VS_MAJOR = 0x02
 CSS_MINOR = 0x00
+MENU_MAJOR = 0x01      # Slippi main / Online-Play menu (the boot screen)
+BOOT_MAJOR = 0x00      # still booting / loading (no menu yet)
 PACE = 0.18
 
 
@@ -65,13 +69,49 @@ def _guard_online(d, p):
         )
 
 
+def wait_menu_ready(d, timeout=30.0, settle_frames=200, log=lambda m: None):
+    """Wait for the Slippi boot menu to LOAD and become input-ready before we
+    press anything. Two host-independent waits, both essential:
+
+      1) until we're OFF the boot/loading screen and on the menu scene (major
+         0x01). Right after boot the scene is major 0x00 (still loading) -- RAM
+         maps and we can attach seconds before the menu actually appears.
+         Pressing then drops the early B,B inputs, which shifts the whole
+         B,B -> D_DOWN -> A -> A recipe so a later A lands on the ONLINE CSS.
+      2) a fixed number of GAME frames for the menu's fade-in: even after the
+         scene flag flips, the menu eats inputs for ~3s while it animates in
+         (confirmed: a 0.5s settle drops inputs and wanders online; ~3s lands on
+         the offline CSS cleanly). Counted in game frames so it's the same on a
+         fast or slow machine.
+
+    Returns True once ready (or already past the menu at a CSS); False if the
+    menu never appeared."""
+    start = time.time()
+    while time.time() - start < timeout:
+        maj = d.u8(SCENE_MAJOR)
+        if maj in (VS_MAJOR, ONLINE_CSS):   # already at a CSS -- the caller handles it
+            return True
+        if maj == MENU_MAJOR:
+            break
+        time.sleep(0.1)
+    else:
+        log("boot menu (scene 0x01) never appeared within timeout")
+        return False
+    log(f"menu loaded after {time.time() - start:.1f}s; "
+        f"waiting {settle_frames} game frames for it to be input-ready")
+    wait_game_frames(d, settle_frames, log=log)
+    return True
+
+
 def nav_to_css(d, p, timeout=35.0, attempts=3, log=lambda m: None):
     """Drive from the post-boot menu to the OFFLINE VS CSS. Returns True once
     confirmed at the offline CSS; raises OnlineAbort if it ever hits the online
     scene; returns False on timeout. Uses only the persistent pipe `p`."""
     start = time.time()
     p.neutral()
-    time.sleep(0.4)  # sacrificial settle for the fresh persistent connection
+    # CRITICAL: do not press until the menu has loaded AND faded in -- pressing
+    # into the boot screen drops inputs and the recipe wanders online.
+    wait_menu_ready(d, log=log)
 
     for attempt in range(1, attempts + 1):
         if at_offline_css(d):

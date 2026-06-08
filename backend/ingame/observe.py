@@ -26,6 +26,60 @@ SCENE_SUBSTATE = 0x80479D33
 FRAME_COUNTER = 0x80479D60
 
 
+def is_in_game(d):
+    """True when the VS in-match scene is up (major 0x02 / substate 0x02)."""
+    return d.u8(SCENE_MAJOR) == 0x02 and d.u8(SCENE_SUBSTATE) == 0x02
+
+
+def wait_in_game(d, timeout=30.0, poll=0.1, log=None):
+    """Block until the match is actually IN-GAME, then return True. This absorbs
+    host-variable stage LOAD time: a slower machine simply spends longer on the
+    black load screen, and we wait for the real scene flag instead of guessing
+    with a fixed sleep. Returns False on timeout or if Dolphin dies."""
+    start = time.time()
+    while time.time() - start < timeout:
+        if not d.alive():
+            return False
+        if is_in_game(d):
+            if log:
+                log(f"in-game after {time.time() - start:.1f}s")
+            return True
+        time.sleep(poll)
+    return is_in_game(d)
+
+
+def wait_game_frames(d, frames, fps_floor=10.0, poll=0.02, log=None):
+    """Wait for `frames` EMULATED game frames to elapse, watching the game's own
+    frame counter. This is host-SPEED INDEPENDENT -- the intro zoom / READY-GO is
+    a fixed number of game frames, so on a slow Dolphin (e.g. 30 fps) we simply
+    wait more wall-clock for the same game frames. That is exactly what a fixed
+    time.sleep() got wrong. `fps_floor` only bounds the safety timeout (assume at
+    least this many fps so we never block forever if the counter stalls). Returns
+    True if the frames elapsed, False on timeout / death / unreadable counter."""
+    frames = max(0, int(frames))
+    timeout = max(2.0, frames / max(1.0, fps_floor) + 2.0)
+    start = time.time()
+    f0 = d.u32(FRAME_COUNTER)
+    if f0 is None:
+        # Counter unreadable -- fall back to ONE bounded wall-clock wait at the
+        # assumed worst-case framerate (still finite; never hangs).
+        time.sleep(min(frames / max(1.0, fps_floor), timeout))
+        return False
+    while time.time() - start < timeout:
+        if not d.alive():
+            return False
+        f = d.u32(FRAME_COUNTER)
+        if f is not None:
+            if f < f0:        # counter reset under us (scene flip) -- re-anchor
+                f0 = f
+            elif f - f0 >= frames:
+                return True
+        time.sleep(poll)
+    if log:
+        log(f"wait_game_frames({frames}) timed out after {timeout:.1f}s; proceeding")
+    return False
+
+
 class Observer:
     def __init__(self, dolphin):
         self.d = dolphin
