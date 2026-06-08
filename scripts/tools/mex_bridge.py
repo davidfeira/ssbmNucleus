@@ -21,6 +21,42 @@ class MexManagerError(Exception):
     pass
 
 
+def _extract_mexcli_json(stdout: str):
+    """Best-effort parse of a MexCLI JSON result from possibly-noisy stdout.
+
+    Setter commands print progress lines (e.g. "Trimmed Image X Y") before the
+    final (pretty-printed) JSON object. Returns the parsed object or None.
+    """
+    stdout = stdout.strip()
+    if not stdout:
+        return None
+
+    # 1) whole output is JSON
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        pass
+
+    # 2) drop known progress lines, then parse the remaining (multi-line) JSON
+    lines = stdout.split('\n')
+    filtered = '\n'.join(l for l in lines if not l.strip().startswith('Trimmed Image'))
+    try:
+        return json.loads(filtered)
+    except json.JSONDecodeError:
+        pass
+
+    # 3) fall back to the last single-line JSON value
+    for line in reversed(lines):
+        line = line.strip()
+        if line.startswith('{') or line.startswith('['):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+    return None
+
+
 class MexManager:
     """
     Python bridge to MexManager CLI for costume import and ISO export.
@@ -434,13 +470,14 @@ class MexManager:
             )
 
             if result.stdout.strip():
-                try:
-                    output = json.loads(result.stdout)
+                # Setter commands run workspace.Save(), which prints progress lines
+                # like "Trimmed Image X Y" before the final JSON result. Recover the
+                # JSON the same way _run_command does, so real errors aren't swallowed.
+                output = _extract_mexcli_json(result.stdout)
+                if output is not None:
                     if isinstance(output, dict) and not output.get('success', True):
                         raise MexManagerError(f"MexCLI error: {output.get('error', 'Unknown error')}")
                     return output
-                except json.JSONDecodeError:
-                    pass
 
             if result.stderr:
                 raise MexManagerError(f"MexCLI error: {result.stderr}")
@@ -469,6 +506,27 @@ class MexManager:
         """Write CSS layout data to the MEX project via stdin."""
         return self._run_command_with_stdin(
             layout_json, "set-css-layout", str(self.project_path)
+        )
+
+    def get_build(self) -> Dict:
+        """Get the GameCube disc-banner metadata (title/creator/description) and a
+        raw RGBA preview of the 96x32 banner image.
+
+        Returns:
+            Dict: success, shortName, longName, shortMaker, longMaker, description,
+                  bannerWidth, bannerHeight, bannerRgbaBase64
+        """
+        return self._run_command("get-build", str(self.project_path))
+
+    def set_build(self, payload: Dict) -> Dict:
+        """Set the disc-banner fields and (optionally) the banner image.
+
+        Args:
+            payload: any of shortName, longName, shortMaker, longMaker, description,
+                     bannerPngBase64 (base64-encoded PNG, any size -> resized to 96x32)
+        """
+        return self._run_command_with_stdin(
+            json.dumps(payload), "set-build", str(self.project_path)
         )
 
     def get_character_id(self, character_name: str) -> Optional[int]:

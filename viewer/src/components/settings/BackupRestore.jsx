@@ -89,7 +89,7 @@ export default function BackupRestore({ API_URL }) {
       const data = await response.json()
 
       if (data.success) {
-        setBackupMessage({ text: 'Vault restored successfully!', type: 'success' })
+        setBackupMessage({ text: data.message || 'Vault restored successfully!', type: 'success' })
         playSound('start')
         // Reload page after 1.5 seconds to refresh metadata
         setTimeout(() => {

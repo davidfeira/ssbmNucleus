@@ -125,6 +125,124 @@
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* Build info header (banner + inline-editable long name / long maker) */
+.mex-build-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.mex-build-header .status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-cyan);
+  box-shadow: var(--glow-cyan-sm);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.mex-banner-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 96px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-deep);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition-fast);
+}
+
+.mex-banner-thumb img {
+  display: block;
+  width: 96px;
+  height: 32px;
+  object-fit: fill;
+  image-rendering: pixelated;
+}
+
+.mex-banner-thumb__empty {
+  font-size: var(--text-2xs, 0.65rem);
+  color: var(--color-text-muted);
+}
+
+.mex-banner-thumb__pencil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 20, 32, 0.6);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.mex-banner-thumb:hover {
+  border-color: var(--color-cyan);
+}
+
+.mex-banner-thumb:hover .mex-banner-thumb__pencil {
+  opacity: 1;
+}
+
+.mex-build-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: min(260px, 32vw);
+  min-width: 0;
+}
+
+.mex-inline-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-1);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  text-overflow: ellipsis;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.mex-inline-input:hover {
+  background: var(--color-bg-deep);
+}
+
+.mex-inline-input:focus {
+  outline: none;
+  background: var(--color-bg-deep);
+  border-color: var(--color-cyan);
+}
+
+.mex-inline-input--name {
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+}
+
+.mex-inline-input--maker {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.mex-build-saving {
+  flex: 0 0 auto;
+  font-size: var(--text-2xs, 0.65rem);
+  color: var(--color-text-muted);
+}
+
 /* Action Buttons */
 .action-buttons-group {
   display: flex;

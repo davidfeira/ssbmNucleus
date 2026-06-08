@@ -3,6 +3,8 @@ import './MexPanel.css'
 import { playSound, playHoverSound } from '../utils/sounds'
 import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
+import BuildInfoModal from './mex/BuildInfoModal'
+import ProjectHeaderInfo from './mex/ProjectHeaderInfo'
 import CharacterMode from './mex/CharacterMode'
 import StageMode from './mex/StageMode'
 import MenuMode from './mex/MenuMode'
@@ -22,6 +24,8 @@ const MexPanel = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [showIsoBuilder, setShowIsoBuilder] = useState(false)
   const [showProjectModal, setShowProjectModal] = useState(false)
+  const [showBuildModal, setShowBuildModal] = useState(false)
+  const [buildInfo, setBuildInfo] = useState(null)
   const [createProjectOverlay, setCreateProjectOverlay] = useState({
     active: false,
     title: 'Creating Project',
@@ -37,6 +41,7 @@ const MexPanel = () => {
     if (projectLoaded) {
       fetchFighters()
       fetchStorageCostumes()
+      fetchBuildInfo()
     }
   }, [projectLoaded])
 
@@ -88,7 +93,33 @@ const MexPanel = () => {
     }
   }
 
+  const fetchBuildInfo = async () => {
+    try {
+      const response = await fetch(`${API_URL}/project/build`)
+      const data = await response.json()
+      if (data.success) {
+        setBuildInfo(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch build info:', err)
+    }
+  }
+
+  // Persist an inline header edit (long name / long maker) and refresh.
+  const handleInlineBuildSave = async (payload) => {
+    const response = await fetch(`${API_URL}/project/build`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || 'Save failed')
+    playSound('boop')
+    await fetchBuildInfo()
+  }
+
   const handleProjectOpened = async () => {
+    setBuildInfo(null)  // drop the previous project's banner while the new one loads
     setCreateProjectOverlay((currentState) => currentState.active
       ? {
           ...currentState,
@@ -112,7 +143,8 @@ const MexPanel = () => {
 
     await Promise.all([
       fetchFighters(),
-      fetchStorageCostumes()
+      fetchStorageCostumes(),
+      fetchBuildInfo()
     ])
     setRefreshing(false)
     setSelectedFighter(null)
@@ -249,10 +281,12 @@ const MexPanel = () => {
         <div className="mex-header">
           <div className="header-left">
             {mexStatus?.connected && (
-              <div className="mex-status connected">
-                <span className="status-dot"></span>
-                <span>{mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}</span>
-              </div>
+              <ProjectHeaderInfo
+                buildInfo={buildInfo}
+                projectName={mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}
+                onOpenBanner={() => setShowBuildModal(true)}
+                onSaveField={handleInlineBuildSave}
+              />
             )}
             <div className="action-buttons-group">
               <button
@@ -331,6 +365,12 @@ const MexPanel = () => {
             API_URL={API_URL}
           />
         )}
+
+        <BuildInfoModal
+          show={showBuildModal}
+          onClose={() => { setShowBuildModal(false); fetchBuildInfo() }}
+          API_URL={API_URL}
+        />
       </div>
 
       {renderCreateProjectOverlay()}

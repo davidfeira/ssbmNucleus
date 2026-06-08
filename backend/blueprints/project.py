@@ -610,6 +610,49 @@ def set_team_color(fighter_name):
         }), 500
 
 
+@project_bp.route('/api/mex/project/build', methods=['GET'])
+def get_build_info():
+    """Get the disc-banner metadata (title/creator/description) + image preview."""
+    try:
+        current_project_path = get_current_project_path()
+        if current_project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded'}), 400
+
+        return jsonify(get_mex_manager().get_build())
+    except Exception as e:
+        logger.error(f"Error getting build info: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@project_bp.route('/api/mex/project/build', methods=['POST'])
+def set_build_info():
+    """Set disc-banner fields and (optionally) the 96x32 banner image.
+
+    Body: any of shortName, longName, shortMaker, longMaker, description,
+    bannerPngBase64 (base64-encoded PNG).
+    """
+    try:
+        current_project_path = get_current_project_path()
+        if current_project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded'}), 400
+
+        data = request.json or {}
+        allowed = ('shortName', 'longName', 'shortMaker', 'longMaker',
+                   'description', 'bannerPngBase64')
+        payload = {k: data[k] for k in allowed if k in data}
+
+        if not payload:
+            return jsonify({'success': False, 'error': 'No fields to update'}), 400
+
+        result = get_mex_manager().set_build(payload)
+        logger.info("Updated disc banner info: %s",
+                    [k for k in payload if k != 'bannerPngBase64'])
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error setting build info: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @project_bp.route('/api/mex/shutdown', methods=['POST'])
 def shutdown():
     """Gracefully shutdown the Flask server."""

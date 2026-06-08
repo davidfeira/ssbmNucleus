@@ -1,0 +1,454 @@
+"""Tests for the vault backup/restore/clear blueprint.
+
+Focus is the *merge* restore mode, which previously let ``zipf.extractall``
+overwrite ``metadata.json`` -- wiping the current vault index instead of merging.
+These tests pin the merge semantics (current items kept, backup items added,
+no duplicates) and cover backup, replace-restore, and clear for good measure.
+
+All filesystem state is redirected to ``tmp_path`` via monkeypatch, so the real
+vault under ``storage/`` is never touched.
+"""
+
+import io
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+from flask import Flask
+
+
+BACKEND_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(BACKEND_DIR))
+
+from blueprints import vault_backup  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Fixtures / helpers
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def vault_env(tmp_path, monkeypatch):
+    """Redirect the blueprint's storage/project/logs paths into tmp_path and
+    return a Flask test client plus the patched paths."""
+    project_root = tmp_path / 'project'
+    storage_path = project_root / 'storage'
+    logs_path = project_root / 'logs'
+    for p in (storage_path, logs_path):
+        p.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(vault_backup, 'PROJECT_ROOT', project_root)
+    monkeypatch.setattr(vault_backup, 'STORAGE_PATH', storage_path)
+    monkeypatch.setattr(vault_backup, 'LOGS_PATH', logs_path)
+
+    app = Flask(__name__)
+    app.register_blueprint(vault_backup.vault_backup_bp)
+    client = app.test_client()
+
+    return type('VaultEnv', (), {
+        'client': client,
+        'project_root': project_root,
+        'storage_path': storage_path,
+        'logs_path': logs_path,
+    })
+
+
+def _write_metadata(storage_path, metadata):
+    (storage_path / 'metadata.json').write_text(json.dumps(metadata), encoding='utf-8')
+
+
+def _read_metadata(storage_path):
+    return json.loads((storage_path / 'metadata.json').read_text(encoding='utf-8'))
+
+
+def _make_backup_zip(metadata, extra_files=None):
+    """Build an in-memory backup zip with metadata.json + optional data files.
+
+    ``extra_files`` maps archive-relative posix paths to bytes.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('metadata.json', json.dumps(metadata))
+        for arcname, content in (extra_files or {}).items():
+            zf.writestr(arcname, content)
+    buf.seek(0)
+    return buf
+
+
+def _skin(skin_id, color=None):
+    return {'id': skin_id, 'color': color or skin_id, 'filename': f'{skin_id}.zip'}
+
+
+def _variant(variant_id, name=None):
+    return {'id': variant_id, 'name': name or variant_id, 'filename': f'{variant_id}.zip'}
+
+
+# ---------------------------------------------------------------------------
+# Pure merge function: merge_vault_metadata
+# ---------------------------------------------------------------------------
+
+def test_merge_keeps_current_and_adds_new_skins():
+    current = {'characters': {'Fox': {'skins': [_skin('fox-red')]}}}
+    incoming = {'characters': {'Fox': {'skins': [_skin('fox-blue')]}}}
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    ids = [s['id'] for s in merged['characters']['Fox']['skins']]
+    assert ids == ['fox-red', 'fox-blue']  # current first, backup appended
+    assert stats['characters'] == 1
+
+
+def test_merge_does_not_duplicate_shared_skins():
+    current = {'characters': {'Fox': {'skins': [_skin('fox-red'), _skin('fox-blue')]}}}
+    incoming = {'characters': {'Fox': {'skins': [_skin('fox-blue'), _skin('fox-green')]}}}
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    ids = [s['id'] for s in merged['characters']['Fox']['skins']]
+    assert ids == ['fox-red', 'fox-blue', 'fox-green']  # blue not duplicated
+    assert stats['characters'] == 1
+
+
+def test_merge_adds_character_absent_from_current():
+    current = {'characters': {'Fox': {'skins': [_skin('fox-red')]}}}
+    incoming = {'characters': {'Marth': {'skins': [_skin('marth-black'), _skin('marth-white')]}}}
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    assert set(merged['characters']) == {'Fox', 'Marth'}
+    assert [s['id'] for s in merged['characters']['Marth']['skins']] == ['marth-black', 'marth-white']
+    assert stats['characters'] == 2  # whole new character's skins counted
+
+
+def test_merge_handles_stage_variants():
+    current = {'stages': {'battlefield': {'variants': [_variant('bf-a')]}}}
+    incoming = {'stages': {
+        'battlefield': {'variants': [_variant('bf-a'), _variant('bf-b')]},
+        'dreamland': {'variants': [_variant('dl-a')]},
+    }}
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    assert [v['id'] for v in merged['stages']['battlefield']['variants']] == ['bf-a', 'bf-b']
+    assert [v['id'] for v in merged['stages']['dreamland']['variants']] == ['dl-a']
+    assert stats['stages'] == 2  # bf-b + dreamland's dl-a
+
+
+def test_merge_dedupes_skin_folder_markers_by_id():
+    folder = {'type': 'folder', 'id': 'folder_abc', 'name': 'Animelee', 'expanded': True}
+    current = {'characters': {'Peach': {'skins': [folder, _skin('peach-a')]}}}
+    incoming = {'characters': {'Peach': {'skins': [folder, _skin('peach-b')]}}}
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    ids = [s['id'] for s in merged['characters']['Peach']['skins']]
+    assert ids == ['folder_abc', 'peach-a', 'peach-b']  # folder not duplicated
+    assert stats['characters'] == 1
+
+
+def test_merge_top_level_lists_by_identity_key():
+    current = {
+        'xdelta': [{'id': 'x1', 'name': 'patch one'}],
+        'custom_characters': [{'slug': 'wolf-2', 'name': 'Wolf'}],
+        'bundles': [{'id': 'b1', 'name': 'Bundle One'}],
+    }
+    incoming = {
+        'xdelta': [{'id': 'x1', 'name': 'patch one'}, {'id': 'x2', 'name': 'patch two'}],
+        'custom_characters': [{'slug': 'roy-2', 'name': 'Roy'}],
+        'custom_stages': [{'slug': 'castle-64', 'name': "Peach's Castle"}],
+        'bundles': [{'id': 'b1', 'name': 'Bundle One'}],
+    }
+
+    merged, stats = vault_backup.merge_vault_metadata(current, incoming)
+
+    assert [x['id'] for x in merged['xdelta']] == ['x1', 'x2']
+    assert {c['slug'] for c in merged['custom_characters']} == {'wolf-2', 'roy-2'}
+    assert [s['slug'] for s in merged['custom_stages']] == ['castle-64']
+    assert [b['id'] for b in merged['bundles']] == ['b1']  # no dupe
+    assert stats == {'characters': 0, 'stages': 0, 'xdelta': 1,
+                     'custom_characters': 1, 'custom_stages': 1, 'bundles': 0}
+
+
+def test_merge_does_not_mutate_inputs():
+    current = {'characters': {'Fox': {'skins': [_skin('fox-red')]}}}
+    incoming = {'characters': {'Fox': {'skins': [_skin('fox-blue')]}}}
+
+    vault_backup.merge_vault_metadata(current, incoming)
+
+    assert [s['id'] for s in current['characters']['Fox']['skins']] == ['fox-red']
+    assert [s['id'] for s in incoming['characters']['Fox']['skins']] == ['fox-blue']
+
+
+def test_merge_preserves_unknown_top_level_keys():
+    current = {'version': '1.0', 'characters': {}}
+    incoming = {'version': '1.0', 'menus': {'foo': 'bar'}, 'characters': {}}
+
+    merged, _ = vault_backup.merge_vault_metadata(current, incoming)
+
+    assert merged['version'] == '1.0'
+    assert merged['menus'] == {'foo': 'bar'}  # carried over from incoming
+
+
+def test_merge_into_empty_current():
+    incoming = {'characters': {'Fox': {'skins': [_skin('fox-red')]}}}
+
+    merged, stats = vault_backup.merge_vault_metadata({}, incoming)
+
+    assert [s['id'] for s in merged['characters']['Fox']['skins']] == ['fox-red']
+    assert stats['characters'] == 1
+
+
+# ---------------------------------------------------------------------------
+# Restore endpoint -- merge mode (the regression under test)
+# ---------------------------------------------------------------------------
+
+def test_restore_merge_keeps_current_vault_items(vault_env):
+    # Current vault has Fox; backup has Marth + an extra Fox skin.
+    _write_metadata(vault_env.storage_path, {
+        'characters': {'Fox': {'skins': [_skin('fox-red')]}},
+    })
+    backup = _make_backup_zip({
+        'characters': {
+            'Fox': {'skins': [_skin('fox-blue')]},
+            'Marth': {'skins': [_skin('marth-black')]},
+        },
+    }, extra_files={'Marth/marth-black.zip': b'marth-data'})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['success'] is True
+    assert body['mode'] == 'merge'
+
+    meta = _read_metadata(vault_env.storage_path)
+    # Current Fox skin is NOT wiped; backup items added.
+    assert [s['id'] for s in meta['characters']['Fox']['skins']] == ['fox-red', 'fox-blue']
+    assert 'Marth' in meta['characters']
+    # Backup data file landed on disk.
+    assert (vault_env.storage_path / 'Marth' / 'marth-black.zip').read_bytes() == b'marth-data'
+
+
+def test_restore_merge_does_not_overwrite_existing_data_files(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    (vault_env.storage_path / 'Fox').mkdir()
+    (vault_env.storage_path / 'Fox' / 'fox-red.zip').write_bytes(b'current-data')
+
+    backup = _make_backup_zip(
+        {'characters': {'Fox': {'skins': [_skin('fox-red')]}}},
+        extra_files={'Fox/fox-red.zip': b'backup-data'},
+    )
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    # Existing file preserved (current wins), not clobbered by the backup copy.
+    assert (vault_env.storage_path / 'Fox' / 'fox-red.zip').read_bytes() == b'current-data'
+
+
+def test_restore_merge_reports_added_count(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    backup = _make_backup_zip({'characters': {'Fox': {'skins': [_skin('fox-blue'), _skin('fox-green')]}}})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    body = resp.get_json()
+    assert body['added']['characters'] == 2
+    assert '2 new item' in body['message']
+
+
+# ---------------------------------------------------------------------------
+# Restore endpoint -- replace mode
+# ---------------------------------------------------------------------------
+
+def test_restore_replace_wipes_current_and_extracts_backup(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    (vault_env.storage_path / 'Fox').mkdir()
+    (vault_env.storage_path / 'Fox' / 'fox-red.zip').write_bytes(b'current-data')
+
+    backup = _make_backup_zip(
+        {'characters': {'Marth': {'skins': [_skin('marth-black')]}}},
+        extra_files={'Marth/marth-black.zip': b'marth-data'},
+    )
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'replace', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    meta = _read_metadata(vault_env.storage_path)
+    assert 'Fox' not in meta['characters']  # wiped
+    assert 'Marth' in meta['characters']
+    assert not (vault_env.storage_path / 'Fox').exists()
+    assert (vault_env.storage_path / 'Marth' / 'marth-black.zip').exists()
+
+
+def test_restore_defaults_to_replace_mode(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    backup = _make_backup_zip({'characters': {'Marth': {'skins': [_skin('marth-black')]}}})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'file': (backup, 'backup.zip')},  # no mode -> replace
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()['mode'] == 'replace'
+    meta = _read_metadata(vault_env.storage_path)
+    assert 'Fox' not in meta['characters']
+
+
+# ---------------------------------------------------------------------------
+# Restore endpoint -- validation / error paths
+# ---------------------------------------------------------------------------
+
+def test_restore_rejects_missing_file(vault_env):
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge'},
+        content_type='multipart/form-data',
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()['success'] is False
+
+
+def test_restore_rejects_non_zip(vault_env):
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (io.BytesIO(b'nope'), 'backup.txt')},
+        content_type='multipart/form-data',
+    )
+    assert resp.status_code == 400
+    assert 'ZIP' in resp.get_json()['error']
+
+
+def test_restore_rejects_zip_without_metadata(vault_env):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        zf.writestr('Fox/fox-red.zip', b'data')  # no metadata.json
+    buf.seek(0)
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (buf, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+    assert resp.status_code == 400
+    assert 'metadata.json' in resp.get_json()['error']
+
+
+def test_restore_merge_leaves_vault_intact_when_backup_invalid(vault_env):
+    # An invalid backup must not have already wiped/altered the vault.
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (io.BytesIO(b'not a zip'), 'backup.txt')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 400
+    meta = _read_metadata(vault_env.storage_path)
+    assert [s['id'] for s in meta['characters']['Fox']['skins']] == ['fox-red']
+
+
+# ---------------------------------------------------------------------------
+# Backup endpoint + round-trip
+# ---------------------------------------------------------------------------
+
+def test_backup_creates_zip_with_all_files(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    (vault_env.storage_path / 'Fox').mkdir()
+    (vault_env.storage_path / 'Fox' / 'fox-red.zip').write_bytes(b'fox-data')
+
+    resp = vault_env.client.post('/api/mex/storage/backup')
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['success'] is True
+
+    backup_path = Path(body['path'])
+    assert backup_path.exists()
+    with zipfile.ZipFile(backup_path, 'r') as zf:
+        names = set(zf.namelist())
+    # Paths are stored relative to STORAGE_PATH (posix separators in zip).
+    assert 'metadata.json' in names
+    assert 'Fox/fox-red.zip' in names
+
+
+def test_backup_then_restore_merge_round_trip(vault_env):
+    # Build a vault, back it up, mutate, then merge the backup back in.
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    (vault_env.storage_path / 'Fox').mkdir()
+    (vault_env.storage_path / 'Fox' / 'fox-red.zip').write_bytes(b'fox-data')
+
+    backup_resp = vault_env.client.post('/api/mex/storage/backup').get_json()
+    backup_path = Path(backup_resp['path'])
+
+    # Replace current vault with a different character.
+    _write_metadata(vault_env.storage_path, {'characters': {'Marth': {'skins': [_skin('marth-black')]}}})
+
+    with open(backup_path, 'rb') as f:
+        backup_bytes = io.BytesIO(f.read())
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup_bytes, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    meta = _read_metadata(vault_env.storage_path)
+    # Both the current Marth and the restored Fox are present.
+    assert set(meta['characters']) == {'Fox', 'Marth'}
+    assert (vault_env.storage_path / 'Fox' / 'fox-red.zip').read_bytes() == b'fox-data'
+
+
+# ---------------------------------------------------------------------------
+# Clear endpoint
+# ---------------------------------------------------------------------------
+
+def test_clear_storage_removes_character_folders_and_resets_metadata(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    (vault_env.storage_path / 'Fox').mkdir()
+    (vault_env.storage_path / 'Fox' / 'fox-red.zip').write_bytes(b'fox-data')
+    # 'das' folder should be preserved structurally (stage root), its variants cleared.
+    das = vault_env.storage_path / 'das'
+    das.mkdir()
+
+    resp = vault_env.client.post('/api/mex/storage/clear', json={})
+
+    assert resp.status_code == 200
+    assert resp.get_json()['success'] is True
+    assert not (vault_env.storage_path / 'Fox').exists()
+    assert das.exists()  # das root kept
+    meta = _read_metadata(vault_env.storage_path)
+    assert meta == {'version': '1.0', 'characters': {}, 'stages': {}}
+
+
+def test_clear_storage_optionally_clears_logs(vault_env):
+    (vault_env.logs_path / 'app.log').write_text('log line', encoding='utf-8')
+    (vault_env.logs_path / 'keep.txt').write_text('keep', encoding='utf-8')
+
+    resp = vault_env.client.post('/api/mex/storage/clear', json={'clearLogs': True})
+
+    assert resp.status_code == 200
+    assert not (vault_env.logs_path / 'app.log').exists()  # .log removed
+    assert (vault_env.logs_path / 'keep.txt').exists()      # non-log kept

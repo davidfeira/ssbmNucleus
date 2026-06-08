@@ -44,6 +44,10 @@ namespace MexCLI
                         return Commands.RecompileCommand.Execute(args);
                     case "info":
                         return Commands.InfoCommand.Execute(args);
+                    case "get-build":
+                        return Commands.GetBuildCommand.Execute(args);
+                    case "set-build":
+                        return Commands.SetBuildCommand.Execute(args);
                     case "set-css-icon":
                         return Commands.SetCSSIconCommand.Execute(args);
                     case "add-code":
@@ -114,6 +118,8 @@ namespace MexCLI
             Console.WriteLine("  export <project.mexproj> <output.iso>      - Export ISO");
             Console.WriteLine("  recompile-csps <project.mexproj>           - Recompile CSPs from PNG sources");
             Console.WriteLine("  info <project.mexproj>                     - Get project information");
+            Console.WriteLine("  get-build <project.mexproj>                - Get disc banner title/creator + image preview");
+            Console.WriteLine("  set-build <project.mexproj>                - Set disc banner fields (reads JSON from stdin)");
             Console.WriteLine("  add-code <project> <name> <hex_source>     - Add a Gecko code to project");
             Console.WriteLine("  get-sss-layout <project.mexproj>           - Get SSS layout data as JSON");
             Console.WriteLine("  set-sss-layout <project.mexproj>           - Set SSS layout (reads JSON from stdin)");
