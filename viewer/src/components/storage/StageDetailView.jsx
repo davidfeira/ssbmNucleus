@@ -60,6 +60,7 @@ export default function StageDetailView({
   handleCspChange,
   handleStockChange,
   handleScreenshotChange,
+  replaceStageScreenshotWithCapture,
   handleSlippiRetest,
   handleSlippiOverride,
   openCspManager,
@@ -146,7 +147,7 @@ export default function StageDetailView({
                   <div className="skin-image-container">
                     {variant.hasScreenshot ? (
                       <img
-                        src={`${API_URL.replace('/api/mex', '')}${variant.screenshotUrl}`}
+                        src={`${API_URL.replace('/api/mex', '')}${variant.screenshotUrl}?t=${lastImageUpdate}`}
                         alt={variant.name}
                         className="skin-csp"
                         onError={(e) => {
@@ -227,6 +228,16 @@ export default function StageDetailView({
           variantId: editingItem?.data?.id,
           name: editingItem?.data?.name
         })}
+        onCaptureScreenshot={() => inGameTest.captureStageScreenshot({
+          stageCode: editingItem?.data?.stageCode,
+          stageFolder: editingItem?.data?.stageFolder,
+          variantId: editingItem?.data?.id,
+          name: editingItem?.data?.name
+        })}
+        onReplaceWithCapture={(dataUri) => {
+          inGameTest.resetTest()
+          replaceStageScreenshotWithCapture(dataUri)
+        }}
         testingInGame={inGameTest.testingInGame}
         testStatus={inGameTest.testStatus}
         testResult={inGameTest.testResult}

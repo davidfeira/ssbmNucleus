@@ -24,6 +24,45 @@ _u32 = ctypes.WinDLL("user32", use_last_error=True)
 _EnumWindowsProc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
 
 
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", wt.LONG), ("y", wt.LONG)]
+
+
+def _client_rect_for_pid(pid):
+    """Screen-space (left, top, right, bottom) of the CLIENT area (no title bar /
+    borders) of the largest visible top-level window owned by `pid`, or None."""
+    best = {"area": 0, "hwnd": None}
+
+    def _cb(hwnd, _lparam):
+        if not _u32.IsWindowVisible(hwnd):
+            return True
+        wpid = wt.DWORD(0)
+        _u32.GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
+        if wpid.value != pid:
+            return True
+        r = wt.RECT()
+        if not _u32.GetClientRect(hwnd, ctypes.byref(r)):
+            return True
+        w, h = r.right - r.left, r.bottom - r.top
+        if w <= 0 or h <= 0:
+            return True
+        if w * h > best["area"]:
+            best["area"] = w * h
+            best["hwnd"] = hwnd
+        return True
+
+    _u32.EnumWindows(_EnumWindowsProc(_cb), 0)
+    hwnd = best["hwnd"]
+    if not hwnd:
+        return None
+    r = wt.RECT()
+    _u32.GetClientRect(hwnd, ctypes.byref(r))
+    tl, br = _POINT(0, 0), _POINT(r.right, r.bottom)
+    _u32.ClientToScreen(hwnd, ctypes.byref(tl))
+    _u32.ClientToScreen(hwnd, ctypes.byref(br))
+    return (tl.x, tl.y, br.x, br.y)
+
+
 def _window_rect_for_pid(pid):
     """Return (left, top, right, bottom) of the largest visible top-level window
     owned by `pid`, or None. Dolphin's render window is the big one; the small
@@ -81,7 +120,8 @@ def capture_png(pid=None, max_width=640):
     isn't possible (no PIL / headless)."""
     if ImageGrab is None:
         return None
-    bbox = _window_rect_for_pid(pid) if pid else None
+    # Prefer the client area (no title bar / borders); fall back to the whole window.
+    bbox = (_client_rect_for_pid(pid) or _window_rect_for_pid(pid)) if pid else None
     if bbox:
         _foreground(pid)
     try:

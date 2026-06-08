@@ -12,6 +12,7 @@ guard. It NEVER goes online -- the engine aborts if it ever sees the online
 scene -- so it can't disrupt the user's Slippi or waste a real player's time.
 """
 
+import base64
 import json
 import logging
 import os
@@ -462,6 +463,101 @@ def start_stage_skin_test():
 
     _start_build_test_job(out_iso, slippi, obs, build)
     return jsonify({'success': True, 'message': 'Stage skin test started'})
+
+
+@test_in_game_bp.route('/api/mex/test-in-game/capture-stage-screenshot', methods=['POST'])
+def start_capture_stage_screenshot():
+    """Capture a clean in-game SCREENSHOT of a DAS stage variant (like a CSP for a
+    stage) and save it as the variant's preview. Builds the one-skin ISO, boots it
+    in the throwaway Dolphin, loads the stage ALONE (1-player, no timer) with the
+    DAS button held, poses a deterministic whole-stage camera, and grabs the
+    frame. The image is RETURNED (not saved) so the user can review it and choose
+    whether to replace the variant's current screenshot (the frontend then saves
+    via /storage/stages/update-screenshot). Streams capture_progress /
+    capture_complete (with the image) / capture_error over SocketIO.
+    Body: { stageCode, stageFolder, variantId, button?, vanillaIsoPath,
+    slippiDolphinPath }."""
+    global _test_running
+    if os.name != 'nt':
+        return jsonify({'success': False,
+                        'error': 'In-game capture is only supported on Windows.'}), 400
+    data = request.json or {}
+    stage_code = data.get('stageCode')
+    stage_folder = data.get('stageFolder')
+    variant_id = data.get('variantId')
+    button = (data.get('button') or 'X').upper()
+    if not stage_code or not stage_folder or not variant_id:
+        return jsonify({'success': False,
+                        'error': 'stageCode, stageFolder and variantId are required.'}), 400
+    vanilla, slippi, _obs, err = _common_inputs(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+
+    with _test_lock:
+        if _test_running:
+            return jsonify({'success': False, 'error': 'A test is already running.'}), 409
+        _test_running = True
+
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_iso = (STORAGE_PATH / 'test-builds' / f'cap_{stage_code}_{stamp}.iso')
+    runs_root = STORAGE_PATH / 'test-runs'
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    def run():
+        global _test_running
+        socketio = get_socketio()
+
+        def emit(stage, percentage, message):
+            socketio.emit('capture_progress', {
+                'stage': stage, 'percentage': percentage, 'message': message})
+
+        try:
+            from test_build import build_stage_skin_iso
+            from ingame.capture import capture_stage
+            from ingame.melee_sss import INTERNAL_STAGE_ID
+
+            emit('building', 3, 'Building a one-skin test ISO…')
+            r = build_stage_skin_iso(
+                vanilla, stage_code, stage_folder, variant_id, str(out_iso),
+                button=button,
+                progress_cb=lambda p, m: emit('building', 6 + int(p * 0.30), m),
+                log=lambda m: logger.info(f"[capture] {m}"))
+
+            stage_name = r['stage']
+            internal_id = INTERNAL_STAGE_ID.get(stage_name)
+            res = capture_stage(
+                str(out_iso), slippi, str(runs_root),
+                internal_id=internal_id, hold=r['button'], framing_key=stage_name,
+                emit=lambda s, p, m: emit(s, 40 + int(p * 0.6), m),
+                log=lambda m: logger.info(f"[capture] {m}"))
+
+            if not res.get('ok') or not res.get('png'):
+                socketio.emit('capture_error', {
+                    'success': False,
+                    'error': res.get('reason') or 'screenshot capture failed'})
+                return
+
+            # Don't save yet -- hand the captured image back so the user can review
+            # it and choose whether to replace the variant's current screenshot.
+            data_uri = "data:image/png;base64," + base64.b64encode(res['png']).decode('ascii')
+            socketio.emit('capture_complete', {
+                'success': True, 'screenshot': data_uri,
+                'stageFolder': stage_folder, 'variantId': variant_id})
+            logger.info(f"[capture] captured {stage_folder}/{variant_id} (awaiting replace confirmation)")
+        except Exception as e:
+            logger.exception("[capture] failed")
+            socketio.emit('capture_error', {'success': False, 'error': str(e)})
+        finally:
+            try:
+                if out_iso.exists():
+                    out_iso.unlink()
+            except Exception:
+                pass
+            with _test_lock:
+                _test_running = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Stage screenshot capture started'})
 
 
 @test_in_game_bp.route('/api/mex/test-in-game/status', methods=['GET'])

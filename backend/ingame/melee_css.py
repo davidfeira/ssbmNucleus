@@ -116,7 +116,9 @@ class Cursor:
         while time.time() - start < timeout:
             x, y = self.read_pos()
             if x is None:
-                self.p.center()
+                # Transient garbage read: HOLD the last stick input and re-poll.
+                # Snapping to neutral (center) mid-glide is what makes the cursor
+                # jitter -- and a stale read doesn't mean the cursor moved.
                 time.sleep(0.02)
                 continue
             ex, ey = tx - x, ty - y

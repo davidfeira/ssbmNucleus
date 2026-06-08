@@ -19,6 +19,8 @@ import struct
 
 PROCESS_QUERY_INFORMATION = 0x0400
 PROCESS_VM_READ = 0x0010
+PROCESS_VM_WRITE = 0x0020
+PROCESS_VM_OPERATION = 0x0008
 MEM_MAPPED = 0x40000
 MEM1_REGION_SIZE = 0x2000000
 MEM1_VALID = 0x1800000  # 24 MiB of real GC RAM
@@ -50,7 +52,8 @@ class Dolphin:
             raise ValueError("Dolphin(pid) requires the Dolphin process id")
         self.pid = int(pid)
         self.h = _k32.OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, self.pid
+            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+            | PROCESS_VM_OPERATION, False, self.pid
         )
         if not self.h:
             raise OSError(f"OpenProcess({self.pid}) failed: {ctypes.get_last_error()}")
@@ -130,6 +133,37 @@ class Dolphin:
         if not p or not (GC_BASE <= p < GC_BASE + MEM1_VALID):
             return None
         return p + offset
+
+    # --- typed writes (big-endian) -------------------------------------------
+    # The handle is opened with PROCESS_VM_WRITE | PROCESS_VM_OPERATION so we can
+    # poke menu state (e.g. SSSData.force_stage_id) directly. Used sparingly --
+    # reads remain the primary feedback path.
+    def _write_raw(self, host_addr, data):
+        n = ctypes.c_size_t(0)
+        ok = _k32.WriteProcessMemory(
+            self.h, ctypes.c_void_p(host_addr), data, len(data), ctypes.byref(n)
+        )
+        return bool(ok) and n.value == len(data)
+
+    def write_bytes(self, gc_addr, data):
+        if self.base is None:
+            return False
+        return self._write_raw(self.host(gc_addr), bytes(data))
+
+    def write_u8(self, gc_addr, value):
+        return self.write_bytes(gc_addr, struct.pack(">B", value & 0xFF))
+
+    def write_s8(self, gc_addr, value):
+        return self.write_bytes(gc_addr, struct.pack(">b", value))
+
+    def write_u16(self, gc_addr, value):
+        return self.write_bytes(gc_addr, struct.pack(">H", value & 0xFFFF))
+
+    def write_u32(self, gc_addr, value):
+        return self.write_bytes(gc_addr, struct.pack(">I", value & 0xFFFFFFFF))
+
+    def write_f32(self, gc_addr, value):
+        return self.write_bytes(gc_addr, struct.pack(">f", value))
 
     def close(self):
         if getattr(self, "h", None):

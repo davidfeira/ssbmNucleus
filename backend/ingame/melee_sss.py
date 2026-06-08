@@ -4,13 +4,15 @@ from live RAM (melee_mem) and driven over the pipe (melee_pipe). The CSS analog
 of melee_css.py, for the stage that a match is played on.
 
 Ported from tests/nucleus/melee_sss.py (class identical; dev __main__ demo
-dropped). Includes the full-m-ex fix: the hovered-stage id is at 0x804D6CAD on
-standard/20XX/DAS builds and shifts to +1 (0x804D6CAE) on a full m-ex roster --
-hovered_stage() reads 0x804D6CAD and falls back to +1.
+dropped).
 
-  hovered stage id   byte at 0x804D6CAD   (enums.Stage value: Battlefield=0x18,
-                     FD=0x19, Dreamland=0x1A, Stadium=0x12, Yoshi's=0x06,
-                     Fountain=0x08)
+  hovered stage     icon-table INDEX at 0x804D6CAE -- the order stages appear in
+                    mexcli get-sss-layout (Yoshi's=6, Fountain=8, Stadium=18,
+                    Battlefield=24, FD=25, DreamLand=26). Per the doldecomp/melee
+                    source this is the hovered ICON INDEX, not Melee's internal
+                    stage id. (0x804D6CAD -- which an earlier version read with a
+                    "+1 m-ex fallback" -- is actually the cursor's Y stick input,
+                    0 at rest, so it only ever worked by falling through to +1.)
   stage cursor X/Y   a POINTER CHAIN, only valid on the stage-select scene:
                        P0 = *(0x804D7820); P1 = *(P0+0x10); P2 = *(P1+0x28)
                        x = float at P2+0x38; y = float at P2+0x3C
@@ -19,13 +21,27 @@ hovered_stage() reads 0x804D6CAD and falls back to +1.
 import time
 
 SSS_CURSOR_PTR = 0x804D7820
-SSS_HOVERED_STAGE = 0x804D6CAD
+# Hovered stage = icon-table index, read at 0x804D6CAE (see module docstring).
+SSS_HOVERED_STAGE = 0x804D6CAE
+
+# SSSData global pointer; force_stage_id is a signed byte at +0x03. Writing a
+# non-negative INTERNAL stage id there makes the SSS frame handler copy it into
+# the match rules and start the match next frame, with NO cursor navigation --
+# layout- and page-independent (custom stages on later pages work the same).
+# From doldecomp/melee (mn/mnstagesel: SSSData.force_stage_id -> rules.xE,
+# gm_801A4B60).
+SSSDATA_PTR = 0x804D6C90
+FORCE_STAGE_OFFSET = 0x03
 
 SCENE_MAJOR = 0x80479D30
 SCENE_MINOR = 0x80479D33
 VS_MAJOR = 0x02
 SSS_MINOR = 0x01
 
+# Hovered ICON-TABLE INDEX per stage (the value at 0x804D6CAE == the get-sss-
+# layout order), used to CONFIRM the cursor is over the intended stage. These are
+# layout indices, NOT Melee internal stage ids -- a direct force-stage write
+# (SSSData.force_stage_id) would instead need get-sss-layout's 'stageID'.
 STAGE_ID = {
     "battlefield": 0x18,
     "finaldestination": 0x19,
@@ -35,14 +51,36 @@ STAGE_ID = {
     "fountainofdreams": 0x08,
 }
 
+# Melee INTERNAL stage ids (== get-sss-layout 'stageID') -- what force_stage_id /
+# rules.xE want, DISTINCT from the icon indices in STAGE_ID above (e.g. Battlefield
+# is icon index 0x18 but internal id 0x1F). Custom stages get their own id (>0x20)
+# which the build reads from get-sss-layout and passes through.
+INTERNAL_STAGE_ID = {
+    "battlefield": 0x1F,
+    "finaldestination": 0x20,
+    "dreamland": 0x1C,          # Dream Land N64 (the legal one; GrOp)
+    "pokemonstadium": 0x03,
+    "yoshisstory": 0x08,
+    "fountainofdreams": 0x02,
+}
+
+# Real VANILLA stage-select coordinates in cursor space, taken straight from the
+# build's own SSS layout (mexcli get-sss-layout). The in-app "Test in game" ISO
+# is always built fresh from vanilla Melee, so its stage-select screen is the
+# full vanilla roster and these are exact -- a single targeted move lands on the
+# tile, no screen scan needed. The previous values were libmelee's TOURNAMENT
+# layout, which on the vanilla SSS point at the WRONG tiles: (15,3.5)=Onett (not
+# Stadium), (10,15.5)=Yoshi's Story (not Fountain), (3.5,15.5)=Brinstar (not
+# Yoshi's). Battlefield/FD/Dream Land/Random happened to line up, which is why
+# only some stages were wrong.
 STAGE_TARGET = {
-    "battlefield": (1.0, -9.0),
-    "finaldestination": (6.7, -9.0),
-    "dreamland": (12.5, -9.0),
-    "pokemonstadium": (15.0, 3.5),
-    "yoshisstory": (3.5, 15.5),
-    "fountainofdreams": (10.0, 15.5),
-    "random": (-13.5, 3.5),
+    "battlefield": (1.3, -9.1),
+    "finaldestination": (6.6, -9.1),
+    "dreamland": (12.3, -9.1),         # Dream Land N64 -- the legal one (GrOp)
+    "pokemonstadium": (2.0, 3.7),
+    "yoshisstory": (9.9, 15.7),
+    "fountainofdreams": (16.5, 15.7),
+    "random": (-14.1, 3.6),
 }
 
 ALIASES = {
@@ -128,13 +166,11 @@ class StageCursor:
         return self.on_stage_select()
 
     def hovered_stage(self):
-        """The enums.Stage id the cursor is over. 0x804D6CAD on standard builds;
-        on a full m-ex roster the struct shifts one byte so the real id is at +1
-        (0x804D6CAE) -- read the base and fall back to +1."""
-        v = self.d.u8(SSS_HOVERED_STAGE)
-        if not v:
-            v = self.d.u8(SSS_HOVERED_STAGE + 1)
-        return v
+        """The icon-table index of the stage the cursor is over (the get-sss-
+        layout order), read straight from 0x804D6CAE -- ground truth, used to
+        confirm a selection. Compare to STAGE_ID. Returns 0 (no stage) when the
+        cursor is between tiles."""
+        return self.d.u8(SSS_HOVERED_STAGE)
 
     def hovered_name(self):
         v = self.hovered_stage()
@@ -150,7 +186,8 @@ class StageCursor:
         while time.time() - start < timeout:
             x, y = self.read_pos()
             if x is None:
-                self.p.center()
+                # Transient garbage read: hold the last input and re-poll rather
+                # than snapping to neutral mid-glide (that causes the jitter).
                 time.sleep(0.02)
                 continue
             ex, ey = tx - x, ty - y
@@ -168,7 +205,15 @@ class StageCursor:
     def select(self, name, press=True, hold=None):
         """Steer to a stage by name and press A to pick it (which, with a locked
         CSS, starts the match). `hold` (e.g. 'X') is held through the load to
-        trigger a DAS alternate stage."""
+        trigger a DAS alternate stage.
+
+        STAGE_TARGET holds the real vanilla stage-select coordinates, so we move
+        straight to the target -- no screen scan -- and CONFIRM via the
+        ground-truth hovered-stage id (the SSS analog of the CSS hovered() check),
+        with a small local nudge in case the cursor landed just off the icon's
+        hitbox. If the intended stage can't be confirmed we DON'T press (fail the
+        check rather than silently test the wrong stage). 'random' has no stage
+        id, so it just uses its coordinate."""
         key = norm(name)
         if key not in STAGE_TARGET:
             raise KeyError(f"no stage target for '{name}' "
@@ -176,7 +221,20 @@ class StageCursor:
         if not self.ensure_stage_select():
             return False
         tx, ty = STAGE_TARGET[key]
+        target_id = STAGE_ID.get(key)
         reached = self.move_to(tx, ty)
+        if target_id is not None:
+            reached = False
+            for dx, dy in ((0.0, 0.0), (0.0, 0.0), (1.2, 0.0), (-1.2, 0.0),
+                           (0.0, 1.2), (0.0, -1.2)):
+                if dx or dy:
+                    self.move_to(tx + dx, ty + dy, wiggle=0.9, timeout=2.0)
+                time.sleep(0.05)  # let the hovered byte settle once the cursor rests
+                if self.hovered_stage() == target_id:
+                    reached = True
+                    break
+            if not reached:
+                return False
         if not press:
             return reached
         return self._confirm(tx, ty, hold=hold)
@@ -269,3 +327,39 @@ class StageCursor:
         if not press:
             return self.hovered_stage() == target_id
         return self._confirm(pos[0], pos[1], hold=hold)
+
+    # --- direct force-select (no cursor, layout/page independent) -------------
+    def force_select(self, internal_id, hold=None, timeout=4.0):
+        """Select + start a stage by writing the engine's own force_stage_id field
+        (SSSData+0x03) instead of moving the cursor: the SSS frame handler sees a
+        non-negative value, copies it into the match rules and starts the match
+        the next frame. No cursor, no page switching -- works for ANY layout and
+        for custom stages on later SSS pages, unlike select()/select_at(), which
+        depend on coordinates.
+
+        `internal_id` is Melee's INTERNAL stage id (0..0x7F, the signed-byte
+        field; from get-sss-layout 'stageID' / INTERNAL_STAGE_ID). `hold` (e.g.
+        'X') is held through the load to trigger a DAS alternate. Requires a
+        Dolphin handle opened for writing (melee_mem PROCESS_VM_WRITE). Returns
+        whether the match started."""
+        if internal_id is None or not (0 <= int(internal_id) <= 0x7F):
+            return False
+        if not self.ensure_stage_select():
+            return False
+        if hold:
+            self.p.press(hold)
+        try:
+            start = time.time()
+            while time.time() - start < timeout:
+                s = self.d.u32(SSSDATA_PTR)
+                if s and 0x80000000 <= s < 0x81800000:
+                    self.d.write_s8(s + FORCE_STAGE_OFFSET, int(internal_id))
+                time.sleep(0.1)
+                if not self.on_stage_select():
+                    if hold:
+                        time.sleep(0.7)  # keep holding so DAS reads it at load
+                    return True
+            return not self.on_stage_select()
+        finally:
+            if hold:
+                self.p.release(hold)

@@ -257,8 +257,9 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
       // Always await metadata refresh for costumes (CSP/stock updates)
       await onRefresh()
 
-      // If we uploaded a CSP or stock, update cache-busting timestamp to force image reload
-      if (newCsp || newStock) {
+      // If we uploaded a CSP, stock, or screenshot, bump the cache-busting
+      // timestamp so the grid/preview reload the new image (same URL otherwise).
+      if (newCsp || newStock || newScreenshot) {
         setLastImageUpdate(Date.now())
       }
 
@@ -271,6 +272,44 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     } catch (err) {
       playSound('error')
       alert(`Save error: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Replace a stage variant's screenshot with a freshly CAPTURED image (data URI
+  // from the in-game capture). Saves immediately via the same endpoint + refresh
+  // the manual upload uses, then closes the modal.
+  const replaceStageScreenshotWithCapture = async (dataUri) => {
+    if (!editingItem || editingItem.type !== 'stage' || !dataUri) return
+    setSaving(true)
+    try {
+      const blob = await (await fetch(dataUri)).blob()
+      const formData = new FormData()
+      formData.append('stageFolder', editingItem.data.stageFolder)
+      formData.append('variantId', editingItem.data.id)
+      formData.append('screenshot', blob, `${editingItem.data.id}_screenshot.png`)
+
+      const resp = await fetch(`${API_URL}/storage/stages/update-screenshot`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await resp.json()
+      if (!data.success) {
+        playSound('error')
+        alert(`Screenshot save failed: ${data.error}`)
+        return
+      }
+
+      await fetchStageVariants()
+      await onRefresh()
+      setLastImageUpdate(Date.now())
+      playSound('camera')
+      setShowEditModal(false)
+      setEditingItem(null)
+    } catch (err) {
+      playSound('error')
+      alert(`Screenshot save error: ${err.message}`)
     } finally {
       setSaving(false)
     }
@@ -452,6 +491,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     // Handlers
     handleEditClick,
     handleScreenshotChange,
+    replaceStageScreenshotWithCapture,
     handleCspChange,
     handleStockChange,
     handleSave,

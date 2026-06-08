@@ -50,6 +50,18 @@ CSS_INDEX = {
     "gameandwatch": 22, "marth": 23, "roy": 24,
 }
 
+# External character id (the match player block's "c_kind") -- what the cursor-free
+# memory selection writes to pick a fighter without steering. DISTINCT from the
+# CSS grid index above: this is the engine's character id (Fox=0x02, Marth=0x09
+# verified live; "no pick"/Master Hand = 0x1A). Sheik shares Zelda's slot (0x12).
+CKIND = {
+    "falcon": 0x00, "dk": 0x01, "fox": 0x02, "gameandwatch": 0x03, "kirby": 0x04,
+    "bowser": 0x05, "link": 0x06, "luigi": 0x07, "mario": 0x08, "marth": 0x09,
+    "mewtwo": 0x0A, "ness": 0x0B, "peach": 0x0C, "pikachu": 0x0D, "iceclimbers": 0x0E,
+    "jigglypuff": 0x0F, "samus": 0x10, "yoshi": 0x11, "zelda": 0x12, "falco": 0x14,
+    "younglink": 0x15, "drmario": 0x16, "roy": 0x17, "pichu": 0x18, "ganondorf": 0x19,
+}
+
 
 def load_grid():
     with open(GRID_PATH, "r", encoding="utf-8") as f:
@@ -63,6 +75,12 @@ def norm(name):
 
 def css_index(name):
     return CSS_INDEX.get(norm(name))
+
+
+def ckind(name):
+    """External character id for the cursor-free memory selection, or None for an
+    unknown / custom fighter (caller should fall back to the cursor)."""
+    return CKIND.get(norm(name))
 
 
 def cell(grid, name):

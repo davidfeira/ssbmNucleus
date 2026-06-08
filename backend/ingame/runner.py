@@ -30,11 +30,12 @@ from .boot import DolphinBoot
 from .melee_mem import Dolphin
 from .melee_pipe import Pipe
 from .melee_css import Cursor
-from .melee_sss import StageCursor
+from .melee_sss import StageCursor, INTERNAL_STAGE_ID, norm as _norm_stage
 from .observe import Observer
 from . import nav
+from . import match_setup
 from . import screenshot as _screenshot
-from .char_select import load_grid, cell, css_index
+from .char_select import load_grid, cell, css_index, ckind as char_ckind
 
 
 # severity for aggregating the overall verdict (higher = worse)
@@ -80,14 +81,16 @@ def build_plan(manifest):
         label_stage = "Battlefield"
         if sss_icon:
             stage = {"kind": "icon", "page": int(sss_icon.get("page", 0)),
-                     "x": float(sss_icon["x"]), "y": float(sss_icon["y"])}
+                     "x": float(sss_icon["x"]), "y": float(sss_icon["y"]),
+                     "stageId": sss_icon.get("stageId")}
             covers.append("stage")
             label_stage = custom_stage.get("name", "custom stage")
         checks.append({
             "label": f"{character.get('name', 'custom fighter')} on {label_stage}",
             "covers": covers + ["menu"],
             "char": {"kind": "custom", "x": float(css_icon["x"]),
-                     "y": float(css_icon["y"]), "index": int(css_icon["index"])},
+                     "y": float(css_icon["y"]), "index": int(css_icon["index"]),
+                     "ckind": css_icon.get("fighter")},
             "stage": stage,
             "hold": None,
             "move": None,
@@ -99,7 +102,8 @@ def build_plan(manifest):
             "covers": ["stage", "menu"],
             "char": {"kind": "vanilla", "name": "fox", "costume": 0},
             "stage": {"kind": "icon", "page": int(sss_icon.get("page", 0)),
-                      "x": float(sss_icon["x"]), "y": float(sss_icon["y"])},
+                      "x": float(sss_icon["x"]), "y": float(sss_icon["y"]),
+                      "stageId": sss_icon.get("stageId")},
             "hold": None,
             "move": None,
         })
@@ -206,28 +210,60 @@ def _select_char(cur, char):
     return _lock_vanilla(cur, char["name"], int(char.get("costume", 0)))
 
 
-def _select_stage(sc, stage, hold):
+def _internal_stage_id(stage):
+    """The engine INTERNAL stage id for a force_select start, or None if the stage
+    must be cursor-selected (a custom icon with no usable id)."""
     if stage is None or stage.get("kind") == "name":
         name = stage["name"] if stage else "battlefield"
-        return sc.select(name, press=True, hold=hold)
-    if stage["kind"] == "icon":
+        return INTERNAL_STAGE_ID.get(_norm_stage(name))
+    if stage.get("kind") == "icon":
+        sid = stage.get("stageId")
+        return sid if isinstance(sid, int) and 0 <= sid <= 0x7F else None
+    if stage.get("kind") == "id":
+        return int(stage["id"])
+    return None
+
+
+def _select_stage(sc, stage, hold):
+    """Pick + start the stage. Prefer the engine's force_stage_id write (no
+    cursor, layout/page independent -- so a custom stage on a later SSS page works
+    the same as a vanilla one) whenever we know the INTERNAL stage id; fall back
+    to cursor-coordinate selection only when we don't."""
+    sid = _internal_stage_id(stage)
+    if sid is not None:
+        return sc.force_select(sid, hold=hold)
+    # No usable internal id -> drive the cursor to the placed icon (page-aware).
+    if stage and stage.get("kind") == "icon":
         return sc.select_at(stage["x"], stage["y"], page=int(stage.get("page", 0)),
                             press=True, hold=hold)
-    if stage["kind"] == "id":
-        return sc.select_by_id(int(stage["id"]), press=True, hold=hold,
-                               pages=int(stage.get("pages", 1)))
-    return False
+    name = stage["name"] if stage else "battlefield"
+    return sc.select(name, press=True, hold=hold)
 
 
-def _ensure_on_sss(d, p, sc, cur, log):
-    """Get onto the stage-select screen, which only happens once a character is
-    locked AND a 2nd player is present. Both are RAM-verified: nav.any_extra_player
-    reads the per-port controller status, and add_cpu opens a port door closed-loop
-    if one is missing. Then press START. Returns True once on the SSS."""
+def _memory_select_to_sss(d, sc, ckind, color, log=_noop):
+    """Cursor-free selection: write the solo player block (chosen fighter + color)
+    and memory-warp the CSS straight to the stage-select screen -- no cursor lock,
+    no add-CPU, no START 'ready' gate. Returns True once on the SSS (the caller
+    then force_selects the stage); False if the warp didn't land -- in which case
+    we're still on the CSS, so the cursor path is a clean fallback. Requires Time/
+    no-timer rules (force_time_infinite) already set so the solo match sustains."""
+    match_setup.write_solo_player(d, ckind, color)
+    match_setup.warp_to_stage_select(d)
+    if not sc.wait_for_stage_select(timeout=8.0):
+        return False
+    match_setup.write_solo_player(d, ckind, color)   # re-assert after the scene flip
+    return True
+
+
+def _ensure_on_sss(d, p, sc, cur, log, solo=False):
+    """Get onto the stage-select screen. Normally that needs a locked character
+    AND a 2nd player, so we add a CPU (closed-loop, RAM-verified) if one's missing,
+    then press START. When `solo` (the 1-player start patch is in), we skip the
+    add-CPU step entirely and just press START. Returns True once on the SSS."""
     for attempt in range(4):
         if sc.on_stage_select():
             return True
-        if not nav.any_extra_player(d):
+        if not solo and not nav.any_extra_player(d):
             log("no 2nd player present; opening a port door")
             nav.add_cpu(d, p, cur=cur, log=log)
         p.tap("START", 0.1)
@@ -316,6 +352,11 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
             result.update(verdict="crashed", reason="Could not read the game's memory after boot.")
             return result
 
+        # Load matches ALONE (1-player) when we can patch the CSS start gate: no
+        # CPU to add (faster, fewer cursor sweeps) and nothing that can attack or
+        # disturb the check. Falls back to a 2nd player if the patch doesn't apply.
+        solo = match_setup.patch_one_player(d, log=log)
+
         p = Pipe(boot.pipe_index)
         obs = Observer(d)
 
@@ -345,6 +386,8 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
         # the match never starts (no 2nd player). This was the harness's implicit
         # 3s post-nav delay.
         nav.wait_css_ready(d, cur, log=log)
+        if solo:
+            match_setup.force_time_infinite(d, log=log)  # a 1-player match won't end
 
         # Snapshot the (now-settled) CSS (shows the menu background + portraits).
         result["screenshot"] = _shot_b64(boot.pid)
@@ -361,8 +404,9 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
         # Open the port-2 door (2nd player) before character select, as in the
         # harness flow. Best-effort here -- the per-check START step verifies a
         # 2nd player actually exists and reliably opens one (panel-row sweep with
-        # START verification) if this missed.
-        nav.add_cpu(d, p, cur=cur, log=log)
+        # START verification) if this missed. Skipped when loading solo.
+        if not solo:
+            nav.add_cpu(d, p, cur=cur, log=log)
 
         n = len(plan)
         for i, check in enumerate(plan):
@@ -380,19 +424,38 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
                         continue
 
                 emit("selecting_char", base_pct + 2, f"Selecting: {label}…")
-                on_cell = _select_char(cur, check["char"])
-                log(f"[{label}] char on_cell={on_cell} hovered={cur.hovered()}")
+                # Primary path: cursor-free memory selection (write the solo player
+                # block + warp CSS->SSS). Used when we can load solo, know the
+                # fighter's external c_kind (vanilla), and can force-select the
+                # stage. Falls back to the proven cursor lock + START otherwise --
+                # or if the warp doesn't land, in which case we're still on the CSS
+                # so the fallback is clean.
+                if check["char"]["kind"] == "vanilla":
+                    ck = char_ckind(check["char"]["name"])
+                else:  # custom m-ex fighter: external id captured from the build
+                    ck = check["char"].get("ckind")
+                if not (isinstance(ck, int) and 0 <= ck <= 0x7F):
+                    ck = None
+                color = int(check["char"].get("costume", 0) or 0)
+                stage_id = _internal_stage_id(check.get("stage"))
+                used_memory = False
+                if solo and ck is not None and stage_id is not None:
+                    used_memory = _memory_select_to_sss(d, sc, ck, color, log)
+                    log(f"[{label}] memory select -> SSS: {used_memory}")
 
                 emit("selecting_stage", base_pct + 6, f"Choosing the stage for: {label}…")
-                # Make sure the port door opened (2nd player present) + the
-                # character locked, landing us on the stage-select screen, before
-                # we try to pick the stage.
-                if not _ensure_on_sss(d, p, sc, cur, log):
-                    sub.update(verdict="never_started",
-                               reason="couldn't reach stage select (no 2nd player, or the character didn't lock)")
-                    sub["screenshot"] = _shot_b64(boot.pid)
-                    result["checks"].append(sub)
-                    continue
+                if not used_memory:
+                    on_cell = _select_char(cur, check["char"])
+                    log(f"[{label}] char on_cell={on_cell} hovered={cur.hovered()}")
+                    # Make sure the port door opened (2nd player present) + the
+                    # character locked, landing us on the stage-select screen,
+                    # before we try to pick the stage.
+                    if not _ensure_on_sss(d, p, sc, cur, log, solo=solo):
+                        sub.update(verdict="never_started",
+                                   reason="couldn't reach stage select (no 2nd player, or the character didn't lock)")
+                        sub["screenshot"] = _shot_b64(boot.pid)
+                        result["checks"].append(sub)
+                        continue
                 started = _select_stage(sc, check.get("stage"), check.get("hold"))
                 sub["started"] = bool(started)
                 log(f"[{label}] match_started={started}")

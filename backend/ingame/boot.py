@@ -250,6 +250,20 @@ def _patch_dolphin_ini(user_dir, pipe_name):
     _write_ini(gc_path, mutate_gc)
 
 
+def _patch_clean_osd(user_dir):
+    """Turn off the emulator OSD overlays for a clean screenshot: Dolphin's FPS
+    counter and Slippi's on-screen ping ("Delay: N"). Keys are written lowercase
+    to match how Slippi writes GFX.ini (Dolphin reads them case-insensitively)."""
+    path = os.path.join(user_dir, "Config", "GFX.ini")
+
+    def mutate(upsert, _replace):
+        upsert("Settings", "showfps", "False")
+        upsert("Settings", "shownetplayping", "False")
+        upsert("Settings", "shownetplaymessages", "False")
+
+    _write_ini(path, mutate)
+
+
 def _patch_gfx_textures(user_dir, dump=False, hires=True):
     path = os.path.join(user_dir, "Config", "GFX.ini")
 
@@ -275,7 +289,8 @@ class DolphinBoot:
     (the user's real Slippi config is never written)."""
 
     def __init__(self, iso_path, slippi_path, runs_root, pipe_index=None,
-                 hires_textures=False, load_seed=None, log=lambda m: None):
+                 hires_textures=False, load_seed=None, clean_osd=False,
+                 log=lambda m: None):
         self.iso_path = iso_path
         self.slippi_path = slippi_path
         self.runs_root = Path(runs_root)
@@ -283,6 +298,7 @@ class DolphinBoot:
         self.pipe_index = pipe_index
         self.hires_textures = hires_textures
         self.load_seed = load_seed  # optional path to a Load/Textures dir to pre-seed
+        self.clean_osd = clean_osd  # turn off FPS/ping OSD overlays (capture mode)
         self.run_dir = None
         self.user_dir = None
         self.exe = None
@@ -307,6 +323,9 @@ class DolphinBoot:
         if self.pipe_index is None:
             self.pipe_index = pick_pipe_index()
         _patch_dolphin_ini(str(self.user_dir), f"slippibot{self.pipe_index}")
+
+        if self.clean_osd:
+            _patch_clean_osd(str(self.user_dir))
 
         if self.hires_textures:
             _patch_gfx_textures(str(self.user_dir), dump=False, hires=True)

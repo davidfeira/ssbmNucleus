@@ -94,7 +94,9 @@ def _r(v):
 
 def place_custom_fighter_icon(mex, fighter_name):
     """Move the new fighter's CSS icon into a free roster slot; return
-    {x, y, index} (cursor target is (x, y-3.5); index == in-game grid index)."""
+    {x, y, index, fighter} (cursor target is (x, y-3.5); index == in-game grid
+    index; fighter == the EXTERNAL character id, used by the runner's cursor-free
+    memory selection to pick this fighter without steering)."""
     layout = mex.get_css_layout()
     icons = layout.get("icons", []) or []
     if not icons:
@@ -110,9 +112,12 @@ def place_custom_fighter_icon(mex, fighter_name):
                   (-28.15, 16.4, -1.0), (28.25, 16.4, -1.0)]
     occupied = set((_r(ic.get("x")), _r(ic.get("y"))) for i, ic in enumerate(icons) if i != idx)
     slot = next(((x, y, z) for (x, y, z) in candidates if (_r(x), _r(y)) not in occupied), candidates[0])
+    # Capture the engine's EXTERNAL char id before mutating the icon (set_css_layout
+    # round-trips the "fighter" field, so the placed icon keeps it).
+    fighter_id = icons[idx].get("fighter")
     icons[idx] = {**icons[idx], "x": slot[0], "y": slot[1], "z": slot[2]}
     mex.set_css_layout(json.dumps({"template": layout.get("template"), "icons": icons}))
-    return {"x": slot[0], "y": slot[1], "index": idx}
+    return {"x": slot[0], "y": slot[1], "index": idx, "fighter": fighter_id}
 
 
 def place_custom_stage_icon(mex, stage_name):
@@ -139,9 +144,13 @@ def place_custom_stage_icon(mex, stage_name):
         raise RuntimeError(f"could not find the custom stage icon for '{stage_name}'")
     slot = (1.3, -9.1, 0.0)  # Battlefield's bottom-row position -- easy for the cursor
     icons = icons_of(pages[found[0]])
+    # Capture the engine's INTERNAL stage id so the runner can force-select it
+    # (no cursor / page navigation needed). Falls back to the placed coordinate if
+    # absent or out of the signed-byte range.
+    stage_id = icons[found[1]].get("stageID")
     icons[found[1]] = {**icons[found[1]], "x": slot[0], "y": slot[1], "z": slot[2]}
     mex.set_sss_layout(json.dumps({"pages": pages}))
-    return {"page": found[0], "x": slot[0], "y": slot[1]}
+    return {"page": found[0], "x": slot[0], "y": slot[1], "stageId": stage_id}
 
 
 def _das_install_framework(files_dir, log=lambda m: None):

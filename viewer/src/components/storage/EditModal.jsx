@@ -48,6 +48,8 @@ export default function EditModal({
 
   // In-game test (costumes only)
   onTestInGame,
+  onCaptureScreenshot,
+  onReplaceWithCapture,
   testingInGame,
   testStatus,
   testResult,
@@ -359,7 +361,7 @@ export default function EditModal({
                     />
                   ) : editingItem.data.hasScreenshot ? (
                     <img
-                      src={editingItem.data.screenshotUrl}
+                      src={`${editingItem.data.screenshotUrl}?t=${lastImageUpdate}`}
                       alt="Preview"
                       className="edit-modal-csp-image"
                       onError={(e) => e.target.style.display = 'none'}
@@ -423,6 +425,23 @@ export default function EditModal({
                       <line x1="18" y1="11" x2="18.01" y2="11"></line>
                     </svg>
                     <span>Test in Game</span>
+                  </button>
+                )}
+
+                {/* Capture stage screenshot (stage skin / DAS variant) */}
+                {onCaptureScreenshot && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={onCaptureScreenshot}
+                    disabled={saving || deleting || exporting || testingInGame}
+                    title="Boot the stage alone in a throwaway Dolphin and grab a clean whole-stage screenshot to use as the preview"
+                    style={{ marginBottom: '1rem' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    <span>Capture Screenshot</span>
                   </button>
                 )}
 
@@ -617,7 +636,7 @@ export default function EditModal({
                     fontWeight: 700, fontSize: '1.15em', marginBottom: '0.75rem', color: '#fff',
                     background: testResult.success ? 'var(--color-success, #2ecc71)' : 'var(--color-error, #e74c3c)'
                   }}>
-                    {testResult.success ? '✓ PASS' : `✕ ${String(testResult.verdict || '').toUpperCase()}`}
+                    {testResult.captured ? '✓ CAPTURED' : testResult.success ? '✓ PASS' : `✕ ${String(testResult.verdict || '').toUpperCase()}`}
                   </div>
                   <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>{testResult.reason}</p>
                   {testResult.onlineAborted && (
@@ -632,13 +651,32 @@ export default function EditModal({
                       style={{ maxWidth: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: '1rem' }}
                     />
                   )}
-                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                    <button className="edit-modal-action-btn edit-modal-action-btn--export" onClick={onTestInGame}>
-                      Test again
-                    </button>
-                    <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onResetTest}>
-                      Close
-                    </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {testResult.captured ? (
+                      <>
+                        <button
+                          className="edit-modal-action-btn edit-modal-action-btn--export"
+                          onClick={() => onReplaceWithCapture && onReplaceWithCapture(testResult.screenshot)}
+                        >
+                          Replace Current Screenshot
+                        </button>
+                        <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onCaptureScreenshot}>
+                          Retake
+                        </button>
+                        <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onResetTest}>
+                          Discard
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="edit-modal-action-btn edit-modal-action-btn--export" onClick={onTestInGame}>
+                          Test again
+                        </button>
+                        <button className="edit-modal-action-btn edit-modal-action-btn--cancel" onClick={onResetTest}>
+                          Close
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : null}

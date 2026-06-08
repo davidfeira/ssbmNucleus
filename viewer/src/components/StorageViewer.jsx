@@ -578,6 +578,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     confirmDialogData,
     handleEditClick,
     handleScreenshotChange,
+    replaceStageScreenshotWithCapture,
     handleCspChange,
     handleStockChange,
     handleSave,
@@ -1314,6 +1315,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         show3DViewer={show3DViewer}
         setShow3DViewer={setShow3DViewer}
         handleEditClick={handleEditClick}
+        replaceStageScreenshotWithCapture={replaceStageScreenshotWithCapture}
         // CSP Manager
         showCspManager={showCspManager}
         cspManagerSkin={cspManagerSkin}
