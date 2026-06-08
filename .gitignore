@@ -73,3 +73,20 @@ scripts/build/build/
 
 # libmelee/memory-probe harness venv
 tests/nucleus/melee_venv/
+
+# Dev scratch + harness outputs (experiment scripts and test dumps, not app code).
+# Root-anchored so they never hide legit nested files of the same type.
+/backend/_exp_*.py
+/backend/_cap_*.py
+/backend/tmp*/
+pytest-cache-files-*/
+/*.zip
+/*.dat
+/*.usd
+/sheik_*.png
+/sheik_*.jpg
+/sheik_*.yml
+/csp_test_out/
+/door_tex_dump/
+/parallel_test/
+/*_test_out/
