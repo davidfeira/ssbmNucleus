@@ -6,7 +6,6 @@ Slippi testing, reordering, and folder management for stored costumes.
 """
 
 import os
-import json
 import time
 import uuid
 import re
@@ -21,6 +20,7 @@ from flask import Blueprint, request, jsonify
 from core.config import PROJECT_ROOT, STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR, SERVICES_DIR
 from core.constants import get_char_prefix
 from core.costume_files import find_costume_archive_name, find_extracted_costume_archive
+from core.metadata import load_metadata, save_metadata
 
 import sys
 sys.path.insert(0, str(PROCESSOR_DIR))
@@ -58,16 +58,7 @@ def get_folder_id_at_position(skins, position):
 def get_storage_metadata():
     """Get storage metadata.json"""
     try:
-        metadata_file = STORAGE_PATH / 'metadata.json'
-
-        if not metadata_file.exists():
-            return jsonify({
-                'success': True,
-                'metadata': {'characters': {}}
-            })
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
+        metadata = load_metadata(default={'characters': {}})
 
         return jsonify({
             'success': True,
@@ -87,12 +78,9 @@ def list_storage_costumes():
         character = request.args.get('character')
         costumes = []
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': True, 'costumes': []})
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         characters_data = metadata.get('characters', {})
         if character:
@@ -159,12 +147,9 @@ def delete_storage_costume():
         if not character or not skin_id:
             return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -201,8 +186,7 @@ def delete_storage_costume():
 
         skins.pop(skin_index)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Deleted costume {skin_id} for {character}")
         return jsonify({'success': True, 'message': f'Successfully deleted {skin_id}', 'deleted_files': deleted_files})
@@ -223,12 +207,9 @@ def rename_storage_costume():
         if not character or not skin_id or not new_name:
             return jsonify({'success': False, 'error': 'Missing character, skinId, or newName parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -246,8 +227,7 @@ def rename_storage_costume():
         if not skin_found:
             return jsonify({'success': False, 'error': f'Skin {skin_id} not found for {character}'}), 404
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Renamed costume {skin_id} to '{new_name}'")
         return jsonify({'success': True, 'message': f'Successfully renamed to {new_name}'})
@@ -297,11 +277,8 @@ def update_costume_csp():
             with open(standalone_hd_csp, 'wb') as f:
                 f.write(csp_data)
 
-            metadata_file = STORAGE_PATH / 'metadata.json'
-            if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-
+            metadata = load_metadata()
+            if metadata is not None:
                 if character in metadata.get('characters', {}):
                     for skin in metadata['characters'][character].get('skins', []):
                         if skin['id'] == skin_id:
@@ -310,8 +287,7 @@ def update_costume_csp():
                             skin['hd_csp_filename'] = hd_csp_filename
                             break
 
-                    with open(metadata_file, 'w') as f:
-                        json.dump(metadata, f, indent=2)
+                    save_metadata(metadata)
 
             logger.info(f"[OK] Updated HD CSP for {character} - {skin_id}")
         else:
@@ -332,11 +308,8 @@ def update_costume_csp():
             zip_path.unlink()
             temp_zip.rename(zip_path)
 
-            metadata_file = STORAGE_PATH / 'metadata.json'
-            if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-
+            metadata = load_metadata()
+            if metadata is not None:
                 if character in metadata.get('characters', {}):
                     for skin in metadata['characters'][character].get('skins', []):
                         if skin['id'] == skin_id:
@@ -345,8 +318,7 @@ def update_costume_csp():
                             skin['csp_filename'] = csp_filename
                             break
 
-                    with open(metadata_file, 'w') as f:
-                        json.dump(metadata, f, indent=2)
+                    save_metadata(metadata)
 
             logger.info(f"[OK] Updated CSP for {character} - {skin_id}")
 
@@ -396,11 +368,8 @@ def capture_hd_csp(character, skin_id):
             with Image.open(final_hd_csp) as img:
                 width, height = img.size
 
-            metadata_file = STORAGE_PATH / 'metadata.json'
-            if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-
+            metadata = load_metadata()
+            if metadata is not None:
                 if character in metadata.get('characters', {}):
                     for skin in metadata['characters'][character].get('skins', []):
                         if skin['id'] == skin_id:
@@ -409,8 +378,7 @@ def capture_hd_csp(character, skin_id):
                             skin['hd_csp_size'] = f"{width}x{height}"
                             break
 
-                    with open(metadata_file, 'w') as f:
-                        json.dump(metadata, f, indent=2)
+                    save_metadata(metadata)
 
             logger.info(f"[OK] Generated HD CSP for {character}/{skin_id} at {scale}x ({width}x{height})")
             return jsonify({'success': True, 'message': f'HD CSP generated at {scale}x', 'resolution': f"{scale}x", 'size': f"{width}x{height}"})
@@ -442,12 +410,9 @@ def manage_csp(character, skin_id):
 
         logger.info(f"[CSP Manage] {character}/{skin_id} action={action} altId={alt_id}")
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         char_data = metadata.get('characters', {}).get(character, {})
         skins = char_data.get('skins', [])
@@ -470,16 +435,14 @@ def manage_csp(character, skin_id):
             else:
                 skin['active_csp_id'] = alt_id
 
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
 
             logger.info(f"[OK] Set active CSP to: {skin['active_csp_id']}")
             return jsonify({'success': True, 'message': 'Active CSP updated', 'activeCspId': skin['active_csp_id']})
 
         elif action == 'reset':
             skin['active_csp_id'] = None
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
             return jsonify({'success': True, 'message': 'Reset to original CSP', 'activeCspId': None})
 
         elif action == 'remove':
@@ -494,8 +457,7 @@ def manage_csp(character, skin_id):
 
             skin['alternate_csps'] = [a for a in alt_csps if a.get('id') != alt_id]
 
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
 
             return jsonify({'success': True, 'message': 'Alt CSP removed'})
 
@@ -533,8 +495,7 @@ def manage_csp(character, skin_id):
                 'timestamp': datetime.now().isoformat()
             })
 
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
 
             return jsonify({
                 'success': True,
@@ -625,8 +586,7 @@ def manage_csp(character, skin_id):
                         })
                         skin['alternate_csps'] = alt_csps
 
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
+                save_metadata(metadata)
 
                 return jsonify({'success': True, 'message': f'HD CSP regenerated at {scale}x', 'isHd': True, 'isMain': is_main})
 
@@ -685,11 +645,8 @@ def update_costume_stock():
         zip_path.unlink()
         temp_zip.rename(zip_path)
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-
+        metadata = load_metadata()
+        if metadata is not None:
             if character in metadata.get('characters', {}):
                 for skin in metadata['characters'][character].get('skins', []):
                     if skin['id'] == skin_id:
@@ -697,8 +654,7 @@ def update_costume_stock():
                         skin['stock_source'] = 'custom'
                         break
 
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
+                save_metadata(metadata)
 
         logger.info(f"[OK] Updated stock icon for {character} - {skin_id}")
         return jsonify({'success': True, 'message': 'Stock icon updated successfully'})
@@ -762,11 +718,8 @@ def retest_costume_slippi():
             except:
                 pass
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-
+        metadata = load_metadata()
+        if metadata is not None:
             if character in metadata.get('characters', {}):
                 for skin in metadata['characters'][character].get('skins', []):
                     if skin['id'] == skin_id:
@@ -776,8 +729,7 @@ def retest_costume_slippi():
                         skin['slippi_manual_override'] = None
                         break
 
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
+                save_metadata(metadata)
 
         logger.info(f"[OK] Retested slippi for {character} - {skin_id}: {validation['slippi_safe']}")
         return jsonify({
@@ -802,12 +754,9 @@ def override_costume_slippi():
         if not character or not skin_id or slippi_safe is None:
             return jsonify({'success': False, 'error': 'Missing character, skinId, or slippiSafe parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -824,8 +773,7 @@ def override_costume_slippi():
         if not skin_found:
             return jsonify({'success': False, 'error': f'Skin {skin_id} not found for {character}'}), 404
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Manually set slippi status for {character} - {skin_id}: {slippi_safe}")
         return jsonify({
@@ -850,12 +798,9 @@ def reorder_costumes():
         if character is None or from_index is None or to_index is None:
             return jsonify({'success': False, 'error': 'Missing character, fromIndex, or toIndex parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -876,8 +821,7 @@ def reorder_costumes():
             elif 'folder_id' in item:
                 del item['folder_id']
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Reordered {character} skins: moved index {from_index} to {to_index}")
         return jsonify({'success': True, 'skins': skins})
@@ -897,12 +841,9 @@ def move_costume_to_top():
         if not character or not skin_id:
             return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -922,8 +863,7 @@ def move_costume_to_top():
         if skin_index > 0:
             skin = skins.pop(skin_index)
             skins.insert(0, skin)
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
             logger.info(f"[OK] Moved {character} skin {skin_id} to top")
 
         return jsonify({'success': True, 'skins': skins})
@@ -943,12 +883,9 @@ def move_costume_to_bottom():
         if not character or not skin_id:
             return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -968,8 +905,7 @@ def move_costume_to_bottom():
         if skin_index < len(skins) - 1:
             skin = skins.pop(skin_index)
             skins.append(skin)
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
             logger.info(f"[OK] Moved {character} skin {skin_id} to bottom")
 
         return jsonify({'success': True, 'skins': skins})
@@ -992,12 +928,7 @@ def create_folder():
             return jsonify({'success': False, 'error': 'Missing character parameter'}), 400
 
         STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-        else:
-            metadata = {'characters': {}}
+        metadata = load_metadata(default={'characters': {}})
 
         characters = metadata.setdefault('characters', {})
         character_data = characters.setdefault(character, {})
@@ -1008,8 +939,7 @@ def create_folder():
 
         skins.append(new_folder)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Created folder '{name}' for {character}")
         return jsonify({'success': True, 'folder': new_folder, 'skins': skins})
@@ -1030,12 +960,9 @@ def rename_folder():
         if not character or not folder_id or not new_name:
             return jsonify({'success': False, 'error': 'Missing character, folderId, or newName parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -1049,8 +976,7 @@ def rename_folder():
 
         folder['name'] = new_name
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Renamed folder {folder_id} to '{new_name}'")
         return jsonify({'success': True, 'skins': skins})
@@ -1070,12 +996,9 @@ def delete_folder():
         if not character or not folder_id:
             return jsonify({'success': False, 'error': 'Missing character or folderId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -1093,8 +1016,7 @@ def delete_folder():
 
         skins.pop(folder_idx)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Deleted folder {folder_id}")
         return jsonify({'success': True, 'skins': skins})
@@ -1114,12 +1036,9 @@ def toggle_folder():
         if not character or not folder_id:
             return jsonify({'success': False, 'error': 'Missing character or folderId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -1133,8 +1052,7 @@ def toggle_folder():
 
         folder['expanded'] = not folder.get('expanded', True)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Toggled folder {folder_id} expanded: {folder['expanded']}")
         return jsonify({'success': True, 'expanded': folder['expanded'], 'skins': skins})
@@ -1155,12 +1073,9 @@ def set_skin_folder():
         if not character or not skin_id:
             return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if character not in metadata.get('characters', {}):
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
@@ -1187,8 +1102,7 @@ def set_skin_folder():
         elif 'folder_id' in skin:
             del skin['folder_id']
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Set skin {skin_id} folder to {folder_id}")
         return jsonify({'success': True, 'skins': skins})

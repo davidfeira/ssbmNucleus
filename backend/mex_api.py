@@ -69,7 +69,7 @@ from blueprints import (
 )
 
 # Import extras API (existing blueprint)
-from extras_api import extras_bp, init_extras_api
+from blueprints.extras import extras_bp, init_extras_api
 from core.state import get_project_files_dir
 
 # Create Flask app

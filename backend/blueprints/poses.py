@@ -6,7 +6,6 @@ Handles saving, listing, deleting poses and batch CSP generation using poses.
 
 import os
 import re
-import json
 import time
 import shutil
 import zipfile
@@ -19,6 +18,7 @@ from flask import Blueprint, request, jsonify, send_file
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR
 from core.constants import CHAR_PREFIXES
 from core.costume_files import find_extracted_costume_archive
+from core.metadata import load_metadata, save_metadata
 from generate_csp import generate_single_csp_internal, apply_character_specific_layers
 
 logger = logging.getLogger(__name__)
@@ -281,15 +281,12 @@ def batch_generate_pose_csps():
         aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
 
         # Load metadata to find skin ZIPs
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({
                 'success': False,
                 'error': 'Metadata file not found'
             }), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         char_data = metadata.get('characters', {}).get(character, {})
         skins = char_data.get('skins', [])
@@ -427,8 +424,7 @@ def batch_generate_pose_csps():
                         logger.warning(f"Failed to cleanup temp dir: {cleanup_err}")
 
         # Save updated metadata
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Batch CSP generation complete: {generated} generated, {failed} failed")
 

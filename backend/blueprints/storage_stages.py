@@ -6,12 +6,12 @@ for stored stage variants.
 """
 
 import re
-import json
 import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from core.config import STORAGE_PATH
+from core.metadata import load_metadata, save_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,9 @@ def delete_storage_stage():
         if not stage_folder or not variant_id:
             return jsonify({'success': False, 'error': 'Missing stageFolder or variantId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_folder not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
@@ -72,8 +69,7 @@ def delete_storage_stage():
 
         variants.pop(variant_index)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Deleted stage variant {variant_id} from {stage_folder}")
         return jsonify({'success': True, 'message': f'Successfully deleted {variant_id}', 'deleted_files': deleted_files})
@@ -94,12 +90,9 @@ def rename_storage_stage():
         if not stage_folder or not variant_id or not new_name:
             return jsonify({'success': False, 'error': 'Missing stageFolder, variantId, or newName parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_folder not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
@@ -124,8 +117,7 @@ def rename_storage_stage():
         if not variant_found:
             return jsonify({'success': False, 'error': f'Variant {variant_id} not found in {stage_folder}'}), 404
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Renamed stage variant {variant_id} to '{new_name}'")
         return jsonify({'success': True, 'message': f'Successfully renamed to {new_name}'})
@@ -165,11 +157,8 @@ def update_stage_screenshot():
         storage_screenshot_path = das_folder / f"{variant_id}_screenshot.png"
         storage_screenshot_path.write_bytes(screenshot_data)
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-
+        metadata = load_metadata()
+        if metadata is not None:
             if stage_folder in metadata.get('stages', {}):
                 stage_data = metadata['stages'][stage_folder]
                 variants = stage_data.get('variants', [])
@@ -181,8 +170,7 @@ def update_stage_screenshot():
                         variant['screenshot_filename'] = f"{variant_id}_screenshot.png"
                         break
 
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
+                save_metadata(metadata)
 
         logger.info(f"[OK] Updated screenshot for {stage_folder}/{variant_id}")
         return jsonify({'success': True, 'message': 'Screenshot updated successfully', 'screenshotUrl': f"/storage/das/{stage_folder}/{variant_id}_screenshot.png"})
@@ -203,12 +191,9 @@ def set_stage_slippi():
         if not stage_name or not variant_id or slippi_safe is None:
             return jsonify({'success': False, 'error': 'Missing stageName, variantId, or slippiSafe parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_name not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage {stage_name} not found in metadata'}), 404
@@ -225,8 +210,7 @@ def set_stage_slippi():
         if not variant_found:
             return jsonify({'success': False, 'error': f'Variant {variant_id} not found for {stage_name}'}), 404
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Manually set slippi status for {stage_name} - {variant_id}: {slippi_safe}")
         return jsonify({
@@ -251,12 +235,9 @@ def reorder_stages():
         if stage_folder is None or from_index is None or to_index is None:
             return jsonify({'success': False, 'error': 'Missing stageFolder, fromIndex, or toIndex parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_folder not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
@@ -270,8 +251,7 @@ def reorder_stages():
         variant = variants.pop(from_index)
         variants.insert(to_index, variant)
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Reordered {stage_folder} variants: moved index {from_index} to {to_index}")
         return jsonify({'success': True, 'variants': variants})
@@ -291,12 +271,9 @@ def move_stage_to_top():
         if not stage_folder or not variant_id:
             return jsonify({'success': False, 'error': 'Missing stageFolder or variantId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_folder not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
@@ -316,8 +293,7 @@ def move_stage_to_top():
         if variant_index > 0:
             variant = variants.pop(variant_index)
             variants.insert(0, variant)
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
             logger.info(f"[OK] Moved {stage_folder} variant {variant_id} to top")
 
         return jsonify({'success': True, 'variants': variants})
@@ -337,12 +313,9 @@ def move_stage_to_bottom():
         if not stage_folder or not variant_id:
             return jsonify({'success': False, 'error': 'Missing stageFolder or variantId parameter'}), 400
 
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         if stage_folder not in metadata.get('stages', {}):
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
@@ -362,8 +335,7 @@ def move_stage_to_bottom():
         if variant_index < len(variants) - 1:
             variant = variants.pop(variant_index)
             variants.append(variant)
-            with open(metadata_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            save_metadata(metadata)
             logger.info(f"[OK] Moved {stage_folder} variant {variant_id} to bottom")
 
         return jsonify({'success': True, 'variants': variants})
