@@ -12,10 +12,16 @@ import { useState } from 'react'
 export function useFolderManagement({
   selectedCharacter,
   API_URL,
-  onRefresh
+  onRefresh,
+  // Optional externally-owned expansion state. StorageViewer owns this so it
+  // persists when CharacterDetailView (which calls this hook) unmounts on Back.
+  expandedFolders: externalExpandedFolders,
+  setExpandedFolders: externalSetExpandedFolders
 }) {
   // Folder state
-  const [expandedFolders, setExpandedFolders] = useState({}) // { folderId: true/false }
+  const [internalExpandedFolders, setInternalExpandedFolders] = useState({}) // { folderId: true/false }
+  const expandedFolders = externalExpandedFolders !== undefined ? externalExpandedFolders : internalExpandedFolders
+  const setExpandedFolders = externalSetExpandedFolders || setInternalExpandedFolders
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
 

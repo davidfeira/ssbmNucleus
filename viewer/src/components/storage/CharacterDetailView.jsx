@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { useInGameTest } from '../../hooks/useInGameTest'
+import { useFolderManagement } from '../../hooks/useFolderManagement'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import FolderCard from './FolderCard'
@@ -31,112 +32,146 @@ export default function CharacterDetailView({
   selectedCharacter,
   allCharacters,
   onBack,
-  // Drag and drop
-  draggedItem,
-  dragStartIndex,
-  dragOverIndex,
-  previewOrder,
-  reordering,
-  isDraggingActive,
-  justDroppedId,
-  setJustDroppedId,
-  handleDragStart,
-  handleDragOver,
-  handleDragEnter,
-  handleDragLeave,
-  handleDragEnd,
-  handleSkinDrop,
-  justDraggedRef,
-  // Folder management
-  handleCreateFolder,
+  // Folder expansion state — owned by StorageViewer so it persists across
+  // character navigation; injected into the colocated useFolderManagement hook
   expandedFolders,
-  toggleFolder,
-  editingFolderId,
-  setEditingFolderId,
-  editingFolderName,
-  setEditingFolderName,
-  saveFolderName,
-  startEditingFolder,
-  deleteFolder,
-  // Edit modal
-  showEditModal,
-  editingItem,
-  editName,
-  setEditName,
-  saving,
-  deleting,
-  exporting,
-  cspPreview,
-  stockPreview,
-  screenshotPreview,
-  lastImageUpdate,
-  editSlippiSafe,
-  setEditSlippiSafe,
-  slippiAdvancedOpen,
-  setSlippiAdvancedOpen,
-  handleSave,
-  handleCancel,
-  handleDelete,
-  handleExport,
-  handleCspChange,
-  handleStockChange,
-  handleScreenshotChange,
-  handleSlippiRetest,
-  handleSlippiOverride,
-  openCspManager,
-  startSkinCreatorFromVault,
-  show3DViewer,
-  setShow3DViewer,
-  // CSP Manager
-  showCspManager,
-  cspManagerSkin,
-  pendingMainCspPreview,
-  hdCspInfo,
-  compareSliderPosition,
-  alternativeCsps,
-  hdResolution,
-  capturingHdCsp,
-  closeCspManager,
-  handleCspManagerMainChange,
-  handleCompareSliderStart,
-  handleSwapCsp,
-  handleRemoveAlternativeCsp,
-  handleAddAlternativeCsp,
-  setHdResolution,
-  handleCaptureHdCsp,
-  handleRegenerateAltHd,
-  handleResetToOriginal,
-  handleSaveCspManager,
-  handleUploadMainCsp,
-  handleUploadAltCsp,
-  // Slippi dialog
-  showSlippiDialog,
-  slippiDialogData,
-  retestingItem,
-  handleRetestFixChoice,
-  handleSlippiChoice,
-  // Confirm dialog
-  showConfirmDialog,
-  confirmDialogData,
-  confirmDelete,
-  cancelDelete,
-  // Context menu
-  contextMenu,
-  handleMoveToTop,
-  handleMoveToBottom,
-  handleSkinContextMenu,
-  handleEditClick,
-  // Skin creator
-  showSkinCreator,
-  closeSkinCreator,
-  openSkinCreator,
+  setExpandedFolders,
+  // Shared state clusters — these hooks live in StorageViewer because
+  // StageDetailView and grid-level modals consume the same state
+  dragDrop,
+  editModal,
+  cspManager,
+  slippiDialog,
+  contextMenuApi,
+  skinCreator,
+  // Identity / data / callbacks
   onSkinCreatorChange,
   onRefresh,
   onCostumesUpdated,
-  skinCreatorInitialCostume,
-  // API
   API_URL
 }) {
+  // Drag and drop (shared useDragAndDrop instance)
+  const {
+    draggedItem,
+    previewOrder,
+    reordering,
+    isDraggingActive,
+    justDroppedId,
+    justDraggedRef,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragEnd,
+    handleSkinDrop
+  } = dragDrop
+
+  // Edit modal (shared useEditModal instance, incl. confirm dialog state)
+  const {
+    showEditModal,
+    editingItem,
+    editName,
+    setEditName,
+    saving,
+    deleting,
+    exporting,
+    cspPreview,
+    stockPreview,
+    screenshotPreview,
+    editSlippiSafe,
+    setEditSlippiSafe,
+    slippiAdvancedOpen,
+    setSlippiAdvancedOpen,
+    show3DViewer,
+    setShow3DViewer,
+    showConfirmDialog,
+    confirmDialogData,
+    handleEditClick,
+    handleScreenshotChange,
+    handleCspChange,
+    handleStockChange,
+    handleSave,
+    handleDelete,
+    handleExport,
+    handleCancel,
+    confirmDelete,
+    cancelDelete
+  } = editModal
+
+  // CSP manager (shared useCspManager instance)
+  const {
+    showCspManager,
+    cspManagerSkin,
+    pendingMainCspPreview,
+    hdCspInfo,
+    compareSliderPosition,
+    alternativeCsps,
+    hdResolution,
+    setHdResolution,
+    capturingHdCsp,
+    lastImageUpdate,
+    openCspManager,
+    closeCspManager,
+    handleCspManagerMainChange,
+    handleCompareSliderStart,
+    handleSwapCsp,
+    handleRemoveAlternativeCsp,
+    handleAddAlternativeCsp,
+    handleCaptureHdCsp,
+    handleRegenerateAltHd,
+    handleResetToOriginal,
+    handleSaveCspManager,
+    handleUploadMainCsp,
+    handleUploadAltCsp
+  } = cspManager
+
+  // Slippi safety dialog / retest (shared with import flow at StorageViewer level)
+  const {
+    showSlippiDialog,
+    slippiDialogData,
+    retestingItem,
+    handleRetestFixChoice,
+    handleSlippiChoice,
+    handleSlippiRetest,
+    handleSlippiOverride
+  } = slippiDialog
+
+  // Context menu (state shared with StageDetailView's variant context menu)
+  const {
+    contextMenu,
+    handleSkinContextMenu,
+    handleMoveToTop,
+    handleMoveToBottom
+  } = contextMenuApi
+
+  // Skin creator (state shared with "edit from vault" flow in StageDetailView)
+  const {
+    showSkinCreator,
+    openSkinCreator,
+    closeSkinCreator,
+    startSkinCreatorFromVault,
+    skinCreatorInitialCostume
+  } = skinCreator
+
+  // Folder management — exclusive to this view, so the hook lives here.
+  // Expansion state is injected from StorageViewer to persist across navigation.
+  const {
+    editingFolderId,
+    setEditingFolderId,
+    editingFolderName,
+    setEditingFolderName,
+    toggleFolder,
+    handleCreateFolder,
+    startEditingFolder,
+    saveFolderName
+  } = useFolderManagement({
+    selectedCharacter,
+    API_URL,
+    onRefresh,
+    expandedFolders,
+    setExpandedFolders
+  })
+
   const charData = allCharacters[selectedCharacter]
   const allSkins = charData?.skins || []
   const skinCount = allSkins.filter(s => s.type !== 'folder' && s.visible !== false).length

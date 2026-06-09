@@ -3,15 +3,10 @@ import './StorageViewer.css'
 import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
 import EmbeddedModelViewer from './EmbeddedModelViewer'
-import SkinCreator from './SkinCreator'
 import SlippiSafetyDialog from './shared/SlippiSafetyDialog'
 import DuplicateImportDialog from './shared/DuplicateImportDialog'
 import ConfirmDialog from './shared/ConfirmDialog'
 import EditModal from './storage/EditModal'
-import CspManagerModal from './storage/CspManagerModal'
-import FolderCard from './storage/FolderCard'
-import SkinCard from './storage/SkinCard'
-import ContextMenu from './storage/ContextMenu'
 import XdeltaImportModal from './storage/XdeltaImportModal'
 import IsoScanModal from './storage/IsoScanModal'
 import XdeltaEditModal from './storage/XdeltaEditModal'
@@ -38,13 +33,11 @@ import CustomStageDetailView from './storage/CustomStageDetailView'
 import CustomCharactersGrid from './storage/CustomCharactersGrid'
 import CustomCharacterDetailView from './storage/CustomCharacterDetailView'
 import { useDragAndDrop } from '../hooks/useDragAndDrop'
-import { useFolderManagement } from '../hooks/useFolderManagement'
 import { useFileImport } from '../hooks/useFileImport'
 import { useXdeltaPatches } from '../hooks/useXdeltaPatches'
 import { useXdeltaProgress } from '../hooks/useXdeltaProgress'
 import { useCspManager } from '../hooks/useCspManager'
 import { useEditModal } from '../hooks/useEditModal'
-import { buildDisplayList, countSkinsInFolder, getFolderIdAtPosition } from '../utils/storageViewerUtils'
 import { playSound, playHoverSound } from '../utils/sounds'
 import { API_URL, BACKEND_URL } from '../config'
 
@@ -273,17 +266,13 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // Drag and drop hook
   const {
     draggedItem,
-    dragStartIndex,
     dragOverIndex,
     previewOrder,
     reordering,
     setReordering,
-    dragTargetFolder,
-    setDragTargetFolder,
     justDraggedRef,
     isDraggingActive,
     justDroppedId,
-    setJustDroppedId,
     handleDragStart,
     handleDragOver,
     handleDragEnter,
@@ -300,24 +289,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     fetchStageVariants
   })
 
-  // Folder management hook
-  const {
-    expandedFolders,
-    setExpandedFolders,
-    editingFolderId,
-    setEditingFolderId,
-    editingFolderName,
-    setEditingFolderName,
-    toggleFolder,
-    handleCreateFolder,
-    startEditingFolder,
-    saveFolderName,
-    deleteFolder
-  } = useFolderManagement({
-    selectedCharacter,
-    API_URL,
-    onRefresh
-  })
+  // Folder expansion state — owned here so it persists when CharacterDetailView
+  // unmounts on Back. The rest of folder management (useFolderManagement) now
+  // lives inside CharacterDetailView, which this state is injected into.
+  const [expandedFolders, setExpandedFolders] = useState({})
 
   // File import hook
   const {
@@ -907,79 +882,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   }
 
 
-  const handleDropOnFolder = async (e, folderId) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (!draggedItem) return
-
-    setReordering(true)
-
-    try {
-      const response = await fetch(`${API_URL}/storage/items/move`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character: selectedCharacter,
-          itemId: draggedItem.id,
-          itemType: draggedItem.type || 'skin',
-          targetFolderId: folderId,
-          targetIndex: -1 // Append at end
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        await onRefresh()
-      } else {
-        alert(`Move to folder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Move to folder error:', err)
-      alert(`Move to folder error: ${err.message}`)
-    } finally {
-      setReordering(false)
-      setDraggedItem(null)
-      setDragStartIndex(null)
-      setDragOverIndex(null)
-      setPreviewOrder(null)
-      setDragTargetFolder(null)
-    }
-  }
-
-  const handleItemReorder = async (fromIndex, toIndex, parentFolderId = null) => {
-    if (fromIndex === toIndex) return
-
-    setReordering(true)
-
-    try {
-      const response = await fetch(`${API_URL}/storage/items/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character: selectedCharacter,
-          parentFolderId,
-          fromIndex,
-          toIndex
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        await onRefresh()
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
-    } finally {
-      setReordering(false)
-    }
-  }
-
   // Context menu handlers
   const handleSkinContextMenu = (e, skin, index) => {
     e.preventDefault()
@@ -1364,110 +1266,106 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         selectedCharacter={selectedCharacter}
         allCharacters={allCharacters}
         onBack={() => setSelectedCharacter(null)}
-        // Drag and drop
-        draggedItem={draggedItem}
-        dragStartIndex={dragStartIndex}
-        dragOverIndex={dragOverIndex}
-        previewOrder={previewOrder}
-        reordering={reordering}
-        isDraggingActive={isDraggingActive}
-        justDroppedId={justDroppedId}
-        setJustDroppedId={setJustDroppedId}
-        handleDragStart={handleDragStart}
-        handleDragOver={handleDragOver}
-        handleDragEnter={handleDragEnter}
-        handleDragLeave={handleDragLeave}
-        handleDragEnd={handleDragEnd}
-        handleSkinDrop={handleSkinDrop}
-        justDraggedRef={justDraggedRef}
-        // Folder management
-        handleCreateFolder={handleCreateFolder}
+        // Folder expansion state (persists here across character navigation)
         expandedFolders={expandedFolders}
-        toggleFolder={toggleFolder}
-        editingFolderId={editingFolderId}
-        setEditingFolderId={setEditingFolderId}
-        editingFolderName={editingFolderName}
-        setEditingFolderName={setEditingFolderName}
-        saveFolderName={saveFolderName}
-        startEditingFolder={startEditingFolder}
-        deleteFolder={deleteFolder}
-        // Edit modal
-        showEditModal={showEditModal}
-        editingItem={editingItem}
-        editName={editName}
-        setEditName={setEditName}
-        saving={saving}
-        deleting={deleting}
-        exporting={exporting}
-        cspPreview={cspPreview}
-        stockPreview={stockPreview}
-        screenshotPreview={screenshotPreview}
-        lastImageUpdate={lastImageUpdate}
-        editSlippiSafe={editSlippiSafe}
-        setEditSlippiSafe={setEditSlippiSafe}
-        slippiAdvancedOpen={slippiAdvancedOpen}
-        setSlippiAdvancedOpen={setSlippiAdvancedOpen}
-        handleSave={handleSave}
-        handleCancel={handleCancel}
-        handleDelete={handleDelete}
-        handleExport={handleExport}
-        handleCspChange={handleCspChange}
-        handleStockChange={handleStockChange}
-        handleScreenshotChange={handleScreenshotChange}
-        handleSlippiRetest={handleSlippiRetest}
-        handleSlippiOverride={handleSlippiOverride}
-        openCspManager={openCspManager}
-        startSkinCreatorFromVault={startSkinCreatorFromVault}
-        show3DViewer={show3DViewer}
-        setShow3DViewer={setShow3DViewer}
-        // CSP Manager
-        showCspManager={showCspManager}
-        cspManagerSkin={cspManagerSkin}
-        pendingMainCspPreview={pendingMainCspPreview}
-        hdCspInfo={hdCspInfo}
-        compareSliderPosition={compareSliderPosition}
-        alternativeCsps={alternativeCsps}
-        hdResolution={hdResolution}
-        capturingHdCsp={capturingHdCsp}
-        closeCspManager={closeCspManager}
-        handleCspManagerMainChange={handleCspManagerMainChange}
-        handleCompareSliderStart={handleCompareSliderStart}
-        handleSwapCsp={handleSwapCsp}
-        handleRemoveAlternativeCsp={handleRemoveAlternativeCsp}
-        handleAddAlternativeCsp={handleAddAlternativeCsp}
-        setHdResolution={setHdResolution}
-        handleCaptureHdCsp={handleCaptureHdCsp}
-        handleRegenerateAltHd={handleRegenerateAltHd}
-        handleResetToOriginal={handleResetToOriginal}
-        handleSaveCspManager={handleSaveCspManager}
-        handleUploadMainCsp={handleUploadMainCsp}
-        handleUploadAltCsp={handleUploadAltCsp}
-        // Slippi dialog
-        showSlippiDialog={showSlippiDialog}
-        slippiDialogData={slippiDialogData}
-        retestingItem={retestingItem}
-        handleRetestFixChoice={handleRetestFixChoice}
-        handleSlippiChoice={handleSlippiChoice}
-        // Confirm dialog
-        showConfirmDialog={showConfirmDialog}
-        confirmDialogData={confirmDialogData}
-        confirmDelete={confirmDelete}
-        cancelDelete={cancelDelete}
-        // Context menu
-        contextMenu={contextMenu}
-        handleMoveToTop={handleMoveToTop}
-        handleMoveToBottom={handleMoveToBottom}
-        handleSkinContextMenu={handleSkinContextMenu}
-        handleEditClick={handleEditClick}
-        // Skin creator
-        showSkinCreator={showSkinCreator}
-        closeSkinCreator={closeSkinCreator}
-        openSkinCreator={openSkinCreator}
+        setExpandedFolders={setExpandedFolders}
+        // Shared state clusters (same hook instances also feed StageDetailView
+        // and the grid-level modals below)
+        dragDrop={{
+          draggedItem,
+          previewOrder,
+          reordering,
+          isDraggingActive,
+          justDroppedId,
+          justDraggedRef,
+          handleDragStart,
+          handleDragOver,
+          handleDragEnter,
+          handleDragLeave,
+          handleDragEnd,
+          handleSkinDrop
+        }}
+        editModal={{
+          showEditModal,
+          editingItem,
+          editName,
+          setEditName,
+          saving,
+          deleting,
+          exporting,
+          cspPreview,
+          stockPreview,
+          screenshotPreview,
+          editSlippiSafe,
+          setEditSlippiSafe,
+          slippiAdvancedOpen,
+          setSlippiAdvancedOpen,
+          show3DViewer,
+          setShow3DViewer,
+          showConfirmDialog,
+          confirmDialogData,
+          handleEditClick,
+          handleScreenshotChange,
+          handleCspChange,
+          handleStockChange,
+          handleSave,
+          handleDelete,
+          handleExport,
+          handleCancel,
+          confirmDelete,
+          cancelDelete
+        }}
+        cspManager={{
+          showCspManager,
+          cspManagerSkin,
+          pendingMainCspPreview,
+          hdCspInfo,
+          compareSliderPosition,
+          alternativeCsps,
+          hdResolution,
+          setHdResolution,
+          capturingHdCsp,
+          lastImageUpdate,
+          openCspManager,
+          closeCspManager,
+          handleCspManagerMainChange,
+          handleCompareSliderStart,
+          handleSwapCsp,
+          handleRemoveAlternativeCsp,
+          handleAddAlternativeCsp,
+          handleCaptureHdCsp,
+          handleRegenerateAltHd,
+          handleResetToOriginal,
+          handleSaveCspManager,
+          handleUploadMainCsp,
+          handleUploadAltCsp
+        }}
+        slippiDialog={{
+          showSlippiDialog,
+          slippiDialogData,
+          retestingItem,
+          handleRetestFixChoice,
+          handleSlippiChoice,
+          handleSlippiRetest,
+          handleSlippiOverride
+        }}
+        contextMenuApi={{
+          contextMenu,
+          handleSkinContextMenu,
+          handleMoveToTop,
+          handleMoveToBottom
+        }}
+        skinCreator={{
+          showSkinCreator,
+          openSkinCreator,
+          closeSkinCreator,
+          startSkinCreatorFromVault,
+          skinCreatorInitialCostume
+        }}
+        // Identity / data / callbacks
         onSkinCreatorChange={onSkinCreatorChange}
         onRefresh={onRefresh}
         onCostumesUpdated={handleCostumeAssetsUpdated}
-        skinCreatorInitialCostume={skinCreatorInitialCostume}
-        // API
         API_URL={API_URL}
       />
     )

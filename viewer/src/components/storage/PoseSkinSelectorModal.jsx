@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import HexagonLoader from '../shared/HexagonLoader'
 import { getAppContentPortalTarget } from './appContentPortal'
+import { CloseIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
 
 /**
@@ -9,13 +10,6 @@ import { playSound } from '../../utils/sounds'
  * Opens when clicking a saved pose, allows selecting multiple skins
  * to batch generate CSPs using that pose
  */
-
-const CloseIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="18" y1="6" x2="6" y2="18"/>
-    <line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-)
 
 const CheckIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
