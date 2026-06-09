@@ -128,7 +128,7 @@ echo ""
 
 # Step 3: Copy HSDRawViewer.exe for Wine
 echo -e "${BLUE}[4/5] Copying HSDRawViewer.exe for Wine support...${NC}"
-HSDRAW_SRC="utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows"
+HSDRAW_SRC="utility/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows"
 if [ -d "$HSDRAW_SRC" ]; then
     mkdir -p dist-backend/hsdraw
     cp -r "$HSDRAW_SRC"/* dist-backend/hsdraw/

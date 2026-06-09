@@ -13,7 +13,7 @@ echo - build/ (MEX project data)
 echo.
 echo This will KEEP:
 echo - utility/assets/vanilla/ (vanilla assets)
-echo - utility/website/backend/tools/processor/csp_data/ (character data)
+echo - utility/tools/processor/csp_data/ (character data)
 echo.
 pause
 

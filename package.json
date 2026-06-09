@@ -70,8 +70,8 @@
         "filter": ["**/*"]
       },
       {
-        "from": "utility/website/backend/tools",
-        "to": "utility/website/backend/tools",
+        "from": "utility/tools",
+        "to": "utility/tools",
         "filter": ["**/*"]
       },
       {

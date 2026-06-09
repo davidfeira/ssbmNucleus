@@ -73,7 +73,7 @@ else:
 if getattr(sys, 'frozen', False):
     HSDRAW_EXE = RESOURCES_DIR / "utility/HSDRawViewer/HSDRawViewer.exe"
 else:
-    HSDRAW_EXE = PROJECT_ROOT / "utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows/HSDRawViewer.exe"
+    HSDRAW_EXE = PROJECT_ROOT / "utility/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows/HSDRawViewer.exe"
 
 # User data paths (writable locations)
 MEX_PROJECT_PATH = PROJECT_ROOT / "build/project.mexproj"
@@ -88,12 +88,15 @@ VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 # Processor tools paths for CSP generation and slippi validation
 if getattr(sys, 'frozen', False):
     # Running as bundled exe - modules are bundled in the exe
-    PROCESSOR_DIR = Path(sys._MEIPASS) / "utility" / "website" / "backend" / "tools" / "processor"
-    SERVICES_DIR = Path(sys._MEIPASS) / "utility" / "website" / "backend" / "app" / "services"
+    PROCESSOR_DIR = Path(sys._MEIPASS) / "utility" / "tools" / "processor"
+    SERVICES_DIR = Path(sys._MEIPASS) / "utility" / "tools" / "services"
 else:
     # Running as Python script
-    PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
-    SERVICES_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
+    PROCESSOR_DIR = PROJECT_ROOT / "utility" / "tools" / "processor"
+    SERVICES_DIR = PROJECT_ROOT / "utility" / "tools" / "services"
+
+# Processor tools log into the app's logs folder (see processor/logging_config.py)
+os.environ.setdefault('NUCLEUS_LOGS_DIR', str(LOGS_PATH))
 
 # Add processor tools to path for imports (CSP generation, slippi validation)
 sys.path.insert(0, str(PROCESSOR_DIR))

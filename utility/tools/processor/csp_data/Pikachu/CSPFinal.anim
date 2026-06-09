@@ -1,0 +1,6367 @@
+animVersion 1.1;
+mayaVersion 2018;
+timeUnit ntscf;
+linearUnit cm;
+angularUnit deg;
+startTime 0;
+endTime 8;
+anim scale.scaleX scaleX JOBJ_0 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_0 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_0 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_0 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_0 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_0 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_0 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_0 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_0 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_0 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_1 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_1 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_1 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_1 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_1 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_1 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_1 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_1 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_1 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_1 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_2 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_2 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_2 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_2 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_2 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_2 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_2 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_2 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_2 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 8.2358583 fixed fixed 1 0 0 0 1 0 1;
+    8 8.2358583 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_2 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_3 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_3 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_3 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_3 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_3 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_3 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_3 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_3 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_3 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_3 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_4 0 5 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_4 0 5 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_4 0 5 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_4 0 5 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 11.745386 fixed fixed 1 0 0 0 1 0 1;
+    8 11.745386 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_4 0 5 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 48.004684 fixed fixed 1 0 0 0 1 0 1;
+    8 48.004684 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_4 0 5 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.68169323 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.68169323 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_4 0 5 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_4 0 5 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_4 0 5 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.7922 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.7922 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_4 0 5 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.975701 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.975701 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_5 0 3 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_5 0 3 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_5 0 3 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_5 0 3 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 5.7839305 fixed fixed 1 0 0 0 1 0 1;
+    8 5.7839305 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_5 0 3 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 11.700102 fixed fixed 1 0 0 0 1 0 1;
+    8 11.700102 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_5 0 3 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -7.7993229 fixed fixed 1 0 0 0 1 0 1;
+    8 -7.7993229 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_5 0 3 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_5 0 3 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_5 0 3 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.5091375 fixed fixed 1 0 0 0 1 0 1;
+    8 2.5091375 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_5 0 3 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.20395448 fixed fixed 1 0 0 0 1 0 1;
+    8 0.20395448 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_6 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_6 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_6 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_6 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 15.784189 fixed fixed 1 0 0 0 1 0 1;
+    8 15.784189 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_6 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.0124771 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.0124771 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_6 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.3197256 fixed fixed 1 0 0 0 1 0 1;
+    8 2.3197256 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_6 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_6 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.463223 fixed fixed 1 0 0 0 1 0 1;
+    8 0.463223 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_6 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.23896746 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.23896746 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_6 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.65743538 fixed fixed 1 0 0 0 1 0 1;
+    8 0.65743538 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_7 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_7 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999963 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999963 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_7 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999961 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999961 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_7 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -111.77639 fixed fixed 1 0 0 0 1 0 1;
+    8 -111.77639 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_7 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0641253 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0641253 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_7 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.42507887 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.42507887 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_7 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_7 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.2367742 fixed fixed 1 0 0 0 1 0 1;
+    8 2.2367742 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_7 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.42295319 fixed fixed 1 0 0 0 1 0 1;
+    8 0.42295319 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_7 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.9295239 fixed fixed 1 0 0 0 1 0 1;
+    8 1.9295239 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_8 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999938 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999938 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_8 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999981 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999981 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_8 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_8 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 22.557476 fixed fixed 1 0 0 0 1 0 1;
+    8 22.557476 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_8 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 40.024671 fixed fixed 1 0 0 0 1 0 1;
+    8 40.024671 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_8 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -32.768558 fixed fixed 1 0 0 0 1 0 1;
+    8 -32.768558 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_8 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_8 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.6970487e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.6970487e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_8 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 6.9727116e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 6.9727116e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_8 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 8.1383938e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 8.1383938e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_9 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_9 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_9 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999997 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999997 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_9 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5.5825599e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -5.5825599e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_9 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.8562694e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 1.8562694e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_9 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -29.454639 fixed fixed 1 0 0 0 1 0 1;
+    8 -29.454639 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_9 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_9 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.2590373 fixed fixed 1 0 0 0 1 0 1;
+    8 1.2590373 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_9 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.9903787e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.9903787e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_9 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -3.6583976e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -3.6583976e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_10 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_10 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999934 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999934 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_10 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_10 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_10 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_10 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -4.2879504e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -4.2879504e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_10 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_10 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.6315 fixed fixed 1 0 0 0 1 0 1;
+    8 0.6315 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_10 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -4.1310042e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -4.1310042e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_10 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 1e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_11 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.5044226e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.5044226e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_11 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 26.92916 fixed fixed 1 0 0 0 1 0 1;
+    8 26.92916 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_11 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.6578428e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 4.6578428e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_11 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_11 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.5070825 fixed fixed 1 0 0 0 1 0 1;
+    8 0.5070825 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_11 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.0016055034 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.0016055034 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_11 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.10069066 fixed fixed 1 0 0 0 1 0 1;
+    8 0.10069066 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_11 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_11 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_11 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999985 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999985 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_12 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -36.593221 fixed fixed 1 0 0 0 1 0 1;
+    8 -36.593221 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_12 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 32.87932 fixed fixed 1 0 0 0 1 0 1;
+    8 32.87932 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_12 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -19.054356 fixed fixed 1 0 0 0 1 0 1;
+    8 -19.054356 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_12 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_12 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.20258387 fixed fixed 1 0 0 0 1 0 1;
+    8 0.20258387 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_12 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.20449367 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.20449367 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_12 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.14170836 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.14170836 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_12 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_12 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_12 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.9999999 fixed fixed 1 0 0 0 1 0 1;
+    8 0.9999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_13 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -7.6466466e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -7.6466466e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_13 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -43.544833 fixed fixed 1 0 0 0 1 0 1;
+    8 -43.544833 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_13 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 5.0572253e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 5.0572253e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_13 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_13 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.355881 fixed fixed 1 0 0 0 1 0 1;
+    8 2.355881 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_13 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.21009154 fixed fixed 1 0 0 0 1 0 1;
+    8 0.21009154 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_13 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.7067816 fixed fixed 1 0 0 0 1 0 1;
+    8 1.7067816 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_13 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999983 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999983 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_13 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_13 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999993 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999993 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_14 0 5 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_14 0 5 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_14 0 5 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_14 0 5 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -26.908373 fixed fixed 1 0 0 0 1 0 1;
+    8 -26.908373 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_14 0 5 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 14.819288 fixed fixed 1 0 0 0 1 0 1;
+    8 14.819288 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_14 0 5 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -11.74186 fixed fixed 1 0 0 0 1 0 1;
+    8 -11.74186 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_14 0 5 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_14 0 5 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_14 0 5 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.51048 fixed fixed 1 0 0 0 1 0 1;
+    8 1.51048 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_14 0 5 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.141233 fixed fixed 1 0 0 0 1 0 1;
+    8 1.141233 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_15 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_15 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_15 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_15 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_15 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_15 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 3.89434 fixed fixed 1 0 0 0 1 0 1;
+    8 3.89434 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_15 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.644386 fixed fixed 1 0 0 0 1 0 1;
+    8 0.644386 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_15 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_15 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_15 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_16 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_16 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_16 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90 fixed fixed 1 0 0 0 1 0 1;
+    8 -90 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_16 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_16 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_16 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.14665 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.14665 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_16 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.065525 fixed fixed 1 0 0 0 1 0 1;
+    8 4.065525 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_16 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_16 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_16 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_17 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999938 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999938 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_17 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999984 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999984 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_17 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_17 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 8.8718953 fixed fixed 1 0 0 0 1 0 1;
+    8 8.8718953 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_17 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -10.211524 fixed fixed 1 0 0 0 1 0 1;
+    8 -10.211524 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_17 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -71.39548 fixed fixed 1 0 0 0 1 0 1;
+    8 -71.39548 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_17 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_17 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.2178967 fixed fixed 1 0 0 0 1 0 1;
+    8 2.2178967 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_17 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 3.210042 fixed fixed 1 0 0 0 1 0 1;
+    8 3.210042 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_17 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.78493849 fixed fixed 1 0 0 0 1 0 1;
+    8 0.78493849 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_18 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -19.915166 fixed fixed 1 0 0 0 1 0 1;
+    8 -19.915166 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_18 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -12.415775 fixed fixed 1 0 0 0 1 0 1;
+    8 -12.415775 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_18 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.5128358 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.5128358 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_18 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_18 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.064937143 fixed fixed 1 0 0 0 1 0 1;
+    8 0.064937143 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_18 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.2091981 fixed fixed 1 0 0 0 1 0 1;
+    8 1.2091981 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_18 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.14042785 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.14042785 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_18 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000013 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000013 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_18 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_18 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_19 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 19.545395 fixed fixed 1 0 0 0 1 0 1;
+    8 19.545395 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_19 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_19 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_19 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_19 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_19 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.28414 fixed fixed 1 0 0 0 1 0 1;
+    8 0.28414 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_19 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.329765 fixed fixed 1 0 0 0 1 0 1;
+    8 1.329765 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_19 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_19 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_19 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_20 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.95257976 fixed fixed 1 0 0 0 1 0 1;
+    8 0.95257976 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_20 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_20 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_20 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -9.7393443 fixed fixed 1 0 0 0 1 0 1;
+    8 -9.7393443 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_20 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 18.347085 fixed fixed 1 0 0 0 1 0 1;
+    8 18.347085 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_20 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 40.864093 fixed fixed 1 0 0 0 1 0 1;
+    8 40.864093 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_20 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_20 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.0629841 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.0629841 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_20 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.9450405 fixed fixed 1 0 0 0 1 0 1;
+    8 2.9450405 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_20 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.86457994 fixed fixed 1 0 0 0 1 0 1;
+    8 0.86457994 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_21 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -13.096184 fixed fixed 1 0 0 0 1 0 1;
+    8 -13.096184 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_21 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 12.605133 fixed fixed 1 0 0 0 1 0 1;
+    8 12.605133 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_21 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -11.658218 fixed fixed 1 0 0 0 1 0 1;
+    8 -11.658218 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_21 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_21 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.041512207 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.041512207 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_21 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.1816247 fixed fixed 1 0 0 0 1 0 1;
+    8 1.1816247 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_21 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.14868221 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.14868221 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_21 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999966 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999966 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_21 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999946 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999946 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_21 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999895 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999895 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_22 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_22 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_22 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_22 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 18.470477 fixed fixed 1 0 0 0 1 0 1;
+    8 18.470477 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_22 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 3.9148174 fixed fixed 1 0 0 0 1 0 1;
+    8 3.9148174 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_22 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.12349252 fixed fixed 1 0 0 0 1 0 1;
+    8 0.12349252 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_22 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_22 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.4761 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.4761 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_22 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.23899254 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.23899254 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_22 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.65594073 fixed fixed 1 0 0 0 1 0 1;
+    8 0.65594073 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_23 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_23 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000006 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000006 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_23 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999961 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999961 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_23 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -68.223615 fixed fixed 1 0 0 0 1 0 1;
+    8 -68.223615 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_23 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0641264 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0641264 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_23 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -179.57492 fixed fixed 1 0 0 0 1 0 1;
+    8 -179.57492 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_23 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_23 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.2239076 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.2239076 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_23 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.4235205 fixed fixed 1 0 0 0 1 0 1;
+    8 0.4235205 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_23 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.9309302 fixed fixed 1 0 0 0 1 0 1;
+    8 1.9309302 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_24 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.999999 fixed fixed 1 0 0 0 1 0 1;
+    8 0.999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_24 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.9999991 fixed fixed 1 0 0 0 1 0 1;
+    8 0.9999991 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_24 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999877 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999877 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_24 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -19.272022 fixed fixed 1 0 0 0 1 0 1;
+    8 -19.272022 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_24 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -37.041838 fixed fixed 1 0 0 0 1 0 1;
+    8 -37.041838 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_24 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -59.826509 fixed fixed 1 0 0 0 1 0 1;
+    8 -59.826509 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_24 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_24 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.070466e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.070466e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_24 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.2136671e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 4.2136671e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_24 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0371424e-07 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0371424e-07 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_25 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_25 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_25 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000009 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000009 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_25 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -8.5266162e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -8.5266162e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_25 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.1029572 fixed fixed 1 0 0 0 1 0 1;
+    8 2.1029572 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_25 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -30.148291 fixed fixed 1 0 0 0 1 0 1;
+    8 -30.148291 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_25 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_25 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.2590319 fixed fixed 1 0 0 0 1 0 1;
+    8 1.2590319 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_25 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.9478447e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 4.9478447e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_25 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5.5535515e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -5.5535515e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_26 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_26 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_26 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_26 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_26 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_26 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -3.3077787e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -3.3077787e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_26 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_26 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.6515 fixed fixed 1 0 0 0 1 0 1;
+    8 0.6515 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_26 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.9155892e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.9155892e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_26 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_27 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.051369913 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.051369913 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_27 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -26.938477 fixed fixed 1 0 0 0 1 0 1;
+    8 -26.938477 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_27 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.3193514 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.3193514 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_27 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_27 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.48718176 fixed fixed 1 0 0 0 1 0 1;
+    8 0.48718176 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_27 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.016026568 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.016026568 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_27 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.10032048 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.10032048 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_27 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999994 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999994 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_27 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999927 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999927 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_27 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999971 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999971 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_28 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 34.446853 fixed fixed 1 0 0 0 1 0 1;
+    8 34.446853 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_28 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -30.815056 fixed fixed 1 0 0 0 1 0 1;
+    8 -30.815056 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_28 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -13.37514 fixed fixed 1 0 0 0 1 0 1;
+    8 -13.37514 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_28 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_28 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.15267304 fixed fixed 1 0 0 0 1 0 1;
+    8 0.15267304 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_28 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.24548348 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.24548348 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_28 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.14271199 fixed fixed 1 0 0 0 1 0 1;
+    8 0.14271199 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_28 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999948 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999948 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_28 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.9999994 fixed fixed 1 0 0 0 1 0 1;
+    8 0.9999994 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_28 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000006 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000006 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_29 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 5.7303089e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 5.7303089e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_29 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 220.19807 fixed fixed 1 0 0 0 1 0 1;
+    8 220.19807 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_29 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_29 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_29 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.3397837 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.3397837 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_29 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.24193 fixed fixed 1 0 0 0 1 0 1;
+    8 0.24193 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_29 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.7010837 fixed fixed 1 0 0 0 1 0 1;
+    8 1.7010837 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_29 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_29 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_29 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_30 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 22.345333 fixed fixed 1 0 0 0 1 0 1;
+    8 22.345333 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_30 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_30 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_30 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_30 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_30 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.73758028 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.73758028 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_30 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.19850739 fixed fixed 1 0 0 0 1 0 1;
+    8 0.19850739 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_30 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_30 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_30 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_31 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_31 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_31 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_31 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90 fixed fixed 1 0 0 0 1 0 1;
+    8 -90 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_31 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_31 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90 fixed fixed 1 0 0 0 1 0 1;
+    8 -90 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_31 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_31 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.3 fixed fixed 1 0 0 0 1 0 1;
+    8 2.3 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_31 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.5 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.5 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_31 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.500039 fixed fixed 1 0 0 0 1 0 1;
+    8 0.500039 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_32 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_32 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999958 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999958 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_32 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999992 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999992 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_32 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -18.8508 fixed fixed 1 0 0 0 1 0 1;
+    8 -18.8508 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_32 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.2572614 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.2572614 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_32 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -23.346949 fixed fixed 1 0 0 0 1 0 1;
+    8 -23.346949 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_32 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_32 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -4.8917823e-07 fixed fixed 1 0 0 0 1 0 1;
+    8 -4.8917823e-07 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_32 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.3960283e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 1.3960283e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_32 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.0532916e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.0532916e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_33 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999931 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999931 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_33 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_33 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_33 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -6.5829787e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -6.5829787e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_33 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 3.1100325e-08 fixed fixed 1 0 0 0 1 0 1;
+    8 3.1100325e-08 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_33 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 33.390696 fixed fixed 1 0 0 0 1 0 1;
+    8 33.390696 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_33 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_33 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.1142624 fixed fixed 1 0 0 0 1 0 1;
+    8 2.1142624 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_33 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.6727189e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.6727189e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_33 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_34 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_34 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999986 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999986 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_34 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_34 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -7.0517716e-07 fixed fixed 1 0 0 0 1 0 1;
+    8 -7.0517716e-07 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_34 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_34 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -89.999978 fixed fixed 1 0 0 0 1 0 1;
+    8 -89.999978 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_34 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_34 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.679199 fixed fixed 1 0 0 0 1 0 1;
+    8 2.679199 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_34 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.007307 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.007307 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_34 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -3.2974679e-08 fixed fixed 1 0 0 0 1 0 1;
+    8 -3.2974679e-08 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_35 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999989 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999989 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_35 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999945 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999945 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_35 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_35 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 10.5905 fixed fixed 1 0 0 0 1 0 1;
+    8 10.5905 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_35 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 7.2897838 fixed fixed 1 0 0 0 1 0 1;
+    8 7.2897838 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_35 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 36.336198 fixed fixed 1 0 0 0 1 0 1;
+    8 36.336198 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_35 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_35 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.015391e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.015391e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_35 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.7233847e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 1.7233847e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_35 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.6818503e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 1.6818503e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_36 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -3.7709583 fixed fixed 1 0 0 0 1 0 1;
+    8 -3.7709583 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_36 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.8785727 fixed fixed 1 0 0 0 1 0 1;
+    8 1.8785727 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_36 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -23.557179 fixed fixed 1 0 0 0 1 0 1;
+    8 -23.557179 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_36 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_36 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.3399979 fixed fixed 1 0 0 0 1 0 1;
+    8 1.3399979 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_36 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.15999723 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.15999723 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_36 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.059999359 fixed fixed 1 0 0 0 1 0 1;
+    8 0.059999359 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_36 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999996 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999996 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_36 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_36 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999972 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999972 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_37 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_37 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_37 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_37 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -7.3081221e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -7.3081221e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_37 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5.6090915e-05 fixed fixed 1 0 0 0 1 0 1;
+    8 -5.6090915e-05 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_37 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -3.0520546 fixed fixed 1 0 0 0 1 0 1;
+    8 -3.0520546 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_37 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_37 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.28846494 fixed fixed 1 0 0 0 1 0 1;
+    8 0.28846494 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_37 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.10875898 fixed fixed 1 0 0 0 1 0 1;
+    8 0.10875898 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_37 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.1398625e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.1398625e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_38 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_38 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_38 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_38 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_38 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.04351 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.04351 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_38 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_38 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_38 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_38 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_38 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_39 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_39 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_39 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_39 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90 fixed fixed 1 0 0 0 1 0 1;
+    8 -90 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_39 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_39 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90 fixed fixed 1 0 0 0 1 0 1;
+    8 -90 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_39 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_39 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.3 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.3 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_39 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.5 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.5 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_39 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.5 fixed fixed 1 0 0 0 1 0 1;
+    8 0.5 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_40 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000002 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_40 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999992 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999992 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_40 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999943 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999943 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_40 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 17.255339 fixed fixed 1 0 0 0 1 0 1;
+    8 17.255339 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_40 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.6539379 fixed fixed 1 0 0 0 1 0 1;
+    8 1.6539379 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_40 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.6863016 fixed fixed 1 0 0 0 1 0 1;
+    8 4.6863016 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_40 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_40 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.01605645 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.01605645 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_40 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.077210906 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.077210906 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_40 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.08759023 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.08759023 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_41 0 2 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999917 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999917 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_41 0 2 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999962 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999962 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_41 0 2 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000009 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000009 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_41 0 2 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.83574479 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.83574479 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_41 0 2 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 8.2764618 fixed fixed 1 0 0 0 1 0 1;
+    8 8.2764618 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_41 0 2 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 64.558187 fixed fixed 1 0 0 0 1 0 1;
+    8 64.558187 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_41 0 2 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_41 0 2 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.1142645 fixed fixed 1 0 0 0 1 0 1;
+    8 2.1142645 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_41 0 2 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 5.5736339e-07 fixed fixed 1 0 0 0 1 0 1;
+    8 5.5736339e-07 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_41 0 2 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.1449158e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.1449158e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_42 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_42 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_42 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_42 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_42 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_42 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -90.000012 fixed fixed 1 0 0 0 1 0 1;
+    8 -90.000012 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_42 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_42 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.67921 fixed fixed 1 0 0 0 1 0 1;
+    8 2.67921 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_42 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.007308 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.007308 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_42 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_43 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_43 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000008 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_43 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_43 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -11.690787 fixed fixed 1 0 0 0 1 0 1;
+    8 -11.690787 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_43 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 7.715194 fixed fixed 1 0 0 0 1 0 1;
+    8 7.715194 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_43 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 15.590321 fixed fixed 1 0 0 0 1 0 1;
+    8 15.590321 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_43 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_43 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_43 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_43 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_44 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.8364052 fixed fixed 1 0 0 0 1 0 1;
+    8 4.8364052 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_44 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.3227519 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.3227519 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_44 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.018609612 fixed fixed 1 0 0 0 1 0 1;
+    8 0.018609612 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_44 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_44 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.3539501 fixed fixed 1 0 0 0 1 0 1;
+    8 1.3539501 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_44 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.15925334 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.15925334 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_44 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.11166187 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.11166187 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_44 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000012 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000012 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_44 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.9999994 fixed fixed 1 0 0 0 1 0 1;
+    8 0.9999994 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_44 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_45 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_45 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_45 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_45 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5.4229088 fixed fixed 1 0 0 0 1 0 1;
+    8 -5.4229088 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_45 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 4.0248887 fixed fixed 1 0 0 0 1 0 1;
+    8 4.0248887 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_45 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -49.157254 fixed fixed 1 0 0 0 1 0 1;
+    8 -49.157254 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_45 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_45 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.13821846 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.13821846 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_45 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.62448561 fixed fixed 1 0 0 0 1 0 1;
+    8 0.62448561 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_45 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.020684493 fixed fixed 1 0 0 0 1 0 1;
+    8 0.020684493 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_46 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.087323828 fixed fixed 1 0 0 0 1 0 1;
+    8 0.087323828 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_46 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.35145186 fixed fixed 1 0 0 0 1 0 1;
+    8 0.35145186 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_46 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 43.706806 fixed fixed 1 0 0 0 1 0 1;
+    8 43.706806 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_46 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_46 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.3570169 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.3570169 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_46 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.2596166 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.2596166 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_46 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.67797105 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.67797105 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_46 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_46 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_46 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_47 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_47 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_47 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_47 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_47 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_47 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_47 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_47 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_47 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.5 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.5 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_47 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -2.999999 fixed fixed 1 0 0 0 1 0 1;
+    8 -2.999999 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_48 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000007 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_48 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000003 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000003 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_48 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.0000005 fixed fixed 1 0 0 0 1 0 1;
+    8 1.0000005 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_48 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -12.195348 fixed fixed 1 0 0 0 1 0 1;
+    8 -12.195348 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_48 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.28435 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.28435 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_48 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -9.4044311 fixed fixed 1 0 0 0 1 0 1;
+    8 -9.4044311 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_48 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_48 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.7493398 fixed fixed 1 0 0 0 1 0 1;
+    8 2.7493398 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_48 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.5465627 fixed fixed 1 0 0 0 1 0 1;
+    8 1.5465627 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_48 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.9021256 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.9021256 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_49 0 1 0;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.9999995 fixed fixed 1 0 0 0 1 0 1;
+    8 0.9999995 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_49 0 1 1;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999893 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999893 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_49 0 1 2;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.99999952 fixed fixed 1 0 0 0 1 0 1;
+    8 0.99999952 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_49 0 1 3;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 12.252635 fixed fixed 1 0 0 0 1 0 1;
+    8 12.252635 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_49 0 1 4;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.47691575 fixed fixed 1 0 0 0 1 0 1;
+    8 0.47691575 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_49 0 1 5;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 3.8632832 fixed fixed 1 0 0 0 1 0 1;
+    8 3.8632832 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_49 0 1 6;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_49 0 1 7;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.59063596 fixed fixed 1 0 0 0 1 0 1;
+    8 0.59063596 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_49 0 1 8;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 2.7151497 fixed fixed 1 0 0 0 1 0 1;
+    8 2.7151497 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_49 0 1 9;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0.10927887 fixed fixed 1 0 0 0 1 0 1;
+    8 0.10927887 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_50 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.6421851e-07 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.6421851e-07 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_50 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_50 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5.7200119e-06 fixed fixed 1 0 0 0 1 0 1;
+    8 -5.7200119e-06 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_50 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_50 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -1.5382598 fixed fixed 1 0 0 0 1 0 1;
+    8 -1.5382598 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_50 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.5291883 fixed fixed 1 0 0 0 1 0 1;
+    8 1.5291883 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_50 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -0.065130004 fixed fixed 1 0 0 0 1 0 1;
+    8 -0.065130004 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_50 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_50 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1.000001 fixed fixed 1 0 0 0 1 0 1;
+    8 1.000001 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_50 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_51 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_51 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_51 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_51 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_51 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_51 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 -5 fixed fixed 1 0 0 0 1 0 1;
+    8 -5 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_51 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_51 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_51 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_51 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateX rotateX JOBJ_52 0 0 0;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateY rotateY JOBJ_52 0 0 1;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim rotate.rotateZ rotateZ JOBJ_52 0 0 2;
+animData {
+  input time;
+  output angular;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim visibility visibility JOBJ_52 0 0 3;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed step 1 0 0 0 1;
+    8 1 fixed step 1 0 0 0 1;
+  }
+}
+anim translate.translateX translateX JOBJ_52 0 0 4;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateY translateY JOBJ_52 0 0 5;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim translate.translateZ translateZ JOBJ_52 0 0 6;
+animData {
+  input time;
+  output linear;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 0 fixed fixed 1 0 0 0 1 0 1;
+    8 0 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleX scaleX JOBJ_52 0 0 7;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleY scaleY JOBJ_52 0 0 8;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}
+anim scale.scaleZ scaleZ JOBJ_52 0 0 9;
+animData {
+  input time;
+  output unitless;
+  weighted 0;
+  preInfinity constant;
+  postInfinity constant;
+  keys {
+    0 1 fixed fixed 1 0 0 0 1 0 1;
+    8 1 fixed fixed 1 0 0 0 1 0 1;
+  }
+}

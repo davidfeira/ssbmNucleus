@@ -179,16 +179,16 @@ REM  Build HSDRawViewer (.NET)
 REM ----------------------------------------
 if !REBUILD!==1 (
     echo [REBUILD] Building HSDRawViewer...
-    dotnet build utility\website\backend\tools\HSDLib\HSDRawViewer -c Release
+    dotnet build utility\tools\HSDLib\HSDRawViewer -c Release
     if !errorlevel! neq 0 (
         echo [ERROR] Failed to build HSDRawViewer.
         pause
         exit /b 1
     )
     echo [OK] HSDRawViewer rebuilt.
-) else if not exist utility\website\backend\tools\HSDLib\HSDRawViewer\bin\Release\net6.0-windows\HSDRawViewer.exe (
+) else if not exist utility\tools\HSDLib\HSDRawViewer\bin\Release\net6.0-windows\HSDRawViewer.exe (
     echo [SETUP] Building HSDRawViewer...
-    dotnet build utility\website\backend\tools\HSDLib\HSDRawViewer -c Release
+    dotnet build utility\tools\HSDLib\HSDRawViewer -c Release
     if !errorlevel! neq 0 (
         echo [ERROR] Failed to build HSDRawViewer.
         pause

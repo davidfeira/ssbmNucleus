@@ -160,8 +160,8 @@ if exist "utility\MexManager\MexCLI\MexCLI.csproj" (
 REM Build HSDRawViewer (for CSP generation)
 echo.
 echo [7/7] Building HSDRawViewer...
-if exist "utility\website\backend\tools\HSDLib\HSDRawViewer\HSDRawViewer.csproj" (
-    "%DOTNET_CMD%" build -c Release utility\website\backend\tools\HSDLib\HSDRawViewer\HSDRawViewer.csproj
+if exist "utility\tools\HSDLib\HSDRawViewer\HSDRawViewer.csproj" (
+    "%DOTNET_CMD%" build -c Release utility\tools\HSDLib\HSDRawViewer\HSDRawViewer.csproj
     if %ERRORLEVEL% NEQ 0 (
         echo WARNING: Failed to build HSDRawViewer. CSP generation may not work.
     ) else (

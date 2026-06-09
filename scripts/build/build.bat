@@ -102,12 +102,12 @@ cd /d "%PROJECT_ROOT%"
 echo.
 echo [3/5] Building HSDRawViewer (self-contained)...
 echo ----------------------------------------
-if not exist "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer" (
+if not exist "%PROJECT_ROOT%\utility\tools\HSDLib\HSDRawViewer" (
     echo ERROR: Cannot find HSDRawViewer directory
     pause
     exit /b 1
 )
-cd /d "%PROJECT_ROOT%\utility\website\backend\tools\HSDLib\HSDRawViewer"
+cd /d "%PROJECT_ROOT%\utility\tools\HSDLib\HSDRawViewer"
 dotnet publish -c Release -r win-x64 --self-contained true -o "%PROJECT_ROOT%\dist-backend\hsdraw"
 if %errorlevel% neq 0 (
     echo ERROR: HSDRawViewer build failed
@@ -221,7 +221,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-call :CopyDir "%PROJECT_ROOT%\utility\website\backend\tools" "%PACKAGE_STAGE%\utility\website\backend\tools" "backend tools"
+call :CopyDir "%PROJECT_ROOT%\utility\tools" "%PACKAGE_STAGE%\utility\tools" "backend tools"
 if %errorlevel% neq 0 (
     pause
     exit /b 1

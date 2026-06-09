@@ -131,9 +131,8 @@ datas = []
 
 # Python modules from utility (must be bundled as source)
 utility_modules = [
-    ('utility/website/backend/tools/processor/*.py', 'utility/website/backend/tools/processor'),
-    ('utility/website/backend/app/services/*.py', 'utility/website/backend/app/services'),
-    ('utility/website/backend/app/utils/*.py', 'utility/website/backend/app/utils'),
+    ('utility/tools/processor/*.py', 'utility/tools/processor'),
+    ('utility/tools/services/*.py', 'utility/tools/services'),
 ]
 
 for src_pattern, dst_folder in utility_modules:
@@ -144,17 +143,17 @@ for src_pattern, dst_folder in utility_modules:
 # CSP generation data (character assets)
 csp_data_path = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'processor' / 'csp_data'
 if csp_data_path.exists():
-    datas.append((str(csp_data_path), 'utility/website/backend/tools/processor/csp_data'))
+    datas.append((str(csp_data_path), 'utility/tools/processor/csp_data'))
 
 # HSDRawViewer and dependencies (entire directory needed for .NET app)
 hsdraw_dir = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'HSDLib' / 'HSDRawViewer' / 'bin' / 'Release' / 'net6.0-windows'
 if hsdraw_dir.exists():
-    datas.append((str(hsdraw_dir), 'utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows'))
+    datas.append((str(hsdraw_dir), 'utility/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows'))
 
 # Costume validator
 validator_dir = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'processor' / 'CostumeValidator'
 if validator_dir.exists():
-    datas.append((str(validator_dir), 'utility/website/backend/tools/processor/CostumeValidator'))
+    datas.append((str(validator_dir), 'utility/tools/processor/CostumeValidator'))
 
 # Vanilla assets (character-specific)
 vanilla_dir = project_root / 'utility' / 'assets' / 'vanilla'
