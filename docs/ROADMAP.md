@@ -4,28 +4,34 @@
 
 ---
 
+## Shipped (formerly roadmap items)
+
+These are implemented — see [API_REFERENCE.md](API_REFERENCE.md) for endpoints:
+
+- [x] Custom stages system (vault, import/export, install to project, folders)
+- [x] Custom characters system (vault, import/export, install to project)
+- [x] In-game testing (`backend/ingame/` harness — see [INGAME_TESTING.md](INGAME_TESTING.md))
+- [x] Menus / CSS / SSS editor (icon grids, backgrounds, doors, layouts — see [MENUS_SYSTEM.md](MENUS_SYSTEM.md))
+- [x] ISO scanning (rip costumes from vanilla/modded ISOs)
+- [x] Backend refactor: `mex_api.py` split into blueprints (`extras` and `menus` split into packages under `backend/blueprints/`)
+
+---
+
 ## PHASE 1: App Feature Completion
 
 - [ ] Gun CSP preview (render gun model in HSD viewport like CSPs)
 - [ ] Standardize buttons/toggles/modal styles and more sound polish
+- [ ] Pages support in vault/install
+- [ ] Better drag/drop - look into standard implementations
+- [ ] Right click → send to folder
 
-
-pages support in vault/install
-better drag/drop - look into standard implementations
-right click --> send to folder
 ---
 
 ## PHASE 1.5: Code Cleanup
 
-**Large File Refactoring**
-
-| File | Lines | Notes |
-|------|-------|-------|
-| `backend/mex_api.py` | 7,871 | Split into modules by feature area |
-| `viewer/src/components/SkinCreator.jsx` | 2,023 | Extract sub-components |
-| `viewer/src/components/mex/CharacterMode.jsx` | 1,612 | Extract sub-components |
-| `viewer/src/components/storage/ExtrasPageView.jsx` | 1,228 | Extract sub-components |
-| `viewer/src/components/StorageViewer.jsx` | 1,017 | Extract sub-components |
+**Large File Refactoring** — the backend split is done; remaining large frontend
+components could still be broken up (`SkinCreator.jsx`, `CharacterMode.jsx`,
+`StorageViewer.jsx`, `ExtrasPageView.jsx` are each ~1,200-2,000 lines).
 
 **Bug Fixes**
 - [ ] Fix Ice Climbers
@@ -35,7 +41,7 @@ right click --> send to folder
 - [ ] Fix Kirby
     - Write Kirby docs
     - Find where it could cause problems (probably just during installation - figure out Kirby hats)
-  Fix Red Falcon .usd bugs
+- [ ] Fix Red Falcon .usd bugs
 - [ ] Fix console errors
 - [ ] Fix xdelta constant server connection for progress updates
 - [ ] Fix HD CSP shadows and Ness/Fox bugs
@@ -130,16 +136,10 @@ These are cool ideas but not priority:
 - Texture pack export: use temp project copy instead of backup/restore (cleaner, avoids issues if export is interrupted)
 - Stable diffusion stocks (AI-generated stock icons)
 - AI rigger (auto-rig custom models)
-- Custom stages
-- SSS editor (stage select screen)
-- Other texture mods (CSS, SSS, menus)
 - 3D model viewer in CSP Studio
 - Open skin in HSDRaw (check for new version)
 - Open build in MEX Tool (use built-in version)
-- Custom characters
 - Code mods
 - Music and sounds
 - Replay viewer and clipper
-- Automate texture pack offset names (analyze ISO hex or find MEX/HSD correlation)
 - Show storage statistics (temp data size, ISO sizes)
-

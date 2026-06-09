@@ -65,11 +65,11 @@ const NAV_SECTIONS = [
     items: [
       {
         label: "Melee Files Reference",
-        path: "docs/new-414/Melee-Files.md",
+        path: "docs/research/new-414/Melee-Files.md",
       },
       {
         label: "Effect Offsets Reference",
-        path: "docs/color-effects-reference/Effect-Offsets-Reference.md",
+        path: "docs/research/color-effects-reference/Effect-Offsets-Reference.md",
       },
     ],
   },

@@ -126,4 +126,4 @@ If you keep those three rules straight, the rest of the behavior makes much more
 
 - [Character Mod Workflow](Character-Mod-Workflow.md)
 - [CSP And Pose Workflow](CSP-And-Pose-Workflow.md)
-- [Melee Files Reference](../docs/new-414/Melee-Files.md)
+- [Melee Files Reference](../docs/research/new-414/Melee-Files.md)

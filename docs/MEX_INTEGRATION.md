@@ -219,7 +219,7 @@ python scripts/tools/mex_bridge.py list
 ## File Locations
 
 ```
-new aka/
+ssbmNucleus/
 ├── utility/
 │   └── MexManager/
 │       ├── MexCLI/                          # CLI wrapper

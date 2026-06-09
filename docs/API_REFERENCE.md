@@ -4,9 +4,9 @@ Complete documentation of all Flask backend endpoints.
 
 ## Overview
 
-- **Base URL**: `http://localhost:5000`
+- **Base URL**: `http://localhost:5000` (port is dynamic — the backend prefers 5000 but falls back to a free OS-assigned port; Electron reads the actual port at startup)
 - **Response Format**: JSON with `{ success: boolean, ... }`
-- **Async Operations**: WebSocket events for progress (export, import, setup)
+- **Async Operations**: WebSocket events for progress (export, import, setup, ISO scan, in-game testing)
 - **File Uploads**: Multipart form data
 
 ---
@@ -15,23 +15,29 @@ Complete documentation of all Flask backend endpoints.
 
 | Blueprint | Purpose | Endpoints |
 |-----------|---------|-----------|
-| project_bp | MEX project management | 9 |
+| project_bp | MEX project management | 14 |
 | assets_bp | File serving (images, assets) | 5 |
 | costumes_bp | Import/remove/reorder in MEX | 3 |
 | export_bp | ISO export with progress | 2 |
-| storage_costumes_bp | Vault costume operations | 23 |
+| storage_costumes_bp | Vault costume operations | 18 |
 | storage_stages_bp | Stage vault operations | 7 |
-| vault_backup_bp | Backup/restore storage | 4 |
+| vault_backup_bp | Backup/restore storage | 5 |
 | mod_export_bp | Export as ZIP mods | 3 |
 | import_bp | Unified import (auto-detect) | 1 |
-| das_bp | Dynamic Alternate Stages | 9 |
+| das_bp | Dynamic Alternate Stages | 8 |
 | poses_bp | CSP pose management | 5 |
 | setup_bp | First-run setup | 4 |
-| slippi_bp | Dolphin/texture packs | 8 |
-| xdelta_bp | Binary patches | 10 |
-| bundles_bp | .ssbm mod bundles | 9 |
+| slippi_bp | Dolphin/texture packs | 10 |
+| xdelta_bp | Binary patches | 11 |
+| bundles_bp | .ssbm mod bundles | 10 |
 | viewer_bp | 3D model preview | 9 |
-| extras_bp | Character effects | Multiple |
+| settings_bp | Settings (placeholder, no routes) | 0 |
+| iso_scan_bp | Rip costumes from ISOs | 7 |
+| menus_bp | CSS/SSS menu mods | 31 |
+| custom_stages_bp | Custom (m-ex) stages | 16 |
+| custom_characters_bp | Custom (m-ex) fighters | 12 |
+| test_in_game_bp | In-game test harness | 8 |
+| extras_bp | Character effects (extras) | 12 |
 
 ---
 
@@ -59,6 +65,12 @@ Open existing MEX project.
 { "projectPath": "/path/to/project.mexproj" }
 ```
 
+### GET /api/mex/project/list
+List all app-managed MEX projects (with which one is currently open).
+
+### POST /api/mex/project/close
+Close the currently loaded MEX project without deleting it.
+
 ### POST /api/mex/project/create
 Create new MEX project from vanilla ISO.
 
@@ -70,6 +82,22 @@ Create new MEX project from vanilla ISO.
   "projectName": "MyMod"
 }
 ```
+
+### POST /api/mex/project/delete
+Delete an app-managed MEX project directory.
+
+**Body:**
+```json
+{ "projectPath": "/path/to/project" }
+```
+
+### GET /api/mex/project/build
+Get disc-banner metadata (title/creator/description) and banner image preview.
+
+### POST /api/mex/project/build
+Set disc-banner fields and (optionally) the 96x32 banner image.
+
+**Body:** any of `shortName`, `longName`, `shortMaker`, `longMaker`, `description`, `bannerPngBase64`.
 
 ### GET /api/mex/fighters
 List all fighters in project.
@@ -203,6 +231,9 @@ Download exported ISO (auto-deleted after download).
 ---
 
 ## Storage Costumes Blueprint
+
+### GET /api/mex/storage/metadata
+Get the storage vault `metadata.json` (all characters/stages/custom content).
 
 ### GET /api/mex/storage/costumes
 List all costumes in vault.
@@ -596,6 +627,9 @@ Verify ISO is vanilla NTSC 1.02.
 
 ## Vault Backup Blueprint
 
+### GET /api/mex/storage/stats
+Get storage vault statistics (sizes, counts).
+
 ### POST /api/mex/storage/backup
 Create backup ZIP of entire storage.
 
@@ -667,6 +701,12 @@ Start watching for dumped textures.
 ### POST /api/mex/texture-pack/stop-listening
 Stop watching and finalize.
 
+### POST /api/mex/texture-pack/apply-offline
+Apply a build's texture pack from a harvested index→filename table — no ISO boot, no CSS scrolling. Copies each real CSP into Dolphin's `Load/` folder under the precomputed filename.
+
+### POST /api/mex/texture-pack/auto-apply
+Fully automatic texture pack naming using a managed, build-independent index→filename table (no Dolphin launch at all).
+
 ### GET|POST /api/dolphin/texture-settings
 Read or update Dolphin texture settings.
 
@@ -709,6 +749,14 @@ Build ISO from xdelta patch.
 **WebSocket Events:**
 - `xdelta_progress`, `xdelta_complete`, `xdelta_error`
 
+### POST /api/mex/xdelta/play/{patch_id}
+Build the patch's ISO (if missing) and launch it in the user's real Slippi Dolphin.
+
+**Body:**
+```json
+{ "slippiPath": "/path/to/slippi", "vanillaIsoPath": "/path/to/vanilla.iso" }
+```
+
 ### GET /api/mex/xdelta/download/{filename}
 Download built ISO.
 
@@ -734,6 +782,14 @@ Download xdelta patch file.
 
 ### GET /api/mex/bundle/list
 List all bundles.
+
+### POST /api/mex/bundle/play/{bundle_id}
+Build the bundle's ISO (if missing), load its texture pack, and launch it in the user's real Slippi Dolphin.
+
+**Body:**
+```json
+{ "slippiPath": "/path/to/slippi", "vanillaIsoPath": "/path/to/vanilla.iso" }
+```
 
 ### POST /api/mex/bundle/delete/{bundle_id}
 Delete bundle.
@@ -840,6 +896,326 @@ Get vanilla costumes for character.
 
 ---
 
+## Settings Blueprint
+
+Registered but currently a placeholder with no routes (the custom vault
+location feature it hosted was removed).
+
+---
+
+## ISO Scan Blueprint
+
+Rips new costume skins out of vanilla/modded ISOs as a background job (see
+`backend/iso_scanner.py` for the pipeline). Progress is emitted over WebSocket.
+
+### GET /api/mex/iso-scan/preflight
+Report whether `wit.exe` (Wiimms ISO Tools) is available.
+
+### POST /api/mex/iso-scan/start
+Start a scan job over a list of ISO paths.
+
+**Body:**
+```json
+{ "iso_paths": ["/path/to/a.iso", "/path/to/b.iso"] }
+```
+
+### GET /api/mex/iso-scan/{job_id}
+Poll current job state / final result (candidates grouped by character).
+
+### GET /api/mex/iso-scan/{job_id}/csp/{key}/csp
+Serve a candidate skin's generated CSP PNG.
+
+### POST /api/mex/iso-scan/{job_id}/import
+Import the selected candidate keys into the vault.
+
+### POST /api/mex/iso-scan/{job_id}/cancel
+Request cancellation of a running job.
+
+### DELETE /api/mex/iso-scan/{job_id}
+Drop the job's work directory and state.
+
+---
+
+## Menus Blueprint
+
+CSS/SSS menu mod management. See [MENUS_SYSTEM.md](MENUS_SYSTEM.md) for concepts.
+
+### CSS Icon Grid
+
+### GET /api/mex/menus/css/icon_grid/list
+List imported icon grid mods.
+
+### POST /api/mex/menus/css/icon_grid/import
+Import an icon grid mod (multipart form; loose PNGs or compiled `MnSlChr` dat).
+
+### GET /api/mex/menus/css/icon_grid/{mod_id}/icons
+List the per-character icons of a mod.
+
+### POST /api/mex/menus/css/icon_grid/update/{mod_id}
+Update mod metadata (name, etc.).
+
+### POST /api/mex/menus/css/icon_grid/{mod_id}/relabel
+Re-assign an icon to a different character.
+
+### POST /api/mex/menus/css/icon_grid/{mod_id}/replace_icon
+Replace a single icon image (multipart form).
+
+### POST /api/mex/menus/css/icon_grid/{mod_id}/delete_icon
+Delete a single icon from the mod.
+
+### POST /api/mex/menus/css/icon_grid/{mod_id}/add_icon
+Add an icon image for a character (multipart form).
+
+### POST /api/mex/menus/css/icon_grid/install/{mod_id}
+Install the full icon grid into the open MEX project.
+
+### POST /api/mex/menus/css/icon_grid/install/{mod_id}/icon
+Install a single icon from the mod into the project.
+
+**Body:** `{ "character": "Fox" }`
+
+### POST /api/mex/menus/css/icon_grid/delete/{mod_id}
+Delete an icon grid mod from storage.
+
+### CSS / Menu Backgrounds
+
+(`/api/mex/menus/background/...` aliases exist for list/import/delete.)
+
+### GET /api/mex/menus/css/background/list
+List imported background mods.
+
+### POST /api/mex/menus/css/background/import
+Import a background mod (multipart form).
+
+### POST /api/mex/menus/css/background/install/{mod_id}
+Install a background into the project's CSS.
+
+### POST /api/mex/menus/css/background/delete/{mod_id}
+Delete a background mod.
+
+### POST /api/mex/menus/background/update/{mod_id}
+Update background mod settings.
+
+### POST /api/mex/menus/sss/background/install/{mod_id}
+Install a background into the project's SSS.
+
+### SSS Layout
+
+### GET /api/mex/menus/sss/layout
+Get the project's stage select screen layout.
+
+### POST /api/mex/menus/sss/layout
+Set the stage select screen layout.
+
+### GET /api/mex/menus/sss/stage-icon
+Serve a stage's SSS icon image.
+
+### CSS Layout
+
+### GET /api/mex/menus/css/layout
+Get the project's character select screen layout.
+
+### POST /api/mex/menus/css/layout
+Set the character select screen layout.
+
+### GET /api/mex/menus/css/fighter-icon
+Serve a fighter's CSS icon image.
+
+### CSS Doors
+
+### GET /api/mex/menus/css/doors/list
+List imported door mods (CSS hand/door textures).
+
+### GET /api/mex/menus/css/doors/image/{mod_id}
+Serve a door mod's preview image.
+
+### POST /api/mex/menus/css/doors/import
+Import a door mod (multipart form).
+
+### POST /api/mex/menus/css/doors/delete/{mod_id}
+Delete a door mod.
+
+### POST /api/mex/menus/css/doors/install/{mod_id}
+Install a door mod into the project.
+
+---
+
+## Custom Stages Blueprint
+
+Wholly new (m-ex) stages, distinct from DAS texture variants. See
+[CUSTOM_CONTENT.md](CUSTOM_CONTENT.md).
+
+### GET /api/mex/custom-stages/list
+List custom stages in the vault.
+
+### POST /api/mex/custom-stages/import-zip
+Import a MexManager-exported stage ZIP (multipart form).
+
+### GET /api/mex/custom-stages/in-project
+List custom stages installed in the open project.
+
+### POST /api/mex/custom-stages/scan-iso
+Scan a modded ISO/project for custom stages to extract.
+
+### GET /api/mex/custom-stages/{slug}/icon
+Serve the stage's SSS icon.
+
+### GET /api/mex/custom-stages/{slug}/banner
+Serve the stage's banner image.
+
+### POST /api/mex/custom-stages/{slug}/delete
+Delete a custom stage from the vault.
+
+### POST /api/mex/custom-stages/{slug}/rename
+Rename a custom stage.
+
+### GET /api/mex/custom-stages/{slug}/export
+Download the stage's original ZIP.
+
+### POST /api/mex/custom-stages/install
+Install a vault custom stage into the open project.
+
+**Body:** `{ "slug": "green-hill-zone" }`
+
+### POST /api/mex/custom-stages/remove-from-project
+Remove a custom stage from the open project.
+
+### POST /api/mex/custom-stages/reorder
+Reorder custom stages in the vault.
+
+### POST /api/mex/custom-stages/folders/create
+Create a vault folder for custom stages.
+
+### POST /api/mex/custom-stages/folders/rename
+Rename a folder.
+
+### POST /api/mex/custom-stages/folders/delete
+Delete a folder (stages move to root).
+
+### POST /api/mex/custom-stages/folders/toggle
+Toggle folder expanded/collapsed.
+
+---
+
+## Custom Characters Blueprint
+
+Entirely new (m-ex) fighters. See [CUSTOM_CONTENT.md](CUSTOM_CONTENT.md).
+
+### GET /api/mex/custom-characters/list
+List custom characters in the vault.
+
+### POST /api/mex/custom-characters/import-zip
+Import a MexManager-exported fighter ZIP (multipart form).
+
+### POST /api/mex/custom-characters/scan-iso
+Scan a modded ISO for custom characters to extract.
+
+### GET /api/mex/custom-characters/{slug}/icon
+Serve the fighter's CSS icon.
+
+### GET /api/mex/custom-characters/{slug}/detail
+Get full fighter metadata (costumes, etc.).
+
+### GET /api/mex/custom-characters/{slug}/csp/{index}
+Serve a per-costume CSP portrait.
+
+### GET /api/mex/custom-characters/{slug}/stock/{index}
+Serve a per-costume stock icon.
+
+### POST /api/mex/custom-characters/{slug}/delete
+Delete a custom character from the vault.
+
+### POST /api/mex/custom-characters/{slug}/rename
+Rename a custom character.
+
+### GET /api/mex/custom-characters/{slug}/export
+Download the fighter's original ZIP.
+
+### POST /api/mex/custom-characters/install
+Install a vault custom character into the open project.
+
+**Body:** `{ "slug": "shadow" }`
+
+### POST /api/mex/custom-characters/remove-from-project
+Remove a custom character from the open project.
+
+---
+
+## Test In Game Blueprint
+
+Boots a freshly-built ISO in an isolated throwaway Dolphin and drives it to a
+real offline match (see [INGAME_TESTING.md](INGAME_TESTING.md)). All start
+endpoints run in a background thread; only one test at a time. Progress is
+streamed over WebSocket: `test_progress`, `test_complete`, `test_error`.
+
+### POST /api/mex/test-in-game/start
+Start a full build test from a build manifest (smart plan covering all mod types in the build).
+
+### POST /api/mex/test-in-game/costume
+Test a single vault costume (builds a minimal ISO, selects the costume, watches for crash/hang).
+
+### POST /api/mex/test-in-game/custom-character
+Test a vault custom character in-game.
+
+### POST /api/mex/test-in-game/custom-stage
+Test a vault custom stage in-game.
+
+### POST /api/mex/test-in-game/stage-skin
+Test a DAS stage skin in-game.
+
+### POST /api/mex/test-in-game/capture-stage-screenshot
+Boot a match on a stage and capture a screenshot (used for stage previews).
+
+### POST /api/mex/test-in-game/capture-stage-batch
+Capture screenshots for multiple stages in one Dolphin session.
+
+### GET /api/mex/test-in-game/status
+Get whether a test is currently running.
+
+---
+
+## Extras Blueprint
+
+Character effect mods (laser colors, shine colors, model swaps, texture hues).
+
+### GET /api/mex/storage/extras/list/{character}
+List extras in vault for a character.
+
+### GET /api/mex/storage/extras/current/{character}/{extra_type}
+Get the currently installed extra of a type for a character.
+
+### POST /api/mex/storage/extras/create
+Create a color-effect extra (e.g. custom laser/shine color).
+
+### POST /api/mex/storage/extras/delete
+Delete an extra from the vault.
+
+### POST /api/mex/storage/extras/install
+Install an extra into the open project.
+
+### POST /api/mex/storage/extras/restore-vanilla
+Restore an effect to its vanilla state.
+
+### POST /api/mex/storage/models/create
+Create a model-swap extra.
+
+### POST /api/mex/storage/models/install
+Install a model-swap extra.
+
+### POST /api/mex/storage/models/delete
+Delete a model-swap extra.
+
+### GET /api/mex/storage/textures/current/{character}/{extra_type}
+Get the current texture-hue extra for a character.
+
+### POST /api/mex/storage/textures/install
+Install a texture-hue extra.
+
+### POST /api/mex/storage/textures/restore-vanilla
+Restore textures to vanilla.
+
+---
+
 ## Assets Blueprint
 
 ### GET /api/mex/assets/{path}
@@ -880,3 +1256,7 @@ Serve project assets.
 | `bundle_export_complete` | Bundle | `{ success }` |
 | `bundle_import_progress` | Bundle | `{ progress, message }` |
 | `bundle_import_complete` | Bundle | `{ success }` |
+| `iso_scan_progress` | ISO Scan | `{ job_id, status, message, percent }` |
+| `test_progress` | Test In Game | `{ stage, percentage, message }` |
+| `test_complete` | Test In Game | result with verdict + screenshots |
+| `test_error` | Test In Game | `{ error }` |

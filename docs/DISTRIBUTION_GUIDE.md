@@ -1,4 +1,4 @@
-# Distribution Guide for Melee Nexus
+# Distribution Guide for SSBM Nucleus
 
 ## ✅ Comprehensive Dependency Audit Complete
 
@@ -10,8 +10,9 @@ All Python dependencies, external executables, and data files have been audited 
 
 **YES - Just ONE file:**
 ```
-dist-electron/Melee Nexus Setup.exe  (~400-500MB)
+dist-electron/SSBM Nucleus Setup 0.3.0.exe  (~400-500MB)
 ```
+(The version number in the filename comes from `package.json` — currently 0.3.0.)
 
 This installer contains EVERYTHING:
 - ✅ Electron app (Chromium browser + your React UI)
@@ -33,8 +34,8 @@ This installer contains EVERYTHING:
 When Electron builds with electron-builder:
 
 ```
-Melee Nexus/
-├── Melee Nexus.exe (main executable)
+SSBM Nucleus/
+├── SSBM Nucleus.exe (main executable)
 └── resources/
     ├── app.asar (your built viewer/dist/)
     ├── backend/
@@ -42,7 +43,7 @@ Melee Nexus/
     └── utility/
         ├── mex/mexcli.exe
         ├── assets/vanilla/ (images here!)
-        └── website/backend/tools/
+        └── tools/
             ├── HSDLib/HSDRawViewer/
             │   ├── HSDRawViewer.exe
             │   ├── lib/
@@ -90,7 +91,7 @@ rmdir /s /q output\
 ### What to Keep:
 
 - ✅ `utility/assets/vanilla/` - Vanilla Melee assets (users need these)
-- ✅ `utility/website/backend/tools/processor/csp_data/` - Character animation data
+- ✅ `utility/tools/processor/csp_data/` - Character animation data
 - ✅ `build/` - Only if you're including a sample MEX project
 
 ### Create a Clean Build Script:
@@ -136,8 +137,8 @@ result = subprocess.run(cmd, creationflags=subprocess.CREATE_NO_WINDOW)
    - Includes `lib/`, `runtimes/`, `Shader/`, DLLs
 
 2. **Path Resolution:**
-   - Dev: `utility/website/backend/tools/HSDLib/HSDRawViewer/.../HSDRawViewer.exe`
-   - Production: `sys._MEIPASS + '/utility/website/backend/tools/HSDLib/...'`
+   - Dev: `utility/tools/HSDLib/HSDRawViewer/.../HSDRawViewer.exe`
+   - Production: `sys._MEIPASS + '/utility/tools/HSDLib/...'`
 
 3. **.NET Runtime:**
    - You're building .NET as **self-contained** in `scripts/build/build.bat`
@@ -193,7 +194,7 @@ This now:
 ### 3. Test Build:
 
 On a **clean Windows VM** (no Python, no .NET):
-1. Install `Melee Nexus Setup.exe`
+1. Install `SSBM Nucleus Setup 0.3.0.exe`
 2. Launch app
 3. Test:
    - Creating MEX project
@@ -203,7 +204,7 @@ On a **clean Windows VM** (no Python, no .NET):
 
 ### 4. Distribute:
 
-Upload **ONLY** `dist-electron/Melee Nexus Setup.exe` to:
+Upload **ONLY** `dist-electron/SSBM Nucleus Setup 0.3.0.exe` to:
 - GitHub Releases
 - Google Drive
 - Your hosting
@@ -218,7 +219,7 @@ Upload **ONLY** `dist-electron/Melee Nexus Setup.exe` to:
 - [ ] Verify CSP generation works (HSDRawViewer)
 - [ ] Verify images load in vault
 - [ ] Verify MEX operations (import/export)
-- [ ] Upload `Melee Nexus Setup.exe`
+- [ ] Upload `SSBM Nucleus Setup 0.3.0.exe`
 - [ ] Write user instructions
 
 ---
@@ -226,7 +227,7 @@ Upload **ONLY** `dist-electron/Melee Nexus Setup.exe` to:
 ## 📝 User Installation Instructions
 
 ```markdown
-# Melee Nexus - Installation
+# SSBM Nucleus - Installation
 
 ## Requirements
 - Windows 10/11 (64-bit)
@@ -234,7 +235,7 @@ Upload **ONLY** `dist-electron/Melee Nexus Setup.exe` to:
 - **NO additional software needed**
 
 ## Installation
-1. Download `Melee Nexus Setup.exe`
+1. Download `SSBM Nucleus Setup 0.3.0.exe`
 2. Run installer
 3. Choose install location
 4. Launch from desktop shortcut
@@ -274,7 +275,7 @@ Everything is bundled in the installer.
 If users report issues, have them check:
 
 ```
-C:\Users\{user}\AppData\Roaming\Melee Nexus\logs\
+C:\Users\{user}\AppData\Roaming\SSBM Nucleus\logs\
 ```
 
 Logs will show:

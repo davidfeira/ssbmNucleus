@@ -4,21 +4,39 @@ This guide will help you set up the development environment for Nucleus Desktop.
 
 ## Prerequisites
 
-1. **Python 3.14+** - [Download from python.org](https://www.python.org/downloads/)
+1. **Python 3.10+** - [Download from python.org](https://www.python.org/downloads/)
    - Make sure to check "Add Python to PATH" during installation
 
 2. **Node.js 18+** - [Download from nodejs.org](https://nodejs.org/)
    - Includes npm (Node Package Manager)
 
-3. **Git** - [Download from git-scm.com](https://git-scm.com/)
+3. **.NET 6 SDK** - needed to build MexCLI and HSDRawViewer
 
-## Initial Setup
+4. **Git** - [Download from git-scm.com](https://git-scm.com/)
+
+## Quick Start (recommended)
+
+`run.bat` in the repo root is the **primary dev launcher**. It checks
+prerequisites (Python, Node, npm, dotnet), then automates all of the setup
+below: creates the venv, installs Python and npm dependencies (root + viewer),
+builds MexCLI and HSDRawViewer if missing (`--rebuild` forces a rebuild),
+copies `codes.gct`, kills stale processes, and finally starts the Vite dev
+server and the Electron app (Electron spawns the Flask backend itself).
+
+```bash
+run.bat            # set up everything (first run) and launch
+run.bat --rebuild  # also rebuild MexCLI + HSDRawViewer
+```
+
+The manual steps below are only needed if you want to do the setup yourself.
+
+## Initial Setup (manual)
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/davidfeira/meleeNexus.git
-cd NucleusDesktop
+git clone https://github.com/davidfeira/ssbmNucleus.git
+cd ssbmNucleus
 ```
 
 ### 2. Install Python Dependencies
@@ -67,7 +85,7 @@ cp utility/MexManager/MexManager.Desktop/codes.gct utility/MexManager/MexCLI/bin
 The 3D model viewer requires HSDRawViewer to be built with embedded mode support:
 
 ```bash
-cd utility/website/backend/tools/HSDLib/HSDRawViewer
+cd utility/tools/HSDLib/HSDRawViewer
 dotnet build -c Release
 cd ../../../../../..
 ```
@@ -76,17 +94,29 @@ This builds the viewer with the `--embedded` flag support, allowing it to run as
 
 ## Running in Development Mode
 
-Use the start script to launch all three components (Backend, Vite, Electron):
+The primary way to run the app is the root launcher:
 
 ```bash
-# Windows - Use the script in scripts/build folder (NOT the root start.bat)
+run.bat
+```
+
+This starts two terminal windows (the Flask backend is spawned by Electron):
+- **Vite Dev Server** - React frontend (http://localhost:3000)
+- **MEX Manager** - Electron desktop app (includes the Flask backend)
+
+Alternatively, `scripts\build\start.bat` is a minimal launcher that skips all
+setup checks and opens three windows (Backend, Vite, Electron) directly:
+
+```bash
 scripts\build\start.bat
 ```
 
-This will open three terminal windows:
-- **MEX Backend** - Flask API server (http://127.0.0.1:5000)
+- **MEX Backend** - Flask API server (prefers port 5000, falls back to a free OS-assigned port)
 - **Vite Dev Server** - React frontend (http://localhost:3000)
 - **MEX Manager** - Electron desktop app
+
+The backend port is dynamic: it tries 5000 first and falls back to a free
+port; Electron picks up the actual port at startup.
 
 ### What Each Component Does
 
@@ -114,7 +144,7 @@ When you first launch the app, you'll need to:
 ## Project Structure
 
 ```
-NucleusDesktop/
+ssbmNucleus/
 ├── backend/              # Flask API server
 │   ├── mex_api.py       # Main API entry point
 │   └── first_run_setup.py # ISO extraction logic
@@ -154,13 +184,15 @@ Copy the codes.gct file to the mexcli directory (see step 4 above).
 Check `logs/backend_*.log` for errors. Make sure:
 - Virtual environment is set up correctly
 - All Python dependencies are installed
-- Port 5000 is not in use by another application
+
+(The backend picks a free port automatically — port 5000 being in use is not
+fatal, it just falls back to another port.)
 
 ### 3D Viewer doesn't connect / shows "FileNotFoundException: --embedded"
 
 HSDRawViewer wasn't rebuilt after source changes. Rebuild it:
 ```bash
-cd utility/website/backend/tools/HSDLib/HSDRawViewer
+cd utility/tools/HSDLib/HSDRawViewer
 dotnet build -c Release
 ```
 Then restart the Electron app. You should see "Embedded mode detected" in the console when opening the 3D viewer.

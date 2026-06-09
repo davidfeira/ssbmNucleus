@@ -6,8 +6,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-REFERENCE_PATH = ROOT / "docs" / "color-effects-reference" / "Effect-Offsets-Reference.md"
-OFFSETS_JSON_PATH = ROOT / "docs" / "color-effects-reference" / "melee_color_offsets.json"
+REFERENCE_PATH = ROOT / "docs" / "research" / "color-effects-reference" / "Effect-Offsets-Reference.md"
+OFFSETS_JSON_PATH = ROOT / "docs" / "research" / "color-effects-reference" / "melee_color_offsets.json"
 
 sys.path.insert(0, str(ROOT / "backend"))
 

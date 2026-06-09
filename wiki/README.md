@@ -24,7 +24,7 @@ On Windows, you can also run `open_wiki.bat` from the repo root. It starts the w
 
 ## Reference
 
-- [Melee Files Reference](../docs/new-414/Melee-Files.md)
-- [Effect Offsets Reference](../docs/color-effects-reference/Effect-Offsets-Reference.md)
+- [Melee Files Reference](../docs/research/new-414/Melee-Files.md)
+- [Effect Offsets Reference](../docs/research/color-effects-reference/Effect-Offsets-Reference.md)
 
 These are the main reference pages for file families and effect offsets.

@@ -1,6 +1,6 @@
-# Linux Build Guide for Melee Nexus
+# Linux Build Guide for SSBM Nucleus
 
-This guide covers building Melee Nexus for Linux as an AppImage.
+This guide covers building SSBM Nucleus for Linux as an AppImage.
 
 ## Prerequisites
 
@@ -146,7 +146,7 @@ chmod +x dist-electron/*.AppImage
 Test HSDRawViewer directly:
 
 ```bash
-cd utility/website/backend/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows
+cd utility/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows
 wine HSDRawViewer.exe --csp <test.dat> output.png
 ```
 

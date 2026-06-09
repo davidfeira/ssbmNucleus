@@ -55,7 +55,7 @@ Located in `backend/blueprints/`. Each blueprint handles a specific domain:
 | **storage_stages_bp** | `storage_stages.py` | Stage vault operations and metadata |
 | **vault_backup_bp** | `vault_backup.py` | Backup/restore/clear storage vault |
 | **mod_export_bp** | `mod_export.py` | Export costumes/stages as ZIP mods |
-| **import_bp** | `import_unified.py` | Unified import with auto-detection (ZIP/7z) |
+| **import_bp** | `import_unified/` (package) | Unified import with auto-detection (ZIP/7z) |
 | **das_bp** | `das.py` | Dynamic Alternate Stages framework |
 | **poses_bp** | `poses.py` | CSP pose/animation management |
 | **setup_bp** | `setup.py` | First-run setup, ISO verification |
@@ -63,7 +63,17 @@ Located in `backend/blueprints/`. Each blueprint handles a specific domain:
 | **xdelta_bp** | `xdelta.py` | Binary patch creation/application |
 | **bundles_bp** | `bundles.py` | `.ssbm` mod bundle management |
 | **viewer_bp** | `viewer.py` | 3D model preview (HSDRawViewer) |
-| **extras_bp** | `extras_api.py` | Character effects (lasers, shine colors) |
+| **settings_bp** | `settings.py` | Placeholder (no routes; former vault-location feature removed) |
+| **iso_scan_bp** | `iso_scan.py` | Rip costume skins from vanilla/modded ISOs (background jobs) |
+| **menus_bp** | `menus/` (package) | CSS/SSS menu mods: icon grids, backgrounds, doors, layouts |
+| **custom_stages_bp** | `custom_stages.py` | Wholly new m-ex stages (vault + project install) |
+| **custom_characters_bp** | `custom_characters.py` | Wholly new m-ex fighters (vault + project install) |
+| **test_in_game_bp** | `test_in_game.py` | In-game test harness HTTP shell (see `backend/ingame/`) |
+| **extras_bp** | `extras/` (package) | Character effects (lasers, shine colors, model swaps, texture hues) |
+
+Note: `extras` and `menus` were originally single files (`backend/extras_api.py`
+and `backend/blueprints/menus.py`) and have been split into packages at
+`backend/blueprints/extras/` and `backend/blueprints/menus/`.
 
 ### Core Modules
 
@@ -79,12 +89,35 @@ backend/core/
 
 ```
 backend/
-├── character_detector.py  # Auto-detect character from ZIP structure
-├── stage_detector.py      # Auto-detect stage from ZIP structure
-├── texture_pack.py        # Texture pack processing
-├── extra_types.py         # Effect color type definitions
-└── first_run_setup.py     # Setup wizard logic
+├── character_detector.py     # Auto-detect character from ZIP structure
+├── stage_detector.py         # Auto-detect stage from ZIP structure
+├── texture_pack.py           # Texture pack processing
+├── texture_filename_table.py # Index->filename table for offline texture apply
+├── iso_scanner.py            # ISO costume scan pipeline (used by iso_scan_bp)
+├── extra_types.py            # Effect color type definitions
+├── first_run_setup.py        # Setup wizard logic
+└── ingame/                   # In-game test engine (see below)
 ```
+
+### In-Game Test Engine (`backend/ingame/`)
+
+A self-contained, Windows-only harness (stdlib + Pillow) that boots a
+freshly-built ISO in an **isolated, throwaway** Slippi Dolphin — a temp copy of
+the user's Dolphin config, so their real Slippi setup is never touched — and
+drives it to a real offline match using RAM feedback:
+
+- `boot.py` — locate Slippi Dolphin, build the temp User dir, launch the ISO
+- `nav.py` / `melee_css.py` / `melee_sss.py` — navigate menus and select the
+  modded character/stage closed-loop via the named pipe controller + RAM reads
+- `melee_mem.py` / `melee_pipe.py` — read emulated RAM, write Dolphin's pipe
+- `observe.py` — crash/hang detection (PASS / CRASH / HUNG verdicts)
+- `screenshot.py` / `capture.py` — capture screenshots (e.g. stage previews)
+- `runner.py` — orchestrator; public entry point `ingame.run_test(...)`
+
+It never enters online play (aborts on the online scene). Consumers:
+the `test_in_game` blueprint (all test/capture endpoints) and the `bundles` and
+`xdelta` blueprints (launching builds in the user's real Slippi via
+`ingame.boot.launch_real`). See [INGAME_TESTING.md](INGAME_TESTING.md).
 
 ### Backend State Management
 
@@ -170,11 +203,12 @@ Frontend uses vanilla React hooks (no Redux/Zustand):
 ## Directory Structure
 
 ```
-new aka/
+ssbmNucleus/
 ├── backend/
 │   ├── mex_api.py              # Flask app entry point
 │   ├── core/                   # Config, state, constants
-│   └── blueprints/             # 17 Flask blueprints
+│   ├── ingame/                 # In-game test engine (Dolphin harness)
+│   └── blueprints/             # Flask blueprints (incl. extras/ and menus/ packages)
 │
 ├── viewer/
 │   ├── src/
@@ -273,11 +307,11 @@ new aka/
 
 ```
 1. User opens CSP manager
-2. React → Flask GET /api/mex/viewer/start
+2. React → Flask POST /api/viewer/start
 3. Flask → Start HSDRawViewer subprocess
 4. HSDRawViewer → Render character pose
 5. User adjusts pose, clicks Generate
-6. React → Flask POST /api/mex/storage/poses/generate
+6. React → Flask POST /api/mex/storage/poses/batch-generate-csp
 7. Flask → processor/generate_csp.py
 8. Flask → Return generated CSP image
 ```
@@ -305,4 +339,4 @@ electron-builder packages:
 - `viewer/dist/` → Frontend assets
 - `utility/assets/` → Vanilla game graphics
 - `utility/HSDRawViewer/` → 3D viewer executable
-- `utility/website/backend/tools/` → Processor tools
+- `utility/tools/` → Processor tools

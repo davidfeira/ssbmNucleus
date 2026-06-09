@@ -68,5 +68,5 @@ Some are not shared because the underlying Melee file is character-specific.
 ## Related Pages
 
 - [Effects Workflow](Extras-And-Effects-Workflow.md)
-- [Melee Files Reference](../docs/new-414/Melee-Files.md)
-- [Effect Offsets Reference](../docs/color-effects-reference/Effect-Offsets-Reference.md)
+- [Melee Files Reference](../docs/research/new-414/Melee-Files.md)
+- [Effect Offsets Reference](../docs/research/color-effects-reference/Effect-Offsets-Reference.md)

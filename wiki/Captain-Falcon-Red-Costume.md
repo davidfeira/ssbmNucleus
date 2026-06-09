@@ -45,4 +45,4 @@ Captain Falcon also has ECB differences, but that is a separate topic and is not
 ## Related Pages
 
 - [Character Mod Workflow](Character-Mod-Workflow.md)
-- [Melee Files Reference](../docs/new-414/Melee-Files.md)
+- [Melee Files Reference](../docs/research/new-414/Melee-Files.md)

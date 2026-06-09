@@ -1,6 +1,6 @@
 # Melee Files Reference
 
-This is a cleaned Markdown conversion of the useful reference material from `docs/new-414/Melee Files.pdf`.
+This is a cleaned Markdown conversion of the useful reference material from `docs/research/new-414/Melee Files.pdf`.
 
 Source: [original Google Doc](https://docs.google.com/document/d/1Q9uY3b9Xd-aUGHVsCLvLc6zR11-5DCPSHBSXb6mAjA8/edit?tab=t.0)
 
@@ -258,4 +258,4 @@ The source also lists the common `Gr*.dat` stage codes:
 
 ## Original File
 
-The original PDF is still stored at `docs/new-414/Melee Files.pdf`.
+The original PDF is still stored at `docs/research/new-414/Melee Files.pdf`.

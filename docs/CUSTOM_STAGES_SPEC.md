@@ -1,5 +1,10 @@
 # Custom Stages Spec
 
+> **Note:** This is the original design specification. The custom stages
+> feature is now implemented (see [API_REFERENCE.md](API_REFERENCE.md) and
+> [CUSTOM_CONTENT.md](CUSTOM_CONTENT.md)); the implementation may differ from
+> this spec in details.
+
 Custom stages are entirely separate from stage skins (DAS). Stage skins are alternate
 textures for the 6 legal stages; custom stages are wholly new stages added to the game
 via MEX's stage system.

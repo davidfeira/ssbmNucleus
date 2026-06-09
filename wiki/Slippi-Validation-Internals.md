@@ -12,7 +12,7 @@ Not a full explanation of every low-level rule used by the external Slippi valid
 
 ## Character Costume Validation Path
 
-For character costumes, Nucleus runs validation through `validate_for_slippi()` in `utility/website/backend/app/services/dat_processor.py`.
+For character costumes, Nucleus runs validation through `validate_for_slippi()` in `utility/tools/services/dat_processor.py`.
 
 That wrapper is used from the import and retest flows in `backend/mex_api.py`.
 
@@ -94,9 +94,9 @@ So the key split is:
 
 If you need to trace the implementation, the main entry points are:
 
-- `utility/website/backend/app/services/dat_processor.py`
+- `utility/tools/services/dat_processor.py`
 - `backend/mex_api.py`
-- `utility/website/backend/tools/processor/validate_costume.py`
+- `utility/tools/processor/validate_costume.py`
 
 ## Summary
 
@@ -108,4 +108,4 @@ It wraps an external validator, makes sure the DAT is presented under the expect
 
 - [Slippi Safety](Slippi-Safety.md)
 - [Character Mod Workflow](Character-Mod-Workflow.md)
-- [Melee Files Reference](../docs/new-414/Melee-Files.md)
+- [Melee Files Reference](../docs/research/new-414/Melee-Files.md)

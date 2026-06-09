@@ -100,7 +100,7 @@ _jobs_lock = threading.Lock()
 # ---------- Job state ----------
 
 # Two-letter `Pl<Xx>...` prefix → canonical character name, per
-# docs/new-414/Melee-Files.md. Used to override DATParser's symbol-based
+# docs/research/new-414/Melee-Files.md. Used to override DATParser's symbol-based
 # detection when filename and symbol disagree (e.g. male wireframe DATs share
 # the "ftDataBoy" symbol with Young Link, so symbol alone tags the wireframe
 # as Young Link). Filename is the more reliable signal — modders don't usually
@@ -348,7 +348,7 @@ def _load_vanilla_hashes() -> set[str]:
 def _is_character_file(path: str) -> bool:
     """Decide whether a filename looks like a per-color costume archive.
 
-    Per docs/new-414/Melee-Files.md the Melee `Pl*` namespace covers several
+    Per docs/research/new-414/Melee-Files.md the Melee `Pl*` namespace covers several
     different file kinds — only one of them is a costume:
 
         PlCo.dat        common player data    (skip)
