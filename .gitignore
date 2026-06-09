@@ -57,7 +57,7 @@ utility/assets/stages/
 
 # Vanilla DAT files in csp_data (copied from user's ISO during first-run setup)
 # Keep animation files (.anim), scene files (.yml), and images - only exclude vanilla Pl*.dat
-utility/website/backend/tools/processor/csp_data/**/Pl*.dat
+utility/tools/processor/csp_data/**/Pl*.dat
 
 # Reference files (large vanilla dumps)
 reference/vanilla-dump/
@@ -84,6 +84,7 @@ pytest-cache-files-*/
 /*.dat
 /*.usd
 /sheik_*.png
+/render_*.png
 /sheik_*.jpg
 /sheik_*.yml
 /csp_test_out/
