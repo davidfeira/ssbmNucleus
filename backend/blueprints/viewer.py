@@ -77,6 +77,52 @@ def find_aj_file(character):
     return None
 
 
+def extract_custom_character_aj(slug):
+    """Get a custom character's animation archive: extract files.animFile
+    from fighter.zip into the character dir (cached as aj_cache.dat)."""
+    char_dir = STORAGE_PATH / 'custom_characters' / slug
+    cache = char_dir / 'aj_cache.dat'
+    if cache.exists():
+        return cache
+    fighter_json = char_dir / 'fighter.json'
+    fighter_zip = char_dir / 'fighter.zip'
+    if not fighter_json.exists() or not fighter_zip.exists():
+        return None
+    try:
+        with open(fighter_json, 'r') as f:
+            anim_file = (json.load(f).get('files') or {}).get('animFile')
+        if not anim_file:
+            return None
+        with zipfile.ZipFile(fighter_zip) as zf:
+            for n in zf.namelist():
+                if n.split('/')[-1].lower() == anim_file.lower():
+                    cache.write_bytes(zf.read(n))
+                    return cache
+    except Exception as e:
+        logger.warning(f"Failed to extract AJ for custom character {slug}: {e}")
+    return None
+
+
+def custom_character_based_on(slug):
+    """Donor skeleton for a custom character (e.g. Chun-Li -> Zelda),
+    derived from a costume joint symbol 'Ply<Name>5K_...'."""
+    import re
+    fighter_json = STORAGE_PATH / 'custom_characters' / slug / 'fighter.json'
+    if not fighter_json.exists():
+        return None
+    try:
+        with open(fighter_json, 'r') as f:
+            fighter = json.load(f)
+        for costume in fighter.get('costumes', []):
+            joint = (costume.get('file') or {}).get('jointSymbol') or ''
+            m = re.match(r'Ply(.+?)5K', joint)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
 def find_vanilla_costume_file(character, costume_code):
     """Find a vanilla costume archive, tolerating both .dat/.usd and legacy folder names."""
     character_dir = VANILLA_ASSETS_DIR / character
@@ -289,12 +335,14 @@ def get_viewer_paths():
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
-        # Find the costume
-        characters = metadata.get('characters', {})
-        if character not in characters:
+        # Find the costume (canonical character, or a custom character's
+        # skin library via the 'custom_characters/<slug>/skins' pseudo key)
+        from core.metadata import get_char_data, custom_character_slug
+        char_data = get_char_data(metadata, character)
+        if char_data is None:
             return jsonify({'success': False, 'error': f'Character {character} not found'}), 404
 
-        skins = characters[character].get('skins', [])
+        skins = char_data.get('skins', [])
         costume = None
         for skin in skins:
             if skin.get('id') == skin_id:
@@ -320,10 +368,22 @@ def get_viewer_paths():
 
         # Find scene file
         scene_path = find_scene_file(character)
-        scene_windows_path = to_windows_path(scene_path) if scene_path else None
 
         # Find AJ file
         aj_path = find_aj_file(character)
+
+        # Custom characters: animations come from their own AJ inside
+        # fighter.zip; the scene config falls back to the donor skeleton
+        slug = custom_character_slug(character)
+        if slug:
+            if aj_path is None:
+                aj_path = extract_custom_character_aj(slug)
+            if scene_path is None:
+                based_on = custom_character_based_on(slug)
+                if based_on:
+                    scene_path = find_scene_file(based_on)
+
+        scene_windows_path = to_windows_path(scene_path) if scene_path else None
         aj_windows_path = to_windows_path(aj_path) if aj_path else None
 
         return jsonify({

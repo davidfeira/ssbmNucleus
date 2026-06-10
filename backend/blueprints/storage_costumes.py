@@ -20,7 +20,7 @@ from flask import Blueprint, request, jsonify
 from core.config import PROJECT_ROOT, STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR, SERVICES_DIR
 from core.constants import get_char_prefix
 from core.costume_files import find_costume_archive_name, find_extracted_costume_archive
-from core.metadata import load_metadata, save_metadata
+from core.metadata import load_metadata, save_metadata, get_char_data
 
 import sys
 sys.path.insert(0, str(PROCESSOR_DIR))
@@ -151,10 +151,10 @@ def delete_storage_costume():
         if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
 
-        if character not in metadata.get('characters', {}):
+        char_data = get_char_data(metadata, character)
+        if char_data is None:
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
 
-        char_data = metadata['characters'][character]
         skins = char_data.get('skins', [])
         skin_to_delete = None
         skin_index = None
@@ -211,10 +211,10 @@ def rename_storage_costume():
         if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
 
-        if character not in metadata.get('characters', {}):
+        char_data = get_char_data(metadata, character)
+        if char_data is None:
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
 
-        char_data = metadata['characters'][character]
         skins = char_data.get('skins', [])
         skin_found = False
 
@@ -279,8 +279,9 @@ def update_costume_csp():
 
             metadata = load_metadata()
             if metadata is not None:
-                if character in metadata.get('characters', {}):
-                    for skin in metadata['characters'][character].get('skins', []):
+                char_data = get_char_data(metadata, character)
+                if char_data is not None:
+                    for skin in char_data.get('skins', []):
                         if skin['id'] == skin_id:
                             skin['has_hd_csp'] = True
                             skin['hd_csp_source'] = 'custom'
@@ -310,8 +311,9 @@ def update_costume_csp():
 
             metadata = load_metadata()
             if metadata is not None:
-                if character in metadata.get('characters', {}):
-                    for skin in metadata['characters'][character].get('skins', []):
+                char_data = get_char_data(metadata, character)
+                if char_data is not None:
+                    for skin in char_data.get('skins', []):
                         if skin['id'] == skin_id:
                             skin['has_csp'] = True
                             skin['csp_source'] = 'custom'
@@ -328,7 +330,7 @@ def update_costume_csp():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@storage_costumes_bp.route('/api/mex/storage/costumes/<character>/<skin_id>/csp/capture-hd', methods=['POST'])
+@storage_costumes_bp.route('/api/mex/storage/costumes/<path:character>/<skin_id>/csp/capture-hd', methods=['POST'])
 def capture_hd_csp(character, skin_id):
     """Generate HD CSP for a skin at specified resolution"""
     try:
@@ -370,8 +372,9 @@ def capture_hd_csp(character, skin_id):
 
             metadata = load_metadata()
             if metadata is not None:
-                if character in metadata.get('characters', {}):
-                    for skin in metadata['characters'][character].get('skins', []):
+                char_data = get_char_data(metadata, character)
+                if char_data is not None:
+                    for skin in char_data.get('skins', []):
                         if skin['id'] == skin_id:
                             skin['has_hd_csp'] = True
                             skin['hd_csp_resolution'] = f"{scale}x"
@@ -388,7 +391,7 @@ def capture_hd_csp(character, skin_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@storage_costumes_bp.route('/api/mex/storage/costumes/<character>/<skin_id>/csp/manage', methods=['POST', 'OPTIONS'])
+@storage_costumes_bp.route('/api/mex/storage/costumes/<path:character>/<skin_id>/csp/manage', methods=['POST', 'OPTIONS'])
 def manage_csp(character, skin_id):
     """Manage CSPs for a skin - swap, remove, add alternatives, regenerate HD"""
     if request.method == 'OPTIONS':
@@ -414,7 +417,7 @@ def manage_csp(character, skin_id):
         if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata not found'}), 404
 
-        char_data = metadata.get('characters', {}).get(character, {})
+        char_data = get_char_data(metadata, character) or {}
         skins = char_data.get('skins', [])
         skin = next((s for s in skins if s.get('id') == skin_id), None)
 
@@ -647,8 +650,9 @@ def update_costume_stock():
 
         metadata = load_metadata()
         if metadata is not None:
-            if character in metadata.get('characters', {}):
-                for skin in metadata['characters'][character].get('skins', []):
+            char_data = get_char_data(metadata, character)
+            if char_data is not None:
+                for skin in char_data.get('skins', []):
                     if skin['id'] == skin_id:
                         skin['has_stock'] = True
                         skin['stock_source'] = 'custom'
@@ -720,8 +724,9 @@ def retest_costume_slippi():
 
         metadata = load_metadata()
         if metadata is not None:
-            if character in metadata.get('characters', {}):
-                for skin in metadata['characters'][character].get('skins', []):
+            char_data = get_char_data(metadata, character)
+            if char_data is not None:
+                for skin in char_data.get('skins', []):
                     if skin['id'] == skin_id:
                         skin['slippi_safe'] = validation['slippi_safe']
                         skin['slippi_tested'] = True
@@ -758,11 +763,12 @@ def override_costume_slippi():
         if metadata is None:
             return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
 
-        if character not in metadata.get('characters', {}):
+        char_data = get_char_data(metadata, character)
+        if char_data is None:
             return jsonify({'success': False, 'error': f'Character {character} not found in metadata'}), 404
 
         skin_found = False
-        for skin in metadata['characters'][character].get('skins', []):
+        for skin in char_data.get('skins', []):
             if skin['id'] == skin_id:
                 skin['slippi_safe'] = slippi_safe
                 skin['slippi_manual_override'] = True

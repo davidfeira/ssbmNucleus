@@ -295,6 +295,47 @@ def _resolve_asset_png(assets_dir, asset_ref):
     return None
 
 
+def _extract_stage_playlist(project_dir, stage_data, stage_dir):
+    """Copy a custom stage's playlist music (.hps files + names) into the
+    vault. MexStage.FromPackage resets the playlist on install, so the
+    vault carries the actual tracks to port them. Returns entry updates."""
+    entries = ((stage_data.get('playlist') or {}).get('entries')) or []
+    if not entries:
+        return {}
+
+    music_json = project_dir / 'data' / 'music.json'
+    if not music_json.exists():
+        return {}
+    try:
+        with open(music_json, 'r', encoding='utf-8') as f:
+            music = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    playlist = []
+    for e in entries:
+        mid = e.get('musicID')
+        chance = e.get('chanceToPlay', 50)
+        if not (isinstance(mid, int) and 0 <= mid < len(music)):
+            continue
+        m = music[mid] or {}
+        fname = m.get('fileName')
+        src = (project_dir / 'files' / 'audio' / fname) if fname else None
+        if not (src and src.exists()):
+            continue
+        i = len(playlist)
+        shutil.copy2(src, stage_dir / f'music_{i}.hps')
+        cache = stage_dir / 'audio_cache' / f'track_{i}.wav'
+        if cache.exists():
+            cache.unlink()
+        playlist.append({
+            'name': (m.get('name') or '').strip() or Path(fname).stem,
+            'chance': chance,
+        })
+
+    return {'playlist': playlist} if playlist else {}
+
+
 def _extract_custom_stages_from_project(project_dir, source_label):
     """Extract custom stages from a MEX project directory into the vault.
     Returns (imported, skipped) name lists."""
@@ -339,6 +380,17 @@ def _extract_custom_stages_from_project(project_dir, source_label):
                 continue
 
             if stage_name.lower() in existing_names:
+                # backfill playlist music for stages scanned before audio
+                # extraction existed
+                existing = next((s for s in metadata.get('custom_stages', [])
+                                 if not _is_folder(s) and (s.get('name') or '').lower() == stage_name.lower()), None)
+                if existing is not None:
+                    existing_dir = CUSTOM_STAGES_PATH / existing['slug']
+                    if existing_dir.exists():
+                        playlist_updates = _extract_stage_playlist(project_dir, stage_data, existing_dir)
+                        if playlist_updates:
+                            existing.update(playlist_updates)
+                            _write_metadata(metadata)
                 skipped.append(stage_name)
                 continue
 
@@ -400,6 +452,8 @@ def _extract_custom_stages_from_project(project_dir, source_label):
                 'has_banner': has_banner,
                 'has_icon': has_icon
             }
+
+            entry.update(_extract_stage_playlist(project_dir, stage_data, stage_dir))
 
             metadata['custom_stages'].append(entry)
             existing_names.add(stage_name.lower())
@@ -484,6 +538,23 @@ def get_custom_stage_banner(slug):
     if banner_path.exists():
         return send_file(banner_path, mimetype='image/png')
     return jsonify({'success': False, 'error': 'Banner not found'}), 404
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/audio/track/<int:index>', methods=['GET'])
+def get_stage_track_audio(slug, index):
+    """Decode a stage playlist track (extracted at scan) to WAV."""
+    stage_dir = CUSTOM_STAGES_PATH / slug
+    cache = stage_dir / 'audio_cache' / f'track_{index}.wav'
+    if not cache.exists():
+        hps = stage_dir / f'music_{index}.hps'
+        if not hps.exists():
+            return jsonify({'success': False, 'error': 'Track not extracted — rescan the source ISO'}), 404
+        from blueprints.custom_characters import _run_mexcli
+        cache.parent.mkdir(exist_ok=True)
+        out = _run_mexcli('hps-to-wav', hps, cache)
+        if not out.get('success') or not cache.exists():
+            return jsonify({'success': False, 'error': out.get('error', 'HPS decode failed')}), 500
+    return send_file(cache, mimetype='audio/wav')
 
 
 @custom_stages_bp.route('/api/mex/custom-stages/<slug>/delete', methods=['POST'])
@@ -594,20 +665,61 @@ def install_custom_stage():
             logger.error(f"add-stage failed: {error_msg}")
             return jsonify({'success': False, 'error': f'Failed to add stage: {error_msg}'}), 500
 
+        from blueprints.custom_characters import _parse_cli_json, _run_mexcli
+        cli_output = _parse_cli_json(result.stdout)
+        stage_name = cli_output.get('name', slug)
+
+        # Port the stage's music playlist: add each track to the target
+        # project (reusing same-named ones), then point the stage at them —
+        # add-stage itself resets the playlist to a single default track
+        warnings = []
+        playlist_ported = 0
+        metadata = _read_metadata()
+        entry = next((s for s in metadata.get('custom_stages', [])
+                      if not _is_folder(s) and s.get('slug') == slug), None)
+        playlist = (entry or {}).get('playlist') or []
+        if playlist:
+            stage_dir = CUSTOM_STAGES_PATH / slug
+            cli_entries = []
+            for i, track in enumerate(playlist):
+                hps = stage_dir / f'music_{i}.hps'
+                if not hps.exists() or not track.get('name'):
+                    warnings.append(f"Track '{track.get('name')}' file missing, skipped")
+                    continue
+                music_out = _run_mexcli('add-music', project_path, hps, track['name'])
+                if music_out.get('success') and 'musicId' in music_out:
+                    cli_entries.append({'musicId': music_out['musicId'],
+                                        'chance': track.get('chance', 50)})
+                else:
+                    warnings.append(f"Track '{track['name']}' could not be added")
+            if cli_entries:
+                pl_result = subprocess.run(
+                    [str(MEXCLI_PATH), 'set-stage-playlist', str(project_path), stage_name],
+                    input=json.dumps(cli_entries),
+                    capture_output=True, text=True,
+                    cwd=str(PROJECT_ROOT), **get_subprocess_args()
+                )
+                if pl_result.returncode == 0 and _parse_cli_json(pl_result.stdout).get('success'):
+                    playlist_ported = len(cli_entries)
+                    logger.info(f"Ported {playlist_ported} playlist track(s) for stage '{stage_name}'")
+                else:
+                    warnings.append('Stage playlist could not be set')
+                    logger.warning(f"set-stage-playlist failed: {pl_result.stdout or pl_result.stderr}")
+
         import time
         time.sleep(0.15)
         reload_mex_manager()
 
-        try:
-            cli_output = json.loads(result.stdout.strip().split('\n')[-1])
-        except (json.JSONDecodeError, IndexError):
-            cli_output = {}
-
+        message = f"Added {stage_name} to project"
+        if playlist_ported:
+            message += f" with {playlist_ported} music track(s)"
         logger.info(f"[OK] Installed custom stage '{slug}' into project")
         return jsonify({
             'success': True,
-            'message': f"Added {cli_output.get('name', slug)} to project",
-            'name': cli_output.get('name', slug),
+            'message': message,
+            'name': stage_name,
+            'playlistPorted': playlist_ported,
+            'warnings': warnings,
         })
     except Exception as e:
         logger.error(f"Install custom stage error: {e}", exc_info=True)
@@ -762,6 +874,40 @@ def delete_custom_stage_folder():
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Delete custom-stage folder error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/set-folder', methods=['POST'])
+def set_custom_stage_folder():
+    """Assign or unassign a custom stage to a folder (drag-into-folder)."""
+    try:
+        data = request.json or {}
+        stage_id = data.get('stageId')
+        folder_id = data.get('folderId')
+
+        if not stage_id:
+            return jsonify({'success': False, 'error': 'Missing stageId'}), 400
+
+        metadata = _read_metadata()
+        items = metadata.get('custom_stages', [])
+
+        stage = next((it for it in items if not _is_folder(it) and it.get('id') == stage_id), None)
+        if not stage:
+            return jsonify({'success': False, 'error': f'Stage {stage_id} not found'}), 404
+
+        if folder_id:
+            folder, _idx = _find_folder(items, folder_id)
+            if not folder:
+                return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+            stage['folder_id'] = folder_id
+        elif 'folder_id' in stage:
+            del stage['folder_id']
+
+        _write_metadata(metadata)
+        logger.info(f"[OK] Set custom stage {stage_id} folder to {folder_id}")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Set custom-stage folder error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
