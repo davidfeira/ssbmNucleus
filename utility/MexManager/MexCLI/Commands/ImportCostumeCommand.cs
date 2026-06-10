@@ -7,6 +7,28 @@ namespace MexCLI.Commands
 {
     public static class ImportCostumeCommand
     {
+        /// <summary>
+        /// Vanilla Kirby costume slot for a costume file's color code
+        /// (PlKbNr=0, PlKbYe=1, PlKbBu=2, PlKbRe=3, PlKbGr=4, PlKbWh=5; -1 unknown).
+        /// Used to pick which vanilla cap entry to clone for an added Kirby costume.
+        /// </summary>
+        private static int KirbyVanillaColorIndex(string fileName)
+        {
+            string stem = Path.GetFileNameWithoutExtension(fileName ?? "");
+            if (!stem.StartsWith("PlKb") || stem.Length < 6)
+                return -1;
+            return stem.Substring(4, 2) switch
+            {
+                "Nr" => 0,
+                "Ye" => 1,
+                "Bu" => 2,
+                "Re" => 3,
+                "Gr" => 4,
+                "Wh" => 5,
+                _ => -1,
+            };
+        }
+
         private static void ApplyOriginalCostumeIndex(MexFighter fighter, MexCostume costume, StringBuilder log)
         {
             string jointSymbol = costume.File.JointSymbol;
@@ -135,6 +157,33 @@ namespace MexCLI.Commands
                 {
                     ApplyOriginalCostumeIndex(fighter, costume, log);
                     fighter.Costumes.Add(costume);
+
+                    // Kirby (internal id 4): every fighter's kirby cap-costume table is
+                    // indexed by Kirby's costume index, so append a matching entry.
+                    // Clone the fighter's own vanilla cap entry for the costume's base
+                    // color (PlKb<Cl>... -> that color's PlKb<Cl>Cp<Ch>.dat) -- a plain
+                    // costume DAT in this slot crashes the copy-ability loader, and the
+                    // vanilla cap file is a configuration the game already runs.
+                    if (fighterInternalId == 4)
+                    {
+                        int colorIdx = KirbyVanillaColorIndex(costume.File.FileName);
+                        foreach (MexFighter f in workspace.Project.Fighters)
+                        {
+                            if (f.HasKirbyCostumes)
+                            {
+                                var src = f.KirbyCostumes[
+                                    colorIdx >= 0 && colorIdx < f.KirbyCostumes.Count ? colorIdx : 0];
+                                f.KirbyCostumes.Add(new MexCostumeFile()
+                                {
+                                    FileName = src.FileName,
+                                    JointSymbol = src.JointSymbol,
+                                    MaterialSymbol = src.MaterialSymbol,
+                                });
+                            }
+                        }
+                        log.AppendLine($"Synced kirby cap-costume tables for \"{costume.File.FileName}\" "
+                                       + $"(vanilla color index {colorIdx})");
+                    }
                 }
 
                 // Save the workspace

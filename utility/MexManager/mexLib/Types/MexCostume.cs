@@ -100,19 +100,22 @@ namespace mexLib.Types
                     if (entry.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) ||
                         entry.Name.EndsWith(".usd", StringComparison.OrdinalIgnoreCase))
                     {
+                        // kirby cap/copy files only: PlKbCp<Ch> or PlKb<Cl>Cp<Ch>
+                        // (PlKb<Cl> costume files take the regular costume path below)
+                        string stem = Path.GetFileNameWithoutExtension(entry.Name);
+                        bool isKirbyCap = stem.StartsWith("PlKb") &&
+                            ((stem.Length >= 6 && string.CompareOrdinal(stem, 4, "Cp", 0, 2) == 0) ||
+                             (stem.Length >= 8 && string.CompareOrdinal(stem, 6, "Cp", 0, 2) == 0));
+
                         // file
-                        if (entry.Name.StartsWith("PlKb"))
+                        if (isKirbyCap)
                         {
                             string targetPath = workspace.GetFilePath(entry.Name.Replace(" ", "_"));
                             string path = workspace.FileManager.GetUniqueFilePath(targetPath);
 
-                            string costume_key = Path.GetFileNameWithoutExtension(path)[4..];
-                            if (!costumes.ContainsKey(costume_key))
-                                costumes.Add(costume_key, new MexCostume());
-
                             workspace.FileManager.Set(path, stream.ToArray());
 
-                            log.AppendLine($"Imported \"{entry.FullName}\" as kirby costume");
+                            log.AppendLine($"Imported \"{entry.FullName}\" as kirby cap file");
                         }
                         else
                         {

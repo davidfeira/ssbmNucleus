@@ -108,6 +108,19 @@ namespace MexCLI.Commands
 
                 fighter.Costumes.RemoveAt(costumeIndex);
 
+                // Kirby (internal id 4): keep every fighter's kirby cap-costume
+                // table aligned with Kirby's costume list (mirrors the GUI)
+                if (fighterInternalId == 4)
+                {
+                    foreach (MexFighter f in workspace.Project.Fighters)
+                    {
+                        if (f.HasKirbyCostumes && costumeIndex < f.KirbyCostumes.Count)
+                        {
+                            f.KirbyCostumes.RemoveAt(costumeIndex);
+                        }
+                    }
+                }
+
                 // Save the workspace
                 workspace.Save(null);
 
