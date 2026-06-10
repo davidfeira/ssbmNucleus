@@ -22,7 +22,7 @@ namespace MexCLI.Commands
                     {
                         success = false,
                         error = "Invalid arguments",
-                        usage = "mexcli create <vanilla-iso-path> <output-directory> <project-name>"
+                        usage = "mexcli create <iso-path> <output-directory> <project-name> [vanilla-asset-iso-path]"
                     };
                     Console.WriteLine(JsonSerializer.Serialize(usageOutput, new JsonSerializerOptions { WriteIndented = true }));
                     return 1;
@@ -31,6 +31,9 @@ namespace MexCLI.Commands
                 string isoPath = args[1];
                 string outputDir = args[2];
                 string projectName = args[3];
+                // when creating from a modded iso, a vanilla iso can be supplied to
+                // backfill menu assets (css icons) the modded iso couldn't provide
+                string? assetIsoPath = args.Length >= 5 ? args[4] : null;
 
                 // Validate ISO exists
                 if (!File.Exists(isoPath))
@@ -127,6 +130,32 @@ namespace MexCLI.Commands
                     mainCode,
                     defaultCodes
                 );
+
+                // backfill css icons from the vanilla iso when the source iso's
+                // character select screen couldn't be fully parsed
+                if (assetIsoPath != null && File.Exists(assetIsoPath))
+                {
+                    var fillOutput = new
+                    {
+                        status = "filling-assets",
+                        message = "Filling missing menu assets from vanilla ISO..."
+                    };
+                    Console.WriteLine(JsonSerializer.Serialize(fillOutput, new JsonSerializerOptions { WriteIndented = true }));
+
+                    try
+                    {
+                        mexLib.Installer.MexInstaller.FillCSSIconsFromISO(workspace, assetIsoPath);
+                    }
+                    catch (Exception fillEx)
+                    {
+                        var fillWarning = new
+                        {
+                            status = "warning",
+                            message = $"Could not fill menu assets from vanilla ISO: {fillEx.Message}"
+                        };
+                        Console.WriteLine(JsonSerializer.Serialize(fillWarning, new JsonSerializerOptions { WriteIndented = true }));
+                    }
+                }
 
                 var installingOutput = new
                 {

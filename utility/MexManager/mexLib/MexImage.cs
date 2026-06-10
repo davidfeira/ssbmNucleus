@@ -84,9 +84,12 @@ namespace mexLib
         /// 
         /// </summary>
         /// <param name="tobj"></param>
-        public MexImage(HSD_TOBJ tobj) : this(8, 8, GXTexFmt.I8, GXTlutFmt.IA8)
+        public MexImage(HSD_TOBJ? tobj) : this(8, 8, GXTexFmt.I8, GXTlutFmt.IA8)
         {
-            if (tobj.ImageData != null)
+            // tobj may be null when installing from a modded ISO whose menu
+            // files lack the textures the installer expects; fall back to the
+            // blank image initialized above
+            if (tobj?.ImageData != null)
             {
                 Width = tobj.ImageData.Width;
                 Height = tobj.ImageData.Height;
@@ -94,7 +97,7 @@ namespace mexLib
                 ImageData = tobj.ImageData.ImageData;
             }
 
-            if (tobj.TlutData != null)
+            if (tobj?.TlutData != null)
             {
                 TlutFormat = tobj.TlutData.Format;
                 PaletteData = tobj.TlutData.TlutData;

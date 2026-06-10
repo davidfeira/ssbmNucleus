@@ -4,6 +4,7 @@ using HSDRaw.Melee;
 using HSDRaw.Melee.Mn;
 using HSDRaw.MEX.Scenes;
 using MeleeMedia.Audio;
+using mexLib.AssetTypes;
 using mexLib.Types;
 using mexLib.Utilties;
 
@@ -528,33 +529,77 @@ namespace mexLib.Installer
             }
 
             // extract fighter icons
+            ExtractCSSIcons(workspace, dataTable, onlyFillBlank: false);
+
+            return null;
+        }
+        /// <summary>
+        /// maps internal fighter ids to css single menu joint indices
+        /// 16 - 34
+        /// 16mario, 17luigi, 18bowser, 19peach, 20yoshi, 21dk, 22falcon
+        /// 23fox, 24ness, 25climbers, 26kirby, 27samus, 28zelda, 29link
+        /// 30pikachu, 31jigglypuff, 32mewtwo, 33game, 34marth
+        /// 4dr, 6ganon, 8falco, 10younlink, 12pichu, 14roy
+        /// </summary>
+        private static readonly int[] InternalToCSSJointIndex = new int[] {
+            16, 23, 22, 21, 26, 18, 29, -1, 24, 19,
+            25, -1, 30, 27, 20, 31, 32, 17, 34, 28,
+            10, 4, 8, 12, 33, 6, 14
+        };
+        /// <summary>
+        /// Replaces css icons that a modded ISO's MnSlChr couldn't provide with
+        /// icons read from another ISO (typically vanilla). Icons that extracted
+        /// successfully are left untouched.
+        /// </summary>
+        /// <param name="workspace"></param>
+        /// <param name="isoPath"></param>
+        public static void FillCSSIconsFromISO(MexWorkspace workspace, string isoPath)
+        {
+            using GCILib.GCISO iso = new(isoPath);
+            byte[]? cssData = iso.GetFileData("MnSlChr.usd");
+            if (cssData == null)
+                return;
+
+            HSDRawFile file = new(cssData);
+            if (file["MnSelectChrDataTable"]?.Data is SBM_SelectChrDataTable dataTable)
+                ExtractCSSIcons(workspace, dataTable, onlyFillBlank: true);
+        }
+        /// <summary>
+        /// True when a texture asset is missing or holds the blank placeholder
+        /// produced when extraction found no texture.
+        /// </summary>
+        private static bool IsBlankTextureAsset(MexWorkspace workspace, MexTextureAsset asset)
+        {
+            MexImage? tex = asset.GetTexFile(workspace);
+            return tex == null ||
+                (tex.Width == 8 && tex.Height == 8 && tex.Format == HSDRaw.GX.GXTexFmt.I8);
+        }
+        /// <summary>
+        /// Extracts fighter css icons and reserved tile textures from a css data table.
+        /// With onlyFillBlank set, only assets that are missing or blank are replaced.
+        /// </summary>
+        private static void ExtractCSSIcons(MexWorkspace workspace, SBM_SelectChrDataTable dataTable, bool onlyFillBlank)
+        {
             List<HSD_JOBJ> single_joint = dataTable.SingleMenuModel.TreeList;
             List<HSDRaw.Common.Animation.HSD_AnimJoint> single_anim = dataTable.SingleMenuAnimation.TreeList;
             List<HSDRaw.Common.Animation.HSD_MatAnimJoint> single_matanim = dataTable.SingleMenuMaterialAnimation.TreeList;
-            // 16 - 34
-            // 16mario, 17luigi, 18bowser, 19peach, 20yoshi, 21dk, 22falcon
-            // 23fox, 24ness, 25climbers, 26kirby, 27samus, 28zelda, 29link
-            // 30pikachu, 31jigglypuff, 32mewtwo, 33game, 34marth
-            // 4dr, 6ganon, 8falco, 10younlink, 12pichu, 14roy
-            int[] internal_to_joint_index = new int[] {
-                16, 23, 22, 21, 26, 18, 29, -1, 24, 19,
-                25, -1, 30, 27, 20, 31, 32, 17, 34, 28,
-                10, 4, 8, 12, 33, 6, 14
-            };
-            for (int i = 0; i < internal_to_joint_index.Length; i++)
+
+            for (int i = 0; i < InternalToCSSJointIndex.Length; i++)
             {
-                if (internal_to_joint_index[i] == -1)
+                if (InternalToCSSJointIndex[i] == -1)
                     continue;
 
                 int externalId = MexFighterIDConverter.ToExternalID(i, workspace.Project.Fighters.Count);
                 MexFighter fighter = workspace.Project.Fighters[i];
 
-                int joint_index = internal_to_joint_index[i];
+                int joint_index = InternalToCSSJointIndex[i];
                 HSD_JOBJ joint = single_joint[joint_index];
+
+                bool replaceIcon = !onlyFillBlank || IsBlankTextureAsset(workspace, fighter.Assets.CSSIconAsset);
 
                 // get icon position
                 MexCharacterSelectIcon? icon = workspace.Project.CharacterSelect.FighterIcons.FirstOrDefault(e => e.Fighter == externalId);
-                if (icon != null)
+                if (icon != null && replaceIcon)
                 {
                     icon.X = joint.TX + 3.4f;
                     icon.Y = joint.TY - 3.5f;
@@ -579,24 +624,28 @@ namespace mexLib.Installer
                 }
 
                 // zelda and blank asset
-                if (internal_to_joint_index[i] == 28)
+                if (InternalToCSSJointIndex[i] == 28)
                 {
-                    HSDRaw.Common.Animation.HSD_MatAnimJoint matanim = single_matanim[internal_to_joint_index[i]];
+                    HSDRaw.Common.Animation.HSD_MatAnimJoint matanim = single_matanim[InternalToCSSJointIndex[i]];
 
-                    MexImage image = new(matanim.MaterialAnimation.Next.TextureAnimation.ToTOBJs()[0]);
-                    fighter.Assets.CSSIconAsset.SetFromMexImage(workspace, image);
+                    if (replaceIcon)
+                    {
+                        HSD_TOBJ[]? zeldaTobjs = matanim.MaterialAnimation?.Next?.TextureAnimation?.ToTOBJs();
+                        fighter.Assets.CSSIconAsset.SetFromMexImage(workspace,
+                            new MexImage(zeldaTobjs != null && zeldaTobjs.Length > 0 ? zeldaTobjs[0] : null));
+                    }
 
                     // extract reserved assets
-                    workspace.Project.ReservedAssets.CSSNullAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj.Next.Mobj.Textures));
-                    workspace.Project.ReservedAssets.CSSBackAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj.Mobj.Textures));
+                    if (!onlyFillBlank || IsBlankTextureAsset(workspace, workspace.Project.ReservedAssets.CSSNullAsset))
+                        workspace.Project.ReservedAssets.CSSNullAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj?.Next?.Mobj?.Textures));
+                    if (!onlyFillBlank || IsBlankTextureAsset(workspace, workspace.Project.ReservedAssets.CSSBackAsset))
+                        workspace.Project.ReservedAssets.CSSBackAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj?.Mobj?.Textures));
                 }
-                else
+                else if (replaceIcon)
                 {
-                    fighter.Assets.CSSIconAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj.Next.Mobj.Textures));
+                    fighter.Assets.CSSIconAsset.SetFromMexImage(workspace, new MexImage(joint.Dobj?.Next?.Mobj?.Textures));
                 }
             }
-
-            return null;
         }
         /// <summary>
         /// 

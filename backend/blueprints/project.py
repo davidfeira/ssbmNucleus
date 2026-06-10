@@ -13,7 +13,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
 from core.config import (
-    PROJECT_ROOT, PROJECTS_PATH, MEXCLI_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
+    PROJECT_ROOT, PROJECTS_PATH, MEXCLI_PATH, OUTPUT_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
 )
 from core.state import (
     get_mex_manager, set_project_path, get_current_project_path, clear_project_path
@@ -46,6 +46,17 @@ def is_managed_project_directory(project_dir):
         return True
     except ValueError:
         return False
+
+
+def cleanup_failed_project_directory(proj_dir):
+    """Remove a partially-created project directory after a failed create."""
+    if not proj_dir.exists() or not is_managed_project_directory(proj_dir):
+        return
+    try:
+        shutil.rmtree(proj_dir)
+        logger.info(f"Removed partial project directory: {proj_dir}")
+    except OSError as cleanup_error:
+        logger.warning(f"Could not remove partial project directory: {cleanup_error}")
 
 
 def build_project_response(project_path, info):
@@ -306,16 +317,23 @@ def close_project():
 
 @project_bp.route('/api/mex/project/create', methods=['POST'])
 def create_project():
-    """Create a new MEX project from a vanilla ISO"""
+    """Create a new MEX project from a vanilla ISO.
+
+    Optionally accepts a vault xdelta patchId: the patch is applied to the
+    vanilla ISO first and the project is created from the patched ISO.
+    """
+    temp_patched_iso = None
     try:
         data = request.json or {}
         iso_path = data.get('isoPath')
+        patch_id = data.get('patchId')
         requested_project_name = (data.get('projectName') or '').strip()
         proj_dir = get_next_project_directory(requested_project_name)
         project_name = requested_project_name or proj_dir.name
 
         logger.info(f"=== CREATE PROJECT REQUEST ===")
         logger.info(f"ISO Path: {iso_path}")
+        logger.info(f"Patch ID: {patch_id or '(none, vanilla)'}")
         logger.info(f"Projects Root: {PROJECTS_PATH}")
         logger.info(f"Project Dir: {proj_dir}")
         logger.info(f"Project Name: {project_name}")
@@ -334,9 +352,60 @@ def create_project():
                 'error': f'ISO file not found: {iso_path}'
             }), 404
 
+        # Apply a vault xdelta patch on top of the vanilla ISO first if requested
+        if patch_id:
+            from blueprints.xdelta import XDELTA_PATH, get_xdelta_exe, load_xdelta_metadata
+
+            patch = next((p for p in load_xdelta_metadata() if p['id'] == patch_id), None)
+            if not patch:
+                return jsonify({
+                    'success': False,
+                    'error': f'Patch not found in vault: {patch_id}'
+                }), 404
+
+            xdelta_file = XDELTA_PATH / f"{patch_id}.xdelta"
+            if not xdelta_file.exists():
+                return jsonify({
+                    'success': False,
+                    'error': f'Patch file missing from vault: {patch["name"]}'
+                }), 404
+
+            temp_patched_iso = OUTPUT_PATH / f"create_{proj_dir.name}_{patch_id}.iso"
+            patch_cmd = [
+                str(get_xdelta_exe()), '-d', '-f',
+                '-s', str(iso_file),
+                str(xdelta_file),
+                str(temp_patched_iso)
+            ]
+
+            logger.info(f"Applying patch '{patch['name']}' before project creation")
+            logger.info(f"Running command: {' '.join(patch_cmd)}")
+
+            patch_result = subprocess.run(
+                patch_cmd,
+                capture_output=True,
+                text=True,
+                **get_subprocess_args()
+            )
+
+            if patch_result.returncode != 0:
+                error_message = patch_result.stderr or patch_result.stdout or 'Unknown xdelta error'
+                logger.error(f"xdelta3 failed: {error_message}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to apply patch "{patch["name"]}": {error_message}'
+                }), 500
+
+            logger.info(f"[OK] Patched ISO ready: {temp_patched_iso}")
+            iso_file = temp_patched_iso
+
         # Call MexCLI create command
         mexcli_path = str(MEXCLI_PATH)
         cmd = [mexcli_path, 'create', str(iso_file), str(proj_dir), project_name]
+        if patch_id:
+            # pass the vanilla ISO so MexCLI can backfill CSS icons the
+            # patched ISO's menu files couldn't provide
+            cmd.append(str(iso_path))
 
         logger.info(f"Running command: {' '.join(cmd)}")
 
@@ -355,6 +424,7 @@ def create_project():
         if result.returncode != 0:
             error_message = result.stderr or result.stdout or 'Unknown error'
             logger.error(f"MexCLI create failed: {error_message}")
+            cleanup_failed_project_directory(proj_dir)
             return jsonify({
                 'success': False,
                 'error': f'Failed to create project: {error_message}'
@@ -365,6 +435,7 @@ def create_project():
 
         if not created_project_path.exists():
             logger.error(f"Project file not found after creation: {created_project_path}")
+            cleanup_failed_project_directory(proj_dir)
             return jsonify({
                 'success': False,
                 'error': 'Project was created but .mexproj file not found'
@@ -388,6 +459,13 @@ def create_project():
             'success': False,
             'error': str(e)
         }), 500
+    finally:
+        if temp_patched_iso is not None and temp_patched_iso.exists():
+            try:
+                temp_patched_iso.unlink()
+                logger.info(f"Deleted temporary patched ISO: {temp_patched_iso}")
+            except OSError as cleanup_error:
+                logger.warning(f"Could not delete temporary patched ISO: {cleanup_error}")
 
 
 @project_bp.route('/api/mex/project/delete', methods=['POST'])

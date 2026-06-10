@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import HexagonLoader from '../shared/HexagonLoader'
+import { BACKEND_URL } from '../../config'
 
 const EXTERNAL_PROJECTS_STORAGE_KEY = 'mex_external_projects'
 const LEGACY_PROJECTS_STORAGE_KEY = 'mex_recent_projects'
@@ -35,6 +36,10 @@ export default function ProjectSelector({
   const [showCreateProjectNameModal, setShowCreateProjectNameModal] = useState(false)
   const [newProjectName, setNewProjectName] = useState('My Project')
   const [createProjectNameError, setCreateProjectNameError] = useState('')
+  const [availablePatches, setAvailablePatches] = useState([])
+  const [patchesLoading, setPatchesLoading] = useState(false)
+  const [selectedPatchId, setSelectedPatchId] = useState('')
+  const [showPatchPickerModal, setShowPatchPickerModal] = useState(false)
   const createProjectNameInputRef = useRef(null)
 
   const syncCreateProjectOverlay = (nextState) => {
@@ -367,10 +372,35 @@ export default function ProjectSelector({
     }
   }
 
-  const openCreateProjectNameModal = () => {
+  const loadAvailablePatches = async () => {
+    setPatchesLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/xdelta/list`)
+      const data = await response.json()
+      setAvailablePatches(data.success ? (data.patches || []) : [])
+    } catch (err) {
+      console.error('Failed to load vault patches:', err)
+      setAvailablePatches([])
+    } finally {
+      setPatchesLoading(false)
+    }
+  }
+
+  const openCreateProjectNameModal = (patchId = '') => {
     setNewProjectName('My Project')
     setCreateProjectNameError('')
+    setSelectedPatchId(patchId)
     setShowCreateProjectNameModal(true)
+  }
+
+  const openPatchPicker = () => {
+    setShowPatchPickerModal(true)
+    loadAvailablePatches()
+  }
+
+  const handlePatchPicked = (patch) => {
+    setShowPatchPickerModal(false)
+    openCreateProjectNameModal(patch.id)
   }
 
   const closeCreateProjectNameModal = () => {
@@ -382,17 +412,24 @@ export default function ProjectSelector({
     setCreateProjectNameError('')
   }
 
-  const handleCreateProject = async (projectName) => {
+  const handleCreateProject = async (projectName, patchId = '') => {
     if (!window.electron) {
       alert('Electron API not available. Please run this app in Electron mode.')
       return
     }
 
+    const selectedPatch = patchId
+      ? availablePatches.find((patch) => patch.id === patchId)
+      : null
+    const preparingStatus = selectedPatch
+      ? `Applying "${selectedPatch.name}" to your vanilla ISO and preparing the project...`
+      : 'Preparing a managed project from your vanilla ISO...'
+
     const createProjectRequest = async (isoPath) => {
       const response = await fetch(`${API_URL}/project/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isoPath, projectName })
+        body: JSON.stringify({ isoPath, projectName, patchId: patchId || undefined })
       })
 
       const data = await response.json()
@@ -418,7 +455,7 @@ export default function ProjectSelector({
       active: true,
       title: 'Creating Workspace',
       progress: 14,
-      status: 'Preparing a managed project from your vanilla ISO...'
+      status: preparingStatus
     })
 
     try {
@@ -443,7 +480,7 @@ export default function ProjectSelector({
           active: true,
           title: 'Creating Workspace',
           progress: 14,
-          status: 'Preparing a managed project from your vanilla ISO...'
+          status: preparingStatus
         })
         ;({ response, data } = await createProjectRequest(isoPath))
       }
@@ -534,7 +571,7 @@ export default function ProjectSelector({
 
     setShowCreateProjectNameModal(false)
     setCreateProjectNameError('')
-    await handleCreateProject(trimmedProjectName)
+    await handleCreateProject(trimmedProjectName, selectedPatchId)
   }
 
   const renderCreateProjectOverlay = () => {
@@ -583,6 +620,12 @@ export default function ProjectSelector({
               placeholder="Project name"
               maxLength={80}
             />
+            {selectedPatchId && (
+              <p className="project-start-from-note">
+                Starting from patch:{' '}
+                <strong>{availablePatches.find((patch) => patch.id === selectedPatchId)?.name || 'Vault patch'}</strong>
+              </p>
+            )}
             {createProjectNameError && (
               <p className="project-name-error">{createProjectNameError}</p>
             )}
@@ -608,6 +651,64 @@ export default function ProjectSelector({
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    )
+  }
+
+  const renderPatchPickerModal = () => {
+    if (!showPatchPickerModal) {
+      return null
+    }
+
+    return (
+      <div className="project-name-modal-overlay" onClick={() => setShowPatchPickerModal(false)}>
+        <div className="project-name-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="patch-picker">
+            <h3>Create From Patch</h3>
+            <p>Pick a patch from your vault. It will be applied to your vanilla ISO before the project is created.</p>
+            <p className="patch-picker-note">
+              Only works with patches built on vanilla Melee (texture and visual mods).
+              Patches that overhaul the game itself won't convert correctly.
+            </p>
+            {patchesLoading ? (
+              <p className="patch-picker-empty">Loading patches...</p>
+            ) : availablePatches.length === 0 ? (
+              <p className="patch-picker-empty">No patches in your vault yet. Import one from the Vault's Patches tab first.</p>
+            ) : (
+              <div className="patch-picker-list">
+                {availablePatches.map((patch) => (
+                  <button
+                    key={patch.id}
+                    type="button"
+                    className="patch-picker-item"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('start'); handlePatchPicked(patch) }}
+                  >
+                    {patch.imageUrl ? (
+                      <img className="patch-picker-cover" src={`${BACKEND_URL}${patch.imageUrl}`} alt="" />
+                    ) : (
+                      <span className="patch-picker-monogram">{(patch.name?.trim()?.[0] || '?').toUpperCase()}</span>
+                    )}
+                    <span className="patch-picker-details">
+                      <span className="patch-picker-name">{patch.name}</span>
+                      {patch.description && <span className="patch-picker-desc">{patch.description}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="project-name-actions">
+              <button
+                type="button"
+                className="btn-cancel-modal"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('back'); setShowPatchPickerModal(false) }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -791,9 +892,23 @@ export default function ProjectSelector({
       description: '',
       buttonLabel: creatingProject ? 'Creating Project...' : 'Create Project',
       disabled: creatingProject || showCreateProjectNameModal,
-      onClick: openCreateProjectNameModal
+      onClick: openCreateProjectNameModal,
+      squareAction: {
+        title: 'Create from a vault patch',
+        onClick: openPatchPicker
+      }
     }
   ]
+
+  const PatchIcon = ({ size = 20 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="3" y="8.4" width="18" height="7.2" rx="3.6" transform="rotate(-45 12 12)" />
+      <circle cx="10.6" cy="10.6" r="0.5" fill="currentColor" stroke="none" />
+      <circle cx="13.4" cy="13.4" r="0.5" fill="currentColor" stroke="none" />
+      <circle cx="13.4" cy="10.6" r="0.5" fill="currentColor" stroke="none" />
+      <circle cx="10.6" cy="13.4" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
 
   const renderProjectListBody = () => {
     if (!projects.length) {
@@ -838,17 +953,34 @@ export default function ProjectSelector({
               <div key={action.key} className={viewConfig.projectOptionClassName}>
                 <h3>{action.title}</h3>
                 {action.description && <p>{action.description}</p>}
-                <button
-                  className="project-btn"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => {
-                    playSound('start')
-                    action.onClick()
-                  }}
-                  disabled={action.disabled}
-                >
-                  {action.buttonLabel}
-                </button>
+                <div className="project-btn-row">
+                  <button
+                    className="project-btn"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => {
+                      playSound('start')
+                      action.onClick()
+                    }}
+                    disabled={action.disabled}
+                  >
+                    {action.buttonLabel}
+                  </button>
+                  {action.squareAction && (
+                    <button
+                      className="project-btn project-btn-square"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => {
+                        playSound('start')
+                        action.squareAction.onClick()
+                      }}
+                      disabled={action.disabled}
+                      title={action.squareAction.title}
+                      aria-label={action.squareAction.title}
+                    >
+                      <PatchIcon />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -872,6 +1004,7 @@ export default function ProjectSelector({
       <div className="mex-panel">
         <div className="project-selection">{projectManagementMenu}</div>
 
+        {renderPatchPickerModal()}
         {renderCreateProjectNameModal()}
         {!onCreateProjectOverlayChange && renderCreateProjectOverlay()}
       </div>
@@ -884,6 +1017,7 @@ export default function ProjectSelector({
         {projectManagementMenu}
       </div>
 
+      {renderPatchPickerModal()}
       {renderCreateProjectNameModal()}
       {!onCreateProjectOverlayChange && renderCreateProjectOverlay()}
     </div>
