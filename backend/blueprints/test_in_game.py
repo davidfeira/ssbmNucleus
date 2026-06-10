@@ -616,6 +616,89 @@ def start_capture_stage_screenshot():
     return jsonify({'success': True, 'message': 'Stage screenshot capture started'})
 
 
+@test_in_game_bp.route('/api/mex/test-in-game/capture-pause-screenshot', methods=['POST'])
+def start_capture_pause_screenshot():
+    """Capture a LIVE in-game screenshot of a pause screen mod. Builds a
+    vanilla+mod ISO (the mod applied to GmPause.usd), boots it in the throwaway
+    Dolphin, loads Battlefield alone (invisible fighter, no timer), PAUSES the
+    match, and grabs the pause overlay. The shot is saved as the mod's preview
+    screenshot and also returned in capture_complete. Streams capture_progress /
+    capture_complete / capture_error over SocketIO.
+    Body: { modId, vanillaIsoPath, slippiDolphinPath }."""
+    global _test_running
+    if os.name != 'nt':
+        return jsonify({'success': False,
+                        'error': 'In-game capture is only supported on Windows.'}), 400
+    data = request.json or {}
+    mod_id = data.get('modId')
+    if not mod_id:
+        return jsonify({'success': False, 'error': 'modId is required.'}), 400
+    vanilla, slippi, _obs, err = _common_inputs(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+
+    with _test_lock:
+        if _test_running:
+            return jsonify({'success': False, 'error': 'A test is already running.'}), 409
+        _test_running = True
+
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_iso = (STORAGE_PATH / 'test-builds' / f'cap_pause_{stamp}.iso')
+    runs_root = STORAGE_PATH / 'test-runs'
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    def run():
+        global _test_running
+        socketio = get_socketio()
+
+        def emit(stage, percentage, message):
+            socketio.emit('capture_progress', {
+                'stage': stage, 'percentage': percentage, 'message': message})
+
+        try:
+            from test_build import build_pause_mod_iso
+            from ingame.capture import capture_pause
+            from blueprints.menus.pause import set_mod_screenshot
+
+            emit('building', 3, 'Building a test ISO with the pause mod…')
+            build_pause_mod_iso(
+                vanilla, mod_id, str(out_iso),
+                progress_cb=lambda p, m: emit('building', 6 + int(p * 0.30), m),
+                log=lambda m: logger.info(f"[capture] {m}"))
+
+            res = capture_pause(
+                str(out_iso), slippi, str(runs_root),
+                emit=lambda s, p, m: emit(s, 40 + int(p * 0.6), m),
+                log=lambda m: logger.info(f"[capture] {m}"))
+
+            if not res.get('ok') or not res.get('png'):
+                socketio.emit('capture_error', {
+                    'success': False,
+                    'error': res.get('reason') or 'screenshot capture failed'})
+                return
+
+            # The live pause shot IS the mod's best preview -- save it directly.
+            set_mod_screenshot(mod_id, res['png'])
+            data_uri = "data:image/png;base64," + base64.b64encode(res['png']).decode('ascii')
+            socketio.emit('capture_complete', {
+                'success': True, 'screenshot': data_uri, 'modId': mod_id})
+            logger.info(f"[capture] captured pause screenshot for mod {mod_id}")
+        except Exception as e:
+            logger.exception("[capture] pause capture failed")
+            socketio.emit('capture_error', {'success': False, 'error': str(e)})
+        finally:
+            try:
+                if out_iso.exists():
+                    out_iso.unlink()
+            except Exception:
+                pass
+            with _test_lock:
+                _test_running = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Pause screenshot capture started'})
+
+
 @test_in_game_bp.route('/api/mex/test-in-game/capture-stage-batch', methods=['POST'])
 def start_capture_stage_batch():
     """BULK-capture clean in-game screenshots for many DAS variants at once. The

@@ -38,6 +38,10 @@ DOORS_PATH = CSS_PATH / 'doors'
 DOORS_PATH.mkdir(parents=True, exist_ok=True)
 DOORS_METADATA = DOORS_PATH / 'metadata.json'
 
+PAUSE_PATH = MENUS_PATH / 'pause'
+PAUSE_PATH.mkdir(parents=True, exist_ok=True)
+PAUSE_METADATA = PAUSE_PATH / 'metadata.json'
+
 SCREENSHOT_CANDIDATES = ['screenshot_0.png', 'screenshot.png', 'preview.png']
 
 # Canonical Melee character → list of accepted filename stems (lowercase).

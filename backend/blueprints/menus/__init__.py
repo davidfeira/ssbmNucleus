@@ -10,6 +10,7 @@ across cohesive submodules:
     sss.py          SSS layout editor + stage icons
     layout.py       CSS layout editor + fighter icons
     doors.py        CSS door textures
+    pause.py        pause screen (GmPause) texture mods
 
 `from blueprints.menus import menus_bp` (and the icon-grid installer API used
 by import_unified.py) keeps working exactly as it did when this was a single
@@ -28,8 +29,11 @@ from . import backgrounds  # noqa: E402,F401
 from . import sss          # noqa: E402,F401
 from . import layout       # noqa: E402,F401
 from . import doors        # noqa: E402,F401
+from . import pause        # noqa: E402,F401
 
-# Re-export the public icon-grid installer API (used by import_unified.py).
+# Re-export the public installer APIs (used by import_unified.py).
 from .icons import install_icon_grid_mod, looks_like_icon_grid_zip  # noqa: E402,F401
+from .pause import install_pause_mods_from_zip, looks_like_pause_zip  # noqa: E402,F401
 
-__all__ = ['menus_bp', 'install_icon_grid_mod', 'looks_like_icon_grid_zip']
+__all__ = ['menus_bp', 'install_icon_grid_mod', 'looks_like_icon_grid_zip',
+           'install_pause_mods_from_zip', 'looks_like_pause_zip']

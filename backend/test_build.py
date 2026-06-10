@@ -296,6 +296,23 @@ def build_stage_skin_iso(vanilla_iso, stage_code, stage_folder, variant_id, out_
         shutil.rmtree(proj_dir, ignore_errors=True)
 
 
+def build_pause_mod_iso(vanilla_iso, mod_id, out_iso, progress_cb=None, log=lambda m: None):
+    """Fresh project + ONE pause screen mod applied to GmPause.usd, for the
+    in-game pause screenshot capture."""
+    # Local import: blueprints.menus.pause owns the mod storage + the
+    # HSDRawViewer spec plumbing; importing here avoids a module cycle.
+    from blueprints.menus.pause import apply_pause_mod
+
+    proj_dir, proj = create_temp_project(vanilla_iso, log=log)
+    try:
+        log("Applying the pause mod to GmPause.usd…")
+        apply_pause_mod(mod_id, proj_dir / "files" / "GmPause.usd")
+        mex = MexManager(str(MEXCLI_PATH), str(proj))
+        _export(mex, out_iso, progress_cb, log)
+    finally:
+        shutil.rmtree(proj_dir, ignore_errors=True)
+
+
 # Hold buttons that reliably trigger a DAS alternate during a memory-driven capture.
 # VERIFIED over a 3-round stress test (each held button loads ITS OWN variant every
 # round, all mutually distinct): X, Y, Z, L, R, B. R is safe even though it flips the

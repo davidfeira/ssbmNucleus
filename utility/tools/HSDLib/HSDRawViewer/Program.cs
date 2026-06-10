@@ -139,6 +139,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for pause screen export/import mode
+            if (args.Length >= 1 && args[0] == "--pause-screen")
+            {
+                Console.WriteLine("Pause screen mode detected");
+                RunPauseScreenOperation(args);
+                return;
+            }
+
             // Check for MEX CSS info mode (reads MxDt.dat icon -> fighter mapping)
             if (args.Length >= 1 && args[0] == "--mex-css-info")
             {
@@ -1762,6 +1770,229 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: CSS doors operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Collect all textures from every JOBJDesc model in a scene_data file
+        /// (e.g. GmPause.usd's ScGamPause_scene_data root). Returns a flat list
+        /// in stable traversal order.
+        /// </summary>
+        static List<(int jointIdx, HSD_TOBJ tobj)> CollectSceneTextures(HSDRawFile rawFile)
+        {
+            var root = rawFile.Roots.Find(r => r.Data is HSD_SOBJ);
+            if (root == null)
+                return null;
+
+            var sobj = (HSD_SOBJ)root.Data;
+            var result = new List<(int, HSD_TOBJ)>();
+            var descs = sobj.JOBJDescs?.Array;
+            if (descs == null)
+                return result;
+
+            foreach (var desc in descs)
+            {
+                if (desc?.RootJoint == null)
+                    continue;
+                result.AddRange(CollectAllTextures(desc.RootJoint));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Pause screen (GmPause.dat/.usd) texture export/import.
+        ///   Export: HSDRawViewer.exe --pause-screen export <gmpause.usd> <output_dir>
+        ///   Import: HSDRawViewer.exe --pause-screen import <gmpause.usd> <spec.json> <output.usd>
+        /// spec.json: {"replacements": [{"index": 4, "png": "...", "format": "original"},
+        ///                              {"target": "main", "png": "...", "format": "rgb5a3"}]}
+        /// </summary>
+        static void RunPauseScreenOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --pause-screen export <gmpause.usd> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --pause-screen import <gmpause.usd> <spec.json> <output.usd>");
+                    return;
+                }
+
+                string subCommand = args[1].ToLower();
+
+                if (subCommand == "export")
+                {
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --pause-screen export <gmpause.usd> <output_dir>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    var allTex = CollectSceneTextures(rawFile);
+                    if (allTex == null)
+                    {
+                        Console.WriteLine("ERROR: No scene_data root found (not a GmPause file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine($"Found {allTex.Count} textures:");
+                    var manifest = new List<Dictionary<string, object>>();
+                    int index = 0;
+                    foreach (var (ji, tobj) in allTex)
+                    {
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string fileName = $"pause_t{index}_j{ji}_{w}x{h}_{fmt}.png";
+                        string outPath = System.IO.Path.Combine(outDir, fileName);
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(outPath, System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        manifest.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["joint"] = ji,
+                            ["width"] = w,
+                            ["height"] = h,
+                            ["format"] = fmt,
+                            ["filename"] = fileName,
+                        });
+                        Console.WriteLine($"  t{index} joint {ji}: {w}x{h} {fmt} -> {fileName}");
+                        index++;
+                    }
+
+                    string manifestPath = System.IO.Path.Combine(outDir, "manifest.json");
+                    System.IO.File.WriteAllText(manifestPath, JsonSerializer.Serialize(
+                        new Dictionary<string, object> { ["textures"] = manifest },
+                        new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"SUCCESS: Exported {index} textures");
+                }
+                else if (subCommand == "import")
+                {
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Usage: HSDRawViewer.exe --pause-screen import <gmpause.usd> <spec.json> <output.usd>");
+                        return;
+                    }
+
+                    string datFile = args[2];
+                    string specFile = args[3];
+                    string outputDat = args[4];
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+
+                    var allTex = CollectSceneTextures(rawFile);
+                    if (allTex == null || allTex.Count == 0)
+                    {
+                        Console.WriteLine("ERROR: No scene_data textures found (not a GmPause file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    using var specDoc = JsonDocument.Parse(System.IO.File.ReadAllText(specFile));
+                    int replaced = 0;
+                    foreach (var entry in specDoc.RootElement.GetProperty("replacements").EnumerateArray())
+                    {
+                        string pngPath = entry.GetProperty("png").GetString();
+                        string formatMode = entry.TryGetProperty("format", out var fmtEl)
+                            ? fmtEl.GetString() : "original";
+
+                        // Resolve target textures: explicit index, or "main"
+                        // (every 88x72 texture — the central pause graphic,
+                        // vanilla t4 + t10).
+                        var targets = new List<HSD_TOBJ>();
+                        if (entry.TryGetProperty("index", out var idxEl))
+                        {
+                            int idx = idxEl.GetInt32();
+                            if (idx < 0 || idx >= allTex.Count)
+                            {
+                                Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}); skipping");
+                                continue;
+                            }
+                            targets.Add(allTex[idx].tobj);
+                        }
+                        else if (entry.TryGetProperty("target", out var tgtEl) && tgtEl.GetString() == "main")
+                        {
+                            foreach (var (ji, tobj) in allTex)
+                                if (tobj.ImageData.Width == 88 && tobj.ImageData.Height == 72)
+                                    targets.Add(tobj);
+                            if (targets.Count == 0)
+                            {
+                                Console.WriteLine("WARNING: no 88x72 main pause textures found; skipping");
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("WARNING: replacement entry has neither 'index' nor 'target'; skipping");
+                            continue;
+                        }
+
+                        if (!System.IO.File.Exists(pngPath))
+                        {
+                            Console.WriteLine($"WARNING: png not found: {pngPath}; skipping");
+                            continue;
+                        }
+
+                        using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
+                        foreach (var tobj in targets)
+                        {
+                            int w = tobj.ImageData.Width;
+                            int h = tobj.ImageData.Height;
+                            using var resized = userImage.Clone(ctx => ctx.Resize(w, h));
+
+                            HSDRaw.GX.GXTexFmt imgFormat;
+                            HSDRaw.GX.GXTlutFmt palFormat;
+                            if (formatMode == "rgb5a3")
+                            {
+                                // Color support for user-uploaded pictures (the
+                                // vanilla pause textures are grayscale I4/IA4).
+                                imgFormat = HSDRaw.GX.GXTexFmt.RGB5A3;
+                                palFormat = HSDRaw.GX.GXTlutFmt.IA8;
+                            }
+                            else
+                            {
+                                imgFormat = tobj.ImageData.Format;
+                                palFormat = tobj.TlutData?.Format ?? HSDRaw.GX.GXTlutFmt.IA8;
+                            }
+
+                            tobj.InjectBitmap(resized, imgFormat, palFormat);
+                            Console.WriteLine($"  Replaced {w}x{h} texture as {imgFormat}");
+                            replaced++;
+                        }
+                    }
+
+                    if (replaced == 0)
+                    {
+                        Console.WriteLine("ERROR: No textures were replaced");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    rawFile.Save(outputDat);
+                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures, saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unknown pause-screen sub-command: {subCommand}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Pause screen operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

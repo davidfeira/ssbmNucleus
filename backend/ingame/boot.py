@@ -263,6 +263,16 @@ def _patch_clean_osd(user_dir):
 
     _write_ini(path, mutate)
 
+    # General OSD messages ("Wrote memory card A contents to ...") are a
+    # Dolphin.ini Interface setting, not GFX.ini -- they photobomb captures
+    # whenever the game touches the memory card near the shot.
+    dolphin_ini = os.path.join(user_dir, "Config", "Dolphin.ini")
+
+    def mutate_iface(upsert, _replace):
+        upsert("Interface", "OnScreenDisplayMessages", "False")
+
+    _write_ini(dolphin_ini, mutate_iface)
+
 
 def _patch_gfx_textures(user_dir, dump=False, hires=True):
     path = os.path.join(user_dir, "Config", "GFX.ini")

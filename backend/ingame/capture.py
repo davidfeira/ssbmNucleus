@@ -248,6 +248,140 @@ def _frame_and_shot(boot, d, fr, settle=4.0, log=_noop):
     return png, "captured"
 
 
+PAUSE_STAGE_INTERNAL_ID = 0x1F   # Battlefield: dark backdrop shows the light pause graphics
+
+
+def _pause_match(d, p, tries=3, log=_noop):
+    """Pause the running match by tapping START. Pausing hands the camera to the
+    pause controller, so a CameraType change away from its in-match value is the
+    confirmation signal (the global frame counter does NOT freeze on pause).
+    Returns True when the switch was observed; the caller may still proceed
+    optimistically on False -- a missed read just means we couldn't confirm."""
+    m0 = d.u32(CAMERA_MODE)
+    for attempt in range(1, tries + 1):
+        p.tap("START", hold=0.08)
+        deadline = time.time() + 1.2
+        while time.time() < deadline and d.alive():
+            m = d.u32(CAMERA_MODE)
+            if m is not None and m0 is not None and m != m0:
+                log(f"paused (camera mode {m0} -> {m}) on tap {attempt}")
+                return True
+            time.sleep(0.05)
+        log(f"pause tap {attempt}: camera mode unchanged ({m0})")
+    return False
+
+
+def capture_pause(iso_path, slippi_path, runs_root, emit=None, log=None, settle=2.0,
+                  internal_id=PAUSE_STAGE_INTERNAL_ID):
+    """Boot the ISO, load a stage ALONE (invisible fighter, no timer), PAUSE the
+    match, and screenshot the pause overlay -- the live preview for a pause
+    screen mod. Same clean-shot setup as capture_stage but WITHOUT the HUD-off
+    flag or the DEBUG_FREE camera: the pause overlay IS the subject, and pausing
+    runs its own camera. Returns {"ok": bool, "png": bytes|None, "reason": str}."""
+    emit = emit or _noop
+    log = log or _noop
+    result = {"ok": False, "png": None, "reason": ""}
+
+    boot = DolphinBoot(iso_path, slippi_path, runs_root, clean_osd=True, log=log)
+    p = None
+    try:
+        emit("booting", 10, "Preparing an isolated Dolphin (capture mode)…")
+        boot.prepare()
+        boot.launch()
+        emit("booting", 20, "Waiting for the controller pipe…")
+        if not boot.wait_for_pipe(timeout=45):
+            result["reason"] = "Dolphin never opened its input pipe."
+            return result
+
+        emit("booting", 28, "Attaching to emulated memory…")
+        d = Dolphin(boot.pid)
+        t0 = time.time()
+        while not d.locate() and time.time() - t0 < 20:
+            if not d.alive():
+                result["reason"] = "Dolphin exited during boot."
+                return result
+            time.sleep(0.4)
+        if d.base is None:
+            result["reason"] = "Could not read the game's memory after boot."
+            return result
+
+        # NO clean-shot code patches here: the pause preview should look like a
+        # real paused game -- visible fighter, shadows, and the in-match HUD
+        # behind the overlay. (The stage capture's invisible-fighter/HUD-off
+        # patches made the pause shot look empty.)
+        solo = match_setup.patch_one_player(d, log=log)
+
+        p = Pipe(boot.pipe_index)
+        cur = Cursor(d, p)
+        sc = StageCursor(d, p)
+
+        emit("at_css", 40, "Navigating to the character-select screen…")
+        try:
+            if not nav.nav_to_css(d, p, log=log):
+                result["reason"] = "Could not reach the character-select screen."
+                return result
+        except nav.OnlineAbort as oa:
+            result["reason"] = str(oa)
+            return result
+        nav.wait_css_ready(d, cur, log=log)
+        match_setup.force_time_infinite(d, log=log)
+
+        emit("selecting_stage", 55, "Loading the stage…")
+        on_sss = _memory_select_to_sss(d, sc, CKIND_FOX, 0, log) if solo else False
+        if not on_sss:
+            if not solo:
+                nav.add_cpu(d, p, cur=cur, log=log)
+            _lock_vanilla(cur, "fox", 0)
+            if not sc.ensure_stage_select():
+                if not (not solo and _ensure_on_sss(d, p, sc, cur, log)):
+                    result["reason"] = "Could not reach the stage-select screen."
+                    return result
+        p.neutral()
+        time.sleep(0.15)
+        if not sc.force_select(internal_id):
+            result["reason"] = "Could not start the match."
+            return result
+
+        emit("framing", 75, "Waiting for the stage to finish loading…")
+        if not wait_in_game(d, timeout=30.0, log=log):
+            result["reason"] = "stage never finished loading into a match"
+            return result
+        wait_game_frames(d, max(1, round(settle * 60)), log=log)   # past the GO! intro zoom
+
+        emit("capturing", 85, "Pausing the match…")
+        paused = _pause_match(d, p, log=log)
+        if not paused:
+            log("could not confirm the pause via camera mode; capturing anyway")
+        time.sleep(1.0)                              # let the overlay fade-in finish
+        if not d.alive():
+            result["reason"] = "Dolphin exited before the screenshot"
+            return result
+
+        emit("capturing", 92, "Capturing the screenshot…")
+        png = _screenshot.capture_via_printwindow(boot.pid, max_width=960)
+        if not png:
+            png = _screenshot.capture_png(boot.pid, max_width=960)
+        if not png:
+            result["reason"] = "screenshot capture returned no image"
+            return result
+        result["ok"] = True
+        result["png"] = png
+        result["reason"] = "captured"
+        result["paused_confirmed"] = paused
+        result["solo"] = solo
+        return result
+    except Exception as e:
+        result["reason"] = f"{type(e).__name__}: {e}"
+        return result
+    finally:
+        try:
+            if p is not None:
+                p.close()
+        except Exception:
+            pass
+        boot.cleanup()
+
+
 def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
                         emit=None, log=None, settle=4.0, hires_textures=False):
     """Boot ONE ISO and screenshot many DAS variants -- possibly spanning SEVERAL

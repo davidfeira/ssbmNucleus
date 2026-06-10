@@ -19,7 +19,8 @@ from character_detector import detect_character_from_zip
 from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
 from blueprints.xdelta import load_xdelta_metadata, save_xdelta_metadata
-from blueprints.menus import install_icon_grid_mod, looks_like_icon_grid_zip
+from blueprints.menus import (install_icon_grid_mod, looks_like_icon_grid_zip,
+                              install_pause_mods_from_zip, looks_like_pause_zip)
 from extra_types import get_storage_character
 
 from . import import_bp
@@ -450,6 +451,25 @@ def import_file():
                         'mods': mods,
                         'imported_count': len(mods),
                         'message': f"Imported {len(mods)} icon grid mod(s): {names}"
+                    })
+                except (zipfile.BadZipFile, RuntimeError):
+                    pass
+
+            # PHASE 4.5: Try pause screen (GmPause) detection
+            logger.info('Phase 4.5: Attempting pause screen detection...')
+            if looks_like_pause_zip(temp_zip_path):
+                logger.info('[OK] Detected pause screen mod')
+                try:
+                    pause_name = custom_title or Path(file.filename).stem
+                    mods = install_pause_mods_from_zip(temp_zip_path, name=pause_name)
+                    names = ', '.join(m.get('name', '?') for m in mods)
+                    return jsonify({
+                        'success': True,
+                        'type': 'menu_mod',
+                        'menu_mod_type': 'pause_screen',
+                        'mods': mods,
+                        'imported_count': len(mods),
+                        'message': f"Imported {len(mods)} pause screen mod(s): {names}"
                     })
                 except (zipfile.BadZipFile, RuntimeError):
                     pass
