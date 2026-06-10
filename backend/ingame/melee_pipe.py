@@ -16,7 +16,10 @@ kernel32 via ctypes (CreateFileW / WriteFile / CloseHandle) -- the same surface
 melee_mem.py already uses. No pywin32, no other dependencies.
 
 Buttons: A B X Y Z L R START D_UP D_DOWN D_LEFT D_RIGHT. Sticks 0.0-1.0, 0.5
-center; control stick y=0.0 UP, y=1.0 DOWN, x=0.0 LEFT, x=1.0 RIGHT.
+center; control stick y=0.0 DOWN, y=1.0 UP (libmelee's convention -- verified
+in-match: y=1.0 + B is an UP-B), x=0.0 LEFT, x=1.0 RIGHT. The closed-loop
+cursor code (melee_css/melee_sss) is unaffected by the labels -- it steers by
+feedback -- but open-loop in-match inputs MUST use this mapping.
 """
 
 import ctypes

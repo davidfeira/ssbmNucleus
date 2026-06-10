@@ -23,6 +23,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from core.config import STORAGE_PATH
+from core.metadata import load_metadata
 from core.state import get_socketio
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,28 @@ def _guard_dolphin_already_open():
                       'and a second one steals focus so the test just sits on the '
                       'menu.'),
         }), 409
+    return None
+
+
+def _paired_nana_zip(character, skin_id):
+    """The paired Nana zip path (str) for an Ice Climbers Popo skin, or None.
+    Mirrors the frontend's pairing (useCostumes.js): the selected skin's
+    `paired_nana_id` names a hidden Nana skin entry whose zip lives in storage."""
+    try:
+        chars = (load_metadata() or {}).get('characters', {})
+        skin = next((s for s in chars.get(character, {}).get('skins', [])
+                     if s.get('id') == skin_id), None)
+        pair_id = (skin or {}).get('paired_nana_id')
+        if not pair_id:
+            return None
+        for char_name, char_data in chars.items():
+            nana = next((s for s in char_data.get('skins', [])
+                         if s.get('id') == pair_id), None)
+            if nana and nana.get('filename'):
+                return str(STORAGE_PATH / char_name / nana['filename'])
+        logger.warning(f"paired Nana skin {pair_id} not found in storage metadata")
+    except Exception:
+        logger.warning("could not resolve a paired Nana costume", exc_info=True)
     return None
 
 
@@ -221,6 +244,11 @@ def start_costume_test():
         return jsonify({'success': False,
                         'error': f'Costume archive not found: {skin_zip}'}), 400
 
+    # Ice Climbers skins are a Popo/Nana PAIR of zips linked in the storage
+    # metadata; importing only the selected (Popo) zip would leave Nana vanilla
+    # in the test ISO. Resolve the paired Nana zip so the build installs both.
+    nana_zip = _paired_nana_zip(character, skin_id)
+
     with _test_lock:
         if _test_running:
             return jsonify({'success': False,
@@ -261,7 +289,8 @@ def start_costume_test():
                                             'message': 'Building a one-costume test ISO…'})
             index = build_single_costume_iso(
                 vanilla_iso=vanilla_iso, character=character, skin_zip=str(skin_zip),
-                out_iso=str(out_iso), progress_cb=build_progress, log=build_log,
+                out_iso=str(out_iso), nana_zip=nana_zip,
+                progress_cb=build_progress, log=build_log,
             )
 
             manifest = {'costume': {'fighter': character, 'colorIndex': index,

@@ -35,7 +35,7 @@ from .observe import Observer, wait_in_game, wait_game_frames
 from . import nav
 from . import match_setup
 from . import screenshot as _screenshot
-from .char_select import load_grid, cell, css_index, ckind as char_ckind
+from .char_select import load_grid, cell, css_index, ckind as char_ckind, raw_key
 
 
 # severity for aggregating the overall verdict (higher = worse)
@@ -273,6 +273,26 @@ def _ensure_on_sss(d, p, sc, cur, log, solo=False):
     return sc.on_stage_select()
 
 
+def _transform_to_sheik(d, p, log=_noop):
+    """The CSS cursor can only pick Zelda (Sheik has no cell of her own), so on
+    the cursor-select fallback a Sheik check starts the match as Zelda -- one
+    deliberate down-B once controls are live transforms her into Sheik so
+    Sheik's data actually loads. NOT needed on the memory-selection path, which
+    writes Sheik's own external id (0x13) and loads her directly. One press
+    only: Sheik's down-B transforms BACK, so blind retries would just toggle."""
+    wait_in_game(d, timeout=20.0)
+    wait_game_frames(d, 180)   # ~3s of game time: past READY/GO so inputs register
+    log("transforming Zelda -> Sheik (down-B)")
+    # Main-stick y: 0.0 = DOWN, 1.0 = UP (verified in-match: 1.0+B was Farore's).
+    p.frame(["SET MAIN 0.500 0.000", "FLUSH"])   # hold down first: not Nayru's
+    time.sleep(0.1)
+    p.frame(["PRESS B", "FLUSH"])
+    time.sleep(0.15)
+    p.frame(["RELEASE B", "SET MAIN 0.500 0.500", "FLUSH"])
+    wait_game_frames(d, 150)   # ride out the transform animation
+    p.center()
+
+
 def _perform_move(d, p, move, reps=6):
     """After a match starts, perform the in-game move that exercises an effect
     mod (so its model/data actually loads). Waits out the load + GO! countdown
@@ -480,6 +500,12 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
                     sub["screenshot"] = _shot_b64(boot)
                     result["checks"].append(sub)
                     continue
+
+                # Cursor-selected Sheik started the match as Zelda -- transform.
+                if (not used_memory and check["char"]["kind"] == "vanilla"
+                        and raw_key(check["char"]["name"]) == "sheik"):
+                    emit("in_match", base_pct + 8, f"Transforming into Sheik for: {label}…")
+                    _transform_to_sheik(d, p, log=log)
 
                 if check.get("move"):
                     emit("in_match", base_pct + 9, f"Triggering {check['move']} for: {label}…")

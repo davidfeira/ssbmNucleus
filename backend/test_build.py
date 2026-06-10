@@ -186,9 +186,15 @@ def _export(mex, out_iso, progress_cb, log):
 # Build functions -- each: fresh project -> install one mod -> export -> nuke.   #
 # --------------------------------------------------------------------------- #
 def build_single_costume_iso(vanilla_iso, character, skin_zip, out_iso,
-                             progress_cb=None, log=lambda m: None):
+                             nana_zip=None, progress_cb=None, log=lambda m: None):
     """Fresh project + the one costume (storage zip). Returns the in-game costume
-    index (color slot) of the imported costume."""
+    index (color slot) of the imported costume.
+
+    `nana_zip`: an Ice Climbers skin is a Popo/Nana PAIR of zips -- `skin_zip`
+    only re-skins Popo, so the caller passes the paired Nana zip and we import it
+    to the separate Nana fighter (internal id 11; mexcli resolves a numeric id).
+    Both imports append at the same slot index, which is how the engine pairs
+    them in-game."""
     skin_zip = Path(skin_zip)
     if not skin_zip.exists():
         raise FileNotFoundError(f"Costume archive not found: {skin_zip}")
@@ -204,6 +210,13 @@ def build_single_costume_iso(vanilla_iso, character, skin_zip, out_iso,
         if not total:
             raise RuntimeError("could not determine the imported costume index")
         index = int(total) - 1
+        if nana_zip:
+            nana_zip = Path(nana_zip)
+            if nana_zip.exists():
+                log("Importing the paired Nana costume…")
+                mex.import_costume("11", str(nana_zip))
+            else:
+                log(f"Paired Nana archive missing ({nana_zip}); testing Popo only")
         _export(mex, out_iso, progress_cb, log)
         return index
     finally:

@@ -30,8 +30,8 @@ GRID_PATH = _grid_path()
 ALIASES = {
     "doc": "drmario", "doctormario": "drmario",
     "ganon": "ganondorf", "dk3": "dk", "donkeykong": "dk",
-    "cf": "falcon", "captainfalcon": "falcon", "cfalcon": "falcon",
-    "sheik": "zelda",  # same cell; sheik is reached by toggling after select
+    "sheik": "zelda",  # the CURSOR can only reach Zelda's cell; ckind() resolves
+                       # sheik to her own external id first (see CKIND_NO_CELL)
     "gnw": "gameandwatch", "gw": "gameandwatch", "mrgameandwatch": "gameandwatch",
     "mrgamewatch": "gameandwatch", "gamewatch": "gameandwatch",
     "puff": "jigglypuff", "jiggs": "jigglypuff",
@@ -53,7 +53,7 @@ CSS_INDEX = {
 # External character id (the match player block's "c_kind") -- what the cursor-free
 # memory selection writes to pick a fighter without steering. DISTINCT from the
 # CSS grid index above: this is the engine's character id (Fox=0x02, Marth=0x09
-# verified live; "no pick"/Master Hand = 0x1A). Sheik shares Zelda's slot (0x12).
+# verified live; "no pick"/Master Hand = 0x1A).
 CKIND = {
     "falcon": 0x00, "dk": 0x01, "fox": 0x02, "gameandwatch": 0x03, "kirby": 0x04,
     "bowser": 0x05, "link": 0x06, "luigi": 0x07, "mario": 0x08, "marth": 0x09,
@@ -62,14 +62,29 @@ CKIND = {
     "younglink": 0x15, "drmario": 0x16, "roy": 0x17, "pichu": 0x18, "ganondorf": 0x19,
 }
 
+# Full engine fighters that have NO CSS CELL of their own, so they're reachable
+# only by the cursor-free memory selection. Sheik is the engine's 0x13 (the gap
+# between Zelda 0x12 and Falco 0x14) but the CSS only shows Zelda -- ckind()
+# resolves these BEFORE the alias table collapses the name to its cell-mate;
+# the cursor path (norm/cell/css_index) still lands on Zelda, and the runner
+# transforms with down-B after the match starts.
+CKIND_NO_CELL = {"sheik": 0x13}
+
 
 def load_grid():
     with open(GRID_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
+def raw_key(name):
+    """The name reduced to lowercase alphanumerics, BEFORE alias resolution --
+    use this to recognise a specific request (e.g. sheik) that norm() would
+    collapse into its CSS cell-mate."""
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
 def norm(name):
-    key = "".join(ch for ch in str(name).lower() if ch.isalnum())
+    key = raw_key(name)
     return ALIASES.get(key, key)
 
 
@@ -80,7 +95,10 @@ def css_index(name):
 def ckind(name):
     """External character id for the cursor-free memory selection, or None for an
     unknown / custom fighter (caller should fall back to the cursor)."""
-    return CKIND.get(norm(name))
+    key = raw_key(name)
+    if key in CKIND_NO_CELL:
+        return CKIND_NO_CELL[key]
+    return CKIND.get(ALIASES.get(key, key))
 
 
 def cell(grid, name):
