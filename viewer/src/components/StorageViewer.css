@@ -7037,3 +7037,395 @@
 .sss-props-popup .sss-props-panel {
   padding: 0.75rem;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Menus vault — shared view styles
+   The menus section (icon grid / backgrounds / doors / pause) reuses the
+   characters/stages design language: elevated cards, subtle borders, token
+   spacing. Nothing here should hardcode colors or pixel margins.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Breadcrumb row above the menus views (Back button + path) */
+.vault-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  width: min(100%, 56rem);
+  align-self: center;
+}
+
+.vault-breadcrumb-path {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  text-transform: capitalize;
+}
+
+/* Category cards (Menus root + CSS/SSS type pickers): same stage-card shell,
+   roomier body with a description line instead of a variant count. */
+.menu-type-info {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  width: 100%;
+}
+
+.menu-type-desc {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+
+/* Loading / empty state shared by the menu mod lists */
+.vault-empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Card grid for texture mods (doors, pause screen) */
+.mod-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+  width: min(100%, 56rem);
+  margin: 0 auto;
+}
+
+.mod-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.mod-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-cyan);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.mod-card-preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Doors are a tall 128x200 texture */
+.mod-card--tall .mod-card-preview {
+  aspect-ratio: 128 / 200;
+}
+
+.mod-card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mod-card-monogram {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+}
+
+.mod-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.mod-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-card-btn {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.mod-card-btn:hover:not(:disabled) {
+  border-color: var(--color-cyan);
+  color: var(--color-text-primary);
+}
+
+.mod-card-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Boxed host for the in-game test/capture panel (pause screenshot flow) */
+.vault-panel-box {
+  width: min(100%, 56rem);
+  margin: 0 auto var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+}
+
+/* Inline checkbox toggle on patch-row cards (e.g. background scene settings) */
+.patch-row-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.patch-row-toggle input {
+  accent-color: var(--color-cyan);
+}
+
+/* Clickable patch rows (icon grid mods open a detail view) */
+.patch-row.clickable {
+  cursor: pointer;
+}
+
+/* Quiet variant of the row action button (delete on vault lists) */
+.btn-build-iso.btn-quiet {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+.btn-build-iso.btn-quiet:hover {
+  border-color: var(--color-danger, #f87171);
+  color: var(--color-danger, #f87171);
+}
+
+/* Disabled state for the floating import button */
+.intake-import-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* "Create new" gateway card at the end of a mod card grid */
+.mod-card--create {
+  cursor: pointer;
+  border-style: dashed;
+}
+
+.mod-card--create .mod-card-monogram {
+  font-size: var(--text-3xl);
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.mod-card--create:hover .mod-card-monogram {
+  color: var(--color-cyan);
+}
+
+/* Hover-reveal edit (pencil) button on mod cards */
+.mod-card-preview {
+  position: relative;
+}
+
+.mod-card-edit {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.mod-card:hover .mod-card-edit {
+  opacity: 1;
+}
+
+.mod-card-edit:hover {
+  background: var(--color-cyan);
+  color: var(--color-bg-deep);
+}
+
+/* ── Pause texture editor ──────────────────────────────────────────────── */
+
+.pause-editor {
+  width: min(100%, 56rem);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pause-editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pause-editor-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.pause-editor-hint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* The in-game-style canvas the slots sit on */
+.pause-editor-canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-subtle);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 20%, #1c2a4a 0%, #0d1426 70%, #080d1a 100%);
+}
+
+.pause-editor-slot {
+  position: absolute;
+  padding: 0;
+  border: 1px dashed rgba(125, 211, 232, 0.35);
+  border-radius: var(--radius-xs);
+  background: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.pause-editor-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.pause-editor-slot:hover {
+  border-color: var(--color-cyan);
+  border-style: solid;
+  background: rgba(125, 211, 232, 0.12);
+  box-shadow: 0 0 12px rgba(125, 211, 232, 0.35);
+  z-index: 2;
+}
+
+.pause-editor-slot.replaced {
+  border-color: rgba(125, 211, 232, 0.7);
+  border-style: solid;
+}
+
+.pause-editor-slot.busy {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Slot strip below the canvas: one chip per texture */
+.pause-editor-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+
+.pause-editor-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+}
+
+.pause-editor-chip.replaced {
+  border-color: rgba(125, 211, 232, 0.5);
+}
+
+.pause-editor-chip-preview {
+  width: 44px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.pause-editor-chip-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+.pause-editor-chip-preview:hover {
+  border-color: var(--color-cyan);
+}
+
+.pause-editor-chip-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.pause-editor-chip-name {
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pause-editor-chip-meta {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+}

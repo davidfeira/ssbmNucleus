@@ -1,0 +1,205 @@
+/**
+ * PauseTextureEditor - per-slot texture editor for a pause screen mod.
+ *
+ * Lays the 11 GmPause textures out on a 4:3 canvas approximating where they
+ * sit on the real pause screen (corner brackets, P1/Pause text top-right,
+ * main graphic + hints bottom-left). Click a slot to upload a replacement;
+ * user-replaced slots get a badge and can be reverted. A strip below lists
+ * every slot for precise access to the tiny ones.
+ */
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { playSound, playHoverSound } from '../../utils/sounds'
+import { API_URL, BACKEND_URL } from '../../config'
+
+// Slot geometry on a 720x540 reference canvas (eyeballed from an in-game
+// pause capture; textures render ~1.3-1.4x their native size on screen).
+const SLOT_LAYOUT = {
+  0:  { name: 'Camera Swirl',      x: 320, y: 408, w: 42,  h: 42 },
+  1:  { name: 'Trim (left)',       x: 424, y: 55,  w: 22,  h: 27 },
+  2:  { name: 'Trim (right)',      x: 667, y: 55,  w: 22,  h: 27 },
+  3:  { name: 'Edge Bar',          x: 686, y: 372, w: 25,  h: 90 },
+  4:  { name: 'Main Graphic',      x: 30,  y: 396, w: 114, h: 94 },
+  5:  { name: 'Corner Bracket',    x: 30,  y: 42,  w: 67,  h: 67 },
+  6:  { name: '"Pause" Text',      x: 515, y: 55,  w: 146, h: 27 },
+  7:  { name: '"P1" Text',         x: 452, y: 55,  w: 57,  h: 27 },
+  8:  { name: 'L+R+A+Start Hint',  x: 150, y: 398, w: 161, h: 47 },
+  9:  { name: 'Z Retry Hint',      x: 150, y: 452, w: 104, h: 47 },
+  10: { name: 'Main Graphic (alt)', x: 560, y: 396, w: 114, h: 94 },
+}
+const REF_W = 720
+const REF_H = 540
+
+const pct = (v, ref) => `${(v / ref) * 100}%`
+
+export default function PauseTextureEditor({ mod, onBack }) {
+  const [textures, setTextures] = useState([])
+  const [error, setError] = useState('')
+  const [busySlot, setBusySlot] = useState(null)
+  const [bust, setBust] = useState({})        // index -> cache-bust stamp
+  const [pickerSlot, setPickerSlot] = useState(null)
+  const fileInputRef = useRef(null)
+
+  const fetchTextures = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/${mod.id}/textures`)
+      const data = await res.json()
+      if (data.success) {
+        setTextures(data.textures || [])
+        setError('')
+      } else {
+        setError(data.error || 'Failed to load textures')
+      }
+    } catch (err) {
+      setError(`Failed to load textures: ${err.message}`)
+    }
+  }, [mod.id])
+
+  useEffect(() => { fetchTextures() }, [fetchTextures])
+
+  const texUrl = (t) =>
+    `${BACKEND_URL}${t.url}${bust[t.index] ? `?v=${bust[t.index]}` : ''}`
+
+  const openPicker = (index) => {
+    if (busySlot !== null) return
+    playSound('boop')
+    setPickerSlot(index)
+    fileInputRef.current?.click()
+  }
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    const index = pickerSlot
+    setPickerSlot(null)
+    if (!file || index === null) return
+
+    setBusySlot(index)
+    const formData = new FormData()
+    formData.append('index', String(index))
+    formData.append('file', file)
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/${mod.id}/replace_texture`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.success) {
+        playSound('newSkin')
+        setBust(prev => ({ ...prev, [index]: Date.now() }))
+        await fetchTextures()
+      } else {
+        setError(data.error || 'Replace failed')
+      }
+    } catch (err) {
+      setError(`Replace failed: ${err.message}`)
+    } finally {
+      setBusySlot(null)
+    }
+  }
+
+  const handleRevert = async (index) => {
+    setBusySlot(index)
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/${mod.id}/revert_texture`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        playSound('boop')
+        setBust(prev => ({ ...prev, [index]: Date.now() }))
+        await fetchTextures()
+      } else {
+        setError(data.error || 'Revert failed')
+      }
+    } catch (err) {
+      setError(`Revert failed: ${err.message}`)
+    } finally {
+      setBusySlot(null)
+    }
+  }
+
+  return (
+    <div className="pause-editor">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/*"
+        onChange={handleFile}
+        style={{ display: 'none' }}
+      />
+
+      <div className="pause-editor-header">
+        <button
+          className="mode-btn"
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('back'); onBack() }}
+        >
+          ← Back
+        </button>
+        <h3 className="pause-editor-title">{mod.name}</h3>
+        <span className="pause-editor-hint">Click a texture to replace it</span>
+      </div>
+
+      {error && <div className="import-message error">{error}</div>}
+
+      <div className="pause-editor-canvas">
+        {textures.map((t) => {
+          const slot = SLOT_LAYOUT[t.index]
+          if (!slot) return null
+          return (
+            <button
+              key={t.index}
+              className={`pause-editor-slot ${t.replaced ? 'replaced' : ''} ${busySlot === t.index ? 'busy' : ''}`}
+              style={{
+                left: pct(slot.x, REF_W),
+                top: pct(slot.y, REF_H),
+                width: pct(slot.w, REF_W),
+                height: pct(slot.h, REF_H),
+              }}
+              title={`${slot.name} — ${t.width}x${t.height} ${t.format}${t.replaced ? ' (edited)' : ''}`}
+              onMouseEnter={playHoverSound}
+              onClick={() => openPicker(t.index)}
+            >
+              <img src={texUrl(t)} alt={slot.name} draggable={false} />
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="pause-editor-strip">
+        {textures.map((t) => {
+          const slot = SLOT_LAYOUT[t.index] || { name: `Texture ${t.index}` }
+          return (
+            <div key={t.index} className={`pause-editor-chip ${t.replaced ? 'replaced' : ''}`}>
+              <button
+                className="pause-editor-chip-preview"
+                onMouseEnter={playHoverSound}
+                onClick={() => openPicker(t.index)}
+                title={`Replace ${slot.name}`}
+              >
+                <img src={texUrl(t)} alt={slot.name} draggable={false} />
+              </button>
+              <div className="pause-editor-chip-info">
+                <span className="pause-editor-chip-name">{slot.name}</span>
+                <span className="pause-editor-chip-meta">{t.width}x{t.height}</span>
+              </div>
+              {t.replaced && (
+                <button
+                  className="mod-card-btn"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => handleRevert(t.index)}
+                  disabled={busySlot !== null}
+                  title="Restore this slot's original texture"
+                >
+                  Revert
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

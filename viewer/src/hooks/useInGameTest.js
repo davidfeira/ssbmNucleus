@@ -179,10 +179,76 @@ export function useInGameTest() {
     }
   }
 
+  // Capture a LIVE pause-screen screenshot for a pause mod. The backend builds
+  // a vanilla+mod ISO, pauses a solo match, grabs the overlay, and saves the
+  // shot as the mod's preview before capture_complete arrives.
+  const capturePauseScreenshot = async ({ modId, name }) => {
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
+    const slippiDolphinPath = localStorage.getItem('slippi_dolphin_path')
+
+    if (!vanillaIsoPath) {
+      setTestError('No vanilla Melee ISO path set. Set it in Settings first.')
+      return
+    }
+    if (!slippiDolphinPath) {
+      setTestError('No Slippi Dolphin path set. Set it in Settings first.')
+      return
+    }
+
+    playSound('start')
+    setTestingInGame(true)
+    setTestStatus({ stage: 'starting', percentage: 0, message: 'Starting pause screenshot capture…' })
+    setTestResult(null)
+    setTestError(null)
+
+    cleanupSocket()
+    const socket = io(BACKEND_URL)
+    socketRef.current = socket
+    socket.on('capture_progress', (d) => setTestStatus(d))
+    socket.on('capture_complete', (d) => {
+      setTestingInGame(false)
+      setTestResult({
+        success: true,
+        captured: true,
+        reason: `Saved as the preview for "${name || 'this mod'}".`,
+        screenshot: d.screenshot || null,
+        modId: d.modId,
+      })
+      playSound('achievement')
+      cleanupSocket()
+    })
+    socket.on('capture_error', (d) => {
+      setTestingInGame(false)
+      setTestError(d.error || 'Screenshot capture failed')
+      playSound('error')
+      cleanupSocket()
+    })
+
+    try {
+      const response = await fetch(`${API_URL}/test-in-game/capture-pause-screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modId, vanillaIsoPath, slippiDolphinPath })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        setTestingInGame(false)
+        setTestError(data.error || 'Failed to start capture')
+        playSound('error')
+        cleanupSocket()
+      }
+    } catch (err) {
+      setTestingInGame(false)
+      setTestError(`Failed to start capture: ${err.message}`)
+      playSound('error')
+      cleanupSocket()
+    }
+  }
+
   return {
     testingInGame, testStatus, testResult, testError,
     startCostumeTest, startCustomCharacterTest, startCustomStageTest, startStageSkinTest,
-    captureStageScreenshot,
+    captureStageScreenshot, capturePauseScreenshot,
     resetTest
   }
 }

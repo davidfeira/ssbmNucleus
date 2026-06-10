@@ -29,7 +29,7 @@ const CSS_MOD_TYPES = [
 
 export default function CssMenuTypesGrid({ onSelectModType }) {
   return (
-    <div className="stages-grid" style={{ justifyContent: 'center' }}>
+    <div className="stages-grid">
       {CSS_MOD_TYPES.map((modType) => (
         <div
           key={modType.key}
@@ -37,8 +37,9 @@ export default function CssMenuTypesGrid({ onSelectModType }) {
           onMouseEnter={playHoverSound}
           onClick={() => { playSound('boop'); onSelectModType(modType.key) }}
         >
-          <div className="stage-info" style={{ padding: '2rem 1rem' }}>
+          <div className="stage-info menu-type-info">
             <h3 className="stage-name">{modType.name}</h3>
+            <p className="menu-type-desc">{modType.description}</p>
           </div>
         </div>
       ))}

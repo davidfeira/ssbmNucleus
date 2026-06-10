@@ -18,12 +18,18 @@ const MENU_TYPES = [
     name: 'Stage Select Screen',
     short: 'SSS',
     description: 'SSS layouts, backgrounds, and icon mods'
+  },
+  {
+    key: 'pause',
+    name: 'Pause Screen',
+    short: 'Pause',
+    description: 'In-game pause overlay texture mods'
   }
 ]
 
 export default function MenusGrid({ onSelectMenuType }) {
   return (
-    <div className="stages-grid" style={{ justifyContent: 'center' }}>
+    <div className="stages-grid">
       {MENU_TYPES.map((menu) => (
         <div
           key={menu.key}
@@ -31,8 +37,9 @@ export default function MenusGrid({ onSelectMenuType }) {
           onMouseEnter={playHoverSound}
           onClick={() => { playSound('boop'); onSelectMenuType(menu.key) }}
         >
-          <div className="stage-info" style={{ padding: '2rem 1rem' }}>
+          <div className="stage-info menu-type-info">
             <h3 className="stage-name">{menu.name}</h3>
+            <p className="menu-type-desc">{menu.description}</p>
           </div>
         </div>
       ))}

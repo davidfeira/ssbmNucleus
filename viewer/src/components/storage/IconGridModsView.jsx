@@ -113,8 +113,7 @@ export default function IconGridModsView({ onDetailChange }) {
     <div className="icon-grid-mods">
       <div className="import-file-container">
         <label
-          className="intake-import-btn"
-          style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
+          className={`intake-import-btn ${importing ? 'disabled' : ''}`}
           onMouseEnter={playHoverSound}
           onClick={() => { if (!importing) playSound('start') }}
         >
@@ -136,21 +135,18 @@ export default function IconGridModsView({ onDetailChange }) {
 
       <div className="patches-list">
         {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-            Loading...
-          </div>
+          <div className="vault-empty">Loading...</div>
         ) : mods.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          <div className="vault-empty">
             No icon grid mods yet. Import a .zip to get started.
           </div>
         ) : (
           mods.map((mod) => (
             <div
               key={mod.id}
-              className="patch-row"
+              className="patch-row clickable"
               onMouseEnter={playHoverSound}
               onClick={() => { playSound('boop'); setSelectedModId(mod.id); onDetailChange?.(true) }}
-              style={{ cursor: 'pointer' }}
             >
               <div className="patch-row-image">
                 {mod.screenshotUrl ? (
@@ -177,10 +173,9 @@ export default function IconGridModsView({ onDetailChange }) {
 
               <div className="patch-row-actions">
                 <button
-                  className="btn-build-iso"
+                  className="btn-build-iso btn-quiet"
                   onMouseEnter={playHoverSound}
                   onClick={(e) => { e.stopPropagation(); playSound('boop'); handleDelete(mod) }}
-                  style={{ background: 'transparent', border: '1px solid var(--color-border)' }}
                 >
                   Delete
                 </button>

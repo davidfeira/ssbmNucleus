@@ -25,6 +25,7 @@ import SssMenuTypesGrid from './storage/SssMenuTypesGrid'
 import IconGridModsView from './storage/IconGridModsView'
 import BackgroundModsView from './storage/BackgroundModsView'
 import DoorModsView from './storage/DoorModsView'
+import PauseModsView from './storage/PauseModsView'
 import SssLayoutEditor from './storage/SssLayoutEditor'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
@@ -1464,7 +1465,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       ) : selectedMenuType ? (
         <div className="grid-wrapper">
           {!menuDetailOpen && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div className="vault-breadcrumb">
               <button
                 className="mode-btn"
                 onMouseEnter={playHoverSound}
@@ -1479,7 +1480,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
               >
                 ← Back
               </button>
-              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              <span className="vault-breadcrumb-path">
                 Menus / {selectedMenuType.toUpperCase()}
                 {selectedMenuModType ? ` / ${selectedMenuModType.replace('_', ' ')}` : ''}
               </span>
@@ -1508,6 +1509,10 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
           {selectedMenuType === 'sss' && selectedMenuModType === 'background' && (
             <BackgroundModsView />
+          )}
+
+          {selectedMenuType === 'pause' && (
+            <PauseModsView onDetailChange={setMenuDetailOpen} />
           )}
         </div>
       ) : (

@@ -109,8 +109,7 @@ export default function BackgroundModsView() {
     <div className="icon-grid-mods">
       <div className="import-file-container">
         <label
-          className="intake-import-btn"
-          style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
+          className={`intake-import-btn ${importing ? 'disabled' : ''}`}
           onMouseEnter={playHoverSound}
           onClick={() => { if (!importing) playSound('start') }}
         >
@@ -132,11 +131,9 @@ export default function BackgroundModsView() {
 
       <div className="patches-list">
         {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-            Loading...
-          </div>
+          <div className="vault-empty">Loading...</div>
         ) : mods.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          <div className="vault-empty">
             No background mods yet. Import a .zip or .dat containing a MnSlChr or MnSlMap file to get started.
           </div>
         ) : (
@@ -145,7 +142,6 @@ export default function BackgroundModsView() {
               key={mod.id}
               className="patch-row"
               onMouseEnter={playHoverSound}
-              style={{ cursor: 'default' }}
             >
               <div className="patch-row-image">
                 {mod.screenshotUrl ? (
@@ -169,7 +165,7 @@ export default function BackgroundModsView() {
                   <p className="patch-row-description">{mod.description}</p>
                 )}
                 <label
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                  className="patch-row-toggle"
                   title="When enabled, installs the background's camera, lighting, and fog settings alongside the model. Turn off if the background looks wrong on a different screen."
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -177,7 +173,6 @@ export default function BackgroundModsView() {
                     type="checkbox"
                     checked={!!mod.includeScene}
                     onChange={() => handleToggleScene(mod)}
-                    style={{ accentColor: 'var(--color-primary, #7c4dff)' }}
                   />
                   Include Scene Settings
                 </label>
@@ -185,10 +180,9 @@ export default function BackgroundModsView() {
 
               <div className="patch-row-actions">
                 <button
-                  className="btn-build-iso"
+                  className="btn-build-iso btn-quiet"
                   onMouseEnter={playHoverSound}
                   onClick={(e) => { e.stopPropagation(); playSound('boop'); handleDelete(mod) }}
-                  style={{ background: 'transparent', border: '1px solid var(--color-border)' }}
                 >
                   Delete
                 </button>
