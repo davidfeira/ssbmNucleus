@@ -66,6 +66,22 @@ namespace MexCLI
                         return Commands.ExportStageCommand.Execute(args);
                     case "add-fighter":
                         return Commands.AddFighterCommand.Execute(args);
+                    case "add-series":
+                        return Commands.AddSeriesCommand.Execute(args);
+                    case "add-music":
+                        return Commands.AddMusicCommand.Execute(args);
+                    case "set-fighter-music":
+                        return Commands.SetFighterMusicCommand.Execute(args);
+                    case "set-stage-playlist":
+                        return Commands.SetStagePlaylistCommand.Execute(args);
+                    case "hps-to-wav":
+                        return Commands.AudioCommands.HpsToWav(args);
+                    case "ssm-info":
+                        return Commands.AudioCommands.SsmInfo(args);
+                    case "ssm-to-wav":
+                        return Commands.AudioCommands.SsmToWav(args);
+                    case "sem-resolve":
+                        return Commands.AudioCommands.SemResolve(args);
                     case "remove-fighter":
                         return Commands.RemoveFighterCommand.Execute(args);
                     case "add-stage":

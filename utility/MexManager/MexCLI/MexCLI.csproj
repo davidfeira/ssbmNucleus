@@ -13,6 +13,9 @@
     <Reference Include="HSDRaw">
       <HintPath>..\MexManager.Desktop\HSDRaw.dll</HintPath>
     </Reference>
+    <Reference Include="MeleeMedia">
+      <HintPath>..\MexManager.Desktop\MeleeMedia.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

@@ -384,13 +384,20 @@ namespace mexLib.Installer
             // fighter assets are external with sheik at end (>=19 0-=1) (=19->29)
             for (int internalId = 0; internalId < workspace.Project.Fighters.Count; internalId++) // 26
             {
-                // get fighter  external id
-                int externalId = MexFighterIDConverter.ToExternalID(internalId, 0x21);
+                // get fighter external id — must use the project's REAL
+                // fighter count like GenerateGmRst does; the old hardcoded
+                // 0x21 broke the internal->external mapping for every m-ex
+                // custom fighter (banners landed on the wrong fighters)
+                int externalId = MexFighterIDConverter.ToExternalID(internalId, workspace.Project.Fighters.Count);
 
-                // sheik hack
+                // sheik hack — must mirror GenerateGmRst exactly: only the
+                // vanilla post-Sheik range shifts down; m-ex custom fighters
+                // (externalId > 25) keep their externalId as the frame.
+                // (The old unbounded `externalId -= 1` made every custom
+                // fighter read its neighbour's banner: Wolf got Sheik's, etc.)
                 if (externalId == 19)
                     externalId = 25;
-                else if (externalId > 19)
+                else if (externalId > 19 && externalId <= 25)
                     externalId -= 1;
 
                 // search and set asset for fighter
