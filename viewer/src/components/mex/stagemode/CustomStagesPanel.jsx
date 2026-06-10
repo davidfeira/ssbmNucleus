@@ -4,8 +4,12 @@
  */
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import { BACKEND_URL } from '../../../config'
+import PaginationBar from '../../shared/PaginationBar'
+import usePagination from '../../shared/usePagination'
 
 export default function CustomStagesPanel({ cs }) {
+  const inIsoPager = usePagination(cs.projectCustomStages.length, 'custom-iso')
+  const vaultPager = usePagination(cs.vaultStages.length, 'custom-vault')
   return (
     <>
       <div className="costumes-section">
@@ -13,8 +17,8 @@ export default function CustomStagesPanel({ cs }) {
           <h3>In ISO ({cs.projectCustomStages.length})</h3>
         </div>
         <div className="costume-list existing">
-          {cs.projectCustomStages.map((stage, idx) => (
-            <div key={stage.index} className="costume-card existing-costume card-visible" style={{ animationDelay: `${idx * 30}ms` }}>
+          {cs.projectCustomStages.slice(inIsoPager.start, inIsoPager.end).map((stage, i) => (
+            <div key={stage.index} className="costume-card existing-costume card-visible" style={{ animationDelay: `${Math.min(i * 30, 990)}ms` }}>
               <div className="costume-preview">
                 {stage.icon_url && (
                   <img src={`${BACKEND_URL}${stage.icon_url}`} alt={stage.name} style={{ imageRendering: 'pixelated' }} onError={e => e.target.style.display = 'none'} />
@@ -28,6 +32,7 @@ export default function CustomStagesPanel({ cs }) {
             <div className="no-costumes"><p>No custom stages installed</p></div>
           )}
         </div>
+        <PaginationBar pager={inIsoPager} />
       </div>
       <div className="costumes-section">
         <div className="costumes-section-header">
@@ -71,13 +76,13 @@ export default function CustomStagesPanel({ cs }) {
           )}
         </div>
         <div className="costume-list">
-          {cs.vaultStages.map((stage, idx) => {
+          {cs.vaultStages.slice(vaultPager.start, vaultPager.end).map((stage, i) => {
             const isSelected = cs.selectedCustomStages.has(stage.slug)
             return (
               <div
                 key={stage.slug}
                 className={`costume-card card-visible ${isSelected ? 'selected' : ''}`}
-                style={{ animationDelay: `${idx * 30}ms` }}
+                style={{ animationDelay: `${Math.min(i * 30, 990)}ms` }}
                 onMouseEnter={playHoverSound}
                 onClick={() => { if (!cs.batchInstallingStages) { playSound('boop'); cs.toggleCustomStageSelection(stage.slug); } }}
               >
@@ -103,6 +108,7 @@ export default function CustomStagesPanel({ cs }) {
             <div className="no-costumes"><p>No custom stages in vault</p></div>
           )}
         </div>
+        <PaginationBar pager={vaultPager} />
       </div>
     </>
   )

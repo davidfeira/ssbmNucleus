@@ -5,9 +5,14 @@
  */
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import { BACKEND_URL } from '../../../config'
+import PaginationBar from '../../shared/PaginationBar'
+import usePagination from '../../shared/usePagination'
 
 export default function VariantsPanel({ sm }) {
   const { selectedStage, mexVariants, dataReady } = sm
+  const availableVariants = sm.getVariantsForStage(selectedStage.code)
+  const inIsoPager = usePagination(mexVariants.length, `${selectedStage.code}-iso`)
+  const availPager = usePagination(availableVariants.length, `${selectedStage.code}-avail`)
 
   // Button Tokens Component
   const ButtonTokens = () => {
@@ -37,7 +42,8 @@ export default function VariantsPanel({ sm }) {
           <ButtonTokens />
         </div>
         <div className="costume-list existing">
-          {mexVariants.map((variant, idx) => {
+          {mexVariants.slice(inIsoPager.start, inIsoPager.end).map((variant, i) => {
+            const idx = inIsoPager.start + i
             const isVanilla = variant.filename?.startsWith('vanilla')
             const imageUrl = isVanilla
               ? selectedStage.vanillaImage
@@ -51,7 +57,7 @@ export default function VariantsPanel({ sm }) {
                 className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                 onMouseEnter={playHoverSound}
                 onClick={() => sm.handleVariantClick(variant)}
-                style={{ cursor: canAssignButton ? 'pointer' : 'default', animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
+                style={{ cursor: canAssignButton ? 'pointer' : 'default', animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
               >
                 <div className="costume-preview">
                   {hasImage && (
@@ -98,15 +104,16 @@ export default function VariantsPanel({ sm }) {
             </div>
           )}
         </div>
+        <PaginationBar pager={inIsoPager} />
       </div>
 
       <div className="costumes-section">
         <div className="costumes-section-header">
           <h3>
-            Available to Import ({dataReady ? sm.getVariantsForStage(selectedStage.code).length : 'Loading...'})
+            Available to Import ({dataReady ? availableVariants.length : 'Loading...'})
             {sm.selectedVariants.size > 0 && ` - ${sm.selectedVariants.size} selected`}
           </h3>
-          {sm.getVariantsForStage(selectedStage.code).length > 0 && (
+          {availableVariants.length > 0 && (
             <div className="batch-controls">
               {sm.selectedVariants.size > 0 ? (
                 <>
@@ -142,20 +149,20 @@ export default function VariantsPanel({ sm }) {
           )}
         </div>
         <div className="costume-list" ref={sm.availableListRef}>
-          {sm.getVariantsForStage(selectedStage.code).map((variant, idx) => {
+          {availableVariants.slice(availPager.start, availPager.end).map((variant, i) => {
+            const idx = availPager.start + i
             const isVanilla = variant.filename?.startsWith('vanilla')
             const imageUrl = isVanilla
               ? selectedStage.vanillaImage
               : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null)
             const hasImage = isVanilla ? true : variant.hasScreenshot
             const isSelected = sm.selectedVariants.has(variant.zipPath)
-            const cascadeDelay = (mexVariants.length + idx) * 30
 
             return (
               <div
                 key={idx}
                 className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
-                style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
+                style={{ animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
                 onMouseEnter={playHoverSound}
                 onClick={() => { if (!sm.batchImporting) { playSound('boop'); sm.toggleVariantSelection(variant.zipPath); } }}
               >
@@ -186,12 +193,13 @@ export default function VariantsPanel({ sm }) {
               </div>
             )
           })}
-          {dataReady && sm.getVariantsForStage(selectedStage.code).length === 0 && (
+          {dataReady && availableVariants.length === 0 && (
             <div className="no-costumes">
               <p>No variants available in storage for {selectedStage.name}</p>
             </div>
           )}
         </div>
+        <PaginationBar pager={availPager} />
       </div>
     </>
   )

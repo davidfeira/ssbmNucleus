@@ -8,6 +8,10 @@
 import { hasExtras } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import HexagonLoader from '../../shared/HexagonLoader'
+import PaginationBar from '../../shared/PaginationBar'
+import usePagination from '../../shared/usePagination'
+import ZeldaSheikPanel from './ZeldaSheikPanel'
+import { isZeldaSheikName } from './useCostumes'
 
 export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL, onEnterExtras }) {
   const {
@@ -40,6 +44,20 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     clearSelection
   } = cm
 
+  // Zelda and Sheik share their in-game costume slots (transform pairing), so
+  // selecting EITHER shows the combined slot-paired panel instead. The check
+  // lives BELOW the pagination hooks so the hook order is stable across renders.
+  const isZS = selectedFighter && isZeldaSheikName(selectedFighter.name)
+  const availableCostumes = selectedFighter && !isZS
+    ? getCostumesForFighter(selectedFighter.name)
+    : []
+  const inIsoPager = usePagination(mexCostumes.length, `${selectedFighter?.name}-iso`)
+  const availPager = usePagination(availableCostumes.length, `${selectedFighter?.name}-avail`)
+
+  if (isZS) {
+    return <ZeldaSheikPanel refreshing={refreshing} cm={cm} API_URL={API_URL} />
+  }
+
   return (
     <div className={`costumes-panel ${refreshing || loadingFighter ? 'refreshing' : ''}`}>
       {selectedFighter ? (
@@ -67,7 +85,8 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
               </div>
             </div>
             <div className={`costume-list existing ${reordering ? 'processing' : ''} ${loadingFighter ? 'processing' : ''}`}>
-              {mexCostumes.map((costume, idx) => {
+              {mexCostumes.slice(inIsoPager.start, inIsoPager.end).map((costume, i) => {
+                const idx = inIsoPager.start + i
                 const isDragging = draggedIndex === idx
                 const isDragOver = dragOverIndex === idx
                 const costumeTeamColors = getCostumeTeamColor(idx)
@@ -76,7 +95,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                   <div
                     key={idx}
                     className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
-                    style={{ animationDelay: dataReady ? `${idx * 30}ms` : '0ms' }}
+                    style={{ animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
                     draggable={!removing && !reordering && !isTeamAssignable}
                     onMouseEnter={playHoverSound}
                     onClick={isTeamAssignable ? () => handleCostumeTeamAssign(idx) : undefined}
@@ -142,6 +161,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                 </div>
               )}
             </div>
+            <PaginationBar pager={inIsoPager} />
             {reordering && (
               <div className="reorder-overlay">
                 <HexagonLoader className="reorder-loader" size={46} decorative />
@@ -153,11 +173,11 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
           <div className="costumes-section">
             <div className="costumes-section-header">
               <h3>
-                Available to Import ({dataReady ? getCostumesForFighter(selectedFighter.name).length : 'Loading...'})
+                Available to Import ({dataReady ? availableCostumes.length : 'Loading...'})
                 {selectedCostumes.size > 0 && ` - ${selectedCostumes.size} selected`}
               </h3>
               <div className="batch-controls">
-                {getCostumesForFighter(selectedFighter.name).length > 0 && (
+                {availableCostumes.length > 0 && (
                   <button
                     className="btn-select-all"
                     onMouseEnter={playHoverSound}
@@ -201,14 +221,14 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
               </div>
             </div>
             <div className={`costume-list ${loadingFighter ? 'processing' : ''}`} ref={availableListRef}>
-              {getCostumesForFighter(selectedFighter.name).map((costume, idx) => {
+              {availableCostumes.slice(availPager.start, availPager.end).map((costume, i) => {
+                const idx = availPager.start + i
                 const isSelected = selectedCostumes.has(costume.zipPath)
-                const cascadeDelay = (mexCostumes.length + idx) * 30
                 return (
                   <div
                     key={idx}
                     className={`costume-card ${isSelected ? 'selected' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
-                    style={{ animationDelay: dataReady ? `${cascadeDelay}ms` : '0ms' }}
+                    style={{ animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
                     onMouseEnter={playHoverSound}
                     onClick={() => { if (!batchImporting && !loadingFighter) { playSound('boop'); toggleCostumeSelection(costume.zipPath); } }}
                   >
@@ -248,12 +268,13 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                   </div>
                 )
               })}
-              {dataReady && getCostumesForFighter(selectedFighter.name).length === 0 && (
+              {dataReady && availableCostumes.length === 0 && (
                 <div className="no-costumes">
                   <p>No costumes available in storage for {selectedFighter.name}</p>
                 </div>
               )}
             </div>
+            <PaginationBar pager={availPager} />
           </div>
         </>
       ) : (

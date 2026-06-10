@@ -41,47 +41,91 @@ export default function FighterList({
             Menus
           </button>
         </div>
-        <span className="fighters-count">{playableFighters.length}</span>
+        <span className="fighters-count">
+          {playableFighters.length - (playableFighters.some(f => f.name === 'Sheik') ? 1 : 0)}
+        </span>
       </div>
       <div className="fighter-items">
-        {playableFighters.map(fighter => {
-          const availableCostumes = getCostumesForFighter(fighter.name)
-          return (
-            <div
-              key={fighter.internalId}
-              className={`fighter-item ${selectedFighter?.internalId === fighter.internalId ? 'selected' : ''}`}
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('boop'); onSelectFighter(fighter); }}
-            >
-              {fighter.defaultStockUrl && (
-                <img
-                  src={`${BACKEND_URL}${fighter.defaultStockUrl}`}
-                  alt=""
-                  className="fighter-stock-icon"
-                  onError={(e) => e.target.style.display = 'none'}
-                />
-              )}
-              <div className="fighter-content">
-                <div className="fighter-name">{fighter.name}</div>
-                <div className="fighter-info">
-                  <span className="costume-count">{fighter.costumeCount} in MEX</span>
-                  {availableCostumes.length > 0 && (
-                    <span className="available-count">{availableCostumes.length} available</span>
-                  )}
+        {(() => {
+          // Zelda and Sheik share one in-game slot pairing (and one combined
+          // costumes panel), so the list shows them as a SINGLE entry with a
+          // split stock icon. Sheik's own row is dropped; the Zelda row becomes
+          // "Zelda / Sheik" and carries both fighters' counts.
+          const sheikFighter = playableFighters.find(f => f.name === 'Sheik')
+          const displayFighters = sheikFighter
+            ? playableFighters.filter(f => f.name !== 'Sheik')
+            : playableFighters
+          return displayFighters.map(fighter => {
+            const isZeldaCombo = !!sheikFighter && fighter.name === 'Zelda'
+            const availableCostumes = isZeldaCombo
+              ? [...getCostumesForFighter('Zelda'), ...getCostumesForFighter('Sheik')]
+              : getCostumesForFighter(fighter.name)
+            const isSelected = selectedFighter?.internalId === fighter.internalId ||
+              (isZeldaCombo && selectedFighter?.internalId === sheikFighter.internalId)
+            return (
+              <div
+                key={fighter.internalId}
+                className={`fighter-item ${isSelected ? 'selected' : ''}`}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); onSelectFighter(fighter); }}
+              >
+                {isZeldaCombo && fighter.defaultStockUrl && sheikFighter.defaultStockUrl ? (
+                  <div className="fighter-stock-icon zs-combo-stock">
+                    <img
+                      src={`${BACKEND_URL}${fighter.defaultStockUrl}`}
+                      alt=""
+                      className="zs-stock-zelda"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                    <img
+                      src={`${BACKEND_URL}${sheikFighter.defaultStockUrl}`}
+                      alt=""
+                      className="zs-stock-sheik"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  </div>
+                ) : fighter.defaultStockUrl && (
+                  <img
+                    src={`${BACKEND_URL}${fighter.defaultStockUrl}`}
+                    alt=""
+                    className="fighter-stock-icon"
+                    onError={(e) => e.target.style.display = 'none'}
+                  />
+                )}
+                <div className="fighter-content">
+                  <div className="fighter-name">{isZeldaCombo ? 'Zelda / Sheik' : fighter.name}</div>
+                  <div className="fighter-info">
+                    <span className="costume-count">
+                      {isZeldaCombo
+                        ? `${fighter.costumeCount}+${sheikFighter.costumeCount} in MEX`
+                        : `${fighter.costumeCount} in MEX`}
+                    </span>
+                    {isZeldaCombo && fighter.costumeCount !== sheikFighter.costumeCount && (
+                      <span
+                        className="zs-mismatch zs-mismatch-mini"
+                        title="Zelda and Sheik have different costume counts — unpaired slots transform to the default costume (safe, no crash)."
+                      >
+                        ⚠
+                      </span>
+                    )}
+                    {availableCostumes.length > 0 && (
+                      <span className="available-count">{availableCostumes.length} available</span>
+                    )}
+                  </div>
                 </div>
+                {fighter.isMexFighter && (
+                  <button
+                    className="fighter-remove-btn"
+                    title={`Remove ${fighter.name}`}
+                    onClick={(e) => { e.stopPropagation(); onRemoveFighter(fighter.name); }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
-              {fighter.isMexFighter && (
-                <button
-                  className="fighter-remove-btn"
-                  title={`Remove ${fighter.name}`}
-                  onClick={(e) => { e.stopPropagation(); onRemoveFighter(fighter.name); }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          )
-        })}
+            )
+          })
+        })()}
         <button
           className="add-character-btn"
           onMouseEnter={playHoverSound}

@@ -12,10 +12,13 @@ import { API_URL, BACKEND_URL } from '../../config'
 import SssLayoutEditor from '../storage/SssLayoutEditor'
 import CssLayoutEditor from '../storage/CssLayoutEditor'
 import HexagonLoader from '../shared/HexagonLoader'
+import PaginationBar from '../shared/PaginationBar'
+import usePagination from '../shared/usePagination'
 
 const MENU_TYPES = [
   { key: 'css', name: 'Character Select Screen', short: 'CSS' },
   { key: 'sss', name: 'Stage Select Screen', short: 'SSS' },
+  { key: 'pause', name: 'Pause Screen', short: 'Pause', noLayout: true },
 ]
 
 const CSS_SUBMOD_TYPES = [
@@ -28,6 +31,10 @@ const SSS_SUBMOD_TYPES = [
   { key: 'background', name: 'Background', description: 'SSS background model and animations' },
 ]
 
+const PAUSE_SUBMOD_TYPES = [
+  { key: 'pause_screen', name: 'Pause Screen', description: 'In-game pause overlay textures' },
+]
+
 export default function MenuMode({ mode, onModeChange }) {
   const [selectedMenu, setSelectedMenu] = useState(null)
   const [selectedSubmod, setSelectedSubmod] = useState(null)
@@ -35,6 +42,7 @@ export default function MenuMode({ mode, onModeChange }) {
   const [iconGridMods, setIconGridMods] = useState([])
   const [bgMods, setBgMods] = useState([])
   const [doorMods, setDoorMods] = useState([])
+  const [pauseMods, setPauseMods] = useState([])
   const [loading, setLoading] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [installMessage, setInstallMessage] = useState('')
@@ -74,6 +82,16 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }, [])
 
+  const fetchPauseMods = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/list`)
+      const data = await res.json()
+      if (data.success) setPauseMods(data.mods || [])
+    } catch (err) {
+      console.error('Failed to fetch pause mods:', err)
+    }
+  }, [])
+
   useEffect(() => {
     if (selectedMenu === 'css') {
       fetchIconGridMods()
@@ -83,14 +101,23 @@ export default function MenuMode({ mode, onModeChange }) {
     if (selectedMenu === 'sss') {
       fetchBgMods()
     }
-  }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods])
+    if (selectedMenu === 'pause') {
+      fetchPauseMods()
+    }
+  }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods, fetchPauseMods])
 
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
     if (key === 'background') return bgMods
     if (key === 'doors') return doorMods
+    if (key === 'pause_screen') return pauseMods
     return []
   }
+
+  // Pagination for the "Available to Import" mod list. Lives up here (before
+  // any conditional return) so the hook order is stable across renders.
+  const currentMods = selectedSubmod ? getModsForSubmod(selectedSubmod) : []
+  const modsPager = usePagination(currentMods.length, `${selectedMenu}-${selectedSubmod}`)
 
   const handleInstall = async () => {
     if (!selectedMod) return
@@ -138,6 +165,8 @@ export default function MenuMode({ mode, onModeChange }) {
           installEndpoint = `${API_URL}/menus/css/background/install/${selectedMod.id}`
         } else if (selectedSubmod === 'doors') {
           installEndpoint = `${API_URL}/menus/css/doors/install/${selectedMod.id}`
+        } else if (selectedSubmod === 'pause_screen') {
+          installEndpoint = `${API_URL}/menus/pause/install/${selectedMod.id}`
         } else {
           installEndpoint = `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
         }
@@ -163,7 +192,8 @@ export default function MenuMode({ mode, onModeChange }) {
   }
 
   const submodTypes = selectedMenu === 'css' ? CSS_SUBMOD_TYPES
-    : selectedMenu === 'sss' ? SSS_SUBMOD_TYPES : []
+    : selectedMenu === 'sss' ? SSS_SUBMOD_TYPES
+    : selectedMenu === 'pause' ? PAUSE_SUBMOD_TYPES : []
 
   // ── Layout editors (not a normal import flow) ──
   if ((selectedMenu === 'css' || selectedMenu === 'sss') && selectedSubmod === 'layout') {
@@ -235,9 +265,9 @@ export default function MenuMode({ mode, onModeChange }) {
               {installedMods[selectedSubmod] ? (
                 <div className="costume-card existing-costume">
                   <div className="costume-preview">
-                    {installedMods[selectedSubmod].screenshotUrl ? (
+                    {(installedMods[selectedSubmod].screenshotUrl || installedMods[selectedSubmod].imageUrl) ? (
                       <img
-                        src={`${BACKEND_URL}${installedMods[selectedSubmod].screenshotUrl}`}
+                        src={`${BACKEND_URL}${installedMods[selectedSubmod].screenshotUrl || installedMods[selectedSubmod].imageUrl}`}
                         alt={installedMods[selectedSubmod].name}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
@@ -297,7 +327,7 @@ export default function MenuMode({ mode, onModeChange }) {
                   <p>No {submod?.name || 'mods'} in vault. Import some from the Menus vault tab first.</p>
                 </div>
               ) : (
-                mods.map(mod => (
+                mods.slice(modsPager.start, modsPager.end).map(mod => (
                   <div
                     key={mod.id}
                     className={`costume-card ${selectedMod?.id === mod.id ? 'selected' : ''}`}
@@ -332,6 +362,7 @@ export default function MenuMode({ mode, onModeChange }) {
                 ))
               )}
             </div>
+            <PaginationBar pager={modsPager} />
           </div>
         </div>
 
@@ -446,19 +477,21 @@ export default function MenuMode({ mode, onModeChange }) {
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #888)' }}>{mt.name}</span>
                 </div>
               </div>
-              <button
-                className="sss-action-btn add"
-                style={{ flex: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-                onMouseEnter={playHoverSound}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  playSound('boop')
-                  setSelectedMenu(mt.key)
-                  setSelectedSubmod('layout')
-                }}
-              >
-                Edit Layout
-              </button>
+              {!mt.noLayout && (
+                <button
+                  className="sss-action-btn add"
+                  style={{ flex: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
+                  onMouseEnter={playHoverSound}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    playSound('boop')
+                    setSelectedMenu(mt.key)
+                    setSelectedSubmod('layout')
+                  }}
+                >
+                  Edit Layout
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -8,6 +8,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { playSound } from '../../../utils/sounds'
 
+// Zelda and Sheik are one in-game pairing: slot N of one loads slot N of the
+// other on transform. The panel therefore shows BOTH fighters together (Zelda
+// on top, Sheik below, slot-paired) whenever either is selected.
+export const ZS_PAIR = ['Zelda', 'Sheik']
+export const isZeldaSheikName = (name) => ZS_PAIR.includes(name)
+
+const EMPTY_TEAM = { red: null, blue: null, green: null }
+
 export default function useCostumes({ API_URL, fighters, storageCostumes, selectedFighter, onRefresh }) {
   const [mexCostumes, setMexCostumes] = useState([])
   const [loadingFighter, setLoadingFighter] = useState(false)
@@ -22,6 +30,12 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
   const [draggedIndex, setDraggedIndex] = useState(null)
   const [dragOverIndex, setDragOverIndex] = useState(null)
   const [reordering, setReordering] = useState(false)
+
+  // Zelda/Sheik combined view: both fighters' MEX costumes + team colors
+  const [pairCostumes, setPairCostumes] = useState({ Zelda: [], Sheik: [] })
+  const [pairTeamColors, setPairTeamColors] = useState({ Zelda: EMPTY_TEAM, Sheik: EMPTY_TEAM })
+  const [draggedRow, setDraggedRow] = useState(null) // which ZS row a drag started in
+  const isZeldaSheik = !!selectedFighter && isZeldaSheikName(selectedFighter.name)
 
   // Confirm dialog state for removing costumes
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -40,14 +54,75 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
       setDataReady(false)
       setMexCostumes([])
       setSelectedTeamColor(null)
-      fetchMexCostumes(selectedFighter.name, true)
-      fetchTeamColors(selectedFighter.name)
+      if (isZeldaSheikName(selectedFighter.name)) {
+        setPairCostumes({ Zelda: [], Sheik: [] })
+        fetchPair(true)
+      } else {
+        fetchMexCostumes(selectedFighter.name, true)
+        fetchTeamColors(selectedFighter.name)
+      }
       // Reset scroll position of Available to Import list
       if (availableListRef.current) {
         availableListRef.current.scrollTop = 0
       }
     }
   }, [selectedFighter])
+
+  // Fetch BOTH Zelda and Sheik costume lists + team colors for the combined view.
+  const fetchPair = async (showLoading = false) => {
+    if (showLoading) {
+      setLoadingFighter(true)
+    }
+    try {
+      const fetchOne = async (name, path, fallback) => {
+        try {
+          const r = await fetch(`${API_URL}/fighters/${encodeURIComponent(name)}/${path}`)
+          const d = await r.json()
+          if (!d.success) {
+            console.error(`Failed to fetch ${name} ${path}:`, d.error)
+            return fallback
+          }
+          return d
+        } catch (err) {
+          console.error(`Failed to fetch ${name} ${path}:`, err)
+          return fallback
+        }
+      }
+      // The costumes endpoint shells out to MexCLI, which opens the whole
+      // workspace -- two CONCURRENT mexcli processes on the same project make
+      // one of them fail (and that fighter shows 0 costumes). Fetch the two
+      // costume lists SEQUENTIALLY; team colors are plain file reads, so those
+      // can run in parallel.
+      const zc = await fetchOne('Zelda', 'costumes', {})
+      const sc = await fetchOne('Sheik', 'costumes', {})
+      const [zt, st] = await Promise.all([
+        fetchOne('Zelda', 'team-colors', EMPTY_TEAM),
+        fetchOne('Sheik', 'team-colors', EMPTY_TEAM)
+      ])
+      setPairCostumes({ Zelda: zc.costumes || [], Sheik: sc.costumes || [] })
+      setPairTeamColors({
+        Zelda: { red: zt.red ?? null, blue: zt.blue ?? null, green: zt.green ?? null },
+        Sheik: { red: st.red ?? null, blue: st.blue ?? null, green: st.green ?? null }
+      })
+    } catch (err) {
+      console.error('Failed to fetch Zelda/Sheik pair:', err)
+      setPairCostumes({ Zelda: [], Sheik: [] })
+    } finally {
+      if (showLoading) {
+        setLoadingFighter(false)
+        setTimeout(() => setDataReady(true), 50)
+      }
+    }
+  }
+
+  // Refresh the In-ISO list(s) after an import/remove/reorder, pair-aware.
+  const refreshMexCostumes = async (fighterName) => {
+    if (isZeldaSheikName(fighterName)) {
+      await fetchPair()
+    } else {
+      await fetchMexCostumes(fighterName)
+    }
+  }
 
   const fetchMexCostumes = async (fighterName, showLoading = false) => {
     if (showLoading) {
@@ -126,6 +201,38 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     if (teamColors.blue === costumeIndex) colors.push('blue')
     if (teamColors.green === costumeIndex) colors.push('green')
     return colors
+  }
+
+  // Pair-view variants: team colors are PER FIGHTER, so the combined view
+  // assigns/reads against whichever row (Zelda or Sheik) the tile lives in.
+  const getPairCostumeTeamColor = (fighterName, costumeIndex) => {
+    const tc = pairTeamColors[fighterName] || EMPTY_TEAM
+    const colors = []
+    if (tc.red === costumeIndex) colors.push('red')
+    if (tc.blue === costumeIndex) colors.push('blue')
+    if (tc.green === costumeIndex) colors.push('green')
+    return colors
+  }
+
+  const handlePairCostumeTeamAssign = async (fighterName, costumeIndex) => {
+    if (!selectedTeamColor) return
+    try {
+      const response = await fetch(`${API_URL}/fighters/${encodeURIComponent(fighterName)}/team-colors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: selectedTeamColor, costumeIndex })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        await fetchPair()
+        setSelectedTeamColor(null)
+      } else {
+        console.error('Failed to set team color:', data.error)
+      }
+    } catch (err) {
+      console.error('Failed to set team color:', err)
+    }
   }
 
   const handleImportCostume = async (costume) => {
@@ -232,7 +339,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
 
           // Refresh
           await onRefresh()
-          await fetchMexCostumes(costume.character)
+          await refreshMexCostumes(costume.character)
         } else {
           alert(`Import failed: ${data.error}`)
         }
@@ -341,7 +448,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
 
       // Refresh
       await onRefresh()
-      await fetchMexCostumes(fighterName)
+      await refreshMexCostumes(fighterName)
 
     } catch (err) {
       console.error('Remove error:', err)
@@ -483,7 +590,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     // Refresh once at the end
     await onRefresh()
     if (selectedFighter) {
-      await fetchMexCostumes(selectedFighter.name)
+      await refreshMexCostumes(selectedFighter.name)
     }
 
     // Clear selections
@@ -579,6 +686,62 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
   const handleDragEnd = () => {
     setDraggedIndex(null)
     setDragOverIndex(null)
+    setDraggedRow(null)
+  }
+
+  // Pair-view drag/drop: reorder WITHIN one row (Zelda or Sheik) only --
+  // cross-row drops are ignored so a Zelda costume can't land in Sheik's list.
+  const handlePairDragStart = (e, fighterName, index) => {
+    setDraggedRow(fighterName)
+    setDraggedIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handlePairDragEnter = (e, fighterName, index) => {
+    e.preventDefault()
+    setDragOverIndex(fighterName === draggedRow ? index : null)
+  }
+
+  const handlePairDrop = async (e, fighterName, toIndex) => {
+    e.preventDefault()
+    const fromIndex = draggedIndex
+    const sameRow = draggedRow === fighterName
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+    setDraggedRow(null)
+    if (!sameRow || fromIndex === null || fromIndex === toIndex || reordering) {
+      return
+    }
+
+    // Optimistically reorder the row
+    setPairCostumes(prev => {
+      const row = [...(prev[fighterName] || [])]
+      const [moved] = row.splice(fromIndex, 1)
+      row.splice(toIndex, 0, moved)
+      return { ...prev, [fighterName]: row }
+    })
+
+    setReordering(true)
+    try {
+      const response = await fetch(`${API_URL}/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fighter: fighterName, fromIndex, toIndex })
+      })
+      const data = await response.json()
+      if (data.success) {
+        console.log(`✓ Reordered ${fighterName} costume from ${fromIndex} to ${toIndex}`)
+        playSound('boop')
+      } else {
+        alert(`Reorder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Reorder error:', err)
+      alert(`Reorder error: ${err.message}`)
+    } finally {
+      await fetchPair()
+      setReordering(false)
+    }
   }
 
   const getCostumesForFighter = (fighterName) => {
@@ -599,10 +762,10 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
 
   const selectAllCostumes = () => {
     if (!selectedFighter) return
-    const allCostumes = getCostumesForFighter(selectedFighter.name)
+    const names = isZeldaSheik ? ZS_PAIR : [selectedFighter.name]
     setSelectedCostumes(prev => {
       const newSet = new Set(prev)
-      allCostumes.forEach(c => newSet.add(c.zipPath))
+      names.forEach(name => getCostumesForFighter(name).forEach(c => newSet.add(c.zipPath)))
       return newSet
     })
   }
@@ -625,6 +788,14 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     draggedIndex,
     dragOverIndex,
     reordering,
+    isZeldaSheik,
+    pairCostumes,
+    draggedRow,
+    getPairCostumeTeamColor,
+    handlePairCostumeTeamAssign,
+    handlePairDragStart,
+    handlePairDragEnter,
+    handlePairDrop,
     showConfirmDialog,
     setShowConfirmDialog,
     pendingRemoval,

@@ -5,6 +5,8 @@
 import { getExtraTypes } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import HexagonLoader from '../../shared/HexagonLoader'
+import PaginationBar from '../../shared/PaginationBar'
+import usePagination from '../../shared/usePagination'
 import { ExtraPreview, ModelPreview, currentColorsToMods } from './ExtraPreviews'
 
 export default function ExtrasView({ selectedFighter, extras }) {
@@ -25,6 +27,8 @@ export default function ExtrasView({ selectedFighter, extras }) {
   } = extras
 
   const extraTypes = getExtraTypes(selectedFighter.name)
+  const availableMods = selectedExtraType ? getAllMods(selectedExtraType.id) : []
+  const modsPager = usePagination(availableMods.length, selectedExtraType?.id)
   console.log('[CharacterMode] Extras for', selectedFighter.name, ':', extraTypes.map(t => t.id))
   if (selectedExtraType) {
     console.log('[CharacterMode] Selected extra type:', selectedExtraType.id, selectedExtraType)
@@ -132,7 +136,7 @@ export default function ExtrasView({ selectedFighter, extras }) {
                 </div>
               </div>
               <div className="costume-list">
-                {getAllMods(selectedExtraType.id).map(mod => (
+                {availableMods.slice(modsPager.start, modsPager.end).map(mod => (
                   <div
                     key={mod.id}
                     className={`costume-card ${selectedExtraMod?.id === mod.id ? 'selected' : ''}`}
@@ -152,12 +156,13 @@ export default function ExtrasView({ selectedFighter, extras }) {
                     </div>
                   </div>
                 ))}
-                {getAllMods(selectedExtraType.id).length === 0 && (
+                {availableMods.length === 0 && (
                   <div className="no-costumes">
                     <p>No extras in vault. Create some in Storage → {selectedFighter.name} → Extras.</p>
                   </div>
                 )}
               </div>
+              <PaginationBar pager={modsPager} />
             </div>
           </>
         ) : (
