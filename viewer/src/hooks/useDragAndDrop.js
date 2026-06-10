@@ -47,6 +47,20 @@ export function useDragAndDrop({
     e.preventDefault()
     if (!draggedItem) return
 
+    // Hovering a folder while dragging a skin means "drop INTO this folder",
+    // not "reorder around it" — highlight the folder instead of previewing.
+    const target = items[index]
+    const draggedIsFolder = items.find(i => i.id === draggedItem.id)?.type === 'folder'
+    if (target?.type === 'folder' && !draggedIsFolder) {
+      if (dragTargetFolder !== target.id) {
+        dragOverIndexRef.current = null
+        setDragOverIndex(null)
+        setDragTargetFolder(target.id)
+      }
+      return
+    }
+    if (dragTargetFolder) setDragTargetFolder(null)
+
     // Only update if we've moved to a different position
     if (dragOverIndexRef.current !== index) {
       dragOverIndexRef.current = index // Update ref immediately
@@ -72,9 +86,65 @@ export function useDragAndDrop({
     }
   }
 
+  const clearDragState = () => {
+    dropInProgressRef.current = false
+    dragOverIndexRef.current = null
+    setReordering(false)
+    setDraggedItem(null)
+    setDragStartIndex(null)
+    setDragOverIndex(null)
+    setPreviewOrder(null)
+    setDragTargetFolder(null)
+  }
+
+  // Drop a skin onto a folder card — assign it to that folder
+  const handleDropIntoFolder = async (folderId) => {
+    if (!draggedItem || !selectedCharacter) {
+      clearDragState()
+      return
+    }
+    dropInProgressRef.current = true
+    setReordering(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/skins/set-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: selectedCharacter,
+          skinId: draggedItem.id,
+          folderId
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        const droppedId = draggedItem.id
+        setJustDroppedId(droppedId)
+        setTimeout(() => setJustDroppedId(null), 400)
+        await onRefresh()
+        requestAnimationFrame(clearDragState)
+        return
+      } else {
+        alert(`Move to folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Move to folder error:', err)
+      alert(`Move to folder error: ${err.message}`)
+    }
+    clearDragState()
+  }
+
   const handleSkinDrop = async (e) => {
     e.preventDefault()
-    if (!draggedItem || dragOverIndexRef.current === null) return
+    if (!draggedItem) return
+
+    // Dropping on a highlighted folder = move into that folder
+    if (dragTargetFolder) {
+      await handleDropIntoFolder(dragTargetFolder)
+      return
+    }
+
+    if (dragOverIndexRef.current === null) return
 
     dropInProgressRef.current = true
 

@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import InGameTestPanel from '../shared/InGameTestPanel'
 import { useInGameTest } from '../../hooks/useInGameTest'
+import { useEditModal } from '../../hooks/useEditModal'
+import { useCspManager } from '../../hooks/useCspManager'
+import EditModal from './EditModal'
+import CspManagerModal from './CspManagerModal'
+import EmbeddedModelViewer from '../EmbeddedModelViewer'
 
 export default function CustomCharacterDetailView({ character, onBack, onDelete, onRename, API_URL }) {
   const [editingName, setEditingName] = useState(false)
@@ -11,20 +16,207 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [detail, setDetail] = useState(null)
+  const [seriesList, setSeriesList] = useState([])
+  const [showSeriesPicker, setShowSeriesPicker] = useState(false)
+  const [skinMessage, setSkinMessage] = useState('')
+  const [importingSkin, setImportingSkin] = useState(false)
+  const [seriesIconBust, setSeriesIconBust] = useState(0)
+  const [assetBust, setAssetBust] = useState(0)
+  const [draggingCostume, setDraggingCostume] = useState(null)  // bundled costume index being dragged
+  const [skinDropActive, setSkinDropActive] = useState(false)
+  const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
+  const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
+  const audioRef = useRef(null)
+  const skinFileRef = useRef(null)
+  const seriesFileRef = useRef(null)
+  const iconFileRef = useRef(null)
+  const bannerBigRef = useRef(null)
+  const bannerSmallRef = useRef(null)
   const inGameTest = useInGameTest()
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      try {
-        const response = await fetch(`${API_URL}/custom-characters/${character.slug}/detail`)
-        const data = await response.json()
-        if (data.success) setDetail(data.detail)
-      } catch (err) {
-        console.error('Failed to fetch character detail:', err)
-      }
+  const fetchDetail = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/detail`)
+      const data = await response.json()
+      if (data.success) setDetail(data.detail)
+    } catch (err) {
+      console.error('Failed to fetch character detail:', err)
     }
-    fetchDetail()
   }, [character.slug, API_URL])
+
+  useEffect(() => { fetchDetail() }, [fetchDetail])
+
+  // ── Shared skin-editing stack (same modal as canonical character skins).
+  // Custom skins are exposed to it under a pseudo-character key whose
+  // path maps straight to this character's skins directory.
+  const pseudoCharacter = `custom_characters/${character.slug}/skins`
+  const setEditingItemRef = useRef(null)
+
+  const cspManager = useCspManager({
+    API_URL,
+    onRefresh: fetchDetail,
+    onUpdateEditingItemAlts: (updater) => {
+      setEditingItemRef.current?.(prev => prev ? {
+        ...prev,
+        data: {
+          ...prev.data,
+          alternateCsps: typeof updater === 'function'
+            ? updater(prev.data.alternateCsps || [])
+            : updater
+        }
+      } : prev)
+    },
+    onUpdateEditingItemActiveCsp: (activeCspId) => {
+      setEditingItemRef.current?.(prev => prev ? {
+        ...prev,
+        data: { ...prev.data, active_csp_id: activeCspId }
+      } : prev)
+    },
+    onUpdateEditingItemData: (updatedData) => {
+      setEditingItemRef.current?.(prev => (
+        prev?.type === 'costume' &&
+        prev.data.id === updatedData.id &&
+        prev.data.character === updatedData.character
+          ? { ...prev, data: { ...prev.data, ...updatedData } }
+          : prev
+      ))
+    }
+  })
+
+  const editModal = useEditModal({
+    API_URL,
+    onRefresh: fetchDetail,
+    fetchStageVariants: async () => {},
+    setLastImageUpdate: cspManager.setLastImageUpdate
+  })
+  setEditingItemRef.current = editModal.setEditingItem
+
+  // Bundled costumes are mirrored by the backend into an editable library
+  // under this second pseudo key (materialized zips, folded back at install)
+  const pseudoCostumes = `custom_characters/${character.slug}/costumes`
+
+  const openSkinEditorFor = (charKey, skin) => {
+    const base = API_URL.replace('/api/mex', '')
+    editModal.handleEditClick('costume', {
+      id: skin.id,
+      character: charKey,
+      color: skin.name || skin.color,
+      has_csp: skin.has_csp,
+      has_stock: skin.has_stock,
+      cspUrl: `${base}/storage/${charKey}/${skin.csp_filename || `${skin.id}_csp.png`}`,
+      hdCspUrl: skin.has_hd_csp
+        ? `${base}/storage/${charKey}/${skin.hd_csp_filename || `${skin.id}_csp_hd.png`}`
+        : null,
+      stockUrl: skin.has_stock ? `${base}/storage/${charKey}/${skin.id}_stc.png` : null,
+      slippi_safe: skin.slippi_safe,
+      slippi_tested: skin.slippi_tested,
+      slippi_manual_override: skin.slippi_manual_override,
+      has_hd_csp: skin.has_hd_csp,
+      hd_csp_resolution: skin.hd_csp_resolution,
+      hd_csp_size: skin.hd_csp_size,
+      active_csp_id: skin.active_csp_id || null,
+      alternateCsps: (skin.alternate_csps || []).map(alt => ({
+        id: alt.id,
+        url: `/storage/${charKey}/${alt.filename}`,
+        poseName: alt.pose_name,
+        isHd: alt.is_hd,
+        timestamp: alt.timestamp
+      }))
+    })
+  }
+
+  const openSkinEditor = (skin) => openSkinEditorFor(pseudoCharacter, skin)
+  const openCostumeEditor = (costume) => {
+    if (!costume.edit_id) return
+    openSkinEditorFor(pseudoCostumes, { ...costume, id: costume.edit_id })
+  }
+
+  // The modal's Delete: a bundled costume must come out of fighter.zip via
+  // the proper removal endpoint, not the skins-library delete
+  const handleModalDelete = () => {
+    const item = editModal.editingItem
+    if (item?.data?.character?.endsWith('/costumes')) {
+      const costume = (detail?.costumes || []).find(c => c.edit_id === item.data.id)
+      if (!costume) return
+      if (!window.confirm(`Remove costume "${costume.name}" from ${character.name}?`)) return
+      fetch(`${API_URL}/custom-characters/${character.slug}/costumes/${costume.index}/remove`, { method: 'POST' })
+        .then(r => r.json())
+        .then(async (data) => {
+          if (data.success) {
+            playSound('boop')
+            editModal.handleCancel()
+            await fetchDetail()
+          } else {
+            alert(data.error || 'Remove failed')
+          }
+        })
+        .catch(err => alert(`Remove error: ${err.message}`))
+    } else {
+      editModal.handleDelete()
+    }
+  }
+
+  const handleSlippiRetest = async () => {
+    const item = editModal.editingItem
+    if (!item) return
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/retest-slippi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: item.data.character, skinId: item.data.id })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        editModal.setEditingItem(prev => prev ? {
+          ...prev,
+          data: { ...prev.data, slippi_safe: data.slippi_safe, slippi_tested: true, slippi_manual_override: null }
+        } : prev)
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Retest failed')
+      }
+    } catch (err) {
+      alert(`Retest error: ${err.message}`)
+    }
+  }
+
+  const handleSlippiOverride = async (slippiSafe) => {
+    const item = editModal.editingItem
+    if (!item) return
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/override-slippi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: item.data.character, skinId: item.data.id, slippiSafe })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        editModal.setEditingItem(prev => prev ? {
+          ...prev,
+          data: { ...prev.data, slippi_safe: slippiSafe, slippi_manual_override: true }
+        } : prev)
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Override failed')
+      }
+    } catch (err) {
+      alert(`Override error: ${err.message}`)
+    }
+  }
+
+  useEffect(() => {
+    fetch(`${API_URL}/custom-characters/series-list`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setSeriesList(data.series || []) })
+      .catch(err => console.error('Failed to fetch series list:', err))
+  }, [API_URL])
+
+  const flashSkinMessage = (msg) => {
+    setSkinMessage(msg)
+    setTimeout(() => setSkinMessage(''), 4000)
+  }
 
   const handleSaveRename = async () => {
     const trimmed = nameValue.trim()
@@ -82,11 +274,327 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     document.body.removeChild(link)
   }
 
-  const iconUrl = character.has_css_icon
-    ? `${API_URL}/custom-characters/${character.slug}/icon`
+  const handleSetSeries = async (seriesId) => {
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-series`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seriesId })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        setShowSeriesPicker(false)
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Failed to set franchise')
+      }
+    } catch (err) {
+      alert(`Set franchise error: ${err.message}`)
+    }
+  }
+
+  const handleActivateCustomSeries = async () => {
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-series-custom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        setShowSeriesPicker(false)
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Failed to activate custom franchise')
+      }
+    } catch (err) {
+      alert(`Custom franchise error: ${err.message}`)
+    }
+  }
+
+  const handleRenameCustomSeries = async () => {
+    const current = detail?.custom_series?.name || ''
+    const name = window.prompt('Franchise name (used to share the series between characters):', current)
+    if (!name || name.trim() === current) return
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-series-custom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Rename failed')
+      }
+    } catch (err) {
+      alert(`Rename error: ${err.message}`)
+    }
+  }
+
+  const handleUploadSeriesIcon = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/replace-series-icon`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        setShowSeriesPicker(false)
+        setSeriesIconBust(Date.now())
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Icon upload failed')
+      }
+    } catch (err) {
+      alert(`Icon upload error: ${err.message}`)
+    }
+  }
+
+  // CSS icon + result banners — replaced inside fighter.zip so installs pick them up
+  const handleReplaceAsset = async (which, e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/replace-asset/${which}`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        setAssetBust(Date.now())
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Replace failed')
+      }
+    } catch (err) {
+      alert(`Replace error: ${err.message}`)
+    }
+  }
+
+  const handleToggleWallJump = async () => {
+    if (!detail) return
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-wall-jump`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canWallJump: !detail.can_wall_jump })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Toggle failed')
+      }
+    } catch (err) {
+      alert(`Toggle error: ${err.message}`)
+    }
+  }
+
+  const saveCostumeRename = async () => {
+    const target = renamingCostume
+    setRenamingCostume(null)
+    if (!target) return
+    const name = target.value.trim()
+    if (!name) return
+    try {
+      const response = await fetch(
+        `${API_URL}/custom-characters/${character.slug}/costumes/${target.index}/rename`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        }
+      )
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Rename failed')
+      }
+    } catch (err) {
+      alert(`Rename error: ${err.message}`)
+    }
+  }
+
+  const handleCostumeToSkin = async (index) => {
+    setSkinDropActive(false)
+    setDraggingCostume(null)
+    if (index == null) return
+    try {
+      const response = await fetch(
+        `${API_URL}/custom-characters/${character.slug}/costumes/${index}/to-skin`,
+        { method: 'POST' }
+      )
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        flashSkinMessage(`Moved ${data.skin.name} to custom skins`)
+        await fetchDetail()
+      } else {
+        flashSkinMessage(`Move failed: ${data.error}`)
+      }
+    } catch (err) {
+      flashSkinMessage(`Move error: ${err.message}`)
+    }
+  }
+
+  const handleImportSkin = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImportingSkin(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('name', file.name.replace(/\.[^.]+$/, ''))
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/skins/add`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        flashSkinMessage(`Added skin ${data.skin.name}`)
+        await fetchDetail()
+      } else {
+        flashSkinMessage(`Add failed: ${data.error}`)
+      }
+    } catch (err) {
+      flashSkinMessage(`Add error: ${err.message}`)
+    } finally {
+      setImportingSkin(false)
+    }
+  }
+
+  // stop audio when leaving the page
+  useEffect(() => () => { audioRef.current?.pause() }, [])
+
+  const toggleAudio = (kind) => {
+    if (playingAudio === kind) {
+      audioRef.current?.pause()
+      audioRef.current = null
+      setPlayingAudio(null)
+      return
+    }
+    audioRef.current?.pause()
+    const path = kind === 'victory' ? 'victory-theme' : 'announcer'
+    const audio = new Audio(`${API_URL}/custom-characters/${character.slug}/audio/${path}`)
+    audio.onended = () => setPlayingAudio(null)
+    audio.onerror = () => setPlayingAudio(null)
+    audioRef.current = audio
+    audio.play().catch(() => setPlayingAudio(null))
+    setPlayingAudio(kind)
+  }
+
+  const hasIcon = detail ? detail.has_css_icon : character.has_css_icon
+  const iconUrl = hasIcon
+    ? `${API_URL}/custom-characters/${character.slug}/icon${assetBust ? `?v=${assetBust}` : ''}`
     : null
 
   const costumes = detail?.costumes || []
+  const addedSkins = detail?.added_skins || []
+  const BACKEND_BASE = API_URL.replace('/api/mex', '')
+  const bigBanner = detail?.zip_assets?.big_banner
+  const smallBanner = detail?.zip_assets?.small_banner
+
+  const customSeriesActive = detail?.custom_series?.active
+
+  // Editable controls (toggles, audio, replaceable assets)
+  const editCells = detail ? [
+    {
+      label: 'Wall Jump',
+      content: (
+        <button
+          className={`char-info-toggle ${detail.can_wall_jump ? 'on' : ''}`}
+          onMouseEnter={playHoverSound}
+          onClick={handleToggleWallJump}
+          title="Toggle whether this character can wall jump"
+        >
+          {detail.can_wall_jump ? 'Yes' : 'No'}
+        </button>
+      )
+    },
+    detail.victory_theme_info?.available && {
+      label: 'Victory Theme',
+      content: (
+        <span className="char-audio-row" title="Ported into your project on install">
+          <button
+            className={`char-audio-btn ${playingAudio === 'victory' ? 'playing' : ''}`}
+            onMouseEnter={playHoverSound}
+            onClick={() => toggleAudio('victory')}
+          >
+            {playingAudio === 'victory' ? '⏸' : '▶'}
+          </button>
+          <span className="char-audio-name" title={detail.victory_theme_info.name}>
+            {detail.victory_theme_info.name}
+          </span>
+        </span>
+      )
+    },
+    detail.announcer_available && {
+      label: 'Announcer',
+      content: (
+        <span className="char-audio-row">
+          <button
+            className={`char-audio-btn ${playingAudio === 'announcer' ? 'playing' : ''}`}
+            onMouseEnter={playHoverSound}
+            onClick={() => toggleAudio('announcer')}
+          >
+            {playingAudio === 'announcer' ? '⏸' : '▶'}
+          </button>
+          <span className="char-audio-name">Play call</span>
+        </span>
+      )
+    },
+    smallBanner && {
+      label: 'Small Banner',
+      content: (
+        <span
+          className="char-info-banner"
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); bannerSmallRef.current?.click() }}
+          title="Small result banner (120x24) — click to replace"
+        >
+          <img
+            src={`${BACKEND_BASE}${smallBanner.url}${assetBust ? `?v=${assetBust}` : ''}`}
+            alt="small banner"
+          />
+        </span>
+      )
+    },
+  ].filter(Boolean) : []
+
+  // Read-only facts (compact strip)
+  const infoPairs = detail ? [
+    ['Source', character.source === 'zip' ? 'Imported ZIP' : 'ISO Scan'],
+    ['Added', new Date(character.date_added).toLocaleDateString()],
+    detail.based_on && ['Based On', detail.based_on],
+    ['Costumes', `${costumes.length}${addedSkins.length ? ` + ${addedSkins.length} custom` : ''}`],
+    detail.anim_count != null && ['Animations', detail.anim_count],
+    detail.sound_bank != null && ['Sound Bank', detail.has_sound_pack ? `${detail.sound_bank} (custom)` : detail.sound_bank],
+    !detail.victory_theme_info?.available && detail.victory_theme != null && ['Victory Theme', `#${detail.victory_theme}`],
+    !detail.announcer_available && detail.announcer_call != null && ['Announcer Call', `#${detail.announcer_call}`],
+    ['Kirby Cap', detail.has_kirby_cap ? 'Yes' : 'No'],
+    detail.ending_movies > 0 && ['Ending Movies', detail.ending_movies],
+    detail.files?.fighterDataPath && ['Fighter File', detail.files.fighterDataPath],
+  ].filter(Boolean) : []
 
   return (
     <div className="storage-viewer">
@@ -98,19 +606,32 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           ← Back to Custom Characters
         </button>
 
-        <div className="custom-stage-detail-header">
-          {iconUrl && (
-            <img
-              src={iconUrl}
-              alt={`${character.name} icon`}
-              className="custom-stage-banner"
-              style={{ width: '128px', imageRendering: 'pixelated' }}
-            />
-          )}
+        {/* ── Header: editable icon + name + franchise + result banner ── */}
+        <div className="custom-char-header">
+          <div
+            className="custom-char-icon-wrap"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); iconFileRef.current?.click() }}
+            title="Replace CSS icon (64x56)"
+          >
+            {iconUrl ? (
+              <img src={iconUrl} alt={`${character.name} icon`} className="custom-char-icon" />
+            ) : (
+              <span className="custom-char-icon-placeholder">{(character.name || '?')[0]}</span>
+            )}
+            <span className="custom-char-icon-edit">✎</span>
+          </div>
+          <input
+            ref={iconFileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => handleReplaceAsset('icon', e)}
+            style={{ display: 'none' }}
+          />
 
-          <div className="custom-stage-title">
+          <div className="custom-char-title">
             {editingName ? (
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div className="custom-char-name-edit">
                 <input
                   type="text"
                   value={nameValue}
@@ -131,53 +652,191 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                 </button>
               </div>
             ) : (
-              <h2>{character.name}</h2>
+              <h2 className="custom-char-name">
+                {character.name}
+                <button
+                  className="series-change-btn"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); setEditingName(true) }}
+                  title="Rename character"
+                >
+                  ✎
+                </button>
+              </h2>
+            )}
+
+            {detail?.series_id != null && (
+              <div className="custom-char-franchise">
+                {customSeriesActive ? (
+                  <>
+                    {detail.custom_series.icon_url && (
+                      <img
+                        src={`${BACKEND_BASE}${detail.custom_series.icon_url}?v=${seriesIconBust}`}
+                        alt=""
+                        className="series-emblem"
+                      />
+                    )}
+                    <span>{detail.custom_series.name || `Custom series ${detail.custom_series.source_id ?? ''}`}</span>
+                    <button
+                      className="series-change-btn"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('boop'); handleRenameCustomSeries() }}
+                      title="Rename custom franchise"
+                    >
+                      ✏ name
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {detail.series_icon_url && (
+                      <img
+                        src={`${BACKEND_BASE}${detail.series_icon_url}`}
+                        alt=""
+                        className="series-emblem"
+                      />
+                    )}
+                    <span>{detail.series_name || `Series ${detail.series_id} (custom, not extracted)`}</span>
+                  </>
+                )}
+                <button
+                  className="series-change-btn"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); setShowSeriesPicker(!showSeriesPicker) }}
+                  title="Change franchise"
+                >
+                  ✎
+                </button>
+              </div>
             )}
           </div>
+
+          {bigBanner && (
+            <div
+              className="custom-char-banner-wrap"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); bannerBigRef.current?.click() }}
+              title="Result-screen banner (256x28) — click to replace"
+            >
+              <img
+                src={`${BACKEND_BASE}${bigBanner.url}${assetBust ? `?v=${assetBust}` : ''}`}
+                alt="result banner"
+                className="custom-char-banner-img"
+              />
+              <span className="custom-char-icon-edit">✎</span>
+            </div>
+          )}
+          <input
+            ref={bannerBigRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => handleReplaceAsset('big_banner', e)}
+            style={{ display: 'none' }}
+          />
         </div>
 
-        <div className="custom-stage-metadata">
-          <div className="custom-stage-meta-row">
-            <span className="custom-stage-meta-label">Source</span>
-            <span>{character.source === 'zip' ? 'Imported ZIP' : 'ISO Scan'}</span>
+        {showSeriesPicker && (
+          <div className="series-picker">
+            {detail?.custom_series && (
+              <button
+                className={`series-pick series-pick--custom ${customSeriesActive ? 'active' : ''}`}
+                onMouseEnter={playHoverSound}
+                onClick={handleActivateCustomSeries}
+                title="Use this character's own franchise (added to your project on install)"
+              >
+                {detail.custom_series.icon_url ? (
+                  <img src={`${BACKEND_BASE}${detail.custom_series.icon_url}?v=${seriesIconBust}`} alt="" />
+                ) : (
+                  <span className="series-pick-noicon">★</span>
+                )}
+                <span className="series-pick-name">{detail.custom_series.name || 'Custom'}</span>
+              </button>
+            )}
+            {seriesList.map((s) => (
+              <button
+                key={s.id}
+                className={`series-pick ${!customSeriesActive && s.id === detail?.series_id ? 'active' : ''}`}
+                onMouseEnter={playHoverSound}
+                onClick={() => handleSetSeries(s.id)}
+                title={s.name}
+              >
+                {s.icon_url ? (
+                  <img src={`${BACKEND_BASE}${s.icon_url}`} alt={s.name} />
+                ) : (
+                  <span className="series-pick-noicon">?</span>
+                )}
+                <span className="series-pick-name">{s.name}</span>
+              </button>
+            ))}
+            <button
+              className="series-pick series-pick--upload"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); seriesFileRef.current?.click() }}
+              title="Upload your own franchise icon (PNG, shown at 80x64)"
+            >
+              <span className="series-pick-noicon">⬆</span>
+              <span className="series-pick-name">Upload PNG…</span>
+            </button>
+            <input
+              ref={seriesFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleUploadSeriesIcon}
+              style={{ display: 'none' }}
+            />
           </div>
-          <div className="custom-stage-meta-row">
-            <span className="custom-stage-meta-label">Added</span>
-            <span>{new Date(character.date_added).toLocaleDateString()}</span>
-          </div>
-          {detail?.series_id != null && (
-            <div className="custom-stage-meta-row">
-              <span className="custom-stage-meta-label">Series ID</span>
-              <span>{detail.series_id}</span>
-            </div>
-          )}
-          <div className="custom-stage-meta-row">
-            <span className="custom-stage-meta-label">Costumes</span>
-            <span>{costumes.length}</span>
-          </div>
-          {detail?.can_wall_jump && (
-            <div className="custom-stage-meta-row">
-              <span className="custom-stage-meta-label">Wall Jump</span>
-              <span>Yes</span>
-            </div>
-          )}
-          {detail?.files?.fighterDataPath && (
-            <div className="custom-stage-meta-row">
-              <span className="custom-stage-meta-label">Fighter File</span>
-              <span>{detail.files.fighterDataPath}</span>
-            </div>
-          )}
-        </div>
+        )}
 
+        {/* ── Editable controls ── */}
+        {detail && editCells.length > 0 && (
+          <div className="char-edit-grid">
+            {editCells.map((cell) => (
+              <div key={cell.label} className="char-info-cell">
+                <span className="char-info-label">{cell.label}</span>
+                <span className="char-info-value">{cell.content}</span>
+              </div>
+            ))}
+            <input
+              ref={bannerSmallRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => handleReplaceAsset('small_banner', e)}
+              style={{ display: 'none' }}
+            />
+          </div>
+        )}
+
+        {/* ── Read-only info strip ── */}
+        {detail && (
+          <div className="char-info-strip">
+            {infoPairs.map(([label, value]) => (
+              <span key={label} className="char-info-pair">
+                <span className="char-strip-label">{label}</span>
+                <span className="char-strip-value">{value}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* ── Costumes ── */}
         {costumes.length > 0 && (
           <div className="custom-char-costumes">
-            <h3 style={{ marginBottom: 'var(--space-3)', color: 'var(--color-text-primary)' }}>Costumes</h3>
+            <h3 className="custom-char-section-title">Costumes</h3>
             <div className="custom-char-costume-grid">
               {costumes.map((costume) => (
-                <div key={costume.index} className="custom-char-costume-card">
+                <div
+                  key={costume.index}
+                  className={`custom-char-costume-card${draggingCostume === costume.index ? ' dragging' : ''}`}
+                  draggable={costumes.length > 1 && renamingCostume?.index !== costume.index}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    setDraggingCostume(costume.index)
+                  }}
+                  onDragEnd={() => { setDraggingCostume(null); setSkinDropActive(false) }}
+                  title={costumes.length > 1 ? 'Drag down into Custom Skins to make this a removable skin' : undefined}
+                >
                   {costume.csp_url ? (
                     <img
-                      src={costume.csp_url}
+                      src={`${costume.csp_url}?t=${cspManager.lastImageUpdate}`}
                       alt={costume.name}
                       className="custom-char-csp"
                     />
@@ -185,6 +844,16 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                     <div className="custom-char-csp-placeholder">
                       {costume.name[0]}
                     </div>
+                  )}
+                  {costume.edit_id && (
+                    <button
+                      className="costume-edit-btn"
+                      onMouseEnter={playHoverSound}
+                      onClick={(e) => { e.stopPropagation(); playSound('boop'); openCostumeEditor(costume) }}
+                      title="Edit costume"
+                    >
+                      ✎
+                    </button>
                   )}
                   <div className="custom-char-costume-info">
                     {costume.stock_url && (
@@ -194,7 +863,28 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                         className="custom-char-stock"
                       />
                     )}
-                    <span className="custom-char-costume-name">{costume.name}</span>
+                    {renamingCostume?.index === costume.index ? (
+                      <input
+                        className="costume-name-input"
+                        value={renamingCostume.value}
+                        onChange={(e) => setRenamingCostume({ index: costume.index, value: e.target.value })}
+                        onBlur={saveCostumeRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveCostumeRename()
+                          if (e.key === 'Escape') setRenamingCostume(null)
+                        }}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span
+                        className="custom-char-costume-name editable"
+                        title={`${costume.dat || ''} — click to rename`}
+                        onClick={() => { playSound('boop'); setRenamingCostume({ index: costume.index, value: costume.name }) }}
+                      >
+                        {costume.name}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -202,14 +892,92 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           </div>
         )}
 
+        {/* ── Custom skins (drop zone for bundled costumes) ── */}
+        <div
+          className={`custom-char-costumes custom-skin-dropzone${draggingCostume != null ? ' drop-ready' : ''}${skinDropActive ? ' drop-active' : ''}`}
+          onDragOver={(e) => {
+            if (draggingCostume != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
+          }}
+          onDragEnter={(e) => {
+            if (draggingCostume != null) { e.preventDefault(); setSkinDropActive(true) }
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget)) return
+            setSkinDropActive(false)
+          }}
+          onDrop={(e) => { e.preventDefault(); handleCostumeToSkin(draggingCostume) }}
+        >
+          <h3 className="custom-char-section-title">Custom Skins</h3>
+          {addedSkins.length === 0 && (
+            <p className="custom-char-section-hint">
+              Add extra skins for this character — import a costume zip/dat, drag a
+              costume from above down here to make it removable, or drag a skin from
+              a vanilla character&apos;s page onto this character.
+            </p>
+          )}
+          <div className="custom-char-costume-grid">
+            {addedSkins.map((skin) => (
+              <div key={skin.id} className="custom-char-costume-card">
+                {skin.csp_url ? (
+                  <img
+                    src={`${BACKEND_BASE}${skin.csp_url}?t=${cspManager.lastImageUpdate}`}
+                    alt={skin.name}
+                    className="custom-char-csp"
+                  />
+                ) : (
+                  <div className="custom-char-csp-placeholder">
+                    {(skin.name || '?')[0]}
+                  </div>
+                )}
+                <button
+                  className="costume-edit-btn"
+                  onMouseEnter={playHoverSound}
+                  onClick={(e) => { e.stopPropagation(); playSound('boop'); openSkinEditor(skin) }}
+                  title="Edit skin"
+                >
+                  ✎
+                </button>
+                <div className="custom-char-costume-info">
+                  {skin.stock_url && (
+                    <img
+                      src={`${BACKEND_BASE}${skin.stock_url}`}
+                      alt="stock"
+                      className="custom-char-stock"
+                    />
+                  )}
+                  <span className="custom-char-costume-name" title={skin.name}>{skin.name}</span>
+                </div>
+              </div>
+            ))}
+            <div
+              className="custom-char-costume-card custom-skin-add-card"
+              onMouseEnter={playHoverSound}
+              onClick={() => { if (!importingSkin) { playSound('boop'); skinFileRef.current?.click() } }}
+              title="Import a costume .zip or .dat as a custom skin"
+            >
+              <div className="custom-char-csp-placeholder">+</div>
+              <div className="custom-char-costume-info">
+                <span className="custom-char-costume-name">
+                  {importingSkin ? 'Importing...' : 'Add Skin'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <input
+            ref={skinFileRef}
+            type="file"
+            accept=".zip,.dat,.usd"
+            onChange={handleImportSkin}
+            style={{ display: 'none' }}
+          />
+          {skinMessage && (
+            <div className={`import-message ${skinMessage.includes('failed') || skinMessage.includes('error') ? 'error' : 'success'}`}>
+              {skinMessage}
+            </div>
+          )}
+        </div>
+
         <div className="custom-stage-actions">
-          <button
-            className="intake-import-btn"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); setEditingName(true) }}
-          >
-            Rename
-          </button>
           <button
             className="intake-import-btn"
             onMouseEnter={playHoverSound}
@@ -246,6 +1014,79 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         confirmText="Delete"
         onConfirm={handleDelete}
         onCancel={() => setShowConfirmDialog(false)}
+      />
+
+      {/* ── Shared skin editing stack (same modal as canonical skins) ── */}
+      <EditModal
+        show={editModal.showEditModal}
+        editingItem={editModal.editingItem}
+        editName={editModal.editName}
+        onNameChange={editModal.setEditName}
+        saving={editModal.saving}
+        deleting={editModal.deleting}
+        exporting={editModal.exporting}
+        cspPreview={editModal.cspPreview}
+        stockPreview={editModal.stockPreview}
+        screenshotPreview={editModal.screenshotPreview}
+        lastImageUpdate={cspManager.lastImageUpdate}
+        editSlippiSafe={editModal.editSlippiSafe}
+        onSlippiSafeChange={editModal.setEditSlippiSafe}
+        slippiAdvancedOpen={editModal.slippiAdvancedOpen}
+        onSlippiAdvancedToggle={() => editModal.setSlippiAdvancedOpen(!editModal.slippiAdvancedOpen)}
+        onSave={editModal.handleSave}
+        onCancel={editModal.handleCancel}
+        onDelete={handleModalDelete}
+        onExport={editModal.handleExport}
+        onCspChange={editModal.handleCspChange}
+        onStockChange={editModal.handleStockChange}
+        onScreenshotChange={editModal.handleScreenshotChange}
+        onSlippiRetest={handleSlippiRetest}
+        onSlippiOverride={handleSlippiOverride}
+        onOpenCspManager={cspManager.openCspManager}
+        onStartSkinCreator={null}
+        onView3D={() => editModal.setShow3DViewer(true)}
+        API_URL={API_URL}
+      />
+      {editModal.show3DViewer && editModal.editingItem?.type === 'costume' && (
+        <EmbeddedModelViewer
+          character={editModal.editingItem.data.character}
+          skinId={editModal.editingItem.data.id}
+          onClose={() => editModal.setShow3DViewer(false)}
+        />
+      )}
+      <CspManagerModal
+        show={cspManager.showCspManager}
+        cspManagerSkin={cspManager.cspManagerSkin}
+        pendingMainCspPreview={cspManager.pendingMainCspPreview}
+        hdCspInfo={cspManager.hdCspInfo}
+        compareSliderPosition={cspManager.compareSliderPosition}
+        lastImageUpdate={cspManager.lastImageUpdate}
+        alternativeCsps={cspManager.alternativeCsps}
+        hdResolution={cspManager.hdResolution}
+        capturingHdCsp={cspManager.capturingHdCsp}
+        onClose={cspManager.closeCspManager}
+        onCspManagerMainChange={cspManager.handleCspManagerMainChange}
+        onCompareSliderStart={cspManager.handleCompareSliderStart}
+        onSwapCsp={cspManager.handleSwapCsp}
+        onRemoveAlternativeCsp={cspManager.handleRemoveAlternativeCsp}
+        onAddAlternativeCsp={cspManager.handleAddAlternativeCsp}
+        onHdResolutionChange={cspManager.setHdResolution}
+        onCaptureHdCsp={cspManager.handleCaptureHdCsp}
+        onRegenerateAltHd={cspManager.handleRegenerateAltHd}
+        onResetToOriginal={cspManager.handleResetToOriginal}
+        onOpenPoseManager={() => alert('The pose manager is not available for custom characters yet.')}
+        onSave={cspManager.handleSaveCspManager}
+        onUploadMainCsp={cspManager.handleUploadMainCsp}
+        onUploadAltCsp={cspManager.handleUploadAltCsp}
+        API_URL={API_URL}
+      />
+      <ConfirmDialog
+        show={editModal.showConfirmDialog}
+        title={editModal.confirmDialogData?.title}
+        message={editModal.confirmDialogData?.message}
+        confirmText={editModal.confirmDialogData?.confirmText}
+        onConfirm={editModal.confirmDelete}
+        onCancel={editModal.cancelDelete}
       />
     </div>
   )

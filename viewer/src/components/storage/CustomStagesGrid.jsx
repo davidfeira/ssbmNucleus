@@ -30,6 +30,7 @@ export default function CustomStagesGrid({
   const [previewOrder, setPreviewOrder] = useState(null)
   const [reordering, setReordering] = useState(false)
   const [justDroppedId, setJustDroppedId] = useState(null)
+  const [dragTargetFolder, setDragTargetFolder] = useState(null)
   const dragOverIndexRef = useRef(null)
   const dropInProgressRef = useRef(false)
   const justDraggedRef = useRef(false)
@@ -61,6 +62,19 @@ export default function CustomStagesGrid({
   const handleDragEnter = (e, index, items) => {
     e.preventDefault()
     if (!draggedItem) return
+
+    // Hovering a folder while dragging a stage = "drop INTO this folder"
+    const target = items[index]
+    const draggedIsFolder = items.find(i => i.id === draggedItem.id)?.type === 'folder'
+    if (target?.type === 'folder' && !draggedIsFolder) {
+      if (dragTargetFolder !== target.id) {
+        dragOverIndexRef.current = null
+        setDragTargetFolder(target.id)
+      }
+      return
+    }
+    if (dragTargetFolder) setDragTargetFolder(null)
+
     if (dragOverIndexRef.current === index) return
     dragOverIndexRef.current = index
 
@@ -80,11 +94,50 @@ export default function CustomStagesGrid({
     setDraggedItem(null)
     setDragStartIndex(null)
     setPreviewOrder(null)
+    setDragTargetFolder(null)
+  }
+
+  const handleDropIntoFolder = async (folderId) => {
+    if (!draggedItem) {
+      cleanupDrag()
+      return
+    }
+    dropInProgressRef.current = true
+    setReordering(true)
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/set-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stageId: draggedItem.id, folderId })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        const droppedId = draggedItem.id
+        setJustDroppedId(droppedId)
+        setTimeout(() => setJustDroppedId(null), 400)
+        await onRefresh()
+        requestAnimationFrame(cleanupDrag)
+        return
+      }
+      alert(`Move to folder failed: ${data.error}`)
+    } catch (err) {
+      console.error('Move to folder error:', err)
+      alert(`Move to folder error: ${err.message}`)
+    }
+    cleanupDrag()
   }
 
   const handleDrop = async (e) => {
     e.preventDefault()
-    if (!draggedItem || dragOverIndexRef.current === null) return
+    if (!draggedItem) return
+
+    if (dragTargetFolder) {
+      await handleDropIntoFolder(dragTargetFolder)
+      return
+    }
+
+    if (dragOverIndexRef.current === null) return
     dropInProgressRef.current = true
 
     const fromIndex = dragStartIndex
@@ -122,6 +175,7 @@ export default function CustomStagesGrid({
 
   const handleDragEnd = () => {
     if (!dropInProgressRef.current) cleanupDrag()
+    else setDragTargetFolder(null)
     justDraggedRef.current = true
     setTimeout(() => { justDraggedRef.current = false }, 100)
   }
@@ -249,7 +303,7 @@ export default function CustomStagesGrid({
                 displayIdx={idx}
                 arrayIdx={entry.arrayIndex}
                 isDragging={draggedItem && draggedItem.id === folderId}
-                isDropTarget={false}
+                isDropTarget={dragTargetFolder === folderId}
                 isJustDropped={justDroppedId === folderId}
                 isEditing={editingFolderId === folderId}
                 editingFolderName={editingFolderName}

@@ -9,7 +9,7 @@
  * - Skin creator integration
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { useInGameTest } from '../../hooks/useInGameTest'
 import { useFolderManagement } from '../../hooks/useFolderManagement'
@@ -58,6 +58,7 @@ export default function CharacterDetailView({
     isDraggingActive,
     justDroppedId,
     justDraggedRef,
+    dragTargetFolder,
     handleDragStart,
     handleDragOver,
     handleDragEnter,
@@ -199,6 +200,45 @@ export default function CharacterDetailView({
   // Extras page state
   const [showExtrasPage, setShowExtrasPage] = useState(false)
 
+  // Custom characters — drop targets for copying a skin to a modded character
+  const [customChars, setCustomChars] = useState([])
+  const [copyTargetSlug, setCopyTargetSlug] = useState(null)
+  const [copyMessage, setCopyMessage] = useState('')
+
+  useEffect(() => {
+    fetch(`${API_URL}/custom-characters/list`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setCustomChars(data.characters || []) })
+      .catch(() => {})
+  }, [API_URL])
+
+  // The strip only makes sense while a skin (not a folder) is being dragged
+  const draggedSkin = draggedItem
+    ? allSkins.find(s => s.id === draggedItem.id && s.type !== 'folder')
+    : null
+
+  const handleCopyToCustom = async (slug, charName) => {
+    setCopyTargetSlug(null)
+    if (!draggedSkin) return
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${slug}/skins/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: selectedCharacter, skinId: draggedSkin.id })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        setCopyMessage(`Copied "${data.skin.name}" to ${charName}`)
+      } else {
+        setCopyMessage(`Copy failed: ${data.error}`)
+      }
+    } catch (err) {
+      setCopyMessage(`Copy error: ${err.message}`)
+    }
+    setTimeout(() => setCopyMessage(''), 4000)
+  }
+
   // Helper to delete a folder
   const handleDeleteFolder = async (folderId) => {
     try {
@@ -265,7 +305,7 @@ export default function CharacterDetailView({
           </div>
         </div>
 
-        <div className="skins-grid" ref={animateRef}>
+        <div className={`skins-grid${isDraggingActive ? ' is-dragging' : ''}`} ref={animateRef}>
           {displayList.map((item, idx) => {
             if (item.type === 'folder') {
               const folderId = item.folder.id
@@ -277,7 +317,7 @@ export default function CharacterDetailView({
                   displayIdx={idx}
                   arrayIdx={item.arrayIndex}
                   isDragging={draggedItem && draggedItem.id === folderId}
-                  isDropTarget={false}
+                  isDropTarget={dragTargetFolder === folderId}
                   isJustDropped={justDroppedId === folderId}
                   isEditing={editingFolderId === folderId}
                   editingFolderName={editingFolderName}
@@ -339,6 +379,35 @@ export default function CharacterDetailView({
             </div>
           </div>
         </div>
+
+        {draggedSkin && customChars.length > 0 && (
+          <div className="copy-to-custom-strip">
+            <span className="copy-to-custom-label">Copy skin to modded character:</span>
+            <div className="copy-to-custom-chips">
+              {customChars.map((c) => (
+                <div
+                  key={c.slug}
+                  className={`copy-chip ${copyTargetSlug === c.slug ? 'hover' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+                  onDragEnter={(e) => { e.preventDefault(); setCopyTargetSlug(c.slug) }}
+                  onDragLeave={() => setCopyTargetSlug((cur) => (cur === c.slug ? null : cur))}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyToCustom(c.slug, c.name) }}
+                  title={`Copy this skin to ${c.name}`}
+                >
+                  {c.has_css_icon && (
+                    <img src={`${API_URL}${c.icon_url.replace('/api/mex', '')}`} alt="" className="copy-chip-icon" />
+                  )}
+                  <span className="copy-chip-name">{c.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {copyMessage && (
+          <div className={`import-message ${copyMessage.includes('failed') || copyMessage.includes('error') ? 'error' : 'success'}`}>
+            {copyMessage}
+          </div>
+        )}
       </div>
       <EditModal
         show={showEditModal}

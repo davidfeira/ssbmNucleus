@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import InGameTestPanel from '../shared/InGameTestPanel'
@@ -10,7 +10,28 @@ export default function CustomStageDetailView({ stage, onBack, onDelete, onRenam
   const [saving, setSaving] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [playingTrack, setPlayingTrack] = useState(null)
+  const audioRef = useRef(null)
   const inGameTest = useInGameTest()
+
+  // stop audio when leaving the page
+  useEffect(() => () => { audioRef.current?.pause() }, [])
+
+  const toggleTrack = (index) => {
+    if (playingTrack === index) {
+      audioRef.current?.pause()
+      audioRef.current = null
+      setPlayingTrack(null)
+      return
+    }
+    audioRef.current?.pause()
+    const audio = new Audio(`${API_URL}/custom-stages/${stage.slug}/audio/track/${index}`)
+    audio.onended = () => setPlayingTrack(null)
+    audio.onerror = () => setPlayingTrack(null)
+    audioRef.current = audio
+    audio.play().catch(() => setPlayingTrack(null))
+    setPlayingTrack(index)
+  }
 
   const handleSaveRename = async () => {
     const trimmed = nameValue.trim()
@@ -158,6 +179,29 @@ export default function CustomStageDetailView({ stage, onBack, onDelete, onRenam
             </div>
           )}
         </div>
+
+        {(stage.playlist || []).length > 0 && (
+          <div className="stage-playlist">
+            <h3 className="custom-char-section-title">Music</h3>
+            <div className="stage-playlist-tracks" title="Ported into your project on install">
+              {stage.playlist.map((track, i) => (
+                <div key={i} className="stage-playlist-track">
+                  <button
+                    className={`char-audio-btn ${playingTrack === i ? 'playing' : ''}`}
+                    onMouseEnter={playHoverSound}
+                    onClick={() => toggleTrack(i)}
+                  >
+                    {playingTrack === i ? '⏸' : '▶'}
+                  </button>
+                  <span className="char-audio-name" title={track.name}>{track.name}</span>
+                  {track.chance != null && (
+                    <span className="stage-track-chance">{track.chance}%</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="custom-stage-actions">
           <button
