@@ -112,10 +112,12 @@ export function SetupGate({ onClose }) {
           className="ai-studio-btn primary"
           onClick={() => {
             onClose?.()
-            window.dispatchEvent(new CustomEvent('nucleus:open-settings'))
+            // switches to the Settings tab AND opens the AI Studio popup
+            window.dispatchEvent(new CustomEvent('nucleus:open-settings',
+              { detail: { section: 'ai-studio' } }))
           }}
         >
-          Open Settings
+          Open AI Studio setup
         </button>
         <button className="ai-studio-btn" onClick={onClose}>Cancel</button>
       </div>

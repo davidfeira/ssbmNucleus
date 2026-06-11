@@ -154,6 +154,52 @@
   margin-bottom: 12px;
   font-size: var(--text-sm);
 }
+
+/* The setup hub popup */
+.aistudio-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.aistudio-modal {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.aistudio-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.aistudio-modal-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--color-text-primary);
+}
+.aistudio-modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.aistudio-modal-close:hover { color: var(--color-text-primary); }
+.aistudio-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+}
 .aistudio-setup-banner.ready {
   background: var(--color-success-muted);
   color: var(--color-success);
