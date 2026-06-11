@@ -89,10 +89,13 @@ POST /close
   No OpenRouter key needed when both planner and image models are local.
   `GET /api/mex/ai-engine/planners` lists installed Ollama models; the
   studio planner pickers append them automatically. Benchmarked with
-  `scripts/skinlab_local_planner_test.py`: qwen3:8b = 6/6 valid plans, full
-  character-region coverage, ~5s/plan, 6GB VRAM, clean unload. The vision
-  REVIEW pass needs a vision-capable local model (e.g. gemma3:4b,
-  qwen2.5vl) — with a text-only planner it's skipped gracefully.
+  `scripts/skinlab_local_planner_test.py` (--review tests the vision pass):
+  **gemma3:4b is the recommended local planner** — 6/6 valid plans, full
+  character coverage, ~4s/plan, 3.9GB VRAM, AND it handles the vision
+  REVIEW pass (critiques the in-game screenshot), so the whole pipeline
+  runs offline. qwen3:8b plans equally well but is text-only (review is
+  skipped gracefully) and needs 6GB. gemma3:1b is fast but covers too few
+  regions; sub-1B models are unreliable.
 - Dev escape hatch: set `NUCLEUS_AIENGINE_PYTHON` to any torch+diffusers
   interpreter (e.g. assetFarm's venv) to skip the managed-runtime install.
   Model weights live in the STANDARD HuggingFace cache, so an existing cache
