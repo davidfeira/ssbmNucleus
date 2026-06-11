@@ -279,11 +279,12 @@ def _sheet_from_session(base_url):
 
 @skin_lab_ai_bp.route('/api/mex/skin-lab/ai-status', methods=['GET'])
 def ai_status():
+    from aiengine import keystore
     from blueprints.ai_engine import _local_model_ready
     return jsonify({
         'success': True,
         'enabled': AI_LAB_ENABLED,
-        'hasKey': bool(os.environ.get('OPENROUTER_API_KEY')),
+        'hasKey': bool(keystore.get_openrouter_key()),
         # setup gate: studios unlock with a key OR a ready local model
         'localModelReady': _local_model_ready(),
     })
@@ -308,7 +309,8 @@ def ai_create():
     image_provider = (data.get('imageProvider') or '').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
     review_pass = data.get('reviewPass', True)   # cheap for characters: default ON
-    key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    from aiengine import keystore
+    key = (data.get('openrouterKey') or keystore.get_openrouter_key() or '').strip()
     if not character or not theme:
         return jsonify({'success': False, 'error': 'character and theme are required'}), 400
     # a local (ollama:) planner needs no key; image models resolve to local

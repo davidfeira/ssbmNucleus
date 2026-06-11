@@ -135,7 +135,8 @@ export default function AiStudioSection({ API_URL }) {
                   <div className="aistudio-option-label">
                     Option A — quickest: an OpenRouter API key (pay per image)
                   </div>
-                  <OpenRouterKeyCard backendHasKey={Boolean(status?.hasBackendKey)}
+                  <OpenRouterKeyCard API_URL={API_URL}
+                                     backendHasKey={Boolean(status?.hasBackendKey)}
                                      onChanged={onChanged} />
                   <div className="aistudio-option-label">
                     Option B — free &amp; offline: install the engine, then
@@ -149,7 +150,8 @@ export default function AiStudioSection({ API_URL }) {
                 </>
               ) : (
                 <>
-                  <OpenRouterKeyCard backendHasKey={Boolean(status?.hasBackendKey)}
+                  <OpenRouterKeyCard API_URL={API_URL}
+                                     backendHasKey={Boolean(status?.hasBackendKey)}
                                      onChanged={onChanged} />
                   <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
                                      onChanged={onChanged} />

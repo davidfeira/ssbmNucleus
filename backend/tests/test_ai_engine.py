@@ -37,6 +37,8 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr('aiengine.settings_store.load_settings',
                         lambda: dict(state['settings']))
     monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+    # the dev machine may have a real encrypted key stored — tests must not
+    monkeypatch.setattr('aiengine.keystore.load_key', lambda: None)
     return state
 
 
@@ -219,6 +221,46 @@ def test_telemetry_tolerates_corrupt_lines(monkeypatch, tmp_path):
     ledger.write_text('not json\n', encoding='utf-8')
     telemetry.record_run('local', 'sd-turbo', 'standard', 'material', 2.0, True)
     assert telemetry.aggregate()['totals']['runs'] == 1
+
+
+# --------------------------------------------------------------------------
+# keystore (encrypted OpenRouter key at rest)
+# --------------------------------------------------------------------------
+def test_keystore_round_trip(monkeypatch, tmp_path):
+    from aiengine import keystore
+    monkeypatch.setattr('aiengine.keystore.KEY_PATH', tmp_path / 'openrouter.key')
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+
+    assert keystore.load_key() is None
+    keystore.save_key('sk-or-v1-test123')
+    # at rest it is NOT plaintext
+    stored = (tmp_path / 'openrouter.key').read_text()
+    assert 'sk-or-v1-test123' not in stored
+    assert keystore.load_key() == 'sk-or-v1-test123'
+    assert keystore.get_openrouter_key() == 'sk-or-v1-test123'
+
+    keystore.save_key('')   # empty clears
+    assert keystore.load_key() is None
+    assert not (tmp_path / 'openrouter.key').exists()
+
+
+def test_keystore_env_fallback(monkeypatch, tmp_path):
+    from aiengine import keystore
+    monkeypatch.setattr('aiengine.keystore.KEY_PATH', tmp_path / 'openrouter.key')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'sk-env')
+    assert keystore.get_openrouter_key() == 'sk-env'
+    keystore.save_key('sk-stored')
+    assert keystore.get_openrouter_key() == 'sk-stored'   # store wins
+
+
+def test_keystore_corrupt_file_reads_as_none(monkeypatch, tmp_path):
+    from aiengine import keystore
+    path = tmp_path / 'openrouter.key'
+    monkeypatch.setattr('aiengine.keystore.KEY_PATH', path)
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+    path.write_text('dpapi:not-even-base64!!!')
+    assert keystore.load_key() is None
+    assert keystore.get_openrouter_key() is None
 
 
 # --------------------------------------------------------------------------

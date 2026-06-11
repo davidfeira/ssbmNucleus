@@ -17,8 +17,8 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from aiengine import (hardware, installer, models_admin, routing, runner,
-                      telemetry)
+from aiengine import (hardware, installer, keystore, models_admin, routing,
+                      runner, telemetry)
 from aiengine.paths import engine_available, engine_python, hf_cache_dir
 from aiengine.registry import MODELS, find
 from aiengine.settings_store import load_settings, save_settings
@@ -57,7 +57,7 @@ def engine_status():
             'diffusersVersion': (check or {}).get('diffusersVersion'),
         },
         'hardware': hardware.detect(),
-        'hasBackendKey': bool(os.environ.get('OPENROUTER_API_KEY')),
+        'hasBackendKey': bool(keystore.get_openrouter_key()),
         'localModelReady': _local_model_ready(),
         'routing': settings.get('tierRouting'),
         'installState': {
@@ -78,7 +78,7 @@ def list_models():
     stats = telemetry.model_stats()
     check = runner.check() if engine_available() else None
     pipelines = (check or {}).get('pipelines') or {}
-    has_key = bool(os.environ.get('OPENROUTER_API_KEY'))
+    has_key = bool(keystore.get_openrouter_key())
 
     models = []
     for spec in MODELS.values():
@@ -259,6 +259,16 @@ def resolve_tasks():
         except routing.RoutingError as e:
             out.append({'kind': kind, 'tier': tier, 'error': str(e)})
     return jsonify({'success': True, 'tasks': out})
+
+
+@ai_engine_bp.route('/api/mex/ai-engine/key', methods=['POST'])
+def set_openrouter_key():
+    """Store the OpenRouter key ENCRYPTED at rest (DPAPI on Windows) —
+    replaces the old plaintext-localStorage scheme. Empty key clears it."""
+    data = request.get_json(silent=True) or {}
+    keystore.save_key(data.get('key') or '')
+    return jsonify({'success': True,
+                    'hasKey': bool(keystore.get_openrouter_key())})
 
 
 @ai_engine_bp.route('/api/mex/ai-engine/planners', methods=['GET'])

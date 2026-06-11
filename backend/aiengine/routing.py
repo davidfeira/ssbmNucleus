@@ -6,9 +6,7 @@ turbo models produce mush). The user maps each tier to a model in Settings;
 when a strong task lands on a different model than a standard one would,
 that's an ESCALATION and the UI says so before money is spent.
 """
-import os
-
-from aiengine import hardware, models_admin
+from aiengine import hardware, keystore, models_admin
 from aiengine.paths import engine_available
 from aiengine.registry import (DEFAULT_API_MODEL, MODELS,
                                TIER_LOCAL_PREFERENCE, find)
@@ -17,7 +15,7 @@ TIERS = ('standard', 'strong')
 
 
 def _key_available(client_key=False):
-    return bool(os.environ.get('OPENROUTER_API_KEY')) or bool(client_key)
+    return bool(keystore.get_openrouter_key()) or bool(client_key)
 
 
 def label_for(spec, model=None):

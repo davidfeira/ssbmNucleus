@@ -130,9 +130,10 @@ def stage_ai_status():
     from skinlab.stage_ops import STAGE_REGIONS_DIR
     stages = sorted(p.stem for p in STAGE_REGIONS_DIR.glob('*.json')) \
         if STAGE_REGIONS_DIR.exists() else []
+    from aiengine import keystore
     from blueprints.ai_engine import _local_model_ready
     return jsonify({'success': True, 'enabled': AI_LAB_ENABLED,
-                    'hasKey': bool(os.environ.get('OPENROUTER_API_KEY')),
+                    'hasKey': bool(keystore.get_openrouter_key()),
                     'localModelReady': _local_model_ready(),
                     'stages': stages})
 
@@ -153,7 +154,8 @@ def stage_ai_create():
     image_provider = (data.get('imageProvider') or '').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
     review_pass = bool(data.get('reviewPass'))   # opt-in: costs another ISO + boot
-    key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    from aiengine import keystore
+    key = (data.get('openrouterKey') or keystore.get_openrouter_key() or '').strip()
     vanilla = (data.get('vanillaIsoPath') or '').strip()
     slippi = (data.get('slippiDolphinPath') or '').strip()
     if not code or not theme:

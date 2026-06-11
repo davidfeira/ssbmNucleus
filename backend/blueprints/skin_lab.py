@@ -467,8 +467,9 @@ def _openrouter_generate(params, model=None, key=None):
 
     import requests as _rq
 
+    from aiengine import keystore
     key = (key or params.get('openrouterKey')
-           or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+           or keystore.get_openrouter_key() or '').strip()
     if not key:
         raise GenerationError('No OpenRouter key (set it in Settings)')
     prompt = (params.get('prompt') or '').strip()
