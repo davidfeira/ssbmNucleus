@@ -19,38 +19,27 @@ export default function Settings({ metadata, onOpenFirstRunSetup }) {
       <div className="settings-content">
         <h2>Settings</h2>
 
-        {/* Volume Controls */}
-        <VolumeSection />
+        {/* Card grid - sections flow into as many columns as fit the window */}
+        <div className="settings-grid">
+          {/* Paths & setup */}
+          <IsoPathSection API_URL={API_URL} />
+          <SlippiPathSection API_URL={API_URL} />
+          <AiStudioSection API_URL={API_URL} />
+          <SetupSection onOpenFirstRunSetup={onOpenFirstRunSetup} />
 
-        {/* Community */}
-        <DiscordSection />
+          {/* App + community */}
+          <VolumeSection />
+          <DiscordSection />
 
-        {/* Vanilla ISO Path */}
-        <IsoPathSection API_URL={API_URL} />
+          {/* Vault tools */}
+          <HdCspSection metadata={metadata} API_URL={API_URL} />
+          <BackupRestore API_URL={API_URL} />
+          <AdditionalDataSection />
 
-        {/* Slippi Dolphin Path */}
-        <SlippiPathSection API_URL={API_URL} />
-
-        {/* AI Studio (OpenRouter key) */}
-        <AiStudioSection API_URL={API_URL} />
-
-        {/* First-Run Setup Wizard */}
-        <SetupSection onOpenFirstRunSetup={onOpenFirstRunSetup} />
-
-        {/* HD CSP Generation Section */}
-        <HdCspSection metadata={metadata} API_URL={API_URL} />
-
-        {/* Vault Backup & Restore Section */}
-        <BackupRestore API_URL={API_URL} />
-
-        {/* Storage Statistics */}
-        <StorageStatsSection metadata={metadata} />
-
-        {/* Additional Data (Texture Pack & ISO Output) */}
-        <AdditionalDataSection />
-
-        {/* Clear Storage Section */}
-        <ClearStorageSection metadata={metadata} API_URL={API_URL} />
+          {/* Data */}
+          <StorageStatsSection metadata={metadata} />
+          <ClearStorageSection metadata={metadata} API_URL={API_URL} />
+        </div>
       </div>
     </div>
   )

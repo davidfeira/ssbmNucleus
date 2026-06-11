@@ -8,7 +8,7 @@
    ───────────────────────────────────────── */
 
 .settings-container {
-  width: min(100%, var(--page-shell-max-width-narrow));
+  width: min(100%, var(--page-shell-max-width));
   margin: 0 auto;
   min-height: 100%;
   padding: var(--page-block-padding) var(--page-inline-padding) calc(var(--page-block-padding) + var(--space-4));
@@ -17,7 +17,7 @@
 .settings-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-5);
 }
 
 .settings-content > h2 {
@@ -25,24 +25,32 @@
   font-size: var(--text-2xl);
   font-weight: var(--font-bold);
   color: var(--color-text-primary);
-  margin: 0 0 var(--space-2) 0;
-  padding-bottom: var(--space-4);
+  margin: 0;
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border-subtle);
   animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* ─────────────────────────────────────────
-   SETTINGS SECTIONS (Flat Layout)
+   SETTINGS SECTIONS (Card Grid)
+   Sections flow into as many ~22rem columns
+   as fit the window - one big panel on wide
+   screens, a single column on narrow ones.
    ───────────────────────────────────────── */
 
-.settings-section {
-  padding: var(--space-5) 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
+.settings-grid {
+  columns: 22rem;
+  column-gap: var(--space-4);
 }
 
-.settings-section:last-child {
-  border-bottom: none;
+.settings-section {
+  break-inside: avoid;
+  margin-bottom: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  animation: cardEntrance var(--duration-slow) var(--ease-out) backwards;
 }
 
 /* Staggered entrance for settings sections */
@@ -55,6 +63,16 @@
 .settings-section:nth-child(8) { animation-delay: 0.21s; }
 .settings-section:nth-child(9) { animation-delay: 0.24s; }
 .settings-section:nth-child(10) { animation-delay: 0.27s; }
+.settings-section:nth-child(11) { animation-delay: 0.3s; }
+
+/* Wide rows wrap gracefully at card width */
+.iso-path-container,
+.hd-csp-tool,
+.hd-csp-controls,
+.backup-buttons,
+.texture-pack-row {
+  flex-wrap: wrap;
+}
 
 .settings-section h3 {
   font-family: var(--font-display);
