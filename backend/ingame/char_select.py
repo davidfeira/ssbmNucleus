@@ -29,6 +29,8 @@ GRID_PATH = _grid_path()
 
 ALIASES = {
     "doc": "drmario", "doctormario": "drmario",
+    # the vault's display name is "C. Falcon" -> raw_key "cfalcon"
+    "cfalcon": "falcon", "captainfalcon": "falcon", "captfalcon": "falcon",
     "ganon": "ganondorf", "dk3": "dk", "donkeykong": "dk",
     "sheik": "zelda",  # the CURSOR can only reach Zelda's cell; ckind() resolves
                        # sheik to her own external id first (see CKIND_NO_CELL)
