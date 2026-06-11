@@ -27,7 +27,10 @@ function applyCssTemplate(icons, template) {
     const iconsInRow = row === rows - 1 ? count - row * iconsPerRow : iconsPerRow
     const isEdge = col === 0 || col === iconsInRow - 1
 
-    let x = centerX - totalW / 2 + iw * col + iw / 2
+    // Center partial rows (e.g. a trailing row of 8 in a 9-wide grid)
+    const rowOffsetX = (iconsPerRow - iconsInRow) * iw / 2
+
+    let x = centerX - totalW / 2 + iw * col + iw / 2 + rowOffsetX
     let y = centerY + totalH / 2 - ih * row - ih / 2
     let z = 0
     let colOffX = 0, colOffY = 0
