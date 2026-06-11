@@ -192,11 +192,31 @@ def stage_ai_create():
             def on_step(i, label):
                 emit('applying', 20 + int(35 * i / n), f'Step {i + 1}/{n}: {label}…')
 
-            def gen(prompt_text):
+            gen_log = []
+
+            def gen(prompt_text, quality=False):
                 params = {'prompt': prompt_text, 'provider': image_provider}
-                if image_model:
-                    params['model'] = image_model
-                path, _info = _generate_material(params)
+                model_used = image_model
+                if quality:
+                    # backdrop-grade material: coherent scene + a stronger
+                    # model when the fast local default is selected
+                    params['style'] = 'scene'
+                    params['recipe'] = 'environment'
+                    if image_provider != 'openrouter' and \
+                            (not image_model or image_model == 'sd-turbo'):
+                        model_used = 'z-image-turbo'
+                if model_used:
+                    params['model'] = model_used
+                label = model_used or ('nano banana' if image_provider == 'openrouter'
+                                       else 'sd-turbo')
+                cost = 0.03 if image_provider == 'openrouter' else 0.0
+                emit('applying', None, f'Generating material — {label}'
+                     + (f' (~{int(cost * 100)}¢)' if cost else ' (local, free)'))
+                path, info = _generate_material(params)
+                gen_log.append({'model': label,
+                                'provider': image_provider,
+                                'cached': bool((info or {}).get('cached')),
+                                'estCostUsd': 0.0 if (info or {}).get('cached') else cost})
                 return path
 
             out_dat = apply_stage_plan(code, steps, tints, work, gen, on_step=on_step)
@@ -238,6 +258,8 @@ def stage_ai_create():
                               + base64.b64encode(res['png']).decode('ascii'),
                 'skinName': skin_name,
                 'steps': steps + ([{'op': 'material-tint', **t} for t in tints]),
+                'generation': gen_log,
+                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
             })
         except Exception as e:
             logger.error(f'[stage-studio] failed: {e}', exc_info=True)

@@ -34,6 +34,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
   const [sheet, setSheet] = useState(null)
   const [skinName, setSkinName] = useState('')
   const [steps, setSteps] = useState([])
+  const [costInfo, setCostInfo] = useState(null)
   const [error, setError] = useState(null)
   const socketRef = useRef(null)
 
@@ -76,6 +77,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
       setSheet(d.sheet)
       setSkinName(d.skinName || theme)
       setSteps(d.steps || [])
+      setCostInfo({ cost: d.estCostUsd, generation: d.generation || [] })
       setPhase('preview')
       playSound('achievement')
       cleanupSocket()
@@ -212,6 +214,15 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
                     {s.op}:{s.region}
                   </span>
                 ))}
+              </div>
+            )}
+            {costInfo && (
+              <div className="ai-studio-progress-message">
+                {costInfo.generation.length} material(s) — {
+                  costInfo.cost > 0
+                    ? `~$${costInfo.cost.toFixed(2)} (${costInfo.generation[0]?.model})`
+                    : `free (local${costInfo.generation[0]?.model ? `, ${costInfo.generation[0].model}` : ''})`
+                }
               </div>
             )}
             <input

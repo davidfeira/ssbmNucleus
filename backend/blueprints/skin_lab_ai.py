@@ -275,14 +275,23 @@ def ai_create():
             skin_name = ((plan.get('skin_name') or theme)[:60])
 
             n = len(steps)
+            gen_log = []
+            img_label = (image_model or ('nano banana' if image_provider == 'openrouter'
+                                         else 'sd-turbo'))
+            img_cost = 0.03 if image_provider == 'openrouter' else 0.0
             for i, s in enumerate(steps):
                 pct = 30 + int(55 * i / n)
                 label = s['op'] + ' ' + s['region']
                 emit('applying', pct, f'Step {i + 1}/{n}: {label}…')
                 if s['op'] == 'composite':
+                    emit('applying', pct, f'Step {i + 1}/{n}: {label} — material via '
+                         f'{img_label}' + (f' (~{int(img_cost * 100)}¢)' if img_cost
+                                           else ' (local, free)'))
                     gen = {'prompt': s['material_prompt'], 'provider': image_provider}
                     if image_model:
                         gen['model'] = image_model
+                    gen_log.append({'model': img_label, 'provider': image_provider,
+                                    'estCostUsd': img_cost})
                     rr = requests.post(f'{base_url}/composite', timeout=900, json={
                         'region': s['region'],
                         'material': {'generate': gen},
@@ -306,6 +315,8 @@ def ai_create():
                 'sheet': 'data:image/jpeg;base64,' + base64.b64encode(sheet).decode('ascii'),
                 'skinName': skin_name,
                 'steps': steps,
+                'generation': gen_log,
+                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
             })
         except Exception as e:
             logger.error(f'[ai-studio] failed: {e}', exc_info=True)

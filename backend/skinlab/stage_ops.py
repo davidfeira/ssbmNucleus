@@ -76,6 +76,8 @@ def apply_stage_plan(code, steps, material_tints, work_dir, generate_material,
             current[idx] = np.asarray(img, dtype=np.uint8).copy()
         return current[idx]
 
+    material_hints = region_map.get('materialHints') or {}
+
     for i, s in enumerate(steps):
         region = s.get('region')
         indexes = (region_map['regions'].get(region) or [])
@@ -84,9 +86,11 @@ def apply_stage_plan(code, steps, material_tints, work_dir, generate_material,
             on_step(i, f'{op} {region}')
         if not indexes:
             continue
+        hint = material_hints.get(region) or {}
         mat = None
         if op == 'composite':
-            mat_path = generate_material(s['material_prompt'])
+            mat_path = generate_material(s['material_prompt'],
+                                         quality=bool(hint.get('quality')))
             mat = np.asarray(Image.open(mat_path).convert('RGB'), dtype=np.uint8)
         changed = []
         for idx in indexes:
@@ -98,7 +102,8 @@ def apply_stage_plan(code, steps, material_tints, work_dir, generate_material,
                 mod = s.get('modulate') or {}
                 result = compose_mod.composite(arr, mat, mask,
                                                lum_lo=float(mod.get('lo', 0.4)),
-                                               lum_hi=float(mod.get('hi', 1.6)))
+                                               lum_hi=float(mod.get('hi', 1.6)),
+                                               mode=hint.get('mode', 'tile'))
             elif op == 'tint':
                 result = compose_mod.tint(arr, mask, float(s['hue']),
                                           float(s.get('saturation', 60)))

@@ -56,11 +56,22 @@ def tile_to(material_rgb, shape):
     return np.tile(material_rgb, reps)[:th, :tw]
 
 
-def composite(rgba, material_rgb, mask, lum_lo=0.3, lum_hi=1.6):
+def fit_to(material_rgb, shape):
+    """Stretch a material (HxWx3) to exactly cover `shape` (HxWx...).
+    Right for panorama/backdrop textures, where tiling a small swatch reads
+    as a crusty repeat instead of one coherent image."""
+    from PIL import Image
+    th, tw = shape[:2]
+    img = Image.fromarray(material_rgb.astype(np.uint8), 'RGB')
+    return np.asarray(img.resize((tw, th), Image.LANCZOS), dtype=np.float64)
+
+
+def composite(rgba, material_rgb, mask, lum_lo=0.3, lum_hi=1.6, mode='tile'):
     """Replace masked pixels with the material, shaded by the original
     lightness relative to the masked region's mean (so highlights stay
-    highlights and creases stay dark). Returns a new array, or None if the
-    mask selects nothing."""
+    highlights and creases stay dark). mode='tile' repeats the swatch;
+    mode='fit' stretches it to the texture (backdrops). Returns a new array,
+    or None if the mask selects nothing."""
     if not mask.any():
         return None
     _, _, l = rgb_to_hsl(rgba[..., :3].astype(np.float64))
@@ -68,7 +79,8 @@ def composite(rgba, material_rgb, mask, lum_lo=0.3, lum_hi=1.6):
     ref = float(lum[mask].mean()) or 0.5
     shade = np.clip(lum / ref, lum_lo, lum_hi)
     out = rgba.copy()
-    mat = tile_to(material_rgb.astype(np.float64), rgba.shape)
+    cover = fit_to if mode == 'fit' else tile_to
+    mat = cover(material_rgb.astype(np.float64), rgba.shape)
     out[..., :3][mask] = np.clip(mat[mask] * shade[mask][:, None], 0, 255).astype(np.uint8)
     return out
 

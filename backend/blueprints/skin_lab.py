@@ -538,9 +538,15 @@ def _openrouter_generate(params):
         raise AssetFarmError('prompt is required')
     model = params.get('model') or 'google/gemini-2.5-flash-image'
 
-    full_prompt = ('Generate a seamless tileable TEXTURE swatch, square, '
-                   'repeating pattern, no borders, no text, fills the whole '
-                   f'image edge to edge: {prompt}')
+    if (params.get('style') or '') == 'scene':
+        # backdrop/panorama use -- one coherent image, stretched (not tiled)
+        full_prompt = ('Generate a wide painted GAME BACKGROUND scene, no '
+                       'text, no borders, cohesive single image filling the '
+                       f'frame: {prompt}')
+    else:
+        full_prompt = ('Generate a seamless tileable TEXTURE swatch, square, '
+                       'repeating pattern, no borders, no text, fills the whole '
+                       f'image edge to edge: {prompt}')
     logger.info(f'[skin-lab] openrouter generate ({model}): {prompt!r}')
     res = _rq.post('https://openrouter.ai/api/v1/chat/completions', timeout=180, json={
         'model': model,
