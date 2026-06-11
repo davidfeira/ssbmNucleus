@@ -7,6 +7,8 @@
  * screenshot and per-check checklist.
  */
 
+import DolphinEmbedPanel from './DolphinEmbedPanel'
+
 const VERDICT_LABEL = {
   healthy: 'PASS',
   ended: 'PASS — match ended',
@@ -17,7 +19,7 @@ const VERDICT_LABEL = {
 }
 
 export default function InGameTestPanel({ test, onStart, label = 'Test in Game', disabled = false }) {
-  const { testingInGame, testStatus, testResult, testError, resetTest } = test
+  const { testingInGame, testStatus, testResult, testError, testMode, resetTest } = test
 
   if (testingInGame) {
     return (
@@ -29,6 +31,8 @@ export default function InGameTestPanel({ test, onStart, label = 'Test in Game',
         <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', maxWidth: 420, margin: '0 auto' }}>
           <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }} />
         </div>
+        {/* Captures keep their own window (the shot's resolution = window size). */}
+        <DolphinEmbedPanel active={testMode !== 'capture'} />
         <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: '0.75rem' }}>
           Builds a one-mod ISO and plays a short match in a throwaway Dolphin.
           Your Slippi setup is untouched, and it never goes online.

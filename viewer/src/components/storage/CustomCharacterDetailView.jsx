@@ -1088,6 +1088,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         testStatus={inGameTest.testStatus}
         testResult={inGameTest.testResult}
         testError={inGameTest.testError}
+        testMode={inGameTest.testMode}
         onResetTest={inGameTest.resetTest}
         API_URL={API_URL}
       />

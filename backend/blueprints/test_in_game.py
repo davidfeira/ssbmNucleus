@@ -45,6 +45,10 @@ def _guard_dolphin_already_open():
     guard answers that case, and our own harness Dolphin would be running)."""
     if request.method != 'POST' or os.name != 'nt' or _test_running:
         return None
+    # The window-embed endpoints position OUR OWN harness Dolphin -- they're not
+    # a test start, and a late poll after a test ends must not 409.
+    if '/test-in-game/window/' in (request.path or ''):
+        return None
     try:
         from ingame.boot import dolphin_running
         open_pids = dolphin_running()
@@ -902,6 +906,37 @@ def _vmeta(v):
     """The identity fields echoed back for each variant in a batch result."""
     return {'stageCode': v.get('stageCode'), 'stageFolder': v.get('stageFolder'),
             'variantId': v.get('variantId'), 'name': v.get('name')}
+
+
+@test_in_game_bp.route('/api/mex/test-in-game/window/position', methods=['POST'])
+def position_test_window():
+    """Pin the running test's Dolphin render window over the frontend's
+    placeholder (ingame/embed.py): borderless, always-on-top, never activated.
+    Body: { x, y, width, height } in PHYSICAL screen pixels. Returns
+    found=false until Dolphin's render window exists -- the frontend keeps
+    polling through the build/boot phase."""
+    if os.name != 'nt':
+        return jsonify({'success': False, 'found': False,
+                        'error': 'Window embedding is only supported on Windows.'}), 400
+    data = request.json or {}
+    try:
+        x, y = int(data['x']), int(data['y'])
+        w, h = int(data['width']), int(data['height'])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({'success': False, 'found': False,
+                        'error': 'x, y, width and height (integers) are required.'}), 400
+    from ingame import embed
+    return jsonify({'success': True, **embed.position(x, y, w, h)})
+
+
+@test_in_game_bp.route('/api/mex/test-in-game/window/park', methods=['POST'])
+def park_test_window():
+    """Move the test Dolphin's render window offscreen (the placeholder is
+    hidden or the panel unmounted). Best-effort; no-op when nothing is active."""
+    if os.name != 'nt':
+        return jsonify({'success': True, 'found': False})
+    from ingame import embed
+    return jsonify({'success': True, **embed.park()})
 
 
 @test_in_game_bp.route('/api/mex/test-in-game/status', methods=['GET'])

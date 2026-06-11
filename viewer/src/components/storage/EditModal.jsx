@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
+import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
 
 export default function EditModal({
   show,
@@ -56,6 +57,7 @@ export default function EditModal({
   testStatus,
   testResult,
   testError,
+  testMode,
   onResetTest,
 
   API_URL
@@ -676,7 +678,9 @@ export default function EditModal({
                   <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', marginBottom: '1rem' }}>
                     <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }}></div>
                   </div>
-                  <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)' }}>
+                  {/* Captures keep their own window (the shot's resolution = window size). */}
+                  <DolphinEmbedPanel active={testMode !== 'capture'} />
+                  <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: '1rem' }}>
                     Builds a one-costume ISO and plays a short match in a throwaway Dolphin.
                     Your Slippi setup is untouched, and it never goes online.
                   </p>

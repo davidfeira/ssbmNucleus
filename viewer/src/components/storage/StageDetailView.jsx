@@ -283,6 +283,7 @@ export default function StageDetailView({
         testStatus={inGameTest.testStatus}
         testResult={inGameTest.testResult}
         testError={inGameTest.testError}
+        testMode={inGameTest.testMode}
         onResetTest={inGameTest.resetTest}
         API_URL={API_URL}
       />

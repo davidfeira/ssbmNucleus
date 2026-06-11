@@ -386,6 +386,13 @@ class DolphinBoot:
             args, cwd=os.path.dirname(self.exe),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        # Register as the embeddable Dolphin so the frontend's "test in game"
+        # panel can pin our render window inside the app (ingame/embed.py).
+        try:
+            from . import embed
+            embed.set_active(self.proc.pid)
+        except Exception:
+            pass
         return self.proc
 
     @property
@@ -409,6 +416,12 @@ class DolphinBoot:
         return False
 
     def terminate(self):
+        if self.proc:
+            try:
+                from . import embed
+                embed.clear_active(self.proc.pid)
+            except Exception:
+                pass
         if self.proc and self.proc.poll() is None:
             pid = self.proc.pid
             try:

@@ -21,6 +21,9 @@ export function useInGameTest() {
   const [testStatus, setTestStatus] = useState(null)   // { stage, percentage, message }
   const [testResult, setTestResult] = useState(null)   // test_complete payload
   const [testError, setTestError] = useState(null)
+  // 'test' (drive a match -- the Dolphin window may be embedded in the app) vs
+  // 'capture' (clean screenshot run -- the window must stay at its own size).
+  const [testMode, setTestMode] = useState(null)
   const socketRef = useRef(null)
 
   const cleanupSocket = () => {
@@ -36,6 +39,7 @@ export function useInGameTest() {
     setTestStatus(null)
     setTestResult(null)
     setTestError(null)
+    setTestMode(null)
   }
 
   // Generic: POST to <endpoint> with the mod identity + the stored paths, then
@@ -55,6 +59,7 @@ export function useInGameTest() {
 
     playSound('start')
     setTestingInGame(true)
+    setTestMode('test')
     setTestStatus({ stage: 'starting', percentage: 0, message: 'Starting in-game test…' })
     setTestResult(null)
     setTestError(null)
@@ -133,6 +138,7 @@ export function useInGameTest() {
 
     playSound('start')
     setTestingInGame(true)
+    setTestMode('capture')
     setTestStatus({ stage: 'starting', percentage: 0, message: 'Starting screenshot capture…' })
     setTestResult(null)
     setTestError(null)
@@ -202,6 +208,7 @@ export function useInGameTest() {
 
     playSound('start')
     setTestingInGame(true)
+    setTestMode('capture')
     setTestStatus({ stage: 'starting', percentage: 0, message: 'Starting pause screenshot capture…' })
     setTestResult(null)
     setTestError(null)
@@ -251,7 +258,7 @@ export function useInGameTest() {
   }
 
   return {
-    testingInGame, testStatus, testResult, testError,
+    testingInGame, testStatus, testResult, testError, testMode,
     startCostumeTest, startCustomCharacterTest, startCustomCharacterSkinTest,
     startCustomStageTest, startStageSkinTest,
     captureStageScreenshot, capturePauseScreenshot,
