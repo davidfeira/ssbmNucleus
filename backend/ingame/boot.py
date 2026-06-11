@@ -419,6 +419,11 @@ class DolphinBoot:
         if self.proc:
             try:
                 from . import embed
+                # Park the render window offscreen BEFORE killing the process:
+                # a dying GL window flashes black wherever it sits (very visible
+                # when it's pinned topmost over the app by the embed).
+                if self.proc.poll() is None:
+                    embed.park(self.proc.pid)
                 embed.clear_active(self.proc.pid)
             except Exception:
                 pass

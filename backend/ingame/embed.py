@@ -111,13 +111,16 @@ def position(x, y, width, height):
     return {"found": True}
 
 
-def park():
-    """Move the active test Dolphin's render window offscreen (placeholder
-    hidden / panel unmounted). Stays visible-but-offscreen so PrintWindow
-    screenshots keep working."""
+def park(pid=None):
+    """Move a test Dolphin's render window offscreen (placeholder hidden /
+    panel unmounted / about to be terminated -- a dying GL window flashes
+    black wherever it sits, so boot.py parks before killing). Stays
+    visible-but-offscreen so PrintWindow screenshots keep working. Defaults
+    to the active pid."""
     if os.name != "nt":
         return {"found": False}
-    pid = get_active()
+    if pid is None:
+        pid = get_active()
     if not pid:
         return {"found": False}
     hwnd = _render_hwnd(pid)
