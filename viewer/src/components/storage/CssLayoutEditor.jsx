@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import SssCanvas from './SssCanvas'
 import CssIconProperties from './CssIconProperties'
 import IconReorderList from './IconReorderList'
-import { playHoverSound } from '../../utils/sounds'
+import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
 
 // Per-slot layout fields: these stay with the slot position when icon
@@ -397,6 +397,29 @@ export default function CssLayoutEditor() {
 
       {/* Bottom toolbar */}
       <div className="sss-bottom-bar">
+        {/* Columns is the primary control - big stepper, first in the bar */}
+        <div className="sss-grid-controls sss-grid-controls--primary">
+          <label>Columns</label>
+          <div className="sss-cols-stepper">
+            <button
+              onClick={() => { playSound('tick'); handleApplyGrid(Math.max(1, (layout?.template?.iconsPerRow ?? 9) - 1)) }}
+              disabled={(layout?.template?.iconsPerRow ?? 9) <= 1}
+              title="Fewer columns"
+            >−</button>
+            <input type="number" min={1} max={20}
+              value={layout?.template?.iconsPerRow ?? 9}
+              onChange={(e) => handleApplyGrid(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))} />
+            <button
+              onClick={() => { playSound('tick'); handleApplyGrid(Math.min(20, (layout?.template?.iconsPerRow ?? 9) + 1)) }}
+              disabled={(layout?.template?.iconsPerRow ?? 9) >= 20}
+              title="More columns"
+            >+</button>
+          </div>
+          <span className="sss-grid-dim">
+            ({Math.ceil(icons.length / (layout?.template?.iconsPerRow ?? 9))} rows)
+          </span>
+          <button className="sss-tab-btn" onClick={handleResetVanilla}>Reset</button>
+        </div>
         <div className="sss-bottom-group">
           <label>Zoom: {zoom}x</label>
           <input type="range" min={4} max={20} value={zoom}
@@ -414,17 +437,6 @@ export default function CssLayoutEditor() {
           <input type="checkbox" checked={useTemplate} onChange={(e) => handleToggleTemplate(e.target.checked)} />
           Swap Mode
         </label>
-        <div className="sss-grid-controls">
-          <label>Cols:</label>
-          <input type="number" min={1} max={20}
-            value={layout?.template?.iconsPerRow ?? 9}
-            onChange={(e) => handleApplyGrid(Math.max(1, parseInt(e.target.value) || 1))}
-            style={{ width: '42px' }} />
-          <span className="sss-grid-dim">
-            ({Math.ceil(icons.length / (layout?.template?.iconsPerRow ?? 9))} rows)
-          </span>
-          <button className="sss-tab-btn" onClick={handleResetVanilla}>Reset</button>
-        </div>
       </div>
     </div>
   )

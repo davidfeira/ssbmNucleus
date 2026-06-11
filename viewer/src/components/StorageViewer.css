@@ -7311,6 +7311,79 @@
   color: var(--color-text-tertiary);
 }
 
+/* Primary grid control (CSS editor): the Columns stepper most users reach for */
+.sss-grid-controls--primary {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.sss-grid-controls--primary > label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+}
+
+.sss-cols-stepper {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.sss-cols-stepper button {
+  width: 34px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sss-cols-stepper button:hover:not(:disabled) {
+  background: var(--color-cyan);
+  color: var(--color-bg-deep);
+}
+
+.sss-cols-stepper button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sss-cols-stepper input[type="number"] {
+  width: 52px;
+  padding: var(--space-2) 0;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  -moz-appearance: textfield;
+}
+
+.sss-cols-stepper input[type="number"]::-webkit-outer-spin-button,
+.sss-cols-stepper input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sss-cols-stepper input[type="number"]:focus {
+  outline: none;
+  background: var(--color-cyan-muted);
+}
+
 .sss-props-popup-overlay {
   position: fixed;
   inset: 0;
