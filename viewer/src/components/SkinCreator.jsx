@@ -57,6 +57,10 @@ export default function SkinCreator({
   const [connectionFailed, setConnectionFailed] = useState(false)
 
   const exportDatResolverRef = useRef(null) // For promise-based exportDat with Electron IPC
+  // The SOURCE costume's dat filename (e.g. PlFxNr.dat), captured from the
+  // viewer-paths response. Saves must keep a Pl* dat name -- the import
+  // pipeline only recognizes Pl*-stemmed DATs as costumes.
+  const sourceDatNameRef = useRef(null)
 
   // Panel resize hook
   const {
@@ -281,6 +285,7 @@ export default function SkinCreator({
       if (!data.success) {
         throw new Error(data.error)
       }
+      sourceDatNameRef.current = (data.datFile || '').split(/[\\/]/).pop() || null
 
       // Set up message listener
       const cleanup = window.electron.onViewerMessage(handleViewerMessage)
@@ -346,6 +351,7 @@ export default function SkinCreator({
       if (!data.success) {
         throw new Error(data.error)
       }
+      sourceDatNameRef.current = (data.datFile || '').split(/[\\/]/).pop() || null
 
       // Set up message listener
       console.log('[SkinCreator] Setting up message listener for vault...')
@@ -418,6 +424,7 @@ export default function SkinCreator({
     }
 
     // Reset state
+    sourceDatNameRef.current = null
     setSkinCreatorStep('select')
     setVanillaCostumes([])
     setSelectedVanillaCostume(null)
@@ -596,9 +603,15 @@ export default function SkinCreator({
 
       const { default: JSZip } = await import('jszip')
       const zip = new JSZip()
-      const datName = customMatch && initialCostume?.dat_name
-        ? initialCostume.dat_name
-        : `${skinName.trim()}.dat`
+      // Keep the SOURCE costume's Pl* dat name (the intake only recognizes
+      // Pl*-stemmed DATs; custom-character installs key costumes by it).
+      // The skin title still becomes the display name via custom_title/name.
+      let datName = initialCostume?.dat_name
+        || sourceDatNameRef.current
+        || (selectedVanillaCostume?.code ? `${selectedVanillaCostume.code}.dat` : '')
+      if (!/^pl/i.test(datName)) {
+        datName = `${skinName.trim()}.dat`
+      }
       zip.file(datName, datBlob)
       const zipBlob = await zip.generateAsync({ type: 'blob' })
 
