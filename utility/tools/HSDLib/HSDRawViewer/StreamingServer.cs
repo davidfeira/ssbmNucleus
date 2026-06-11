@@ -527,19 +527,10 @@ namespace HSDRawViewer
                             await SendBinaryAsync(webSocket, frameData);
 
                             frameCount++;
-
-                            // Log every 100 frames to debug file
-                            if (frameCount % 100 == 0)
-                            {
-                                var totalElapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                                File.AppendAllText(@"C:\Users\david\projects\new aka\logs\FRAME_DEBUG.txt",
-                                    $"{DateTime.Now:HH:mm:ss.fff} Frame {frameCount}, {frameCount / totalElapsed:F1} fps\n");
-                            }
                         }
                         catch (Exception ex)
                         {
-                            File.AppendAllText(@"C:\Users\david\projects\new aka\logs\FRAME_DEBUG.txt",
-                                $"{DateTime.Now:HH:mm:ss.fff} FRAME ERROR: {ex.Message}\n");
+                            LogError("Frame render/send error", ex);
                         }
                     }
 
@@ -566,7 +557,6 @@ namespace HSDRawViewer
 
         private async Task ReceiveMessagesAsync(WebSocket webSocket, byte[] buffer)
         {
-            var dbg = @"C:\Users\david\projects\new aka\logs\RECEIVE_DEBUG.txt";
             try
             {
                 // Use a MemoryStream to accumulate fragmented messages
@@ -578,7 +568,6 @@ namespace HSDRawViewer
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} CLOSE message received\n");
                         Log("Received close message from client");
                         break;
                     }
@@ -593,26 +582,13 @@ namespace HSDRawViewer
                         {
                             var message = Encoding.UTF8.GetString(messageBuffer.ToArray());
                             messageBuffer.SetLength(0); // Clear for next message
-
-                            // Log message type (not full message to avoid spam)
-                            string msgType = "unknown";
-                            try {
-                                using var doc = JsonDocument.Parse(message);
-                                msgType = doc.RootElement.GetProperty("type").GetString();
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} MSG: {msgType}\n");
-                            } catch { }
                             await ProcessCommandAsync(webSocket, message);
-                            // Log after processing to see if we're stuck
-                            if (msgType == "exportDat")
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} exportDat PROCESSED, wsState={webSocket.State}\n");
                         }
                     }
                 }
-                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} LOOP EXIT: wsState={webSocket.State}\n");
             }
             catch (Exception ex)
             {
-                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} EXCEPTION: {ex.Message}\n");
                 LogError("Receive error", ex);
             }
         }
@@ -829,50 +805,31 @@ namespace HSDRawViewer
                         // Export the modified DAT file with updated textures
                         try
                         {
-                            // Write to dedicated debug file - bypasses all other logging
-                            var dbg = @"C:\Users\david\projects\new aka\logs\EXPORT_DEBUG.txt";
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP1\n");
                             Log("Received exportDat command");
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP2\n");
 
                             if (_rawFile == null)
                             {
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} ERROR: _rawFile null\n");
                                 await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = "No DAT file loaded" });
                                 break;
                             }
 
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP3 - rawFile valid\n");
                             string tempPath = Path.Combine(Path.GetTempPath(), $"export_{Guid.NewGuid()}.dat");
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP4 - tempPath: {tempPath}\n");
 
                             // Run on background thread - no UI thread needed for file I/O
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP5 - starting Task.Run\n");
                             byte[] datBytes = await Task.Run(() =>
                             {
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP6 - inside Task.Run\n");
                                 _rawFile.Save(tempPath);
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP7 - save done\n");
                                 var data = File.ReadAllBytes(tempPath);
                                 File.Delete(tempPath);
-                                File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP8 - read {data.Length} bytes\n");
                                 return data;
                             });
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP9 - Task.Run done\n");
 
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP10 - converting to base64\n");
                             string base64Data = Convert.ToBase64String(datBytes);
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP11 - sending response ({datBytes.Length} bytes)\n");
                             await SendJsonAsync(webSocket, new { type = "exportDat", success = true, data = base64Data });
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP12 - DONE!\n");
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP13 - before Log\n");
                             Log($"DAT exported successfully, size: {datBytes.Length} bytes");
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} STEP14 - after Log, about to break\n");
                         }
                         catch (Exception ex)
                         {
-                            var dbg = @"C:\Users\david\projects\new aka\logs\EXPORT_DEBUG.txt";
-                            File.AppendAllText(dbg, $"{DateTime.Now:HH:mm:ss.fff} EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n");
                             LogError("Error in exportDat", ex);
                             await SendJsonAsync(webSocket, new { type = "exportDat", success = false, error = ex.Message });
                         }
@@ -936,10 +893,6 @@ namespace HSDRawViewer
             {
                 LogError("Command parse error", ex);
             }
-
-            // Debug: log when ProcessCommandAsync completes
-            File.AppendAllText(@"C:\Users\david\projects\new aka\logs\RECEIVE_DEBUG.txt",
-                $"{DateTime.Now:HH:mm:ss.fff} ProcessCommand DONE\n");
         }
 
         private async Task SendJsonAsync(WebSocket webSocket, object data)
