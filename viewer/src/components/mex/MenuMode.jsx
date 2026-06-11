@@ -202,11 +202,11 @@ export default function MenuMode({ mode, onModeChange }) {
       <div className="mex-content" style={{ flexDirection: 'column' }}>
         <div style={{ padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--color-border-subtle)' }}>
           <button
-            className="btn-back-small"
+            className="back-button"
             onMouseEnter={playHoverSound}
             onClick={() => { playSound('back'); setSelectedSubmod(null); setSelectedMod(null); setSelectedMenu(null) }}
           >
-            ← Back to Menus
+            &larr; Back to Menus
           </button>
         </div>
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

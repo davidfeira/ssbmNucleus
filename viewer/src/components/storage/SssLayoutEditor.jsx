@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import SssCanvas from './SssCanvas'
 import SssIconProperties from './SssIconProperties'
 import IconReorderList from './IconReorderList'
+import PropsPopup from './PropsPopup'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
 
@@ -593,20 +594,14 @@ export default function SssLayoutEditor() {
 
         {/* Properties popup */}
         {propsPopup && selectedIcons.length > 0 && (
-          <div className="sss-props-popup-overlay" onClick={() => setPropsPopup(null)}>
-            <div
-              className="sss-props-popup"
-              style={{ left: propsPopup.x, top: propsPopup.y }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SssIconProperties
-                icons={selectedIcons}
-                indices={selectedIndices}
-                stages={layout.stages || []}
-                onUpdate={handleUpdateIcon}
-              />
-            </div>
-          </div>
+          <PropsPopup x={propsPopup.x} y={propsPopup.y} onClose={() => setPropsPopup(null)}>
+            <SssIconProperties
+              icons={selectedIcons}
+              indices={selectedIndices}
+              stages={layout.stages || []}
+              onUpdate={handleUpdateIcon}
+            />
+          </PropsPopup>
         )}
       </div>
 

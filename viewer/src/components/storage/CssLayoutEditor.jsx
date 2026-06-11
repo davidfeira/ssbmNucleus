@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import SssCanvas from './SssCanvas'
 import CssIconProperties from './CssIconProperties'
 import IconReorderList from './IconReorderList'
+import PropsPopup from './PropsPopup'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
 
@@ -378,20 +379,14 @@ export default function CssLayoutEditor() {
         </div>
 
         {propsPopup && selectedIcons.length > 0 && (
-          <div className="sss-props-popup-overlay" onClick={() => setPropsPopup(null)}>
-            <div
-              className="sss-props-popup"
-              style={{ left: propsPopup.x, top: propsPopup.y }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <CssIconProperties
-                icons={selectedIcons}
-                indices={selectedIndices}
-                fighters={layout.fighters || []}
-                onUpdate={handleUpdateIcon}
-              />
-            </div>
-          </div>
+          <PropsPopup x={propsPopup.x} y={propsPopup.y} onClose={() => setPropsPopup(null)}>
+            <CssIconProperties
+              icons={selectedIcons}
+              indices={selectedIndices}
+              fighters={layout.fighters || []}
+              onUpdate={handleUpdateIcon}
+            />
+          </PropsPopup>
         )}
       </div>
 
