@@ -97,7 +97,7 @@ export default function EngineInstallCard({ API_URL, status, socket, onChanged }
             {progress?.phase ? `[${progress.phase}] ` : ''}{progress?.message || 'installing…'}
           </div>
         </div>
-      ) : !installedOk && (
+      ) : (
         <div className="iso-path-container">
           <select
             className="ai-studio-planner"
@@ -112,7 +112,8 @@ export default function EngineInstallCard({ API_URL, status, socket, onChanged }
           </select>
           <button className="iso-browse-button" onMouseEnter={playHoverSound}
                   onClick={install}>
-            {staleError ? 'Resume install' : 'Install engine'}
+            {installedOk ? 'Reinstall / update'
+              : staleError ? 'Resume install' : 'Install engine'}
           </button>
         </div>
       )}

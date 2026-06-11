@@ -37,8 +37,10 @@ PYTHON_BUILD_URL = (
     'https://github.com/astral-sh/python-build-standalone/releases/download/'
     '20250409/cpython-3.12.10%2B20250409-x86_64-pc-windows-msvc-install_only.tar.gz')
 
+# cu128+ required for Blackwell GPUs (RTX 50xx, sm_120) — cu124 torch has no
+# kernels for them and dies at generation time with 'no kernel image'.
 TORCH_INDEX = {
-    'cuda': 'https://download.pytorch.org/whl/cu124',
+    'cuda': 'https://download.pytorch.org/whl/cu128',
     'cpu': 'https://download.pytorch.org/whl/cpu',
 }
 MIN_FREE_BYTES = 8 * 1024**3   # torch + deps need real room
@@ -158,13 +160,16 @@ def start_install(socketio, variant=None):
             _download_python(emit)
             _write_state(phase='python')
 
+            # reinstall torch when the phase never completed, the variant
+            # changed, OR the wheel index changed (e.g. cu124 -> cu128)
             if state.get('phase') not in ('torch', 'deps', 'verify') \
-                    or state.get('torchVariant') != variant:
+                    or state.get('torchVariant') != variant \
+                    or state.get('torchIndex') != TORCH_INDEX[variant]:
                 emit('torch', f'installing torch ({variant})… '
                      'this is a ~2.5GB download', None)
-                _pip(['install', 'torch', '--index-url', TORCH_INDEX[variant]],
-                     'torch', emit)
-            _write_state(phase='torch')
+                _pip(['install', '--upgrade', 'torch',
+                      '--index-url', TORCH_INDEX[variant]], 'torch', emit)
+            _write_state(phase='torch', torchIndex=TORCH_INDEX[variant])
 
             emit('deps', 'installing diffusers and friends…', None)
             _pip(['install', '-r', str(ENGINE_REQUIREMENTS)], 'deps', emit)

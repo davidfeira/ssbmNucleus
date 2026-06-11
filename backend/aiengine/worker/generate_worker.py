@@ -53,6 +53,17 @@ def check():
         report['cuda'] = torch.cuda.is_available()
         report['cudaDeviceName'] = (torch.cuda.get_device_name(0)
                                     if report['cuda'] else None)
+        if report['cuda']:
+            # is_available() lies for unsupported architectures (e.g. cu124
+            # torch on a Blackwell sm_120 card) — actually RUN a kernel
+            try:
+                (torch.zeros(2, device='cuda') + 1).sum().item()
+                report['cudaKernelsOk'] = True
+            except Exception as e:
+                report['cudaKernelsOk'] = False
+                report.update(ok=False,
+                              error='CUDA kernels unusable on this GPU '
+                                    f'(torch build too old for it): {e}')
     except Exception as e:
         report.update(ok=False, torch=None, cuda=False, error=f'torch: {e}')
         emit(report)
