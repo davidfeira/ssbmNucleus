@@ -1914,6 +1914,70 @@ namespace HSDRawViewer
         }
 
         /// <summary>
+        /// Texture-SWAP animation frames (MatAnim TexAnim ImageBuffers) --
+        /// e.g. Pokémon Stadium's blinking deck light strips. The anim player
+        /// uploads these per frame; they are neither map_head TOBJs nor named
+        /// roots, so they form a third texture store. Buffers sharing an
+        /// HSD_Image accessor with a map_head TOBJ are skipped (those update
+        /// through the TOBJ entry). Wrappers reference the LIVE accessors, so
+        /// InjectBitmap writes the bank in place.
+        /// </summary>
+        static List<HSD_TOBJ> CollectTexAnimImages(HSDRawFile rawFile)
+        {
+            var result = new List<HSD_TOBJ>();
+            var root = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Gr.SBM_Map_Head);
+            if (root == null)
+                return result;
+            var head = (HSDRaw.Melee.Gr.SBM_Map_Head)root.Data;
+            var groups = head.ModelGroups?.Array;
+            if (groups == null)
+                return result;
+
+            var mapImages = new HashSet<HSD_Image>();
+            var mapTex = CollectStageTextures(rawFile);
+            if (mapTex != null)
+                foreach (var (_, t) in mapTex)
+                    if (t?.ImageData != null)
+                        mapImages.Add(t.ImageData);
+
+            var seen = new HashSet<HSD_Image>();
+            for (int g = 0; g < groups.Length; g++)
+            {
+                var majArr = groups[g]?.MaterialAnimations?.Array;
+                if (majArr == null) continue;
+                foreach (var majRoot in majArr)
+                {
+                    if (majRoot == null) continue;
+                    foreach (var maj in majRoot.TreeList)
+                    {
+                        if (maj.MaterialAnimation == null) continue;
+                        foreach (var ma in maj.MaterialAnimation.List)
+                        {
+                            if (ma.TextureAnimation == null) continue;
+                            foreach (var ta in ma.TextureAnimation.List)
+                            {
+                                var bufs = ta.ImageBuffers?.Array;
+                                if (bufs == null) continue;
+                                var tluts = ta.TlutBuffers?.Array;
+                                for (int i = 0; i < bufs.Length; i++)
+                                {
+                                    var img = bufs[i]?.Data;
+                                    if (img?.ImageData == null) continue;
+                                    if (mapImages.Contains(img) || !seen.Add(img)) continue;
+                                    var tobj = new HSD_TOBJ { ImageData = img };
+                                    if (tluts != null && i < tluts.Length && tluts[i]?.Data != null)
+                                        tobj.TlutData = tluts[i].Data;
+                                    result.Add(tobj);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Rotate an RGB color's hue (0..1 floats) by `deg` and scale its
         /// saturation (HSL space). Float twin of <see cref="RotateHue"/> for
         /// animation color tracks.
@@ -1946,6 +2010,103 @@ namespace HSDRawViewer
                 _ => (c, 0f, x),
             };
             return (Math.Clamp(r2 + m, 0f, 1f), Math.Clamp(g2 + m, 0f, 1f), Math.Clamp(b2 + m, 0f, 1f));
+        }
+
+        /// <summary>
+        /// Rotate one packed GX color entry (GXCompTypeClr layouts) in place
+        /// inside a big-endian buffer. Returns 1 if an entry was rewritten.
+        /// </summary>
+        static int RotateClrBytes(byte[] buf, int off, int compType, float deg, float satScale)
+        {
+            switch (compType)
+            {
+                case 0:
+                {   // RGB565
+                    int v = (buf[off] << 8) | buf[off + 1];
+                    var (r, g, b) = RotateHue((byte)(((v >> 11) & 0x1F) << 3), (byte)(((v >> 5) & 0x3F) << 2), (byte)((v & 0x1F) << 3), deg, satScale);
+                    int nv = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+                    buf[off] = (byte)(nv >> 8); buf[off + 1] = (byte)nv;
+                    return 1;
+                }
+                case 1: case 2: case 5:
+                {   // RGB8 / RGBX8 / RGBA8 -- first three bytes are RGB
+                    var (r, g, b) = RotateHue(buf[off], buf[off + 1], buf[off + 2], deg, satScale);
+                    buf[off] = r; buf[off + 1] = g; buf[off + 2] = b;
+                    return 1;
+                }
+                case 3:
+                {   // RGBA4
+                    int v = (buf[off] << 8) | buf[off + 1];
+                    var (r, g, b) = RotateHue((byte)(((v >> 12) & 0xF) * 17), (byte)(((v >> 8) & 0xF) * 17), (byte)(((v >> 4) & 0xF) * 17), deg, satScale);
+                    int nv = ((r >> 4) << 12) | ((g >> 4) << 8) | ((b >> 4) << 4) | (v & 0xF);
+                    buf[off] = (byte)(nv >> 8); buf[off + 1] = (byte)nv;
+                    return 1;
+                }
+                case 4:
+                {   // RGBA6
+                    int v = (buf[off] << 16) | (buf[off + 1] << 8) | buf[off + 2];
+                    var (r, g, b) = RotateHue((byte)(((v >> 18) & 0x3F) << 2), (byte)(((v >> 12) & 0x3F) << 2), (byte)(((v >> 6) & 0x3F) << 2), deg, satScale);
+                    int nv = ((r >> 2) << 18) | ((g >> 2) << 12) | ((b >> 2) << 6) | (v & 0x3F);
+                    buf[off] = (byte)(nv >> 16); buf[off + 1] = (byte)(nv >> 8); buf[off + 2] = (byte)nv;
+                    return 1;
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Rotate a POBJ's vertex colors (CLR0/CLR1). Stage geometry often
+        /// gets its color ENTIRELY from vertex colors over grayscale textures
+        /// (e.g. Pokémon Stadium's green deck light strips) -- no texture,
+        /// material, TEV, or matanim edit can touch those. Handles indexed
+        /// color arrays in place and DIRECT colors via a display-list
+        /// round-trip (indexes preserved, attributes untouched). Gray verts
+        /// (baked lighting) are hue-rotation no-ops, so this is safe to run
+        /// across whole groups. Returns the number of colors rewritten.
+        /// </summary>
+        static int RotateVertexColors(HSDRaw.Common.HSD_POBJ pobj, float deg, float satScale)
+        {
+            int changed = 0;
+            var attrs = pobj.ToGXAttributes();
+            bool hasDirectClr = false;
+            foreach (var att in attrs)
+            {
+                if (att.AttributeName != HSDRaw.GX.GXAttribName.GX_VA_CLR0
+                    && att.AttributeName != HSDRaw.GX.GXAttribName.GX_VA_CLR1)
+                    continue;
+                if (att.AttributeType == HSDRaw.GX.GXAttribType.GX_DIRECT)
+                {
+                    hasDirectClr = true;
+                    continue;
+                }
+                var buf = att.Buffer?._s?.GetData();
+                if (buf == null || att.Stride <= 0)
+                    continue;
+                int n = buf.Length / att.Stride;
+                for (int i = 0; i < n; i++)
+                    changed += RotateClrBytes(buf, i * att.Stride, (int)att.CompType, deg, satScale);
+                att.Buffer._s.SetData(buf);
+            }
+            if (hasDirectClr)
+            {
+                var dl = pobj.ToDisplayList(attrs);
+                foreach (var prim in dl.Primitives)
+                    foreach (var ig in prim.Indices)
+                    {
+                        if (ig.Clr0 != null)
+                        {
+                            (ig.Clr0[0], ig.Clr0[1], ig.Clr0[2]) = RotateHue(ig.Clr0[0], ig.Clr0[1], ig.Clr0[2], deg, satScale);
+                            changed++;
+                        }
+                        if (ig.Clr1 != null)
+                        {
+                            (ig.Clr1[0], ig.Clr1[1], ig.Clr1[2]) = RotateHue(ig.Clr1[0], ig.Clr1[1], ig.Clr1[2], deg, satScale);
+                            changed++;
+                        }
+                    }
+                pobj.DisplayListBuffer = dl.ToBuffer();
+            }
+            return changed;
         }
 
         /// <summary>
@@ -2082,6 +2243,14 @@ namespace HSDRawViewer
                                             colored++;
                                             Console.WriteLine($"  g{g} dobj{dobjs - 1} MOBJ DIF=({mat.DIF_R},{mat.DIF_G},{mat.DIF_B}) AMB=({mat.AMB_R},{mat.AMB_G},{mat.AMB_B})");
                                         }
+                                        if (dobj.Mobj?.Textures != null)
+                                            foreach (var tobjT in dobj.Mobj.Textures.List)
+                                            {
+                                                var tev = tobjT?.TEV;
+                                                if (tev == null) continue;
+                                                var k = tev.constant; var t0 = tev.tev0; var t1 = tev.tev1;
+                                                Console.WriteLine($"  g{g} dobj{dobjs - 1} TEV konst=({k.R},{k.G},{k.B}) tev0=({t0.R},{t0.G},{t0.B}) tev1=({t1.R},{t1.G},{t1.B}) active={tev.active}");
+                                            }
                                         if (dobj.Pobj != null)
                                             foreach (var pobj in dobj.Pobj.List)
                                                 if (pobj.ToGXAttributes().Any(a => a.AttributeName == HSDRaw.GX.GXAttribName.GX_VA_CLR0))
@@ -2193,6 +2362,31 @@ namespace HSDRawViewer
                         Console.WriteLine($"  t{index} root {root.Name}: {w}x{h} {fmt}");
                         index++;
                     }
+                    // Texture-swap animation frames (blinking light strips
+                    // etc.) continue the index space after the roots.
+                    foreach (var tobj in CollectTexAnimImages(rawFile))
+                    {
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string fileName = $"stage_t{index}_anim_{w}x{h}_{fmt}.png";
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, fileName), System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        manifest.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["anim"] = true,
+                            ["width"] = w,
+                            ["height"] = h,
+                            ["format"] = fmt,
+                            ["filename"] = fileName,
+                        });
+                        Console.WriteLine($"  t{index} anim-frame: {w}x{h} {fmt}");
+                        index++;
+                    }
                     System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "manifest.json"),
                         JsonSerializer.Serialize(new Dictionary<string, object> { ["textures"] = manifest },
                                                  new JsonSerializerOptions { WriteIndented = true }));
@@ -2214,8 +2408,10 @@ namespace HSDRawViewer
                         return;
                     }
 
-                    // Root images continue the index space after map_head.
+                    // Roots, then texture-swap anim frames, continue the
+                    // index space after map_head.
                     var rootImages = CollectRootImages(rawFile);
+                    var animImages = CollectTexAnimImages(rawFile);
 
                     using var specDoc = JsonDocument.Parse(System.IO.File.ReadAllText(specFile));
                     int replaced = 0;
@@ -2223,9 +2419,9 @@ namespace HSDRawViewer
                     {
                         int idx = entry.GetProperty("index").GetInt32();
                         string pngPath = entry.GetProperty("png").GetString();
-                        if (idx < 0 || idx >= allTex.Count + rootImages.Count)
+                        if (idx < 0 || idx >= allTex.Count + rootImages.Count + animImages.Count)
                         {
-                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}+{rootImages.Count}); skipping");
+                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}+{rootImages.Count}+{animImages.Count}); skipping");
                             continue;
                         }
                         if (!System.IO.File.Exists(pngPath))
@@ -2233,8 +2429,11 @@ namespace HSDRawViewer
                             Console.WriteLine($"WARNING: png not found: {pngPath}; skipping");
                             continue;
                         }
-                        var isRoot = idx >= allTex.Count;
-                        var tobj = isRoot ? rootImages[idx - allTex.Count].tobj : allTex[idx].tobj;
+                        var isRoot = idx >= allTex.Count && idx < allTex.Count + rootImages.Count;
+                        var isAnim = idx >= allTex.Count + rootImages.Count;
+                        var tobj = isAnim ? animImages[idx - allTex.Count - rootImages.Count]
+                                 : isRoot ? rootImages[idx - allTex.Count].tobj
+                                 : allTex[idx].tobj;
                         using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
                         int w = tobj.ImageData.Width;
                         int h = tobj.ImageData.Height;
@@ -2258,7 +2457,10 @@ namespace HSDRawViewer
                         }
                         else
                         {
-                            Console.WriteLine($"  t{idx}: replaced ({w}x{h} {imgFormat})");
+                            // Anim-frame wrappers reference the bank's LIVE
+                            // HSD_Image/HSD_Tlut, so the inject above already
+                            // wrote them in place.
+                            Console.WriteLine($"  t{idx}: replaced{(isAnim ? " ANIM-FRAME" : "")} ({w}x{h} {imgFormat})");
                         }
                         replaced++;
                     }
@@ -2269,6 +2471,7 @@ namespace HSDRawViewer
                     // live in materials, not textures).
                     int matCount = 0;
                     int matAnimCount = 0;
+                    int vtxCount = 0;
                     if (specDoc.RootElement.TryGetProperty("materialTints", out var tintsEl))
                     {
                         var headRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Gr.SBM_Map_Head);
@@ -2300,12 +2503,35 @@ namespace HSDRawViewer
                                         foreach (var dobj in jobj.Dobj.List)
                                         {
                                             var mat = dobj.Mobj?.Material;
-                                            if (mat == null) continue;
-                                            (mat.DIF_R, mat.DIF_G, mat.DIF_B) =
-                                                RotateHue(mat.DIF_R, mat.DIF_G, mat.DIF_B, hueShift, satScale);
-                                            (mat.AMB_R, mat.AMB_G, mat.AMB_B) =
-                                                RotateHue(mat.AMB_R, mat.AMB_G, mat.AMB_B, hueShift, satScale);
-                                            matCount++;
+                                            if (mat != null)
+                                            {
+                                                (mat.DIF_R, mat.DIF_G, mat.DIF_B) =
+                                                    RotateHue(mat.DIF_R, mat.DIF_G, mat.DIF_B, hueShift, satScale);
+                                                (mat.AMB_R, mat.AMB_G, mat.AMB_B) =
+                                                    RotateHue(mat.AMB_R, mat.AMB_G, mat.AMB_B, hueShift, satScale);
+                                                matCount++;
+                                            }
+                                            // Static TOBJ TEV constants (glow/accent
+                                            // colors mixed over grayscale masks).
+                                            if (dobj.Mobj?.Textures != null)
+                                                foreach (var tobjT in dobj.Mobj.Textures.List)
+                                                {
+                                                    var tev = tobjT?.TEV;
+                                                    if (tev == null) continue;
+                                                    var (kr, kg, kb) = RotateHue(tev.constant.R, tev.constant.G, tev.constant.B, hueShift, satScale);
+                                                    tev.constant = System.Drawing.Color.FromArgb(kr, kg, kb);
+                                                    var (r0, g0, b0) = RotateHue(tev.tev0.R, tev.tev0.G, tev.tev0.B, hueShift, satScale);
+                                                    tev.tev0 = System.Drawing.Color.FromArgb(r0, g0, b0);
+                                                    var (r1, g1, b1) = RotateHue(tev.tev1.R, tev.tev1.G, tev.tev1.B, hueShift, satScale);
+                                                    tev.tev1 = System.Drawing.Color.FromArgb(r1, g1, b1);
+                                                    matCount++;
+                                                }
+                                            // Vertex colors: often the ONLY color
+                                            // source for stage geometry (gray verts
+                                            // are rotation no-ops, so this is safe).
+                                            if (dobj.Pobj != null)
+                                                foreach (var pobj in dobj.Pobj.List)
+                                                    vtxCount += RotateVertexColors(pobj, hueShift, satScale);
                                         }
                                     }
 
@@ -2342,12 +2568,12 @@ namespace HSDRawViewer
                                     }
                                 }
                             }
-                            Console.WriteLine($"Material tints applied to {matCount} materials, {matAnimCount} matanim color triples");
+                            Console.WriteLine($"Material tints applied to {matCount} materials, {matAnimCount} matanim color triples, {vtxCount} vertex colors");
                         }
                     }
 
                     rawFile.Save(outputDat);
-                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures (+{matCount} material tints, +{matAnimCount} matanim triples), saved to: {outputDat}");
+                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures (+{matCount} material tints, +{matAnimCount} matanim triples, +{vtxCount} vertex colors), saved to: {outputDat}");
                 }
                 else
                 {

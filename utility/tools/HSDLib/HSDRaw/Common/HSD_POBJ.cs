@@ -37,7 +37,7 @@ namespace HSDRaw.Common
         public byte[] DisplayListBuffer
         {
             get => _s.GetBuffer(0x10);
-            internal set
+            set
             {
                 _s.SetBuffer(0x10, value);
                 DisplayListSize = value.Length;
