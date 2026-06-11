@@ -104,8 +104,13 @@ export default function DolphinEmbedPanel({ active }) {
     <div
       ref={placeholderRef}
       style={{
+        // As big as fits: 4:3, capped by the container's width AND by the
+        // available height (~17rem reserved for the spinner/text/progress
+        // around it). 100cqh = the nearest size container's height (the
+        // EditModal test overlay); with no container it falls back to the
+        // viewport height, which is right for the inline detail-view panels.
         aspectRatio: '4 / 3',
-        width: 'min(100%, 560px)',
+        width: 'clamp(280px, calc((100cqh - 17rem) * 4 / 3), 100%)',
         margin: '1rem auto 0',
         background: 'var(--color-bg-deep)',
         border: '1px solid var(--color-border-subtle)',
