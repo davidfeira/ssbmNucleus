@@ -155,6 +155,14 @@
   font-size: var(--text-sm);
 }
 
+.aistudio-option-label {
+  font-family: var(--font-display);
+  font-weight: var(--font-semibold);
+  font-size: var(--text-sm);
+  color: var(--color-cyan);
+  margin: 16px 0 8px;
+}
+
 /* The setup hub popup */
 .aistudio-modal-overlay {
   position: fixed;

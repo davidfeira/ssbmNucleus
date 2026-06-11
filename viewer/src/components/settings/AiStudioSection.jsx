@@ -123,19 +123,42 @@ export default function AiStudioSection({ API_URL }) {
                 <div className={`aistudio-setup-banner ${ready ? 'ready' : 'pending'}`}>
                   {ready
                     ? '✓ AI Studios are unlocked'
-                    : 'Setup needed — add an OpenRouter key or download a local model to unlock the AI Studios.'}
+                    : 'Pick ONE of the two paths below to unlock the AI Studios.'}
                 </div>
               )}
               <HardwareCard status={status} />
-              <OpenRouterKeyCard backendHasKey={Boolean(status?.hasBackendKey)}
-                                 onChanged={onChanged} />
-              <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
-                                 onChanged={onChanged} />
-              <ModelCatalog API_URL={API_URL} models={models} socket={socket}
-                            onChanged={onChanged} />
-              <TierRoutingCard API_URL={API_URL} status={status} models={models}
-                               hasKey={hasKey} onChanged={onChanged} />
-              <UsageStatsCard API_URL={API_URL} refreshKey={refreshKey} />
+              {!ready ? (
+                // guided first-run: just the two unlock paths — everything
+                // else (full catalog, tier routing, stats) appears once
+                // setup completes, so new users aren't buried in options
+                <>
+                  <div className="aistudio-option-label">
+                    Option A — quickest: an OpenRouter API key (pay per image)
+                  </div>
+                  <OpenRouterKeyCard backendHasKey={Boolean(status?.hasBackendKey)}
+                                     onChanged={onChanged} />
+                  <div className="aistudio-option-label">
+                    Option B — free &amp; offline: install the engine, then
+                    download a local model
+                  </div>
+                  <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
+                                     onChanged={onChanged} />
+                  <ModelCatalog API_URL={API_URL} models={models} socket={socket}
+                                onChanged={onChanged} localOnly />
+                </>
+              ) : (
+                <>
+                  <OpenRouterKeyCard backendHasKey={Boolean(status?.hasBackendKey)}
+                                     onChanged={onChanged} />
+                  <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
+                                     onChanged={onChanged} />
+                  <ModelCatalog API_URL={API_URL} models={models} socket={socket}
+                                onChanged={onChanged} />
+                  <TierRoutingCard API_URL={API_URL} status={status} models={models}
+                                   hasKey={hasKey} onChanged={onChanged} />
+                  <UsageStatsCard API_URL={API_URL} refreshKey={refreshKey} />
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -179,18 +179,21 @@ function ModelCard({ API_URL, model, socket, onChanged }) {
   )
 }
 
-export default function ModelCatalog({ API_URL, models, socket, onChanged }) {
+export default function ModelCatalog({ API_URL, models, socket, onChanged,
+                                       localOnly = false }) {
   if (!models) return null
   const local = models.models.filter((m) => m.kind === 'local')
-  const api = models.models.filter((m) => m.kind === 'api')
+  const api = localOnly ? [] : models.models.filter((m) => m.kind === 'api')
 
   return (
     <div className="aistudio-card">
-      <div className="aistudio-card-title">Image models</div>
+      <div className="aistudio-card-title">
+        {localOnly ? 'Local image models' : 'Image models'}
+      </div>
       <p className="section-description">
-        Local models run free on your GPU; API models bill per image through
-        OpenRouter. Pick what fits your machine — the badges compare each
-        model's needs against your hardware.
+        {localOnly
+          ? "Run free on your GPU — the badges compare each model's needs against your hardware. One downloaded model unlocks the studios."
+          : "Local models run free on your GPU; API models bill per image through OpenRouter. Pick what fits your machine — the badges compare each model's needs against your hardware."}
       </p>
       {local.map((m) => (
         <ModelCard key={m.id} API_URL={API_URL} model={m} socket={socket}
