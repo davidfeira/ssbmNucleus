@@ -51,6 +51,9 @@ function CspUploadModal({
     onCancel()
   }
 
+  // For "add" we offer two equal paths: generate from a pose (primary) or upload
+  const showPoseOption = uploadTarget === 'alt' && !!onOpenPoseManager
+
   const modal = (
     <div className="csp-upload-overlay" onClick={handleCancel}>
       <div className="csp-upload-modal" onClick={(e) => e.stopPropagation()}>
@@ -64,9 +67,29 @@ function CspUploadModal({
           </button>
         </div>
 
-        <div className="csp-upload-body csp-upload-body--single">
+        <div className={`csp-upload-body ${showPoseOption ? '' : 'csp-upload-body--single'}`}>
+          {/* LEFT: generate from a pose (the path most people want) */}
+          {showPoseOption && (
+            <div className="csp-upload-slot">
+              <div className="csp-upload-slot-label">From Pose</div>
+              <div
+                className="csp-upload-pose-card"
+                onClick={() => { handleCancel(); onOpenPoseManager(); }}
+              >
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="5" r="2"></circle>
+                  <path d="M12 7v5"></path>
+                  <path d="M9 22l3-6 3 6"></path>
+                  <path d="M7 12l5 2 5-2"></path>
+                </svg>
+                <strong>Generate from a Pose</strong>
+                <small>Pose the 3D model and render portraits for any of your skins</small>
+              </div>
+            </div>
+          )}
+
           <div className="csp-upload-slot">
-            <div className="csp-upload-slot-label">Portrait Image</div>
+            <div className="csp-upload-slot-label">{showPoseOption ? 'Upload Image' : 'Portrait Image'}</div>
             <div
               className={`csp-upload-slot-preview ${preview ? 'has-image' : ''}`}
               onClick={() => document.getElementById('csp-upload-input').click()}
@@ -120,25 +143,6 @@ function CspUploadModal({
             </p>
           </div>
         </div>
-
-        {/* Alternative path: render a new portrait from a pose instead of uploading */}
-        {uploadTarget === 'alt' && onOpenPoseManager && (
-          <button
-            className="csp-upload-pose-option"
-            onClick={() => { handleCancel(); onOpenPoseManager(); }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="5" r="2"></circle>
-              <path d="M12 7v5"></path>
-              <path d="M9 22l3-6 3 6"></path>
-              <path d="M7 12l5 2 5-2"></path>
-            </svg>
-            <span>
-              <strong>Or generate from a pose</strong>
-              <small>Pose the 3D model and render portraits for any of your skins</small>
-            </span>
-          </button>
-        )}
 
         <div className="csp-upload-actions">
           <button className="csp-upload-btn csp-upload-btn--cancel" onClick={handleCancel}>
