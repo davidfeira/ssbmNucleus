@@ -1,7 +1,9 @@
 /**
- * ModelCatalog - one card per model: recommended specs, a fit badge derived
- * from the detected hardware, measured generation times once telemetry
- * exists, and download / enable / delete management for local models.
+ * ModelCatalog - the image-model list as an ACCORDION: every model is one
+ * slim row (status dot, name, compact hint); clicking a row expands it —
+ * one at a time — to show specs, fit badge, measured speed, and the
+ * download / enable / delete actions. Keeps the list scannable instead of
+ * a wall of cards.
  */
 import { useEffect, useState } from 'react'
 import { playHoverSound, playSound } from '../../../utils/sounds'
@@ -14,7 +16,29 @@ const FIT_BADGES = {
   no_gpu: { cls: 'bad', text: 'needs an NVIDIA GPU' },
 }
 
-function ModelCard({ API_URL, model, socket, onChanged }) {
+function statusDot(model, downloading) {
+  if (downloading) return 'busy'
+  if (model.kind === 'api') return model.requiresKey ? 'off' : 'api'
+  if (model.downloaded) return model.enabled ? 'on' : 'off'
+  if (model.partial) return 'warn'
+  return 'off'
+}
+
+function compactHint(model, download) {
+  if (download) {
+    return download.bytesTotal
+      ? `${Math.round(100 * download.bytesDone / download.bytesTotal)}%…`
+      : 'starting…'
+  }
+  if (model.kind === 'api') return `~${Math.round(model.costPerImageUsd * 100)}¢/image`
+  if (model.downloaded) {
+    return `${fmtBytes(model.sizeOnDiskBytes)}${model.enabled ? ' · ready' : ' · disabled'}`
+  }
+  if (model.partial) return 'incomplete'
+  return `~${model.diskEstimateGb.toFixed(0)} GB download`
+}
+
+function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle }) {
   const [download, setDownload] = useState(null)   // {bytesDone, bytesTotal}
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -96,91 +120,103 @@ function ModelCard({ API_URL, model, socket, onChanged }) {
     : (model.speedBlurb ? `${model.speedBlurb} (no runs yet)` : null)
 
   return (
-    <div className={`aistudio-model${model.enabled ? '' : ' disabled'}`}>
-      <div className="aistudio-model-head">
-        <span className="aistudio-model-name">{model.label}</span>
-        {isLocal
-          ? <span className={`aistudio-badge ${fit.cls}`}>{fit.text}</span>
-          : <span className="aistudio-badge api">
-              API · ~{Math.round(model.costPerImageUsd * 100)}¢/image
-            </span>}
-        {model.needsEngineUpdate && (
-          <span className="aistudio-badge bad">needs engine update</span>
-        )}
-      </div>
-      <div className="aistudio-model-desc">{model.description}</div>
-      <div className="aistudio-model-specs">
-        {isLocal && <span>needs ~{model.vramGb.toFixed(0)} GB VRAM</span>}
-        {isLocal && (
-          <span>
-            {model.downloaded
-              ? `${fmtBytes(model.sizeOnDiskBytes)} on disk`
-              : model.partial
-                ? `incomplete — ${fmtBytes(model.sizeOnDiskBytes)} of ~${model.diskEstimateGb.toFixed(0)} GB`
-                : `~${model.diskEstimateGb.toFixed(0)} GB download`}
-          </span>
-        )}
-        {speed && <span>{speed}</span>}
-        {!isLocal && model.requiresKey && <span>needs an OpenRouter key</span>}
-      </div>
+    <div className={`aistudio-row${expanded ? ' expanded' : ''}${model.enabled ? '' : ' disabled'}`}>
+      <button className="aistudio-row-head" onMouseEnter={playHoverSound}
+              onClick={() => { playSound('tick'); onToggle() }}>
+        <span className={`aistudio-dot ${statusDot(model, downloading)}`} />
+        <span className="aistudio-row-name">{model.label}</span>
+        <span className="aistudio-row-hint">{compactHint(model, download)}</span>
+        <span className="aistudio-row-chevron">{expanded ? '▾' : '▸'}</span>
+      </button>
 
-      {downloading && (
-        <div className="aistudio-progress">
-          <div className="ai-studio-progress-bar">
-            <div
-              className="ai-studio-progress-fill"
-              style={{
-                width: download?.bytesTotal
-                  ? `${Math.round(100 * download.bytesDone / download.bytesTotal)}%`
-                  : '100%',
-              }}
-            />
+      {expanded && (
+        <div className="aistudio-row-body">
+          <div className="aistudio-model-head">
+            {isLocal
+              ? <span className={`aistudio-badge ${fit.cls}`}>{fit.text}</span>
+              : <span className="aistudio-badge api">
+                  API · ~{Math.round(model.costPerImageUsd * 100)}¢/image
+                </span>}
+            {model.needsEngineUpdate && (
+              <span className="aistudio-badge bad">needs engine update</span>
+            )}
           </div>
-          <div className="ai-studio-progress-message">
-            {download?.bytesTotal
-              ? `${fmtBytes(download.bytesDone)} / ${fmtBytes(download.bytesTotal)}`
-              : 'starting download…'}
+          <div className="aistudio-model-desc">{model.description}</div>
+          <div className="aistudio-model-specs">
+            {isLocal && <span>needs ~{model.vramGb.toFixed(0)} GB VRAM</span>}
+            {isLocal && (
+              <span>
+                {model.downloaded
+                  ? `${fmtBytes(model.sizeOnDiskBytes)} on disk`
+                  : model.partial
+                    ? `incomplete — ${fmtBytes(model.sizeOnDiskBytes)} of ~${model.diskEstimateGb.toFixed(0)} GB`
+                    : `~${model.diskEstimateGb.toFixed(0)} GB download`}
+              </span>
+            )}
+            {speed && <span>{speed}</span>}
+            {!isLocal && model.requiresKey && <span>needs an OpenRouter key</span>}
           </div>
-        </div>
-      )}
 
-      {isLocal && !downloading && (
-        <div className="aistudio-model-actions">
-          {!model.downloaded ? (
-            <>
-              <button className="iso-browse-button" disabled={busy}
-                      onMouseEnter={playHoverSound} onClick={startDownload}>
-                {model.partial ? 'Resume download' : 'Download'}
-              </button>
-              {model.partial && (
-                <button className="iso-browse-button danger" disabled={busy}
-                        onMouseEnter={playHoverSound} onClick={remove}>
-                  Delete ({fmtBytes(model.sizeOnDiskBytes)})
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <label className="aistudio-toggle">
-                <input type="checkbox" checked={model.enabled}
-                       onChange={(e) => toggle(e.target.checked)} />
-                enabled
-              </label>
-              <button className="iso-browse-button danger" disabled={busy}
-                      onMouseEnter={playHoverSound} onClick={remove}>
-                Delete ({fmtBytes(model.sizeOnDiskBytes)})
-              </button>
-            </>
+          {downloading && (
+            <div className="aistudio-progress">
+              <div className="ai-studio-progress-bar">
+                <div
+                  className="ai-studio-progress-fill"
+                  style={{
+                    width: download?.bytesTotal
+                      ? `${Math.round(100 * download.bytesDone / download.bytesTotal)}%`
+                      : '100%',
+                  }}
+                />
+              </div>
+              <div className="ai-studio-progress-message">
+                {download?.bytesTotal
+                  ? `${fmtBytes(download.bytesDone)} / ${fmtBytes(download.bytesTotal)}`
+                  : 'starting download…'}
+              </div>
+            </div>
           )}
+
+          {isLocal && !downloading && (
+            <div className="aistudio-model-actions">
+              {!model.downloaded ? (
+                <>
+                  <button className="iso-browse-button" disabled={busy}
+                          onMouseEnter={playHoverSound} onClick={startDownload}>
+                    {model.partial ? 'Resume download' : 'Download'}
+                  </button>
+                  {model.partial && (
+                    <button className="iso-browse-button danger" disabled={busy}
+                            onMouseEnter={playHoverSound} onClick={remove}>
+                      Delete ({fmtBytes(model.sizeOnDiskBytes)})
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label className="aistudio-toggle">
+                    <input type="checkbox" checked={model.enabled}
+                           onChange={(e) => toggle(e.target.checked)} />
+                    enabled
+                  </label>
+                  <button className="iso-browse-button danger" disabled={busy}
+                          onMouseEnter={playHoverSound} onClick={remove}>
+                    Delete ({fmtBytes(model.sizeOnDiskBytes)})
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {error && <div className="aistudio-callout danger">{error}</div>}
         </div>
       )}
-      {error && <div className="aistudio-callout danger">{error}</div>}
     </div>
   )
 }
 
 export default function ModelCatalog({ API_URL, models, socket, onChanged,
                                        localOnly = false }) {
+  const [expandedId, setExpandedId] = useState(null)
   if (!models) return null
   const local = models.models.filter((m) => m.kind === 'local')
   const api = localOnly ? [] : models.models.filter((m) => m.kind === 'api')
@@ -192,16 +228,13 @@ export default function ModelCatalog({ API_URL, models, socket, onChanged,
       </div>
       <p className="section-description">
         {localOnly
-          ? "Run free on your GPU — the badges compare each model's needs against your hardware. One downloaded model unlocks the studios."
-          : "Local models run free on your GPU; API models bill per image through OpenRouter. Pick what fits your machine — the badges compare each model's needs against your hardware."}
+          ? 'Run free on your GPU — one downloaded model unlocks the studios. Click a model for details.'
+          : 'Local models run free on your GPU; API models bill per image. Click a model for details and management.'}
       </p>
-      {local.map((m) => (
-        <ModelCard key={m.id} API_URL={API_URL} model={m} socket={socket}
-                   onChanged={onChanged} />
-      ))}
-      {api.map((m) => (
-        <ModelCard key={m.id} API_URL={API_URL} model={m} socket={socket}
-                   onChanged={onChanged} />
+      {[...local, ...api].map((m) => (
+        <ModelRow key={m.id} API_URL={API_URL} model={m} socket={socket}
+                  onChanged={onChanged} expanded={expandedId === m.id}
+                  onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)} />
       ))}
       <div className="aistudio-storage-footer">
         {fmtBytes(models.totalDiskBytes)} of model weights ·
