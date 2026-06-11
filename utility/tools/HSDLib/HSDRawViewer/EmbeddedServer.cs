@@ -212,6 +212,10 @@ namespace HSDRawViewer
             // Create viewport
             Log("Creating ViewportControl...");
             _viewport = new ViewportControl();
+            // Embedded windows are resized externally to match the web UI
+            // placeholder - keep the GL canvas filling the window in CSP mode
+            // instead of pinning it to the fixed 2x screenshot size
+            _viewport.CSPFillViewport = true;
 
             if (characterJobjNode.Accessor is HSD_JOBJ jobj)
             {

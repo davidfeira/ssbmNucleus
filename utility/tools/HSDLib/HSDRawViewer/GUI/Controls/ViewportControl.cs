@@ -183,13 +183,24 @@ namespace HSDRawViewer.GUI
         public ScreenshotTakenCallack ScreenshotTaken;
 
         private bool _cspMode = false;
+
+        /// <summary>
+        /// When true, CSP mode keeps the GL canvas docked to fill the control
+        /// instead of pinning it to the fixed 2x screenshot size. Used by the
+        /// embedded viewer, whose window is resized externally and which does
+        /// not use the in-control screenshot pipeline (poses are re-rendered
+        /// via the --csp CLI). Without this, everything outside the fixed
+        /// 544x752 canvas shows the WinForms control background.
+        /// </summary>
+        public bool CSPFillViewport { get; set; } = false;
+
         public bool CSPMode
         {
             get => _cspMode;
             set
             {
                 _cspMode = value;
-                if (_cspMode)
+                if (_cspMode && !CSPFillViewport)
                 {
                     glControl.Dock = DockStyle.None;
                     glControl.SendToBack();
@@ -648,9 +659,16 @@ namespace HSDRawViewer.GUI
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
                 // 136 x 188
-
-                float width = CSPWidth / (float)glControl.Width;
-                float height = CSPHeight / (float)glControl.Height;
+                // The final CSP render is the center half of a canvas with the
+                // CSP aspect ratio. Express that region as a fraction of THIS
+                // canvas so the guide stays correct at any canvas size (in the
+                // fixed 2x modes this reduces to the old CSPWidth/glControl.Width
+                // math). Camera.PerspectiveMatrix compresses the vertical fov
+                // when aspect > 1, which the Max/Min terms compensate for.
+                float canvasAspect = glControl.Width / (float)glControl.Height;
+                float cspAspect = CSPWidth / (float)CSPHeight;
+                float width = 0.5f * cspAspect / Math.Min(canvasAspect, 1f);
+                float height = 0.5f * Math.Max(canvasAspect, 1f);
 
                 GL.Color4(0.5f, 0.5f, 0.5f, 0.5f);
 
