@@ -50,15 +50,12 @@ export default function MenuMode({ mode, onModeChange }) {
   const [installedMods, setInstalledMods] = useState({}) // submod_key -> mod
 
   const fetchIconGridMods = useCallback(async () => {
-    setLoading(true)
     try {
       const res = await fetch(`${API_URL}/menus/css/icon_grid/list`)
       const data = await res.json()
       if (data.success) setIconGridMods(data.mods || [])
     } catch (err) {
       console.error('Failed to fetch icon grid mods:', err)
-    } finally {
-      setLoading(false)
     }
   }, [])
 
@@ -92,18 +89,20 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }, [])
 
+  // One loading flag covering ALL of the selected menu's fetches - previously
+  // only the icon-grid fetch toggled it, so pause/doors/background lists
+  // flashed "No mods in vault" and then popped in
   useEffect(() => {
-    if (selectedMenu === 'css') {
-      fetchIconGridMods()
-      fetchBgMods()
-      fetchDoorMods()
-    }
-    if (selectedMenu === 'sss') {
-      fetchBgMods()
-    }
-    if (selectedMenu === 'pause') {
-      fetchPauseMods()
-    }
+    let fetches = []
+    if (selectedMenu === 'css') fetches = [fetchIconGridMods(), fetchBgMods(), fetchDoorMods()]
+    if (selectedMenu === 'sss') fetches = [fetchBgMods()]
+    if (selectedMenu === 'pause') fetches = [fetchPauseMods()]
+    if (fetches.length === 0) return
+
+    let cancelled = false
+    setLoading(true)
+    Promise.all(fetches).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods, fetchPauseMods])
 
   const getModsForSubmod = (key) => {
@@ -263,31 +262,30 @@ export default function MenuMode({ mode, onModeChange }) {
             <h3>Currently in MEX</h3>
             <div className="costume-list existing">
               {installedMods[selectedSubmod] ? (
-                <div className="costume-card existing-costume">
+                <div className="costume-card existing-costume menu-mod-card">
                   <div className="costume-preview">
                     {(installedMods[selectedSubmod].screenshotUrl || installedMods[selectedSubmod].imageUrl) ? (
                       <img
                         src={`${BACKEND_URL}${installedMods[selectedSubmod].screenshotUrl || installedMods[selectedSubmod].imageUrl}`}
                         alt={installedMods[selectedSubmod].name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem' }}>
+                      <div className="menu-mod-placeholder">
                         {installedMods[selectedSubmod].name?.[0] || '?'}
                       </div>
                     )}
                   </div>
                   <div className="costume-info">
                     <h4>{installedMods[selectedSubmod].name}</h4>
-                    <span style={{ fontSize: '11px', color: '#888' }}>{installedMods[selectedSubmod].icon_count || 0} icons</span>
+                    {installedMods[selectedSubmod].icon_count ? (
+                      <span className="menu-mod-meta">{installedMods[selectedSubmod].icon_count} icons</span>
+                    ) : null}
                   </div>
                 </div>
               ) : (
-                <div className="costume-card existing-costume vanilla-extra">
-                  <div className="costume-preview" style={{ padding: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)', fontSize: '0.8rem' }}>
-                      Vanilla
-                    </div>
+                <div className="costume-card existing-costume vanilla-extra menu-mod-card">
+                  <div className="costume-preview">
+                    <div className="menu-mod-placeholder">Vanilla</div>
                   </div>
                   <div className="costume-info">
                     <h4>Vanilla</h4>
@@ -313,7 +311,7 @@ export default function MenuMode({ mode, onModeChange }) {
                   </button>
                 )}
                 {installMessage && (
-                  <span style={{ fontSize: '0.8rem', color: installMessage.startsWith('✓') ? 'var(--color-success, #4caf50)' : 'var(--color-error, #f44336)' }}>
+                  <span style={{ fontSize: '0.8rem', color: installMessage.startsWith('✓') ? 'var(--color-success, #4caf50)' : 'var(--color-danger, #f44336)' }}>
                     {installMessage}
                   </span>
                 )}
@@ -321,7 +319,10 @@ export default function MenuMode({ mode, onModeChange }) {
             </div>
             <div className="costume-list">
               {loading ? (
-                <div className="no-costumes"><p>Loading...</p></div>
+                <div className="no-costumes menu-mod-loading">
+                  <HexagonLoader size={72} decorative />
+                  <p>Loading mods…</p>
+                </div>
               ) : mods.length === 0 ? (
                 <div className="no-costumes">
                   <p>No {submod?.name || 'mods'} in vault. Import some from the Menus vault tab first.</p>
@@ -330,7 +331,7 @@ export default function MenuMode({ mode, onModeChange }) {
                 mods.slice(modsPager.start, modsPager.end).map(mod => (
                   <div
                     key={mod.id}
-                    className={`costume-card ${selectedMod?.id === mod.id ? 'selected' : ''}`}
+                    className={`costume-card menu-mod-card ${selectedMod?.id === mod.id ? 'selected' : ''}`}
                     onMouseEnter={playHoverSound}
                     onClick={() => { playSound('boop'); setSelectedMod(mod) }}
                   >
@@ -339,11 +340,10 @@ export default function MenuMode({ mode, onModeChange }) {
                         <img
                           src={`${BACKEND_URL}${mod.screenshotUrl || mod.imageUrl}`}
                           alt={mod.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => { e.target.style.display = 'none' }}
                         />
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: 'var(--color-text-muted, #888)' }}>
+                        <div className="menu-mod-placeholder">
                           {mod.name?.[0] || '?'}
                         </div>
                       )}
@@ -356,7 +356,9 @@ export default function MenuMode({ mode, onModeChange }) {
                     </div>
                     <div className="costume-info">
                       <h4>{mod.name}</h4>
-                      <span style={{ fontSize: '11px', color: '#888' }}>{mod.icon_count || 0} icons</span>
+                      {mod.icon_count ? (
+                        <span className="menu-mod-meta">{mod.icon_count} icons</span>
+                      ) : null}
                     </div>
                   </div>
                 ))
