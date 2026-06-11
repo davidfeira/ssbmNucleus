@@ -128,19 +128,25 @@ const TASK_LABELS = {
   backdrop: 'Backgrounds',
 }
 
-/** Per-task "what will run" lines with escalation callouts. */
+/** Per-task "what will run" — ONE BOX PER TASK, so mod types that need the
+ * stronger model (e.g. stage backdrops) get their own clearly-marked second
+ * box, and mod types that don't simply don't show it. */
 export function ResolutionNotice({ resolution }) {
   if (!resolution) return null
   return (
-    <div className="ai-studio-resolution">
+    <>
       {resolution.map((t) => (
         <div key={t.kind}
-             className={`ai-studio-progress-message${t.escalated || t.error ? ' escalated' : ''}`}>
-          {TASK_LABELS[t.kind] || t.kind} → {t.error ? t.error : t.label}
-          {t.escalated && t.reason ? ` — ${t.reason}` : ''}
+             className={`ai-studio-resolution${t.escalated || t.error ? ' escalated' : ''}`}>
+          <div className={`ai-studio-progress-message${t.escalated || t.error ? ' escalated' : ''}`}>
+            {TASK_LABELS[t.kind] || t.kind} → {t.error ? t.error : t.label}
+          </div>
+          {t.escalated && t.reason && (
+            <div className="ai-studio-resolution-reason">{t.reason}</div>
+          )}
         </div>
       ))}
-    </div>
+    </>
   )
 }
 

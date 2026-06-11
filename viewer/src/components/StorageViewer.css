@@ -7902,6 +7902,15 @@
   border-radius: 6px;
   padding: 8px 10px;
 }
+.ai-studio-resolution + .ai-studio-resolution { margin-top: 6px; }
+.ai-studio-resolution.escalated {
+  border-color: rgba(255, 165, 2, 0.45);
+  background: rgba(255, 165, 2, 0.06);
+}
 .ai-studio-resolution .ai-studio-progress-message.escalated {
   color: var(--color-warning, #ffa502);
+}
+.ai-studio-resolution-reason {
+  color: var(--color-text-secondary, #8b93a7);
+  font-size: 12px;
 }
