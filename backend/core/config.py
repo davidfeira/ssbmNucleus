@@ -85,6 +85,13 @@ LOGS_PATH = PROJECT_ROOT / "logs"
 # Asset paths (user-extracted assets, not bundled)
 VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 
+# AssetFarm (sibling project): local diffusion image generation, used by the
+# skin lab to generate textures. Optional -- endpoints report cleanly when the
+# install isn't present. Override with NUCLEUS_ASSETFARM_DIR.
+ASSETFARM_DIR = Path(os.environ.get(
+    'NUCLEUS_ASSETFARM_DIR',
+    str(Path.home() / "projects" / "assetFarm")))
+
 # Processor tools paths for CSP generation and slippi validation
 if getattr(sys, 'frozen', False):
     # Running as bundled exe - modules are bundled in the exe

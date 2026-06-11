@@ -67,6 +67,7 @@ from blueprints import (
     custom_characters_bp,
     test_in_game_bp,
 )
+from blueprints.skin_lab import skin_lab_bp
 
 # Import extras API (existing blueprint)
 from blueprints.extras import extras_bp, init_extras_api
@@ -133,6 +134,7 @@ app.register_blueprint(menus_bp)
 app.register_blueprint(custom_stages_bp)
 app.register_blueprint(custom_characters_bp)
 app.register_blueprint(test_in_game_bp)
+app.register_blueprint(skin_lab_bp)
 
 
 # SocketIO connection handlers
