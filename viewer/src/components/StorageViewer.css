@@ -7871,3 +7871,32 @@
   border-top: 1px dashed var(--color-border, #2a3245);
   padding-top: 8px;
 }
+
+/* AI Studio setup gating + tier-resolution notices */
+.create-mod-card.ai.gated { opacity: 0.5; filter: saturate(0.4); }
+.create-mod-card.ai.gated:hover { opacity: 0.7; }
+
+.ai-studio-gate {
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px;
+}
+.ai-studio-gate-icon { font-size: 32px; }
+.ai-studio-gate-text strong { color: var(--color-text-primary, #f5f5f5); }
+.ai-studio-gate-text p {
+  color: var(--color-text-tertiary, #8896a4);
+  font-size: 13px;
+  max-width: 420px;
+  margin: 8px auto 0;
+}
+
+.ai-studio-resolution {
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--color-bg-primary, #0e1117);
+  border: 1px solid var(--color-border, #2a3245);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.ai-studio-resolution .ai-studio-progress-message.escalated {
+  color: var(--color-warning, #ffa502);
+}

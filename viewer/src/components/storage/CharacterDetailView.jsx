@@ -51,13 +51,19 @@ export default function CharacterDetailView({
   onCostumesUpdated,
   API_URL
 }) {
-  // AI Skin Studio (feature-gated by the backend /ai-status probe)
+  // AI Skin Studio (feature-gated by the backend /ai-status probe; greyed
+  // until setup — an OpenRouter key or a local model — is complete)
   const [aiStudioEnabled, setAiStudioEnabled] = useState(false)
+  const [aiReady, setAiReady] = useState(true)
   const [showAiStudio, setShowAiStudio] = useState(false)
   useEffect(() => {
     fetch(`${API_URL}/skin-lab/ai-status`)
       .then((r) => r.json())
-      .then((d) => setAiStudioEnabled(Boolean(d.enabled)))
+      .then((d) => {
+        setAiStudioEnabled(Boolean(d.enabled))
+        setAiReady(Boolean(d.hasKey || d.localModelReady
+          || localStorage.getItem('openrouter_api_key')))
+      })
       .catch(() => setAiStudioEnabled(false))
   }, [API_URL])
 
@@ -350,12 +356,14 @@ export default function CharacterDetailView({
           </div>
           {aiStudioEnabled && (
             <div
-              className="create-mod-card ai"
+              className={`create-mod-card ai${aiReady ? '' : ' gated'}`}
+              title={aiReady ? undefined
+                : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
               onMouseEnter={playHoverSound}
               onClick={() => { playSound('start'); setShowAiStudio(true); }}
             >
               <div className="create-mod-image-area">
-                <span className="create-mod-icon">✨</span>
+                <span className="create-mod-icon">{aiReady ? '✨' : '🔒'}</span>
               </div>
               <div className="create-mod-info">
                 <span className="create-mod-label">AI Skin Studio</span>

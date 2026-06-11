@@ -65,14 +65,40 @@ POST /close
   values replaces, never stacks). Lightness is untouched so shading survives.
 - `POST /palette/reset` — push the snapshot back.
 
-### AssetFarm bridge (texture generation)
-- `POST /generate-texture {prompt, index?, recipe?, model?, seed?, width?,
-  height?, name?}` — generates an image with the sibling assetFarm project
-  (local diffusion; `NUCLEUS_ASSETFARM_DIR` overrides the default
-  `~/projects/assetFarm`). Default recipe `tileset_tile`; see
-  `python -m assetfarm list-recipes` for others. With `index`, the result is
-  resized onto that texture in the open session; without, it just returns
-  `imagePath`. First call loads the model — slow.
+### AI engine (texture generation)
+- `POST /generate-texture {prompt, index?, style?: 'scene', tier?, model?,
+  seed?, width?, height?, name?}` — generates an image via the VENDORED AI
+  engine (`backend/aiengine/`): local diffusion in a managed runtime, or an
+  OpenRouter image model. Which model runs is decided by the task-tier
+  resolver (`aiengine/routing.py`): `tier` defaults to `standard` (seamless
+  tile swatch) or `strong` when `style:'scene'` (coherent backdrop). Users
+  map tiers to models in Settings → AI Studio; an explicit `model` (registry
+  id like `sd-turbo`, or an OpenRouter slug containing `/`) overrides. With
+  `index`, the result is resized onto that texture in the open session;
+  without, it just returns `imagePath`. First local call loads the model —
+  slow. Every generation is ledgered to `storage/ai_runs.jsonl` (stats:
+  `GET /api/mex/ai-engine/stats`).
+- Engine management lives under `/api/mex/ai-engine/`: `status`, `models`
+  (catalog + downloaded/fit/measured-speed), `models/<id>/download|delete|
+  toggle`, `install` (managed Python+torch runtime), `routing` (tier→model),
+  `resolve` (preflight escalation notices), `stats`.
+- FULLY-LOCAL mode: planner ids prefixed `ollama:` (e.g. `ollama:qwen3:8b`)
+  run the planning LLM through a local Ollama server (`NUCLEUS_OLLAMA_URL`,
+  default localhost:11434) with `format:json` + `keep_alive:0` — the LLM
+  unloads immediately after each call so the diffusion model gets the GPU.
+  No OpenRouter key needed when both planner and image models are local.
+  `GET /api/mex/ai-engine/planners` lists installed Ollama models; the
+  studio planner pickers append them automatically. Benchmarked with
+  `scripts/skinlab_local_planner_test.py`: qwen3:8b = 6/6 valid plans, full
+  character-region coverage, ~5s/plan, 6GB VRAM, clean unload. The vision
+  REVIEW pass needs a vision-capable local model (e.g. gemma3:4b,
+  qwen2.5vl) — with a text-only planner it's skipped gracefully.
+- Dev escape hatch: set `NUCLEUS_AIENGINE_PYTHON` to any torch+diffusers
+  interpreter (e.g. assetFarm's venv) to skip the managed-runtime install.
+  Model weights live in the STANDARD HuggingFace cache, so an existing cache
+  is reused as-is. `NUCLEUS_IMAGE_PROVIDER=local` forces local generation
+  everywhere (the old `assetfarm` value still works; `NUCLEUS_ASSETFARM_DIR`
+  is gone — assetFarm is no longer used at runtime).
 
 ### Regions + deterministic compositing
 The structured ops a UI — or a small planner model emitting JSON — drives

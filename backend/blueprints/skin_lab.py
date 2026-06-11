@@ -449,94 +449,32 @@ def palette_reset():
 
 
 # --------------------------------------------------------------------------- #
-# assetFarm bridge -- generate an image with local diffusion and (optionally)  #
-# apply it straight onto a texture in the open session.                        #
+# image generation -- the vendored AI engine (local diffusion) or OpenRouter,  #
+# picked by the task-tier resolver; optionally applied straight onto a         #
+# texture in the open session.                                                 #
 # --------------------------------------------------------------------------- #
-class AssetFarmError(RuntimeError):
+class GenerationError(RuntimeError):
     pass
 
 
-def _assetfarm_generate(params):
-    """Run an assetFarm generation. params: {prompt, recipe?, model?, seed?,
-    width?, height?, name?}. Returns (absolute_image_path, result_info).
-    Raises AssetFarmError with a readable message on any failure."""
-    import subprocess
-
-    from core.config import ASSETFARM_DIR
-
-    prompt = (params.get('prompt') or '').strip()
-    if not prompt:
-        raise AssetFarmError('prompt is required')
-
-    farm_python = ASSETFARM_DIR / '.venv' / 'Scripts' / 'python.exe'
-    if not farm_python.exists():
-        raise AssetFarmError(f'assetFarm not found at {ASSETFARM_DIR} '
-                             '(set NUCLEUS_ASSETFARM_DIR)')
-
-    recipe = params.get('recipe') or 'tileset_tile'
-    cmd = [str(farm_python), '-m', 'assetfarm', 'generate', recipe,
-           '-p', prompt, '-n', (params.get('name') or 'skinlab').strip(),
-           '--project', 'nucleus-skinlab', '--json']
-    # sd-turbo: 1-step, ~16s/tile incl. cold start, free -- the right default
-    # for material swatches; NUCLEUS_ASSETFARM_MODEL overrides. Slash-style ids
-    # (e.g. "google/gemini-2.5-flash-image") are API model names that leaked in
-    # from a forced-local request -- not assetFarm models, drop them.
-    model = params.get('model')
-    if model and '/' in str(model):
-        model = None
-    model = model or os.environ.get('NUCLEUS_ASSETFARM_MODEL', 'sd-turbo')
-    if model:
-        cmd += ['--model', str(model)]
-    if params.get('seed') is not None:
-        cmd += ['--seed', str(int(params['seed']))]
-    if params.get('width'):
-        cmd += ['--width', str(int(params['width']))]
-    if params.get('height'):
-        cmd += ['--height', str(int(params['height']))]
-
-    logger.info(f'[skin-lab] assetFarm generate: {prompt!r} (recipe={recipe})')
-    try:
-        proc = subprocess.run(cmd, cwd=str(ASSETFARM_DIR), capture_output=True,
-                              text=True, timeout=900, **get_subprocess_args())
-    except subprocess.TimeoutExpired:
-        raise AssetFarmError('assetFarm generation timed out')
-
-    # --json puts a machine-readable result on the LAST stdout line
-    result = None
-    for line in reversed((proc.stdout or '').strip().splitlines()):
-        try:
-            result = json.loads(line)
-            break
-        except json.JSONDecodeError:
-            continue
-    if not result or not result.get('ok') or not result.get('output_paths'):
-        detail = (result or {}).get('error') or (proc.stderr or proc.stdout or '')[-2000:]
-        raise AssetFarmError(f'assetFarm generation failed: {detail}')
-
-    # output_paths are relative to the assetFarm project directory
-    image_path = Path(result['output_paths'][0])
-    if not image_path.is_absolute():
-        image_path = ASSETFARM_DIR / image_path
-    return image_path, result
-
-
-def _openrouter_generate(params):
+def _openrouter_generate(params, model=None, key=None):
     """Generate a texture image via an OpenRouter image-output model (e.g.
-    google/gemini-2.5-flash-image). Needs OPENROUTER_API_KEY in the backend's
-    environment. Returns (absolute_image_path, result_info)."""
+    google/gemini-2.5-flash-image). Key: explicit arg (threaded from the
+    request) or OPENROUTER_API_KEY. Returns (absolute_image_path, result_info)."""
     import base64 as _b64
     import hashlib
     import os
 
     import requests as _rq
 
-    key = os.environ.get('OPENROUTER_API_KEY')
+    key = (key or params.get('openrouterKey')
+           or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not key:
-        raise AssetFarmError('OPENROUTER_API_KEY is not set in the backend environment')
+        raise GenerationError('No OpenRouter key (set it in Settings)')
     prompt = (params.get('prompt') or '').strip()
     if not prompt:
-        raise AssetFarmError('prompt is required')
-    model = params.get('model') or 'google/gemini-2.5-flash-image'
+        raise GenerationError('prompt is required')
+    model = model or params.get('model') or 'google/gemini-2.5-flash-image'
 
     if (params.get('style') or '') == 'scene':
         # backdrop/panorama use -- one coherent image, stretched (not tiled)
@@ -555,15 +493,15 @@ def _openrouter_generate(params):
     }, headers={'Authorization': f'Bearer {key}'})
     body = res.json()
     if 'error' in body:
-        raise AssetFarmError(f'openrouter generation failed: {body["error"]}')
+        raise GenerationError(f'openrouter generation failed: {body["error"]}')
     msg = (body.get('choices') or [{}])[0].get('message') or {}
     images = msg.get('images') or []
     if not images:
-        raise AssetFarmError('openrouter returned no image: '
-                             + str(msg.get('content') or body)[:300])
+        raise GenerationError('openrouter returned no image: '
+                              + str(msg.get('content') or body)[:300])
     url = (images[0].get('image_url') or {}).get('url') or ''
     if 'base64,' not in url:
-        raise AssetFarmError('unexpected image payload from openrouter')
+        raise GenerationError('unexpected image payload from openrouter')
     raw = _b64.b64decode(url.split('base64,', 1)[1])
 
     out_dir = STORAGE_PATH / 'skinlab_materials'
@@ -575,45 +513,105 @@ def _openrouter_generate(params):
 
 
 def _generate_material(params):
-    """Route a {generate: ...} request: cached result first (materials are
-    keyed by name/prompt hash), then provider 'openrouter' (or a model id
-    containing '/') with assetFarm local as the FALLBACK (e.g. when the
-    OpenRouter key is out of credits), else assetFarm directly."""
+    """Route a {generate: ...} request through the task-tier resolver.
+
+    params: {prompt, name?, seed?, width?, height?, style?: 'scene',
+             tier?: 'standard'|'strong', kind?: 'material'|'ailab'|'stage',
+             provider?, model?, openrouterKey?}
+    Material cache first (keyed by name/prompt hash); then the resolved
+    provider — OpenRouter falls back to a local model on failure (e.g. key
+    out of credits). Every attempt lands in the telemetry ledger."""
     import hashlib
+    import time as _time
+
+    from aiengine import routing, telemetry
+    from aiengine.routing import RoutingError
+    from aiengine.runner import EngineError
 
     prompt = (params.get('prompt') or '').strip()
     stem = (params.get('name') or hashlib.sha1(prompt.encode()).hexdigest()[:10])
     cache = STORAGE_PATH / 'skinlab_materials' / f'{stem}.png'
-    if cache.exists():
-        return cache, {'cached': True}
 
-    # NUCLEUS_IMAGE_PROVIDER=assetfarm forces local generation everywhere
-    # (batch runs / cost control); requests can still name a provider when unset.
+    tier = params.get('tier') or \
+        ('strong' if (params.get('style') or '') == 'scene' else 'standard')
+    kind = params.get('kind') or 'material'
+    client_key = bool(params.get('openrouterKey'))
+
+    # NUCLEUS_IMAGE_PROVIDER=local (alias: assetfarm) forces local generation
+    # everywhere (batch runs / cost control); requests can still name a
+    # provider/model when unset.
     forced = os.environ.get('NUCLEUS_IMAGE_PROVIDER', '').strip().lower()
-    provider = forced or (params.get('provider') or '').strip().lower()
-    model = params.get('model') or ''
-    if provider == 'openrouter' or (not provider and '/' in model):
-        try:
-            return _openrouter_generate(params)
-        except AssetFarmError as e:
-            logger.warning(f'[skin-lab] openrouter generation failed ({e}); '
-                           'falling back to local assetFarm')
-    image_path, result = _assetfarm_generate(params)
+    provider = forced if forced in ('local', 'assetfarm') \
+        else (params.get('provider') or '').strip().lower()
+    model = params.get('model') or None
+    if provider in ('local', 'assetfarm') and model and '/' in str(model):
+        model = None   # API slug leaked into a forced-local request
+
     try:
-        # mirror into the material cache so repeats hit it
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        if Path(image_path).resolve() != cache.resolve():
-            cache.write_bytes(Path(image_path).read_bytes())
-            image_path = cache
-    except Exception:
-        pass
-    return image_path, result
+        resolved = routing.resolve(tier, override_provider=provider,
+                                   override_model=model, client_key=client_key)
+    except RoutingError as e:
+        raise GenerationError(str(e))
+
+    if cache.exists():
+        telemetry.record_run(resolved['provider'], resolved['model'], tier,
+                             kind, 0.0, True, cached=True)
+        return cache, {'cached': True, 'tier': tier,
+                       'escalated': resolved['escalated'],
+                       'provider': resolved['provider'],
+                       'model': resolved['model'], 'label': resolved['label'],
+                       'estCostUsd': 0.0}
+
+    if resolved['provider'] == 'openrouter':
+        t0 = _time.time()
+        try:
+            image_path, result = _openrouter_generate(
+                params, model=resolved['model'],
+                key=params.get('openrouterKey'))
+            telemetry.record_run('openrouter', resolved['model'], tier, kind,
+                                 _time.time() - t0, True,
+                                 est_cost_usd=resolved['estCostUsd'])
+            result.update(tier=tier, escalated=resolved['escalated'],
+                          provider='openrouter', label=resolved['label'],
+                          estCostUsd=resolved['estCostUsd'],
+                          seconds=round(_time.time() - t0, 1))
+            return image_path, result
+        except GenerationError as e:
+            telemetry.record_run('openrouter', resolved['model'], tier, kind,
+                                 _time.time() - t0, False)
+            logger.warning(f'[skin-lab] openrouter generation failed ({e}); '
+                           'falling back to a local model')
+            try:
+                resolved = routing.resolve(tier, override_provider='local',
+                                           client_key=client_key)
+            except RoutingError:
+                raise e   # nothing local to fall back to
+
+    from aiengine import runner as _runner
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    style = 'scene' if (params.get('style') or '') == 'scene' else 'tile'
+    t0 = _time.time()
+    try:
+        _, seconds = _runner.generate(
+            prompt, resolved['model'], cache, style=style,
+            seed=params.get('seed'),
+            width=int(params['width']) if params.get('width') else None,
+            height=int(params['height']) if params.get('height') else None)
+    except EngineError as e:
+        telemetry.record_run('local', resolved['model'], tier, kind,
+                             _time.time() - t0, False)
+        raise GenerationError(str(e))
+    telemetry.record_run('local', resolved['model'], tier, kind, seconds, True)
+    return cache, {'model': resolved['model'], 'tier': tier,
+                   'escalated': resolved['escalated'], 'provider': 'local',
+                   'label': resolved['label'], 'estCostUsd': 0.0,
+                   'seconds': seconds}
 
 
 @skin_lab_bp.route('/api/mex/skin-lab/generate-texture', methods=['POST'])
 def generate_texture():
-    """Generate an image via the assetFarm project and optionally apply it to
-    a texture. Body: {prompt, index?, recipe?: 'tileset_tile', model?, seed?,
+    """Generate an image via the AI engine and optionally apply it to a
+    texture. Body: {prompt, index?, style?: 'scene', tier?, model?, seed?,
     width?, height?, name?}. With `index`, the result is resized to that
     texture and pushed into the open session; without it, the image is just
     generated and its path returned. First call may be slow (model load)."""
@@ -622,11 +620,13 @@ def generate_texture():
         return jsonify({'success': False, 'error': 'prompt is required'}), 400
     try:
         image_path, result = _generate_material(data)
-    except AssetFarmError as e:
+    except GenerationError as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
     payload = {'success': True, 'imagePath': str(image_path),
-               'seed': result.get('seed'), 'recipe': result.get('recipe')}
+               'model': result.get('model'), 'tier': result.get('tier'),
+               'escalated': result.get('escalated'),
+               'seconds': result.get('seconds')}
 
     index = data.get('index')
     if index is not None:
@@ -852,7 +852,7 @@ def composite_textures():
     """Re-fabric textures: lay a material over the masked pixels, shaded by
     the texture's original lightness (folds/seams survive). Body:
     {region: "fur" | textures: [i...],
-     material: {path} | {data: b64} | {generate: {prompt, ...assetFarm}},
+     material: {path} | {data: b64} | {generate: {prompt, tier?, kind?, ...}},
      mask?: {hueMin,hueMax,satMin,satMax,lumMin,lumMax}   (default: the
             region's mask hint; REQUIRED with explicit textures),
      modulate?: {lo: 0.3, hi: 1.6},
@@ -861,9 +861,10 @@ def composite_textures():
 
     # Resolve the material image first (generation can be slow; no lock held)
     material = data.get('material') or {}
+    generated = None
     try:
         if material.get('generate'):
-            image_path, _ = _generate_material(material['generate'])
+            image_path, generated = _generate_material(material['generate'])
             mat_img = Image.open(image_path).convert('RGB')
         elif material.get('path'):
             mat_img = Image.open(material['path']).convert('RGB')
@@ -873,7 +874,7 @@ def composite_textures():
         else:
             return jsonify({'success': False,
                             'error': 'material must be {path}, {data} or {generate}'}), 400
-    except AssetFarmError as e:
+    except GenerationError as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     except Exception as e:
         return jsonify({'success': False, 'error': f'Bad material image: {e}'}), 400
@@ -921,7 +922,8 @@ def composite_textures():
             except ViewerSessionError as e:
                 return jsonify({'success': False, 'error': str(e),
                                 'changed': changed, 'skipped': skipped}), 500
-        return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
+        return jsonify({'success': True, 'changed': changed,
+                        'skipped': skipped, 'generated': generated})
 
 
 @skin_lab_bp.route('/api/mex/skin-lab/tint', methods=['POST'])

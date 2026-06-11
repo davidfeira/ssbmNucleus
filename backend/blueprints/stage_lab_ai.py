@@ -26,11 +26,11 @@ import time
 import zipfile
 from pathlib import Path
 
-import requests
 from flask import Blueprint, jsonify, request
 
 from blueprints.skin_lab_ai import (AI_LAB_ENABLED, DEFAULT_PLANNER,
-                                    OPENROUTER_URL, _extract_json)
+                                    _call_planner, _extract_json,
+                                    is_local_planner)
 from core.config import STORAGE_PATH
 
 logger = logging.getLogger(__name__)
@@ -56,10 +56,11 @@ You can emit four kinds of steps:
    "saturationShift": -100..100}} -- rotates existing colors, keeps patterns.
 3. {{"op": "tint", "region": "<name>", "hue": 0-360, "saturation": 0-100}} --
    colorizes outright (works on grays), keeps lightness.
-4. {{"op": "material-tint", "hueShift": -180..180}} -- rotates the stage's
-   MATERIAL colors (glow rims, light accents, and animated material colors
-   like Pokemon Stadium's turf green that are not textures). At most one of
-   these; powerful, affects the whole stage's accent palette.
+4. {{"op": "material-tint", "hueShift": -180..180}} -- rotates ALL of the
+   stage's non-texture colors: material colors (glow rims, light accents),
+   animated material colors, TEV constants, and vertex colors (e.g. Pokemon
+   Stadium's green deck light strips). At most one of these; powerful,
+   affects the whole stage's accent palette.
 
 Rules:
 - 3 to 6 steps total. At most 3 composite steps.
@@ -129,8 +130,10 @@ def stage_ai_status():
     from skinlab.stage_ops import STAGE_REGIONS_DIR
     stages = sorted(p.stem for p in STAGE_REGIONS_DIR.glob('*.json')) \
         if STAGE_REGIONS_DIR.exists() else []
+    from blueprints.ai_engine import _local_model_ready
     return jsonify({'success': True, 'enabled': AI_LAB_ENABLED,
                     'hasKey': bool(os.environ.get('OPENROUTER_API_KEY')),
+                    'localModelReady': _local_model_ready(),
                     'stages': stages})
 
 
@@ -146,7 +149,8 @@ def stage_ai_create():
     code = (data.get('stageCode') or '').strip()
     theme = (data.get('theme') or '').strip()
     model = (data.get('plannerModel') or DEFAULT_PLANNER).strip()
-    image_provider = (data.get('imageProvider') or 'openrouter').strip().lower()
+    # empty provider/model = 'Auto': the tier resolver picks per task
+    image_provider = (data.get('imageProvider') or '').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
     review_pass = bool(data.get('reviewPass'))   # opt-in: costs another ISO + boot
     key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
@@ -154,9 +158,11 @@ def stage_ai_create():
     slippi = (data.get('slippiDolphinPath') or '').strip()
     if not code or not theme:
         return jsonify({'success': False, 'error': 'stageCode and theme are required'}), 400
-    if not key:
+    # a local (ollama:) planner needs no key (fully-local runs allowed)
+    if not key and not is_local_planner(model):
         return jsonify({'success': False,
-                        'error': 'No OpenRouter key (set it in Settings)'}), 400
+                        'error': 'No OpenRouter key (set it in Settings, or '
+                                 'pick a local planner)'}), 400
     if not vanilla or not os.path.exists(vanilla):
         return jsonify({'success': False,
                         'error': 'Vanilla ISO path missing (set it in Settings)'}), 400
@@ -195,15 +201,11 @@ def stage_ai_create():
                 stage_name=rm.get('stage', code), theme=theme,
                 region_summary=region_summary,
                 extra_notes=(f'- NOTE: {extra}\n' if extra else ''))
-            r = requests.post(OPENROUTER_URL, timeout=180, json={
-                'model': model,
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 2000,
-            }, headers={'Authorization': f'Bearer {key}'})
-            body = r.json()
-            if 'error' in body:
-                raise StageOpsError(f"planner failed: {body['error'].get('message')}")
-            plan = _extract_json(body['choices'][0]['message']['content'])
+            try:
+                reply = _call_planner(model, prompt, key)
+            except RuntimeError as e:
+                raise StageOpsError(str(e))
+            plan = _extract_json(reply)
             steps, tints, err = _validate_stage(plan or {}, set(rm['regions']))
             if err:
                 raise StageOpsError(err)
@@ -217,31 +219,34 @@ def stage_ai_create():
             gen_log = []
 
             def gen(prompt_text, quality=False):
-                params = {'prompt': prompt_text, 'provider': image_provider}
-                model_used = image_model
+                # backdrops are 'strong' tier (coherent scene work); the
+                # resolver picks the model — escalating past tile-only locals
+                params = {'prompt': prompt_text, 'kind': 'stage',
+                          'tier': 'strong' if quality else 'standard',
+                          'openrouterKey': key}
                 if quality:
-                    # backdrop-grade material: coherent scene + a stronger
-                    # model when the fast local default is selected
                     params['style'] = 'scene'
-                    params['recipe'] = 'environment'
-                    if image_provider != 'openrouter' and \
-                            (not image_model or image_model == 'sd-turbo'):
-                        model_used = 'z-image-turbo'
-                if model_used:
-                    params['model'] = model_used
-                label = model_used or ('nano banana' if image_provider == 'openrouter'
-                                       else 'sd-turbo')
-                cost = 0.03 if image_provider == 'openrouter' else 0.0
-                emit('applying', None, f'Generating material — {label}'
-                     + (f' (~{int(cost * 100)}¢)' if cost else ' (local, free)'))
+                if image_model:
+                    params['model'] = image_model
+                elif image_provider:
+                    params['provider'] = image_provider
+                emit('applying', None, 'Generating material…')
                 t0 = time.time()
                 path, info = _generate_material(params)
-                cached = bool((info or {}).get('cached'))
-                gen_log.append({'model': label,
-                                'provider': image_provider,
+                info = info or {}
+                cached = bool(info.get('cached'))
+                label = info.get('label') or info.get('model') or 'image model'
+                escalated = bool(info.get('escalated'))
+                emit('applying', None, f'Material via {label}'
+                     + (' — escalated for scene quality' if escalated else ''))
+                gen_log.append({'model': info.get('model') or label,
+                                'provider': info.get('provider') or image_provider,
+                                'tier': info.get('tier'),
+                                'escalated': escalated,
                                 'cached': cached,
                                 'seconds': round(time.time() - t0, 1),
-                                'estCostUsd': 0.0 if cached else cost})
+                                'estCostUsd': 0.0 if cached
+                                else (info.get('estCostUsd') or 0.0)})
                 return path
 
             out_dat = apply_stage_plan(code, steps, tints, work, gen, on_step=on_step)

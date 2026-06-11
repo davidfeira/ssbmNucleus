@@ -106,13 +106,19 @@ export default function StageDetailView({
   const stageInfo = selectedStage
   const variants = stageVariants[selectedStage.code] || []
 
-  // AI Stage Studio (gated by backend probe + per-stage region map)
+  // AI Stage Studio (gated by backend probe + per-stage region map; greyed
+  // until setup — an OpenRouter key or a local model — is complete)
   const [aiStages, setAiStages] = useState(null)
+  const [aiReady, setAiReady] = useState(true)
   const [showAiStudio, setShowAiStudio] = useState(false)
   useEffect(() => {
     fetch(`${API_URL}/stage-lab/ai-status`)
       .then((r) => r.json())
-      .then((d) => setAiStages(d.enabled ? (d.stages || []) : []))
+      .then((d) => {
+        setAiStages(d.enabled ? (d.stages || []) : [])
+        setAiReady(Boolean(d.hasKey || d.localModelReady
+          || localStorage.getItem('openrouter_api_key')))
+      })
       .catch(() => setAiStages([]))
   }, [API_URL])
   const aiAvailable = Array.isArray(aiStages) && aiStages.includes(selectedStage.code)
@@ -206,12 +212,14 @@ export default function StageDetailView({
           })}
           {aiAvailable && (
             <div
-              className="create-mod-card ai"
+              className={`create-mod-card ai${aiReady ? '' : ' gated'}`}
+              title={aiReady ? undefined
+                : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
               onMouseEnter={playHoverSound}
               onClick={() => { playSound('start'); setShowAiStudio(true); }}
             >
               <div className="create-mod-image-area">
-                <span className="create-mod-icon">✨</span>
+                <span className="create-mod-icon">{aiReady ? '✨' : '🔒'}</span>
               </div>
               <div className="create-mod-info">
                 <span className="create-mod-label">AI Stage Studio</span>

@@ -103,6 +103,20 @@ hiddenimports = [
     # Single-costume temp ISO builder for the per-mod in-game test
     'test_build',
 
+    # AI engine host modules (imported lazily inside request handlers)
+    'aiengine',
+    'aiengine.paths',
+    'aiengine.registry',
+    'aiengine.hardware',
+    'aiengine.settings_store',
+    'aiengine.routing',
+    'aiengine.telemetry',
+    'aiengine.models_admin',
+    'aiengine.installer',
+    'aiengine.runner',
+    'huggingface_hub',
+    'tqdm',
+
     # Utility modules (dynamically imported)
     'generate_csp',
     'generate_stock_icon',
@@ -175,6 +189,17 @@ if das_dir.exists():
 grid_json = project_root / 'backend' / 'ingame' / 'grid.json'
 if grid_json.exists():
     datas.append((str(grid_json), 'ingame'))
+
+# AI engine: the generate worker is EXECUTED by the managed runtime (an
+# external Python), never imported — ship it as a data file. paths.py finds
+# it at sys._MEIPASS/aiengine/generate_worker.py in frozen builds. The
+# engine_requirements.txt is read by the installer.
+worker_py = project_root / 'backend' / 'aiengine' / 'worker' / 'generate_worker.py'
+if worker_py.exists():
+    datas.append((str(worker_py), 'aiengine'))
+engine_reqs = project_root / 'backend' / 'aiengine' / 'engine_requirements.txt'
+if engine_reqs.exists():
+    datas.append((str(engine_reqs), 'aiengine'))
 
 # =============================================================================
 # BINARIES

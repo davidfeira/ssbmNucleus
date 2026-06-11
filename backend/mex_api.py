@@ -70,6 +70,7 @@ from blueprints import (
 from blueprints.skin_lab import skin_lab_bp
 from blueprints.skin_lab_ai import skin_lab_ai_bp
 from blueprints.stage_lab_ai import stage_lab_ai_bp
+from blueprints.ai_engine import ai_engine_bp
 
 # Import extras API (existing blueprint)
 from blueprints.extras import extras_bp, init_extras_api
@@ -139,6 +140,7 @@ app.register_blueprint(test_in_game_bp)
 app.register_blueprint(skin_lab_bp)
 app.register_blueprint(skin_lab_ai_bp)
 app.register_blueprint(stage_lab_ai_bp)
+app.register_blueprint(ai_engine_bp)
 
 
 # SocketIO connection handlers

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
+import useAiStudioSetup, { ResolutionNotice, SetupGate } from './useAiStudioSetup'
 
 const PLANNERS = [
   { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
@@ -9,16 +10,7 @@ const PLANNERS = [
   { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
 ]
 
-const IMAGE_MODELS = [
-  { provider: 'openrouter', model: 'google/gemini-2.5-flash-image',
-    label: 'Nano Banana — API, best quality (~3¢/image)' },
-  { provider: 'assetfarm', model: 'sd-turbo',
-    label: 'SD-Turbo — local GPU, free & fast' },
-  { provider: 'assetfarm', model: 'flux-klein-4b',
-    label: 'FLUX Klein — local GPU, free, sharper (slower)' },
-  { provider: 'assetfarm', model: 'z-image-turbo',
-    label: 'Z-Image Turbo — local GPU, free, high quality (slowest)' },
-]
+const TASK_KINDS = ['material']
 
 /**
  * AI Skin Studio: describe a theme, an AI model plans the skin, the lab
@@ -27,8 +19,11 @@ const IMAGE_MODELS = [
 export default function AIStudioModal({ show, character, onClose, onSaved }) {
   const [theme, setTheme] = useState('')
   const [planner, setPlanner] = useState(PLANNERS[0].id)
+  // '' = Auto: the backend's tier resolver picks per task
   const [imageModel, setImageModel] = useState(
-    localStorage.getItem('ai_studio_image_model') || IMAGE_MODELS[0].model)
+    localStorage.getItem('ai_studio_image_model') || '')
+  const { ready, options, localPlanners, resolution, resolveFor } =
+    useAiStudioSetup(show, TASK_KINDS)
   const [phase, setPhase] = useState('form')        // form | running | preview | saving
   const [status, setStatus] = useState(null)
   const [sheet, setSheet] = useState(null)
@@ -60,6 +55,20 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
     }
     return cleanupSocket
   }, [show])
+
+  // drop a stale stored pick (model deleted/disabled since) back to Auto
+  useEffect(() => {
+    if (show && options.length && imageModel
+        && !options.some((o) => o.value === imageModel)) {
+      setImageModel('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, options])
+
+  // preview what each task will actually run on (escalation notice)
+  useEffect(() => {
+    if (show && ready) resolveFor(imageModel)
+  }, [show, ready, imageModel, resolveFor])
 
   if (!show) return null
 
@@ -99,8 +108,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
           character,
           theme: theme.trim(),
           plannerModel: planner,
-          imageProvider: IMAGE_MODELS.find((m) => m.model === imageModel)?.provider,
-          imageModel,
+          // Auto ('') sends neither — the backend's tier resolver picks
+          imageProvider: options.find((o) => o.value === imageModel)?.provider,
+          imageModel: imageModel || undefined,
           openrouterKey: localStorage.getItem('openrouter_api_key') || undefined,
         }),
       })
@@ -158,7 +168,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
           <button className="ai-studio-close" onClick={handleClose}>×</button>
         </div>
 
-        {phase === 'form' && (
+        {phase === 'form' && ready === false && <SetupGate onClose={onClose} />}
+
+        {phase === 'form' && ready !== false && (
           <div className="ai-studio-form">
             <label className="ai-studio-label">Describe the skin you want</label>
             <textarea
@@ -175,6 +187,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
               {PLANNERS.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}
+              {localPlanners.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
             </select>
             <label className="ai-studio-label">Image model (materials)</label>
             <select className="ai-studio-planner" value={imageModel}
@@ -182,13 +197,16 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
                       setImageModel(e.target.value)
                       localStorage.setItem('ai_studio_image_model', e.target.value)
                     }}>
-              {IMAGE_MODELS.map((m) => (
-                <option key={m.model} value={m.model}>{m.label}</option>
+              <option value="">Auto (recommended)</option>
+              {options.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
+            <ResolutionNotice resolution={resolution} />
             {error && <div className="ai-studio-error">{error}</div>}
             <div className="ai-studio-actions">
-              <button className="ai-studio-btn primary" disabled={!theme.trim()} onClick={run}>
+              <button className="ai-studio-btn primary"
+                      disabled={!theme.trim() || ready === null} onClick={run}>
                 Generate
               </button>
               <button className="ai-studio-btn" onClick={handleClose}>Cancel</button>
@@ -230,6 +248,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
                     {g.cached ? ' — cached (free)'
                       : g.estCostUsd > 0 ? ` — ~${Math.round(g.estCostUsd * 100)}¢`
                         : ' — free (local)'}
+                    {g.escalated ? ' — escalated for scene quality' : ''}
                   </div>
                 ))}
                 <div className="ai-studio-progress-message">

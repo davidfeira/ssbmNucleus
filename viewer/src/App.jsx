@@ -23,6 +23,14 @@ function App() {
   // First-run setup state
   const [setupNeeded, setSetupNeeded] = useState(null); // null = checking, true = needed, false = complete
 
+  // Deep components (e.g. the AI Studio gating CTA) can jump to Settings
+  // without prop drilling through the detail views.
+  useEffect(() => {
+    const openSettings = () => setActiveTab('settings')
+    window.addEventListener('nucleus:open-settings', openSettings)
+    return () => window.removeEventListener('nucleus:open-settings', openSettings)
+  }, [])
+
   // Download queue for nucleus:// imports
   const {
     currentDownload,

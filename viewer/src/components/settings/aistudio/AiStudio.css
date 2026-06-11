@@ -1,0 +1,164 @@
+/* AI Studio settings hub */
+
+.aistudio-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.aistudio-card-title {
+  font-family: var(--font-display);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aistudio-badge {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.aistudio-badge.good { background: var(--color-success-muted); color: var(--color-success); }
+.aistudio-badge.warn { background: var(--color-warning-muted); color: var(--color-warning); }
+.aistudio-badge.bad { background: var(--color-danger-muted); color: var(--color-danger); }
+.aistudio-badge.api { background: var(--color-info-muted); color: var(--color-info); }
+.aistudio-badge.muted { background: var(--color-bg-surface); color: var(--color-text-tertiary); }
+
+.aistudio-callout {
+  font-size: var(--text-sm);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 8px;
+}
+.aistudio-callout.warning { background: var(--color-warning-muted); color: var(--color-warning); }
+.aistudio-callout.danger { background: var(--color-danger-muted); color: var(--color-danger); }
+
+.aistudio-hw-row {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: var(--color-text-secondary);
+}
+.aistudio-hw-gpu { color: var(--color-text-primary); font-weight: var(--font-medium); }
+.aistudio-hw-detail { color: var(--color-text-tertiary); font-size: var(--text-sm); }
+
+.aistudio-model {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--color-bg-base);
+}
+.aistudio-model.disabled { opacity: 0.55; }
+
+.aistudio-model-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.aistudio-model-name {
+  color: var(--color-text-primary);
+  font-weight: var(--font-medium);
+}
+.aistudio-model-desc {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  margin-top: 2px;
+}
+.aistudio-model-specs {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin-top: 6px;
+}
+.aistudio-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.aistudio-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.iso-browse-button.danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.aistudio-progress { margin-top: 8px; }
+.ai-studio-progress-fill.indeterminate {
+  animation: aistudio-pulse 1.2s ease-in-out infinite;
+}
+@keyframes aistudio-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.aistudio-storage-footer {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin-top: 8px;
+}
+.aistudio-mono { font-family: var(--font-mono); }
+
+.aistudio-tier-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.aistudio-tier-label { flex: 1; color: var(--color-text-secondary); }
+.aistudio-tier-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.aistudio-tier-row select { flex: 1; }
+
+.aistudio-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.aistudio-stats-table th {
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: var(--font-regular);
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.aistudio-stats-table td {
+  color: var(--color-text-secondary);
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.aistudio-setup-banner {
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: var(--text-sm);
+}
+.aistudio-setup-banner.ready {
+  background: var(--color-success-muted);
+  color: var(--color-success);
+}
+.aistudio-setup-banner.pending {
+  background: var(--color-warning-muted);
+  color: var(--color-warning);
+}

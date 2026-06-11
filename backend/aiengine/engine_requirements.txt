@@ -1,0 +1,13 @@
+# Installed into the MANAGED runtime by aiengine/installer.py (phase 'deps').
+# torch is installed separately first with the cuda/cpu wheel index.
+# diffusers is a pinned RELEASE (never git+): the worker's --check probe
+# reports which pipeline classes this version actually has, and the model
+# catalog hides local models whose pipeline is missing.
+diffusers>=0.35,<1.0
+transformers>=4.46
+accelerate>=1.0
+safetensors>=0.4
+huggingface-hub>=0.26
+pillow>=10.0
+sentencepiece>=0.2
+protobuf>=4.0

@@ -5,3 +5,6 @@ python-socketio==5.10.0
 numpy
 pyyaml
 pillow
+# AI engine model management (cache scan/download — pure Python, no torch)
+huggingface_hub
+tqdm

@@ -38,6 +38,48 @@ AI_LAB_ENABLED = os.environ.get('NUCLEUS_AI_LAB', '1') != '0'
 DEFAULT_PLANNER = 'openai/gpt-5-mini'
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
+# Local planner LLMs run through Ollama: planner model ids prefixed
+# 'ollama:' (e.g. 'ollama:qwen3:8b') need no API key — combined with local
+# image models the studios are fully offline.
+OLLAMA_URL = os.environ.get('NUCLEUS_OLLAMA_URL', 'http://127.0.0.1:11434')
+
+
+def is_local_planner(model):
+    return (model or '').startswith('ollama:')
+
+
+def _call_ollama_planner(model, prompt, image_jpeg=None):
+    """Planner call against a local Ollama model. format=json forces valid
+    JSON framing; keep_alive=0 unloads the LLM IMMEDIATELY after the reply so
+    the diffusion model gets the GPU to itself (16GB can't hold both)."""
+    name = model.split(':', 1)[1]
+    message = {'role': 'user', 'content': prompt}
+    if image_jpeg is not None:
+        message['images'] = [base64.b64encode(image_jpeg).decode('ascii')]
+    r = requests.post(f'{OLLAMA_URL}/api/chat', timeout=600, json={
+        'model': name,
+        'messages': [message],
+        'format': 'json',
+        'stream': False,
+        'think': False,
+        'keep_alive': 0,
+        'options': {'temperature': 0.7, 'num_ctx': 8192},
+    })
+    body = r.json()
+    if 'error' in body:
+        raise RuntimeError(f"local planner failed: {body['error']} "
+                           f"(is '{name}' pulled in Ollama?)")
+    return body['message']['content']
+
+
+def list_local_planners():
+    """Installed Ollama models as planner options, [] when Ollama is absent."""
+    try:
+        tags = requests.get(f'{OLLAMA_URL}/api/tags', timeout=3).json()
+        return sorted(m['name'] for m in tags.get('models', []))
+    except Exception:
+        return []
+
 PLAN_PROMPT = """You are designing a Super Smash Bros. Melee costume transformation
 for {character} using a texture-compositing API. The theme is:
 
@@ -178,7 +220,10 @@ def _vanilla_nr_code(character):
 
 
 def _call_planner(model, prompt, key, image_jpeg=None):
-    """Text call, or vision call when image_jpeg bytes are provided."""
+    """Text call, or vision call when image_jpeg bytes are provided.
+    'ollama:<model>' routes to the local Ollama server (no key needed)."""
+    if is_local_planner(model):
+        return _call_ollama_planner(model, prompt, image_jpeg=image_jpeg)
     if image_jpeg is not None:
         content = [
             {'type': 'text', 'text': prompt},
@@ -234,10 +279,13 @@ def _sheet_from_session(base_url):
 
 @skin_lab_ai_bp.route('/api/mex/skin-lab/ai-status', methods=['GET'])
 def ai_status():
+    from blueprints.ai_engine import _local_model_ready
     return jsonify({
         'success': True,
         'enabled': AI_LAB_ENABLED,
         'hasKey': bool(os.environ.get('OPENROUTER_API_KEY')),
+        # setup gate: studios unlock with a key OR a ready local model
+        'localModelReady': _local_model_ready(),
     })
 
 
@@ -256,15 +304,19 @@ def ai_create():
     costume_code = (data.get('costumeCode') or '').strip()
     theme = (data.get('theme') or '').strip()
     model = (data.get('plannerModel') or DEFAULT_PLANNER).strip()
-    image_provider = (data.get('imageProvider') or 'openrouter').strip().lower()
+    # empty provider/model = 'Auto': the tier resolver picks per task
+    image_provider = (data.get('imageProvider') or '').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
     review_pass = data.get('reviewPass', True)   # cheap for characters: default ON
     key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not character or not theme:
         return jsonify({'success': False, 'error': 'character and theme are required'}), 400
-    if not key:
+    # a local (ollama:) planner needs no key; image models resolve to local
+    # ones without a key too -> fully offline runs are allowed
+    if not key and not is_local_planner(model):
         return jsonify({'success': False,
-                        'error': 'No OpenRouter key (set it in Settings)'}), 400
+                        'error': 'No OpenRouter key (set it in Settings, or '
+                                 'pick a local planner)'}), 400
 
     base_url = request.host_url.rstrip('/') + '/api/mex/skin-lab'
 
@@ -309,9 +361,6 @@ def ai_create():
             skin_name = ((plan.get('skin_name') or theme)[:60])
 
             gen_log = []
-            img_label = (image_model or ('nano banana' if image_provider == 'openrouter'
-                                         else 'sd-turbo'))
-            img_cost = 0.03 if image_provider == 'openrouter' else 0.0
 
             def run_steps(step_list, lo_pct, hi_pct, tag=''):
                 n = len(step_list)
@@ -320,23 +369,32 @@ def ai_create():
                     label = s['op'] + ' ' + s['region']
                     emit('applying', pct, f'{tag}Step {i + 1}/{n}: {label}…')
                     if s['op'] == 'composite':
-                        emit('applying', pct, f'{tag}Step {i + 1}/{n}: {label} — '
-                             f'material via {img_label}'
-                             + (f' (~{int(img_cost * 100)}¢)' if img_cost
-                                else ' (local, free)'))
+                        # costume materials are 'standard' tier tile swatches
                         gen = {'prompt': s['material_prompt'],
-                               'provider': image_provider}
+                               'kind': 'ailab', 'tier': 'standard',
+                               'openrouterKey': key}
                         if image_model:
                             gen['model'] = image_model
+                        elif image_provider:
+                            gen['provider'] = image_provider
                         t0 = time.time()
                         rr = requests.post(f'{base_url}/composite', timeout=900, json={
                             'region': s['region'],
                             'material': {'generate': gen},
                             'modulate': s.get('modulate') or {}}).json()
-                        gen_log.append({'model': img_label,
-                                        'provider': image_provider,
+                        info = rr.get('generated') or {}
+                        img_label = info.get('label') or info.get('model') \
+                            or image_model or 'image model'
+                        emit('applying', pct, f'{tag}Step {i + 1}/{n}: {label} — '
+                             f'material via {img_label}')
+                        gen_log.append({'model': info.get('model') or img_label,
+                                        'provider': info.get('provider')
+                                        or image_provider,
+                                        'tier': info.get('tier'),
+                                        'escalated': bool(info.get('escalated')),
+                                        'cached': bool(info.get('cached')),
                                         'seconds': round(time.time() - t0, 1),
-                                        'estCostUsd': img_cost})
+                                        'estCostUsd': info.get('estCostUsd') or 0.0})
                     elif s['op'] == 'tint':
                         rr = requests.post(f'{base_url}/tint', timeout=120, json={
                             'region': s['region'], 'hue': s['hue'],
