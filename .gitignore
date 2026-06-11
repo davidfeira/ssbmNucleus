@@ -91,3 +91,6 @@ pytest-cache-files-*/
 /door_tex_dump/
 /parallel_test/
 /*_test_out/
+
+# local release staging (release_to_r2.py)
+releases/
