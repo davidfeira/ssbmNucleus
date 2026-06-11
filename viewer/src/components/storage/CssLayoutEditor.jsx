@@ -266,7 +266,7 @@ export default function CssLayoutEditor() {
   }, [])
 
   if (loading) return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>Loading CSS layout...</div>
-  if (error) return <div style={{ textAlign: 'center', padding: '2rem' }}><p style={{ color: '#ff6b6b' }}>{error}</p><button className="mode-btn" onClick={fetchLayout}>Retry</button></div>
+  if (error) return <div style={{ textAlign: 'center', padding: '2rem' }}><p style={{ color: 'var(--color-danger)' }}>{error}</p><button className="mode-btn" onClick={fetchLayout}>Retry</button></div>
   if (!layout) return null
 
   const selectedIcons = selectedIndices.map(i => icons[i]).filter(Boolean)
@@ -276,7 +276,7 @@ export default function CssLayoutEditor() {
       {/* Top bar */}
       <div className="sss-top-bar">
         <div className="sss-page-tabs">
-          <span style={{ color: 'var(--color-text)', fontWeight: 600, padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)', fontWeight: 600, padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}>
             Character Select Screen
           </span>
         </div>

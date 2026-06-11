@@ -260,7 +260,9 @@ export default function PoseSkinSelectorModal({
         .pss-overlay {
           position: absolute;
           inset: 0;
-          background: rgba(0, 0, 0, 0.85);
+          background: rgba(6, 12, 20, 0.92);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -271,77 +273,82 @@ export default function PoseSkinSelectorModal({
         }
 
         .pss-modal {
-          background: #1a1a2e;
-          border-radius: 12px;
+          background: linear-gradient(
+            165deg,
+            var(--color-bg-elevated) 0%,
+            var(--color-bg-base) 40%,
+            var(--color-bg-deep) 100%
+          );
+          border: 1px solid var(--color-cyan);
+          border-radius: var(--radius-2xl);
           width: min(100%, 60rem);
           max-height: min(100%, var(--modal-max-height));
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          box-shadow:
+            var(--shadow-xl),
+            0 0 80px rgba(0, 0, 0, 0.5),
+            0 0 24px rgba(125, 211, 232, 0.12);
           margin: auto;
-        }
-
-        @media (min-width: 1440px) {
-          .pss-modal {
-            max-width: 1000px;
-          }
-        }
-
-        @media (min-width: 1920px) {
-          .pss-modal {
-            max-width: 1150px;
-          }
-        }
-
-        @media (min-width: 2560px) {
-          .pss-modal {
-            max-width: 1400px;
-          }
         }
 
         .pss-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 16px 20px;
-          background: #16162a;
-          border-bottom: 1px solid #2a2a4a;
+          padding: var(--space-3) var(--space-6);
+          background: rgba(0, 0, 0, 0.15);
+          border-bottom: 1px solid var(--color-border-subtle);
         }
 
         .pss-title {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: var(--space-3);
+          min-width: 0;
         }
 
         .pss-title-label {
-          font-size: 18px;
-          font-weight: 600;
-          color: #fff;
+          font-family: var(--font-display);
+          font-size: var(--text-lg);
+          font-weight: var(--font-bold);
+          letter-spacing: var(--tracking-tight);
+          background: var(--gradient-cyan);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
 
         .pss-title-pose {
-          font-size: 14px;
-          color: #6c8cff;
-          padding: 4px 10px;
-          background: rgba(108, 140, 255, 0.15);
-          border-radius: 4px;
+          font-size: var(--text-sm);
+          color: var(--color-cyan);
+          padding: 2px 10px;
+          background: var(--color-cyan-muted, rgba(125, 211, 232, 0.12));
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-md);
         }
 
         .pss-close-btn {
-          background: transparent;
-          border: none;
-          color: #888;
+          width: 32px;
+          height: 32px;
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-full);
+          background: var(--color-bg-surface);
+          color: var(--color-text-tertiary);
           cursor: pointer;
-          padding: 8px;
-          border-radius: 6px;
-          transition: all 0.15s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all var(--transition-fast);
+          flex-shrink: 0;
         }
 
         .pss-close-btn:hover:not(:disabled) {
-          background: #2a2a4a;
-          color: #fff;
+          background: var(--color-danger-muted);
+          color: var(--color-danger);
+          border-color: var(--color-danger);
+          transform: rotate(90deg);
         }
 
         .pss-close-btn:disabled {
@@ -352,52 +359,56 @@ export default function PoseSkinSelectorModal({
         .pss-pose-preview {
           display: flex;
           align-items: center;
-          gap: 16px;
-          padding: 12px 20px;
-          background: #16162a;
-          border-bottom: 1px solid #2a2a4a;
+          gap: var(--space-4);
+          padding: var(--space-3) var(--space-6);
+          border-bottom: 1px solid var(--color-border-subtle);
         }
 
         .pss-pose-preview img {
           width: 60px;
           height: 80px;
           object-fit: contain;
-          border-radius: 4px;
-          background: #0d0d1a;
+          border-radius: var(--radius-md);
+          background: var(--color-bg-deep);
+          border: 1px solid var(--color-border-subtle);
         }
 
         .pss-pose-preview span {
-          color: #888;
-          font-size: 13px;
+          color: var(--color-text-secondary);
+          font-size: var(--text-sm);
         }
 
         .pss-controls {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 20px;
-          border-bottom: 1px solid #2a2a4a;
+          gap: var(--space-3);
+          padding: var(--space-3) var(--space-6);
+          border-bottom: 1px solid var(--color-border-subtle);
         }
 
         .pss-select-btns {
           display: flex;
-          gap: 8px;
+          gap: var(--space-2);
         }
 
         .pss-select-btns button {
-          padding: 6px 12px;
-          background: #2a2a4a;
-          border: none;
-          border-radius: 4px;
-          color: #ccc;
+          padding: var(--space-1) var(--space-3);
+          background: var(--color-bg-elevated);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg);
+          color: var(--color-text-secondary);
           cursor: pointer;
-          font-size: 12px;
-          transition: all 0.15s ease;
+          font-family: var(--font-display);
+          font-size: var(--text-xs);
+          font-weight: var(--font-semibold);
+          transition: all var(--transition-fast);
         }
 
         .pss-select-btns button:hover:not(:disabled) {
-          background: #3a3a5a;
-          color: #fff;
+          background: var(--color-cyan);
+          border-color: var(--color-cyan);
+          color: var(--color-bg-deep);
         }
 
         .pss-select-btns button:disabled {
@@ -406,17 +417,17 @@ export default function PoseSkinSelectorModal({
         }
 
         .pss-resolution-note {
-          color: #888;
-          font-size: 12px;
+          color: var(--color-text-muted);
+          font-size: var(--text-xs);
         }
 
         .pss-skins-grid {
           flex: 1;
           overflow-y: auto;
-          padding: 16px;
+          padding: var(--space-4) var(--space-6);
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-          gap: 12px;
+          gap: var(--space-3);
           align-content: start;
         }
 
@@ -425,34 +436,36 @@ export default function PoseSkinSelectorModal({
         .pss-empty {
           grid-column: 1 / -1;
           text-align: center;
-          color: #666;
-          padding: 40px;
+          color: var(--color-text-muted);
+          padding: var(--space-8);
         }
 
         .pss-loading-shell {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 16px;
+          gap: var(--space-4);
         }
 
         .pss-skin-card {
           position: relative;
-          background: #16162a;
-          border: 2px solid transparent;
-          border-radius: 8px;
-          padding: 8px;
+          background: var(--color-bg-deep);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg);
+          padding: var(--space-2);
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all var(--transition-fast);
         }
 
         .pss-skin-card:hover {
-          border-color: #3a3a5a;
+          border-color: var(--color-cyan);
+          transform: translateY(-2px);
+          box-shadow: var(--glow-cyan-sm);
         }
 
         .pss-skin-card.pss-selected {
-          border-color: #6c8cff;
-          background: rgba(108, 140, 255, 0.1);
+          border-color: var(--color-cyan);
+          background: var(--color-cyan-muted, rgba(125, 211, 232, 0.1));
         }
 
         .pss-checkbox {
@@ -461,9 +474,9 @@ export default function PoseSkinSelectorModal({
           left: 6px;
           width: 20px;
           height: 20px;
-          background: #0d0d1a;
-          border: 2px solid #3a3a5a;
-          border-radius: 4px;
+          background: var(--color-bg-deep);
+          border: 2px solid var(--color-border);
+          border-radius: var(--radius-sm);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -471,12 +484,12 @@ export default function PoseSkinSelectorModal({
         }
 
         .pss-selected .pss-checkbox {
-          background: #6c8cff;
-          border-color: #6c8cff;
+          background: var(--color-cyan);
+          border-color: var(--color-cyan);
         }
 
         .pss-checkbox svg {
-          color: #fff;
+          color: var(--color-bg-deep);
         }
 
         .pss-skin-image {
@@ -485,8 +498,8 @@ export default function PoseSkinSelectorModal({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #0d0d1a;
-          border-radius: 4px;
+          background: var(--color-bg-base);
+          border-radius: var(--radius-md);
           overflow: hidden;
         }
 
@@ -497,24 +510,27 @@ export default function PoseSkinSelectorModal({
         }
 
         .pss-skin-placeholder {
-          color: #444;
-          font-size: 24px;
+          color: var(--color-text-tertiary);
+          font-size: var(--text-xl);
+          font-family: var(--font-display);
+          font-weight: var(--font-bold);
         }
 
         .pss-skin-name {
           text-align: center;
-          font-size: 11px;
-          color: #888;
-          margin-top: 6px;
+          font-family: var(--font-display);
+          font-size: var(--text-xs);
+          color: var(--color-text-secondary);
+          margin-top: var(--space-1);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .pss-footer {
-          padding: 16px 20px;
-          background: #16162a;
-          border-top: 1px solid #2a2a4a;
+          padding: var(--space-3) var(--space-6);
+          background: rgba(0, 0, 0, 0.15);
+          border-top: 1px solid var(--color-border-subtle);
         }
 
         .pss-generate-btn {
@@ -522,25 +538,27 @@ export default function PoseSkinSelectorModal({
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 12px;
-          background: #6c8cff;
+          gap: var(--space-2);
+          padding: var(--space-3);
+          background: var(--gradient-cyan, var(--color-cyan));
           border: none;
-          border-radius: 6px;
-          color: #fff;
-          font-size: 14px;
-          font-weight: 500;
+          border-radius: var(--radius-lg);
+          color: var(--color-bg-deep);
+          font-family: var(--font-display);
+          font-size: var(--text-sm);
+          font-weight: var(--font-semibold);
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all var(--transition-fast);
         }
 
         .pss-generate-btn:hover:not(:disabled) {
-          background: #5a7aee;
+          box-shadow: var(--glow-cyan-sm);
+          transform: translateY(-1px);
         }
 
         .pss-generate-btn:disabled {
-          background: #3a3a5a;
-          color: #666;
+          background: var(--color-bg-elevated);
+          color: var(--color-text-muted);
           cursor: not-allowed;
         }
 
@@ -548,52 +566,60 @@ export default function PoseSkinSelectorModal({
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 12px;
+          gap: var(--space-3);
         }
 
         .pss-progress span {
           text-align: center;
-          color: #888;
-          font-size: 13px;
+          color: var(--color-text-secondary);
+          font-size: var(--text-sm);
         }
 
         .pss-results {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
+          gap: var(--space-3);
         }
 
         .pss-results span {
-          font-size: 14px;
+          font-size: var(--text-sm);
         }
 
         .pss-results.pss-success span {
-          color: #4caf50;
+          color: var(--color-success, #51cf66);
         }
 
         .pss-results.pss-error span {
-          color: #f44336;
+          color: var(--color-danger, #ff6b6b);
         }
 
         .pss-results button {
-          padding: 8px 16px;
-          background: #2a2a4a;
-          border: none;
-          border-radius: 4px;
-          color: #ccc;
+          padding: var(--space-2) var(--space-4);
+          background: var(--color-bg-elevated);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg);
+          color: var(--color-text-secondary);
+          font-family: var(--font-display);
+          font-size: var(--text-sm);
+          font-weight: var(--font-semibold);
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all var(--transition-fast);
         }
 
         .pss-results button:hover {
-          background: #3a3a5a;
-          color: #fff;
+          background: var(--color-cyan);
+          border-color: var(--color-cyan);
+          color: var(--color-bg-deep);
         }
 
         @media (max-width: 960px) {
           .pss-modal {
             width: 100%;
+          }
+
+          .pss-controls {
+            flex-wrap: wrap;
           }
         }
       `}</style>

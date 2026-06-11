@@ -445,7 +445,7 @@ export default function SssLayoutEditor() {
   if (error) {
     return (
       <div style={{ textAlign: 'center', padding: '2rem' }}>
-        <p style={{ color: '#ff6b6b' }}>{error}</p>
+        <p style={{ color: 'var(--color-danger)' }}>{error}</p>
         <button className="mode-btn" onClick={fetchLayout}>Retry</button>
       </div>
     )
@@ -499,7 +499,7 @@ export default function SssLayoutEditor() {
               <button className="sss-tab-btn" onClick={handleMovePageRight} title="Move page right"
                 disabled={activePage >= layout.pages.length - 1}>&#9654;</button>
               <button className="sss-tab-btn" onClick={handleDeletePage} title="Delete page"
-                style={{ color: '#ff6b6b' }}>&#10005;</button>
+                style={{ color: 'var(--color-danger)' }}>&#10005;</button>
             </>
           )}
           <button

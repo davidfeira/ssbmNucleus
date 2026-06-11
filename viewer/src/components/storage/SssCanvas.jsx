@@ -355,7 +355,7 @@ export default function SssCanvas({
   }, [zoom, onZoomChange])
 
   return (
-    <div ref={containerRef} style={{ flex: 1, minHeight: 0, minWidth: 0, background: '#1a1a2e', borderRadius: '8px', overflow: 'hidden' }}>
+    <div ref={containerRef} style={{ flex: 1, minHeight: 0, minWidth: 0, background: 'var(--color-bg-deep)', overflow: 'hidden' }}>
       <canvas
         ref={canvasRef}
         width={canvasSize.w}
