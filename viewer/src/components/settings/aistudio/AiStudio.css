@@ -170,9 +170,10 @@
   border: 1px solid var(--color-border);
   border-radius: 10px;
   width: min(720px, 92vw);
-  max-height: 86vh;
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 .aistudio-modal-header {
@@ -199,6 +200,10 @@
 .aistudio-modal-body {
   padding: 14px 16px;
   overflow-y: auto;
+  /* flex children default to min-height:auto and refuse to shrink — without
+     this the body grows past the modal cap instead of scrolling */
+  min-height: 0;
+  flex: 1;
 }
 .aistudio-setup-banner.ready {
   background: var(--color-success-muted);

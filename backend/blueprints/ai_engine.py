@@ -101,8 +101,10 @@ def list_models():
             'enabled': spec.id not in disabled,
             'fit': hardware.model_fit(spec, hw),
             # known-missing pipeline class in the installed diffusers
-            'needsEngineUpdate': (spec.kind == 'local' and pipelines
-                                  and pipelines.get(spec.pipeline_class) is False),
+            # (bool(): a bare `and` chain leaks {} into the JSON, which is
+            # truthy in JS and lit the badge on every model)
+            'needsEngineUpdate': bool(spec.kind == 'local' and pipelines
+                                      and pipelines.get(spec.pipeline_class) is False),
             'stats': (stats.get(spec.id) or stats.get(spec.repo_id)
                       if spec.kind == 'local' else stats.get(spec.repo_id)),
             'requiresKey': spec.kind == 'api' and not has_key,
