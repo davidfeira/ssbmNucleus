@@ -65,6 +65,7 @@ export default function PoseSkinSelectorModal({
   const [selectedSkins, setSelectedSkins] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [results, setResults] = useState(null)
 
   // Fetch skins for this character
@@ -116,62 +117,60 @@ export default function PoseSkinSelectorModal({
     setSelectedSkins(new Set())
   }
 
+  // Generate one skin per request so we can show real per-skin progress
+  // (each render takes seconds; one big batch request gave no feedback)
   const handleGenerate = async () => {
     if (selectedSkins.size === 0) return
 
+    const skinList = Array.from(selectedSkins)
     setGenerating(true)
     setResults(null)
+    setProgress({ current: 0, total: skinList.length })
 
-    try {
-      const response = await fetch(`${API_URL}/storage/poses/batch-generate-csp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character,
-          poseName,
-          skinIds: Array.from(selectedSkins),
-          hdResolution: '4x'
+    let generated = 0
+    let failed = 0
+    const details = []
+
+    for (let i = 0; i < skinList.length; i++) {
+      setProgress({ current: i + 1, total: skinList.length })
+      try {
+        const response = await fetch(`${API_URL}/storage/poses/batch-generate-csp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character,
+            poseName,
+            skinIds: [skinList[i]],
+            hdResolution: '4x'
+          })
         })
-      })
 
-      const data = await response.json()
-
-      if (data.success) {
-        if (data.generated > 0) {
-          playSound('camera')
+        const data = await response.json()
+        if (data.success) {
+          generated += data.generated || 0
+          failed += data.failed || 0
+          if (Array.isArray(data.results)) details.push(...data.results)
         } else {
-          playSound('error')
+          failed += 1
         }
-        setResults({
-          generated: data.generated,
-          failed: data.failed,
-          details: data.results
-        })
-        if (data.generated > 0) {
-          if (onCostumesUpdated) {
-            await onCostumesUpdated({
-              character,
-              skinIds: Array.from(selectedSkins)
-            })
-          } else if (onRefresh) {
-            await onRefresh()
-          }
-        }
-      } else {
-        playSound('error')
-        setResults({
-          error: data.error || 'Generation failed'
-        })
+      } catch (err) {
+        console.error('[PoseSkinSelector] Generate error:', err)
+        failed += 1
       }
-    } catch (err) {
-      console.error('[PoseSkinSelector] Generate error:', err)
-      playSound('error')
-      setResults({
-        error: err.message || 'Network error'
-      })
-    } finally {
-      setGenerating(false)
     }
+
+    playSound(generated > 0 ? 'camera' : 'error')
+    setResults({ generated, failed, details })
+
+    if (generated > 0) {
+      if (onCostumesUpdated) {
+        await onCostumesUpdated({ character, skinIds: skinList })
+      } else if (onRefresh) {
+        await onRefresh()
+      }
+    }
+
+    setGenerating(false)
   }
 
   const modal = (
@@ -232,7 +231,13 @@ export default function PoseSkinSelectorModal({
           {generating ? (
             <div className="pss-progress">
               <HexagonLoader size={92} label="Generating CSPs" />
-              <span>Generating {selectedSkins.size} CSP{selectedSkins.size !== 1 ? 's' : ''}...</span>
+              <span>Generating {progress.current} / {progress.total}…</span>
+              <div className="pss-progress-bar">
+                <div
+                  className="pss-progress-fill"
+                  style={{ width: `${progress.total ? ((progress.current - 1) / progress.total) * 100 : 0}%` }}
+                />
+              </div>
             </div>
           ) : results ? (
             <div className={`pss-results ${results.error ? 'pss-error' : 'pss-success'}`}>
@@ -573,6 +578,22 @@ export default function PoseSkinSelectorModal({
           text-align: center;
           color: var(--color-text-secondary);
           font-size: var(--text-sm);
+        }
+
+        .pss-progress-bar {
+          width: min(100%, 22rem);
+          height: 6px;
+          background: var(--color-bg-deep);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-full);
+          overflow: hidden;
+        }
+
+        .pss-progress-fill {
+          height: 100%;
+          background: var(--gradient-cyan, var(--color-cyan));
+          border-radius: var(--radius-full);
+          transition: width 0.4s ease;
         }
 
         .pss-results {

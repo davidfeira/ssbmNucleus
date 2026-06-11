@@ -56,6 +56,9 @@ namespace HSDRawViewer
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_SHOWWINDOW = 0x0040;
+        // Never activate on reposition - without this every resize/show yanks
+        // keyboard focus away from the Electron window hosting the viewer
+        private const uint SWP_NOACTIVATE = 0x0010;
 
         private ViewportControl _viewport;
         private RenderJObj _renderJObj;
@@ -229,9 +232,10 @@ namespace HSDRawViewer
                 Log($"RenderJObj created. DOBJs: {_renderJObj.DObjCount}");
             }
 
-            // Create borderless embeddable form
+            // Create borderless embeddable form (non-activating so it never
+            // steals focus from the Electron window while embedded)
             Log("Creating borderless host form...");
-            _hostForm = new Form();
+            _hostForm = new NoActivateForm();
             _hostForm.FormBorderStyle = FormBorderStyle.None;
             _hostForm.StartPosition = FormStartPosition.Manual;
             _hostForm.Location = new System.Drawing.Point(0, 0);
@@ -498,7 +502,7 @@ namespace HSDRawViewer
                             _viewport.RefreshSize();
                             _viewport.Invalidate();
                             // Keep window on top - use TOPMOST since owned windows don't stay on top reliably
-                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
                         }));
                         Log($"Resized to {x},{y} {width}x{height}");
                         break;
@@ -518,7 +522,7 @@ namespace HSDRawViewer
                                 int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
                                 // Bring to front
-                                SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                                SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
                                 _hostForm.Show();
                                 Log($"Set owner to HWND: {_parentHwnd}");
                             }));
@@ -529,7 +533,7 @@ namespace HSDRawViewer
                         _hostForm.Invoke((Action)(() =>
                         {
                             _hostForm.Show();
-                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                            SetWindowPos(_hostForm.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
                             _hostForm.Invalidate();
                         }));
                         break;

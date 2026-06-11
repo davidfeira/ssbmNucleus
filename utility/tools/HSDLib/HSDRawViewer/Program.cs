@@ -563,8 +563,9 @@ namespace HSDRawViewer
                     viewport.AddRenderer(drawable);
                 }
 
-                // Create a form to host the viewport (hidden)
-                using (var form = new Form())
+                // Create a form to host the viewport (hidden, never activates -
+                // batch CSP generation must not steal focus from the user)
+                using (var form = new NoActivateForm())
                 {
                     form.WindowState = FormWindowState.Minimized;
                     form.ShowInTaskbar = false;
