@@ -28,22 +28,37 @@ export default function useAiStudioSetup(show, taskKinds) {
     Promise.all([
       fetch(`${API_URL}/skin-lab/ai-status`).then((r) => r.json()),
       fetch(`${API_URL}/ai-engine/models`).then((r) => r.json()),
+      fetch(`${API_URL}/ai-engine/status`).then((r) => r.json()).catch(() => ({})),
       fetch(`${API_URL}/ai-engine/planners`).then((r) => r.json()).catch(() => ({})),
-    ]).then(([st, m, p]) => {
+    ]).then(([st, m, eng, p]) => {
       if (cancelled) return
       setReady(Boolean(st.hasKey || hasLocalKey || st.localModelReady))
       if (m.success) {
-        const usable = m.models.filter((mm) => (
-          mm.kind === 'local'
-            ? (mm.downloaded && mm.enabled && !mm.needsEngineUpdate)
-            : (st.hasKey || hasLocalKey)))
-        setOptions(usable.map((mm) => ({
-          value: mm.kind === 'api' ? mm.repoId : mm.id,
-          provider: mm.kind === 'api' ? 'openrouter' : 'local',
-          label: mm.stats?.avgSeconds != null
-            ? `${mm.label} — ~${Math.round(mm.stats.avgSeconds)}s/image`
-            : mm.label,
-        })))
+        const engineOk = Boolean(eng.engine?.installed && eng.engine?.ok)
+        const keyOk = Boolean(st.hasKey || hasLocalKey)
+        // locked models stay VISIBLE (greyed) so users learn what unlocks
+        // them: local = engine installed + weights downloaded; api = a key
+        setOptions(m.models.map((mm) => {
+          let reason = null
+          if (mm.kind === 'local') {
+            if (!engineOk && !mm.downloaded) reason = 'install engine + download'
+            else if (!engineOk) reason = 'install the engine'
+            else if (!mm.downloaded) reason = mm.partial ? 'resume the download' : 'download it'
+            else if (!mm.enabled) reason = 'disabled in settings'
+            else if (mm.needsEngineUpdate) reason = 'needs engine update'
+          } else if (mm.requiresKey && !keyOk) {
+            reason = 'needs an OpenRouter key'
+          }
+          return {
+            value: mm.kind === 'api' ? mm.repoId : mm.id,
+            provider: mm.kind === 'api' ? 'openrouter' : 'local',
+            locked: Boolean(reason),
+            reason,
+            label: mm.stats?.avgSeconds != null
+              ? `${mm.label} — ~${Math.round(mm.stats.avgSeconds)}s/image`
+              : mm.label,
+          }
+        }))
       }
       // installed Ollama models double as free offline planner LLMs
       setLocalPlanners((p.local || []).map((name) => ({

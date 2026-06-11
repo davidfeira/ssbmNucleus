@@ -16,29 +16,31 @@ const FIT_BADGES = {
   no_gpu: { cls: 'bad', text: 'needs an NVIDIA GPU' },
 }
 
-function statusDot(model, downloading) {
-  if (downloading) return 'busy'
-  if (model.kind === 'api') return model.requiresKey ? 'off' : 'api'
-  if (model.downloaded) return model.enabled ? 'on' : 'off'
-  if (model.partial) return 'warn'
-  return 'off'
+/* a model is UNLOCKED when the studios can actually run it: local needs the
+   engine installed AND weights downloaded (and not disabled); api needs a key */
+function lockReason(model, engineOk) {
+  if (model.kind === 'api') return model.requiresKey ? 'needs an OpenRouter key' : null
+  if (!engineOk && !model.downloaded) return 'install the engine + download'
+  if (!engineOk) return 'install the engine'
+  if (!model.downloaded) return model.partial ? 'resume the download' : 'not downloaded yet'
+  if (!model.enabled) return 'disabled'
+  if (model.needsEngineUpdate) return 'needs engine update'
+  return null
 }
 
-function compactHint(model, download) {
+function compactHint(model, download, locked) {
   if (download) {
     return download.bytesTotal
       ? `${Math.round(100 * download.bytesDone / download.bytesTotal)}%…`
       : 'starting…'
   }
-  if (model.kind === 'api') return `~${Math.round(model.costPerImageUsd * 100)}¢/image`
-  if (model.downloaded) {
-    return `${fmtBytes(model.sizeOnDiskBytes)}${model.enabled ? ' · ready' : ' · disabled'}`
-  }
-  if (model.partial) return 'incomplete'
-  return `~${model.diskEstimateGb.toFixed(0)} GB download`
+  if (locked) return locked
+  if (model.kind === 'api') return `unlocked · ~${Math.round(model.costPerImageUsd * 100)}¢/image`
+  return `unlocked · ${fmtBytes(model.sizeOnDiskBytes)}`
 }
 
-function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle }) {
+function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle,
+                    engineOk }) {
   const [download, setDownload] = useState(null)   // {bytesDone, bytesTotal}
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -114,23 +116,43 @@ function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle }) {
   const isLocal = model.kind === 'local'
   const fit = FIT_BADGES[model.fit] || FIT_BADGES.good
   const downloading = Boolean(download) || model.downloading
+  const locked = downloading ? null : lockReason(model, engineOk)
   const stats = model.stats
   const speed = stats?.avgSeconds != null
     ? `~${Math.round(stats.avgSeconds)}s/image measured (${stats.runs} runs)`
     : (model.speedBlurb ? `${model.speedBlurb} (no runs yet)` : null)
 
   return (
-    <div className={`aistudio-row${expanded ? ' expanded' : ''}${model.enabled ? '' : ' disabled'}`}>
+    <div className={`aistudio-row${expanded ? ' expanded' : ''}${locked ? ' locked' : ''}`}>
       <button className="aistudio-row-head" onMouseEnter={playHoverSound}
               onClick={() => { playSound('tick'); onToggle() }}>
-        <span className={`aistudio-dot ${statusDot(model, downloading)}`} />
+        {downloading
+          ? <span className="aistudio-dot busy" />
+          : locked
+            ? <span className="aistudio-lock">🔒</span>
+            : <span className="aistudio-dot on" />}
         <span className="aistudio-row-name">{model.label}</span>
-        <span className="aistudio-row-hint">{compactHint(model, download)}</span>
+        <span className={`aistudio-row-hint${locked ? ' locked' : ''}`}>
+          {compactHint(model, download, locked)}
+        </span>
         <span className="aistudio-row-chevron">{expanded ? '▾' : '▸'}</span>
       </button>
 
       {expanded && (
         <div className="aistudio-row-body">
+          {isLocal && (
+            <div className="aistudio-checklist">
+              <div className={engineOk ? 'done' : ''}>
+                {engineOk ? '✓' : '○'} local engine installed
+                {!engineOk && ' — use the engine card above'}
+              </div>
+              <div className={model.downloaded ? 'done' : ''}>
+                {model.downloaded ? '✓' : '○'} weights downloaded
+                {!model.downloaded
+                  && ` — ${model.partial ? 'resume below' : `~${model.diskEstimateGb.toFixed(0)} GB, button below`}`}
+              </div>
+            </div>
+          )}
           <div className="aistudio-model-head">
             {isLocal
               ? <span className={`aistudio-badge ${fit.cls}`}>{fit.text}</span>
@@ -215,7 +237,7 @@ function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle }) {
 }
 
 export default function ModelCatalog({ API_URL, models, socket, onChanged,
-                                       localOnly = false }) {
+                                       localOnly = false, engineOk = false }) {
   const [expandedId, setExpandedId] = useState(null)
   if (!models) return null
   const local = models.models.filter((m) => m.kind === 'local')
@@ -228,12 +250,13 @@ export default function ModelCatalog({ API_URL, models, socket, onChanged,
       </div>
       <p className="section-description">
         {localOnly
-          ? 'Run free on your GPU — one downloaded model unlocks the studios. Click a model for details.'
-          : 'Local models run free on your GPU; API models bill per image. Click a model for details and management.'}
+          ? 'Run free on your GPU. 🔒 models unlock once the engine is installed AND their weights are downloaded. Click a model for details.'
+          : 'Local models run free on your GPU (🔒 until the engine is installed and the weights are downloaded); API models unlock with an OpenRouter key. Click a model for details.'}
       </p>
       {[...local, ...api].map((m) => (
         <ModelRow key={m.id} API_URL={API_URL} model={m} socket={socket}
                   onChanged={onChanged} expanded={expandedId === m.id}
+                  engineOk={engineOk}
                   onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)} />
       ))}
       <div className="aistudio-storage-footer">

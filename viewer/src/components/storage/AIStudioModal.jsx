@@ -56,10 +56,10 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
     return cleanupSocket
   }, [show])
 
-  // drop a stale stored pick (model deleted/disabled since) back to Auto
+  // drop a stale stored pick (model deleted/locked since) back to Auto
   useEffect(() => {
     if (show && options.length && imageModel
-        && !options.some((o) => o.value === imageModel)) {
+        && !options.some((o) => o.value === imageModel && !o.locked)) {
       setImageModel('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +199,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
                     }}>
               <option value="">{autoOptionLabel(autoResolution)}</option>
               {options.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.value} value={m.value} disabled={m.locked}>
+                  {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}
+                </option>
               ))}
             </select>
             <ResolutionNotice resolution={resolution} />
