@@ -312,7 +312,9 @@ const EmbeddedModelViewer = forwardRef(({
           setIsConnected(true)
           setIsLoading(false)
           console.log('[EmbeddedViewer] Ready! CSP preset values:', { cspMode, showGrid, showBackground })
-          // Position the viewer window after a brief delay to ensure DOM is ready
+          // Position immediately to minimize the visible jump, then again
+          // once layout settles
+          updateViewerPosition()
           setTimeout(() => updateViewerPosition(), 100)
           // Always apply display settings - each viewer instance controls its own config
           setTimeout(() => {
