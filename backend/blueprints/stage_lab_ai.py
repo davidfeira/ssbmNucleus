@@ -22,6 +22,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -212,11 +213,14 @@ def stage_ai_create():
                 cost = 0.03 if image_provider == 'openrouter' else 0.0
                 emit('applying', None, f'Generating material — {label}'
                      + (f' (~{int(cost * 100)}¢)' if cost else ' (local, free)'))
+                t0 = time.time()
                 path, info = _generate_material(params)
+                cached = bool((info or {}).get('cached'))
                 gen_log.append({'model': label,
                                 'provider': image_provider,
-                                'cached': bool((info or {}).get('cached')),
-                                'estCostUsd': 0.0 if (info or {}).get('cached') else cost})
+                                'cached': cached,
+                                'seconds': round(time.time() - t0, 1),
+                                'estCostUsd': 0.0 if cached else cost})
                 return path
 
             out_dat = apply_stage_plan(code, steps, tints, work, gen, on_step=on_step)

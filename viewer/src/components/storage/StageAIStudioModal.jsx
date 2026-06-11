@@ -228,13 +228,22 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
                 ))}
               </div>
             )}
-            {costInfo && (
-              <div className="ai-studio-progress-message">
-                {costInfo.generation.length} material(s) — {
-                  costInfo.cost > 0
-                    ? `~$${costInfo.cost.toFixed(2)} (${costInfo.generation[0]?.model})`
-                    : `free (local${costInfo.generation[0]?.model ? `, ${costInfo.generation[0].model}` : ''})`
-                }
+            {costInfo && costInfo.generation.length > 0 && (
+              <div className="ai-studio-genlog">
+                {costInfo.generation.map((g, i) => (
+                  <div key={i} className="ai-studio-progress-message">
+                    material {i + 1}: {g.model}
+                    {g.seconds != null ? ` — ${g.seconds}s` : ''}
+                    {g.cached ? ' — cached (free)'
+                      : g.estCostUsd > 0 ? ` — ~${Math.round(g.estCostUsd * 100)}¢`
+                        : ' — free (local)'}
+                  </div>
+                ))}
+                <div className="ai-studio-progress-message">
+                  total: {costInfo.cost > 0 ? `~$${costInfo.cost.toFixed(2)}` : 'free'}
+                  {' · '}
+                  {costInfo.generation.reduce((s, g) => s + (g.seconds || 0), 0).toFixed(0)}s generating
+                </div>
               </div>
             )}
             <input

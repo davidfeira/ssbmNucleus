@@ -19,6 +19,7 @@ import json
 import os
 import re
 import threading
+import time
 
 import requests
 from flask import Blueprint, jsonify, request
@@ -290,12 +291,14 @@ def ai_create():
                     gen = {'prompt': s['material_prompt'], 'provider': image_provider}
                     if image_model:
                         gen['model'] = image_model
-                    gen_log.append({'model': img_label, 'provider': image_provider,
-                                    'estCostUsd': img_cost})
+                    t0 = time.time()
                     rr = requests.post(f'{base_url}/composite', timeout=900, json={
                         'region': s['region'],
                         'material': {'generate': gen},
                         'modulate': s.get('modulate') or {}}).json()
+                    gen_log.append({'model': img_label, 'provider': image_provider,
+                                    'seconds': round(time.time() - t0, 1),
+                                    'estCostUsd': img_cost})
                 elif s['op'] == 'tint':
                     rr = requests.post(f'{base_url}/tint', timeout=120, json={
                         'region': s['region'], 'hue': s['hue'],

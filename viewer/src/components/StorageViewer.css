@@ -8001,3 +8001,9 @@
   color: var(--color-text-secondary, #8b93a7);
 }
 .create-mod-card.ai .create-mod-icon { font-size: 26px; }
+
+.ai-studio-genlog {
+  display: flex; flex-direction: column; gap: 2px;
+  border-top: 1px dashed var(--color-border, #2a3245);
+  padding-top: 8px;
+}
