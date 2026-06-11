@@ -18,6 +18,7 @@ export default function useAiStudioSetup(show, taskKinds) {
   const [options, setOptions] = useState([])
   const [localPlanners, setLocalPlanners] = useState([])
   const [resolution, setResolution] = useState(null)
+  const [autoResolution, setAutoResolution] = useState(null)
 
   const hasLocalKey = Boolean(localStorage.getItem('openrouter_api_key'))
 
@@ -54,6 +55,22 @@ export default function useAiStudioSetup(show, taskKinds) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show])
 
+  // always know what Auto would pick (even while an explicit model is
+  // selected) — feeds the picker's 'Auto — <model>' label only
+  useEffect(() => {
+    if (!show) return
+    fetch(`${API_URL}/ai-engine/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: taskKinds.map((kind) => ({ kind })),
+                             clientHasKey: hasLocalKey }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setAutoResolution(d.tasks) })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show])
+
   const resolveFor = useCallback((selectedModel) => {
     const tasks = taskKinds.map((kind) => ({
       kind,
@@ -65,12 +82,30 @@ export default function useAiStudioSetup(show, taskKinds) {
       body: JSON.stringify({ tasks, clientHasKey: hasLocalKey }),
     })
       .then((r) => r.json())
-      .then((d) => { if (d.success) setResolution(d.tasks) })
+      .then((d) => {
+        if (!d.success) return
+        setResolution(d.tasks)
+        if (!selectedModel) setAutoResolution(d.tasks)
+      })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskKinds.join(','), hasLocalKey])
 
-  return { ready, options, localPlanners, resolution, resolveFor }
+  return { ready, options, localPlanners, resolution, autoResolution, resolveFor }
+}
+
+const shortName = (label) => (label || '').replace(/\s*\([^)]*\)\s*$/, '')
+
+/** 'Auto — SD-Turbo' / 'Auto — SD-Turbo / scenes: Nano Banana' — shows what
+ * the resolver would actually pick for THIS machine's setup. */
+export function autoOptionLabel(autoResolution) {
+  const ok = (autoResolution || []).filter((t) => !t.error && t.label)
+  if (!ok.length) return 'Auto (recommended)'
+  const names = [...new Set(ok.map((t) => shortName(t.label)))]
+  if (names.length === 1) return `Auto — ${names[0]}`
+  const material = ok.find((t) => t.kind === 'material')
+  const backdrop = ok.find((t) => t.kind === 'backdrop')
+  return `Auto — ${shortName(material?.label)} / scenes: ${shortName(backdrop?.label)}`
 }
 
 const TASK_LABELS = {

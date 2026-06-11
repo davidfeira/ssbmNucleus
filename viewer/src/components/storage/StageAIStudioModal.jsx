@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
-import useAiStudioSetup, { ResolutionNotice, SetupGate } from './useAiStudioSetup'
+import useAiStudioSetup, { ResolutionNotice, SetupGate, autoOptionLabel } from './useAiStudioSetup'
 
 const PLANNERS = [
   { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
@@ -26,7 +26,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   // '' = Auto: the backend's tier resolver picks per task
   const [imageModel, setImageModel] = useState(
     localStorage.getItem('ai_studio_image_model') || '')
-  const { ready, options, localPlanners, resolution, resolveFor } =
+  const { ready, options, localPlanners, resolution, autoResolution, resolveFor } =
     useAiStudioSetup(show, TASK_KINDS)
   const [reviewPass, setReviewPass] = useState(false)
   const [assessment, setAssessment] = useState(null)
@@ -210,7 +210,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
                       setImageModel(e.target.value)
                       localStorage.setItem('ai_studio_image_model', e.target.value)
                     }}>
-              <option value="">Auto (recommended)</option>
+              <option value="">{autoOptionLabel(autoResolution)}</option>
               {options.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
