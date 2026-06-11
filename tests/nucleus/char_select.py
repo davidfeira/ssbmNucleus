@@ -22,6 +22,7 @@ ALIASES = {
     "cf": "falcon", "captainfalcon": "falcon",
     "sheik": "zelda",  # same cell; sheik is reached by toggling after select
     "gnw": "gameandwatch", "gw": "gameandwatch", "mrgameandwatch": "gameandwatch",
+    "mrgamewatch": "gameandwatch", "gamewatch": "gameandwatch",
     "puff": "jigglypuff", "jiggs": "jigglypuff",
     "pika": "pikachu", "mew2": "mewtwo",
     "ics": "iceclimbers", "icies": "iceclimbers", "popo": "iceclimbers",

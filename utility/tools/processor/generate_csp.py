@@ -122,6 +122,9 @@ def find_character_assets(character_name, dat_filepath=None):
     folder_name = character_name
     if character_name == 'Ice Climbers':
         folder_name = 'Ice Climbers (Popo)'
+    # detect_character() says 'Mr. Game & Watch' but the asset folder is 'G&W'
+    if character_name == 'Mr. Game & Watch':
+        folder_name = 'G&W'
 
     character_folder = os.path.join(CSP_BASE_PATH, folder_name)
 
