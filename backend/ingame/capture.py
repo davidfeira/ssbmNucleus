@@ -65,10 +65,18 @@ CAM_DBG_EYE = 0x8045304C         # DEBUG_FREE eye Vec3
 CAM_DBG_FOV = 0x80453058         # DEBUG_FREE fov (degrees)
 CAMERA_DEBUG_FREE = 8
 
-# Per-base-stage camera framing (eye, interest, fov). Calibrated by capture. An
-# absent stage falls back to DEFAULT_FRAMING. Keyed by the INTERNAL_STAGE_ID name.
+# Per-base-stage camera framing (eye, interest, fov). Calibrated 2026-06-11 via
+# _cap_calibrate.py sweeps (one boot per stage, candidates eyeballed). An absent
+# stage falls back to DEFAULT_FRAMING. Keyed by the INTERNAL_STAGE_ID name.
 DEFAULT_FRAMING = {"eye": (0.0, 20.0, 450.0), "interest": (0.0, 8.0, 0.0), "fov": 40.0}
-STAGE_FRAMING = {}
+STAGE_FRAMING = {
+    "battlefield": {"eye": (0.0, 35.7, 189.5), "interest": (0.0, 29.7, 0.0), "fov": 40.0},
+    "finaldestination": {"eye": (0.0, 14.0, 237.1), "interest": (0.0, 8.0, 0.0), "fov": 40.0},
+    "dreamland": {"eye": (0.0, 34.2, 214.1), "interest": (0.0, 28.2, 0.0), "fov": 40.0},
+    "yoshisstory": {"eye": (0.0, 29.5, 201.7), "interest": (0.0, 23.5, 0.0), "fov": 40.0},
+    "fountainofdreams": {"eye": (0.0, 29.9, 175.3), "interest": (0.0, 23.9, 0.0), "fov": 40.0},
+    "pokemonstadium": {"eye": (0.0, 65.0, 310.0), "interest": (0.0, 8.0, 0.0), "fov": 40.0},
+}
 
 
 def _apply_code_patches(d, log=_noop):
@@ -99,12 +107,14 @@ def _set_free_camera(d, eye, interest, fov):
 
 def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
                   framing_key=None, emit=None, log=None, settle=4.0,
-                  hires_textures=False):
+                  hires_textures=False, framing_sweep=None):
     """Boot the ISO, load the stage ALONE in a no-timer Time match (internal_id,
     holding `hold` for a DAS variant), pose the camera, and return
     {"ok": bool, "png": bytes|None, "reason": str}.
 
-    framing_key selects a per-base-stage camera preset (STAGE_FRAMING)."""
+    framing_key selects a per-base-stage camera preset (STAGE_FRAMING).
+    framing_sweep (calibration): a list of framing dicts -- one boot, one shot
+    per framing; returns {"ok", "shots": [{"framing", "png", "reason"}]}."""
     emit = emit or _noop
     log = log or _noop
     result = {"ok": False, "png": None, "reason": ""}
@@ -174,6 +184,22 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
             return result
 
         emit("framing", 75, "Waiting for the stage to finish loading…")
+        if framing_sweep is not None:
+            # calibration mode: one boot, many camera candidates. The camera is
+            # deterministic (DEBUG_FREE, no per-frame recompute), so after the
+            # first settled shot each new framing only needs a short hold.
+            shots = []
+            for i, fr in enumerate(framing_sweep):
+                emit("capturing", 90, f"Sweep shot {i + 1}/{len(framing_sweep)}…")
+                png, reason = _frame_and_shot(boot, d, fr,
+                                              settle=settle if i == 0 else 0.7,
+                                              log=log)
+                shots.append({"framing": fr, "png": png, "reason": reason})
+            result["ok"] = any(s["png"] for s in shots)
+            result["shots"] = shots
+            result["reason"] = "sweep"
+            result["solo"] = solo
+            return result
         fr = STAGE_FRAMING.get(framing_key, DEFAULT_FRAMING)
         emit("capturing", 90, "Capturing the screenshot…")
         png, reason = _frame_and_shot(boot, d, fr, settle=settle, log=log)

@@ -74,6 +74,33 @@ POST /close
   resized onto that texture in the open session; without, it just returns
   `imagePath`. First call loads the model — slow.
 
+### Regions + deterministic compositing
+The structured ops a UI — or a small planner model emitting JSON — drives
+directly. No agent or code required.
+
+- `GET /regions` — the open character's texture-region map: role → texture
+  indexes (`fur`, `cloth`, `armor`, `eyes`, `face_detail`), `protected`
+  indexes (eyes/mouth — skipped unless `force`), default `maskHints` per
+  region, and per-index notes. Maps ship per character in
+  `backend/assets/texture_regions/<Character>.json`; `approximate: true`
+  flags a texture-count mismatch with the open DAT. 404 = no map (work with
+  explicit textures + masks).
+- `POST /composite` — re-fabric: lay a material over masked pixels, shaded by
+  each texture's ORIGINAL lightness so folds/seams survive.
+  `{region:"fur" | textures:[i...], material: {path}|{data:b64}|{generate:
+  {prompt,...}}, mask?: {hueMin,hueMax,satMin,satMax,lumMin,lumMax},
+  modulate?: {lo:0.3, hi:1.6}, force?}`. Mask defaults to the region's hint;
+  hueMin>hueMax wraps through 0 (reds). Returns `{changed, skipped}`.
+- `POST /hue-shift` — rotate hue / push saturation on masked pixels
+  (lightness untouched): `{region|textures, mask?, hueShift?,
+  saturationShift?, force?}`. Same targeting semantics as /composite.
+
+Example — a whole themed skin in two calls (after /open):
+```json
+POST /composite {"region":"fur","material":{"generate":{"prompt":"molten lava"}},"modulate":{"lo":0.45,"hi":1.5}}
+POST /hue-shift {"region":"cloth","hueShift":-160}
+```
+
 ### Saving
 - `GET /export-dat` — the edited DAT bytes (every pushed texture included).
 - `POST /save {name}` — exports and saves to the vault as a NEW skin:

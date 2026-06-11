@@ -19,6 +19,7 @@ One session at a time -- it owns a real OpenGL window.
 import io
 import json
 import logging
+import os
 import shutil
 import threading
 import time
@@ -29,8 +30,11 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 from PIL import Image
 
 from core.config import HSDRAW_EXE, LOGS_PATH, STORAGE_PATH, get_subprocess_args
+from skinlab import compose as compose_mod
 from skinlab import palette as palette_mod
 from skinlab.session import ViewerSession, ViewerSessionError
+
+TEXTURE_REGIONS_DIR = Path(__file__).parent.parent / 'assets' / 'texture_regions'
 
 logger = logging.getLogger(__name__)
 
@@ -448,47 +452,54 @@ def palette_reset():
 # assetFarm bridge -- generate an image with local diffusion and (optionally)  #
 # apply it straight onto a texture in the open session.                        #
 # --------------------------------------------------------------------------- #
-@skin_lab_bp.route('/api/mex/skin-lab/generate-texture', methods=['POST'])
-def generate_texture():
-    """Generate an image via the assetFarm project and optionally apply it to
-    a texture. Body: {prompt, index?, recipe?: 'tileset_tile', model?, seed?,
-    width?, height?, name?}. With `index`, the result is resized to that
-    texture and pushed into the open session; without it, the image is just
-    generated and its path returned. First call may be slow (model load)."""
+class AssetFarmError(RuntimeError):
+    pass
+
+
+def _assetfarm_generate(params):
+    """Run an assetFarm generation. params: {prompt, recipe?, model?, seed?,
+    width?, height?, name?}. Returns (absolute_image_path, result_info).
+    Raises AssetFarmError with a readable message on any failure."""
     import subprocess
 
     from core.config import ASSETFARM_DIR
 
-    data = request.get_json(silent=True) or {}
-    prompt = (data.get('prompt') or '').strip()
+    prompt = (params.get('prompt') or '').strip()
     if not prompt:
-        return jsonify({'success': False, 'error': 'prompt is required'}), 400
+        raise AssetFarmError('prompt is required')
 
     farm_python = ASSETFARM_DIR / '.venv' / 'Scripts' / 'python.exe'
     if not farm_python.exists():
-        return jsonify({'success': False,
-                        'error': f'assetFarm not found at {ASSETFARM_DIR} '
-                                 '(set NUCLEUS_ASSETFARM_DIR)'}), 500
+        raise AssetFarmError(f'assetFarm not found at {ASSETFARM_DIR} '
+                             '(set NUCLEUS_ASSETFARM_DIR)')
 
-    recipe = data.get('recipe') or 'tileset_tile'
+    recipe = params.get('recipe') or 'tileset_tile'
     cmd = [str(farm_python), '-m', 'assetfarm', 'generate', recipe,
-           '-p', prompt, '-n', (data.get('name') or 'skinlab').strip(),
+           '-p', prompt, '-n', (params.get('name') or 'skinlab').strip(),
            '--project', 'nucleus-skinlab', '--json']
-    if data.get('model'):
-        cmd += ['--model', str(data['model'])]
-    if data.get('seed') is not None:
-        cmd += ['--seed', str(int(data['seed']))]
-    if data.get('width'):
-        cmd += ['--width', str(int(data['width']))]
-    if data.get('height'):
-        cmd += ['--height', str(int(data['height']))]
+    # sd-turbo: 1-step, ~16s/tile incl. cold start, free -- the right default
+    # for material swatches; NUCLEUS_ASSETFARM_MODEL overrides. Slash-style ids
+    # (e.g. "google/gemini-2.5-flash-image") are API model names that leaked in
+    # from a forced-local request -- not assetFarm models, drop them.
+    model = params.get('model')
+    if model and '/' in str(model):
+        model = None
+    model = model or os.environ.get('NUCLEUS_ASSETFARM_MODEL', 'sd-turbo')
+    if model:
+        cmd += ['--model', str(model)]
+    if params.get('seed') is not None:
+        cmd += ['--seed', str(int(params['seed']))]
+    if params.get('width'):
+        cmd += ['--width', str(int(params['width']))]
+    if params.get('height'):
+        cmd += ['--height', str(int(params['height']))]
 
     logger.info(f'[skin-lab] assetFarm generate: {prompt!r} (recipe={recipe})')
     try:
         proc = subprocess.run(cmd, cwd=str(ASSETFARM_DIR), capture_output=True,
                               text=True, timeout=900, **get_subprocess_args())
     except subprocess.TimeoutExpired:
-        return jsonify({'success': False, 'error': 'assetFarm generation timed out'}), 500
+        raise AssetFarmError('assetFarm generation timed out')
 
     # --json puts a machine-readable result on the LAST stdout line
     result = None
@@ -500,13 +511,114 @@ def generate_texture():
             continue
     if not result or not result.get('ok') or not result.get('output_paths'):
         detail = (result or {}).get('error') or (proc.stderr or proc.stdout or '')[-2000:]
-        return jsonify({'success': False,
-                        'error': f'assetFarm generation failed: {detail}'}), 500
+        raise AssetFarmError(f'assetFarm generation failed: {detail}')
 
     # output_paths are relative to the assetFarm project directory
     image_path = Path(result['output_paths'][0])
     if not image_path.is_absolute():
         image_path = ASSETFARM_DIR / image_path
+    return image_path, result
+
+
+def _openrouter_generate(params):
+    """Generate a texture image via an OpenRouter image-output model (e.g.
+    google/gemini-2.5-flash-image). Needs OPENROUTER_API_KEY in the backend's
+    environment. Returns (absolute_image_path, result_info)."""
+    import base64 as _b64
+    import hashlib
+    import os
+
+    import requests as _rq
+
+    key = os.environ.get('OPENROUTER_API_KEY')
+    if not key:
+        raise AssetFarmError('OPENROUTER_API_KEY is not set in the backend environment')
+    prompt = (params.get('prompt') or '').strip()
+    if not prompt:
+        raise AssetFarmError('prompt is required')
+    model = params.get('model') or 'google/gemini-2.5-flash-image'
+
+    full_prompt = ('Generate a seamless tileable TEXTURE swatch, square, '
+                   'repeating pattern, no borders, no text, fills the whole '
+                   f'image edge to edge: {prompt}')
+    logger.info(f'[skin-lab] openrouter generate ({model}): {prompt!r}')
+    res = _rq.post('https://openrouter.ai/api/v1/chat/completions', timeout=180, json={
+        'model': model,
+        'messages': [{'role': 'user', 'content': full_prompt}],
+        'modalities': ['image', 'text'],
+    }, headers={'Authorization': f'Bearer {key}'})
+    body = res.json()
+    if 'error' in body:
+        raise AssetFarmError(f'openrouter generation failed: {body["error"]}')
+    msg = (body.get('choices') or [{}])[0].get('message') or {}
+    images = msg.get('images') or []
+    if not images:
+        raise AssetFarmError('openrouter returned no image: '
+                             + str(msg.get('content') or body)[:300])
+    url = (images[0].get('image_url') or {}).get('url') or ''
+    if 'base64,' not in url:
+        raise AssetFarmError('unexpected image payload from openrouter')
+    raw = _b64.b64decode(url.split('base64,', 1)[1])
+
+    out_dir = STORAGE_PATH / 'skinlab_materials'
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = (params.get('name') or hashlib.sha1(prompt.encode()).hexdigest()[:10])
+    path = out_dir / f'{stem}.png'
+    path.write_bytes(raw)
+    return path, {'model': model}
+
+
+def _generate_material(params):
+    """Route a {generate: ...} request: cached result first (materials are
+    keyed by name/prompt hash), then provider 'openrouter' (or a model id
+    containing '/') with assetFarm local as the FALLBACK (e.g. when the
+    OpenRouter key is out of credits), else assetFarm directly."""
+    import hashlib
+
+    prompt = (params.get('prompt') or '').strip()
+    stem = (params.get('name') or hashlib.sha1(prompt.encode()).hexdigest()[:10])
+    cache = STORAGE_PATH / 'skinlab_materials' / f'{stem}.png'
+    if cache.exists():
+        return cache, {'cached': True}
+
+    # NUCLEUS_IMAGE_PROVIDER=assetfarm forces local generation everywhere
+    # (batch runs / cost control); requests can still name a provider when unset.
+    forced = os.environ.get('NUCLEUS_IMAGE_PROVIDER', '').strip().lower()
+    provider = forced or (params.get('provider') or '').strip().lower()
+    model = params.get('model') or ''
+    if provider == 'openrouter' or (not provider and '/' in model):
+        try:
+            return _openrouter_generate(params)
+        except AssetFarmError as e:
+            logger.warning(f'[skin-lab] openrouter generation failed ({e}); '
+                           'falling back to local assetFarm')
+    image_path, result = _assetfarm_generate(params)
+    try:
+        # mirror into the material cache so repeats hit it
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        if Path(image_path).resolve() != cache.resolve():
+            cache.write_bytes(Path(image_path).read_bytes())
+            image_path = cache
+    except Exception:
+        pass
+    return image_path, result
+
+
+@skin_lab_bp.route('/api/mex/skin-lab/generate-texture', methods=['POST'])
+def generate_texture():
+    """Generate an image via the assetFarm project and optionally apply it to
+    a texture. Body: {prompt, index?, recipe?: 'tileset_tile', model?, seed?,
+    width?, height?, name?}. With `index`, the result is resized to that
+    texture and pushed into the open session; without it, the image is just
+    generated and its path returned. First call may be slow (model load)."""
+    data = request.get_json(silent=True) or {}
+    if not (data.get('prompt') or '').strip():
+        return jsonify({'success': False, 'error': 'prompt is required'}), 400
+    try:
+        image_path, result = _generate_material(data)
+    except AssetFarmError as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
     payload = {'success': True, 'imagePath': str(image_path),
                'seed': result.get('seed'), 'recipe': result.get('recipe')}
 
@@ -539,6 +651,349 @@ def generate_texture():
             payload['applied'] = True
             payload['index'] = int(index)
     return jsonify(payload)
+
+
+# --------------------------------------------------------------------------- #
+# regions + deterministic compositing -- the structured ops a UI or a small    #
+# planner model drives with JSON (no code, no agent).                          #
+# --------------------------------------------------------------------------- #
+def _load_region_map():
+    """The texture-region map for the open session's character (canonical name
+    or a custom character's donor), or None. Flags 'approximate' when the open
+    DAT's texture count differs from the map's basis."""
+    character = (_meta or {}).get('character') or ''
+    name = character
+    if character.startswith('custom_characters/'):
+        from blueprints.viewer import custom_character_based_on
+        from core.metadata import custom_character_slug
+        slug = custom_character_slug(character)
+        name = custom_character_based_on(slug) if slug else ''
+    path = TEXTURE_REGIONS_DIR / f'{name}.json'
+    if not name or not path.exists():
+        return None
+    region_map = json.loads(path.read_text(encoding='utf-8'))
+    basis_count = (region_map.get('basis') or {}).get('textureCount')
+    region_map['approximate'] = (basis_count is not None
+                                 and basis_count != len(_session.textures))
+    return region_map
+
+
+def _compute_live_hints(session, region_map):
+    """Per-COSTUME mask hints, computed from the open DAT's actual pixels.
+    Shipped hints describe the basis costume's colors (e.g. a blue jacket),
+    but every costume color differs -- so for hue-defined regions we histogram
+    the region's saturated pixels and take the dominant hue band. The armor
+    hint (low-sat whites) is costume-independent and kept as shipped."""
+    hints = dict((region_map.get('maskHints') or {}))
+    # maps can opt regions out of live recomputation ("liveHints" key): regions
+    # whose textures are single-purpose work best with NO mask (all opaque
+    # pixels), and a computed hue band would wrongly narrow them.
+    live_regions = region_map.get('liveHints')
+    if live_regions is None:
+        live_regions = ('fur', 'cloth', 'eyes')
+    for region in live_regions:
+        idxs = (region_map.get('regions') or {}).get(region) or []
+        bins = np.zeros(360, dtype=np.int64)
+        for index in idxs:
+            try:
+                arr = _texture_png_array(session, index)
+            except Exception:
+                continue
+            h, s, l = palette_mod.rgb_to_hsl(arr[..., :3].astype(np.float64))
+            mask = (arr[..., 3] >= 128) & (s >= 25) & (l >= 15) & (l <= 90)
+            if mask.any():
+                bins += np.bincount(np.floor(h[mask]).astype(np.int64) % 360,
+                                    minlength=360)
+        if bins.sum() < 200:
+            continue
+        if region == 'eyes':
+            # the eye texture is mostly the SKIN around the iris (fur-toned);
+            # suppress the fur band so the iris cluster wins the peak
+            fur_hint = hints.get('fur') or {}
+            lo_f, hi_f = fur_hint.get('hueMin'), fur_hint.get('hueMax')
+            if lo_f is not None and hi_f is not None:
+                pad = 15
+                for hdeg in range(360):
+                    if lo_f <= hi_f:
+                        inside = (lo_f - pad) <= hdeg <= (hi_f + pad)
+                    else:
+                        inside = hdeg >= (lo_f - pad) or hdeg <= (hi_f + pad)
+                    if inside:
+                        bins[hdeg] = 0
+            if bins.sum() < 50:
+                continue
+        # dominant band: walk out from the peak until bins drop below 3% of it
+        peak = int(bins.argmax())
+        floor = max(1, bins[peak] * 0.03)
+        lo = peak
+        while bins[(lo - 1) % 360] >= floor and (peak - lo) % 360 < 100:
+            lo = (lo - 1) % 360
+        hi = peak
+        while bins[(hi + 1) % 360] >= floor and (hi - peak) % 360 < 100:
+            hi = (hi + 1) % 360
+        hints[region] = {'hueMin': int(lo), 'hueMax': int(hi), 'satMin': 18}
+    return hints
+
+
+def _region_hints():
+    """Live hints for the open session, computed once and cached in _meta."""
+    if _meta is None:
+        return {}
+    if 'liveHints' not in _meta:
+        region_map = _load_region_map()
+        if region_map is None:
+            _meta['liveHints'] = {}
+        else:
+            try:
+                _meta['liveHints'] = _compute_live_hints(_session, region_map)
+            except Exception:
+                logger.warning('live hint computation failed', exc_info=True)
+                _meta['liveHints'] = dict(region_map.get('maskHints') or {})
+    return _meta['liveHints']
+
+
+def _resolve_targets(data, region_map):
+    """The texture indexes + default mask for a request that names either
+    explicit {textures: [...]} or a {region: "fur"}. Returns
+    (indexes, default_mask, protected, error)."""
+    protected = set((region_map or {}).get('protected') or [])
+    if data.get('textures') is not None:
+        try:
+            indexes = [int(i) for i in data['textures']]
+        except (TypeError, ValueError):
+            return None, None, None, 'textures must be a list of indexes'
+        return indexes, None, protected, None
+    region = (data.get('region') or '').strip()
+    if not region:
+        return None, None, None, 'Provide textures: [indexes] or region: "<name>"'
+    if region_map is None:
+        return None, None, None, ('No texture-region map for this character -- '
+                                  'use explicit textures + mask')
+    indexes = (region_map.get('regions') or {}).get(region)
+    if not indexes:
+        known = ', '.join((region_map.get('regions') or {}).keys())
+        return None, None, None, f'Unknown region "{region}" (known: {known})'
+    # live hints follow the OPEN costume's actual colors (shipped hints only
+    # describe the basis costume)
+    default_mask = _region_hints().get(region) \
+        or (region_map.get('maskHints') or {}).get(region)
+    return list(indexes), default_mask, protected, None
+
+
+def _mask_kwargs(mask):
+    mask = mask or {}
+    return {
+        'hue_min': mask.get('hueMin'), 'hue_max': mask.get('hueMax'),
+        'sat_min': mask.get('satMin'), 'sat_max': mask.get('satMax'),
+        'lum_min': mask.get('lumMin'), 'lum_max': mask.get('lumMax'),
+    }
+
+
+def _texture_png_array(session, index):
+    png = _edited.get(index) or session.get_full_texture(index)
+    return np.array(Image.open(io.BytesIO(png)).convert('RGBA'))
+
+
+def _push_array(session, index, arr):
+    buf = io.BytesIO()
+    Image.fromarray(arr, 'RGBA').save(buf, format='PNG')
+    png = buf.getvalue()
+    session.update_texture(index, png)
+    _edited[index] = png
+
+
+@skin_lab_bp.route('/api/mex/skin-lab/regions', methods=['GET'])
+def get_regions():
+    """The open character's texture-region map (roles per texture index,
+    protected indexes, default masks per region). 404 when no map is shipped
+    for this character -- callers then work with explicit textures + masks."""
+    with _lock:
+        session, err = _require_session()
+        if err:
+            return err
+        region_map = _load_region_map()
+        if region_map is None:
+            return jsonify({'success': False,
+                            'error': 'No texture-region map for this character'}), 404
+        # hints recomputed from the OPEN costume's pixels (colors vary per costume)
+        region_map['liveMaskHints'] = _region_hints()
+        return jsonify({'success': True, 'regionMap': region_map})
+
+
+@skin_lab_bp.route('/api/mex/skin-lab/composite', methods=['POST'])
+def composite_textures():
+    """Re-fabric textures: lay a material over the masked pixels, shaded by
+    the texture's original lightness (folds/seams survive). Body:
+    {region: "fur" | textures: [i...],
+     material: {path} | {data: b64} | {generate: {prompt, ...assetFarm}},
+     mask?: {hueMin,hueMax,satMin,satMax,lumMin,lumMax}   (default: the
+            region's mask hint; REQUIRED with explicit textures),
+     modulate?: {lo: 0.3, hi: 1.6},
+     force?: false}   -- protected textures (eyes/mouth) are skipped unless forced."""
+    data = request.get_json(silent=True) or {}
+
+    # Resolve the material image first (generation can be slow; no lock held)
+    material = data.get('material') or {}
+    try:
+        if material.get('generate'):
+            image_path, _ = _generate_material(material['generate'])
+            mat_img = Image.open(image_path).convert('RGB')
+        elif material.get('path'):
+            mat_img = Image.open(material['path']).convert('RGB')
+        elif material.get('data'):
+            import base64 as _b64
+            mat_img = Image.open(io.BytesIO(_b64.b64decode(material['data']))).convert('RGB')
+        else:
+            return jsonify({'success': False,
+                            'error': 'material must be {path}, {data} or {generate}'}), 400
+    except AssetFarmError as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Bad material image: {e}'}), 400
+    mat_arr = np.array(mat_img)
+
+    with _lock:
+        session, err = _require_session()
+        if err:
+            return err
+        region_map = _load_region_map()
+        indexes, default_mask, protected, rerr = _resolve_targets(data, region_map)
+        if rerr:
+            return jsonify({'success': False, 'error': rerr}), 400
+        mask_spec = data.get('mask') or default_mask
+        if mask_spec is None:
+            if (data.get('region') or '').strip():
+                mask_spec = {}   # region without a mask hint: every opaque pixel
+            else:
+                return jsonify({'success': False,
+                                'error': 'mask is required with explicit textures'}), 400
+        modulate = data.get('modulate') or {}
+        lum_lo = float(modulate.get('lo', 0.3))
+        lum_hi = float(modulate.get('hi', 1.6))
+        force = bool(data.get('force'))
+
+        valid = {t['index'] for t in session.textures}
+        changed, skipped = [], []
+        for index in indexes:
+            if index not in valid:
+                skipped.append({'index': index, 'reason': 'no such texture'})
+                continue
+            if index in protected and not force:
+                skipped.append({'index': index, 'reason': 'protected'})
+                continue
+            try:
+                arr = _texture_png_array(session, index)
+                mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                result = compose_mod.composite(arr, mat_arr, mask,
+                                               lum_lo=lum_lo, lum_hi=lum_hi)
+                if result is None:
+                    skipped.append({'index': index, 'reason': 'mask matched nothing'})
+                    continue
+                _push_array(session, index, result)
+                changed.append(index)
+            except ViewerSessionError as e:
+                return jsonify({'success': False, 'error': str(e),
+                                'changed': changed, 'skipped': skipped}), 500
+        return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
+
+
+@skin_lab_bp.route('/api/mex/skin-lab/tint', methods=['POST'])
+def tint_textures():
+    """COLORIZE masked pixels: set hue + saturation outright, keep lightness.
+    Works on whites/grays where hue-shift is a no-op (e.g. white armor ->
+    green armor). Body: {region | textures, mask?, hue (0-360),
+    saturation?: 60, force?} -- same target/mask semantics as /composite."""
+    data = request.get_json(silent=True) or {}
+    if data.get('hue') is None:
+        return jsonify({'success': False, 'error': 'hue is required (0-360)'}), 400
+    hue = float(data['hue'])
+    saturation = float(data.get('saturation', 60) or 60)
+
+    with _lock:
+        session, err = _require_session()
+        if err:
+            return err
+        region_map = _load_region_map()
+        indexes, default_mask, protected, rerr = _resolve_targets(data, region_map)
+        if rerr:
+            return jsonify({'success': False, 'error': rerr}), 400
+        mask_spec = data.get('mask') or default_mask
+        if mask_spec is None:
+            if (data.get('region') or '').strip():
+                mask_spec = {}   # region without a mask hint: every opaque pixel
+            else:
+                return jsonify({'success': False,
+                                'error': 'mask is required with explicit textures'}), 400
+        valid = {t['index'] for t in session.textures}
+        changed, skipped = [], []
+        for index in indexes:
+            if index not in valid:
+                skipped.append({'index': index, 'reason': 'no such texture'})
+                continue
+            # tint preserves structure -- protected (eyes/mouth) stays allowed;
+            # recoloring eyes is its primary use
+            try:
+                arr = _texture_png_array(session, index)
+                mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                result = compose_mod.tint(arr, mask, hue, saturation)
+                if result is None:
+                    skipped.append({'index': index, 'reason': 'mask matched nothing'})
+                    continue
+                _push_array(session, index, result)
+                changed.append(index)
+            except ViewerSessionError as e:
+                return jsonify({'success': False, 'error': str(e),
+                                'changed': changed, 'skipped': skipped}), 500
+        return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
+
+
+@skin_lab_bp.route('/api/mex/skin-lab/hue-shift', methods=['POST'])
+def hue_shift_textures():
+    """Rotate hue / push saturation on masked pixels (lightness untouched).
+    Body: {region | textures, mask?, hueShift?, saturationShift?, force?} --
+    same target/mask semantics as /composite."""
+    data = request.get_json(silent=True) or {}
+    hue_delta = float(data.get('hueShift', 0) or 0)
+    sat_delta = float(data.get('saturationShift', 0) or 0)
+    if not hue_delta and not sat_delta:
+        return jsonify({'success': False,
+                        'error': 'hueShift or saturationShift is required'}), 400
+
+    with _lock:
+        session, err = _require_session()
+        if err:
+            return err
+        region_map = _load_region_map()
+        indexes, default_mask, protected, rerr = _resolve_targets(data, region_map)
+        if rerr:
+            return jsonify({'success': False, 'error': rerr}), 400
+        mask_spec = data.get('mask') or default_mask
+        if mask_spec is None:
+            if (data.get('region') or '').strip():
+                mask_spec = {}   # region without a mask hint: every opaque pixel
+            else:
+                return jsonify({'success': False,
+                                'error': 'mask is required with explicit textures'}), 400
+        valid = {t['index'] for t in session.textures}
+        changed, skipped = [], []
+        for index in indexes:
+            if index not in valid:
+                skipped.append({'index': index, 'reason': 'no such texture'})
+                continue
+            # hue-shift preserves structure -- protected (eyes/mouth) allowed
+            try:
+                arr = _texture_png_array(session, index)
+                mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                result = compose_mod.hue_shift(arr, mask, hue_delta, sat_delta)
+                if result is None:
+                    skipped.append({'index': index, 'reason': 'mask matched nothing'})
+                    continue
+                _push_array(session, index, result)
+                changed.append(index)
+            except ViewerSessionError as e:
+                return jsonify({'success': False, 'error': str(e),
+                                'changed': changed, 'skipped': skipped}), 500
+        return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
 
 
 # --------------------------------------------------------------------------- #

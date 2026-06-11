@@ -1,0 +1,23 @@
+{
+  "stage": "fountainofdreams",
+  "code": "GrIz",
+  "basis": {"textureCount": 193},
+  "regions": {
+    "water": [13, 14, 15, 16, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68],
+    "pool": [17, 19, 24, 25, 28, 32, 35],
+    "platform": [18, 21, 22, 26, 27, 29, 30, 31, 34],
+    "pillars": [37, 38, 39, 40, 84, 85, 112, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 176, 177, 178, 179, 180, 181, 183, 184, 185, 186, 187, 188, 189],
+    "sky": [81, 113, 115, 116, 173, 174],
+    "structure": [98, 104, 105, 106, 110, 168, 171]
+  },
+  "protected": [13, 14, 15, 16, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68],
+  "notes": {
+    "water": "192x128 water ANIMATION frame sets (teal/red/blue palettes) - composite-blocked; tint applies uniformly across frames and is safe",
+    "pool": "the magenta reflecting-pool surfaces",
+    "platform": "the pale marble main platform surfaces",
+    "pillars": "32x128 fountain pillar/stream strips",
+    "sky": "aurora/sky sheets",
+    "structure": "tower + understructure",
+    "unmapped": "grays + tiny sparkle/glow bits left vanilla (coarse v1 map - refine on capture evidence)"
+  }
+}
