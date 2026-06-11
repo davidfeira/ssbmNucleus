@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import SssCanvas from './SssCanvas'
 import CssIconProperties from './CssIconProperties'
-import { playSound, playHoverSound } from '../../utils/sounds'
+import IconReorderList from './IconReorderList'
+import { playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
+
+// Per-slot layout fields: these stay with the slot position when icon
+// identities are reordered/swapped within the list
+const CSS_SLOT_FIELDS = ['x', 'y', 'z', 'scaleX', 'scaleY',
+  'collisionSizeX', 'collisionSizeY', 'collisionOffsetX', 'collisionOffsetY']
 
 const CSS_BASE_WIDTH = 3.5
 const CSS_BASE_HEIGHT = 3.4
@@ -227,6 +233,21 @@ export default function CssLayoutEditor() {
     setSelectedIndices([primaryIdx + 1])
   }, [icons, primaryIdx, updateIcons, maybeApplyTemplate])
 
+  // Drag-and-drop reorder: move the icon identity from one slot to another;
+  // the slot layout fields stay with their positions
+  const handleReorderIcon = useCallback((from, to) => {
+    if (from === to) return
+    const slots = icons.map(ic =>
+      Object.fromEntries(CSS_SLOT_FIELDS.map(f => [f, ic[f]]))
+    )
+    const arr = [...icons]
+    const [moved] = arr.splice(from, 1)
+    arr.splice(to, 0, moved)
+    const rezipped = arr.map((ic, i) => ({ ...ic, ...slots[i] }))
+    updateIcons(maybeApplyTemplate(rezipped))
+    setSelectedIndices([to])
+  }, [icons, updateIcons, maybeApplyTemplate])
+
   const handleApplyTemplate = useCallback(() => {
     if (!layout?.template) return
     updateIcons(applyCssTemplate(icons, layout.template))
@@ -343,32 +364,17 @@ export default function CssLayoutEditor() {
                 disabled={primaryIdx < 0 || primaryIdx >= icons.length - 1}>&#9660;</button>
             </div>
           </div>
-          <div className="sss-icon-list">
-            {icons.map((icon, idx) => (
-              <div
-                key={idx}
-                className={`sss-icon-item ${selectedIndices.includes(idx) ? 'selected' : ''}`}
-                onClick={(e) => {
-                  playSound('boop')
-                  if (e.shiftKey) {
-                    const s = new Set(selectedIndices)
-                    if (s.has(idx)) s.delete(idx); else s.add(idx)
-                    setSelectedIndices([...s])
-                  } else {
-                    setSelectedIndices([idx])
-                  }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  if (!selectedIndices.includes(idx)) setSelectedIndices([idx])
-                  setPropsPopup({ x: e.clientX, y: e.clientY })
-                }}
-              >
-                <span className="sss-icon-idx">{idx}</span>
-                <span className="sss-icon-name">{icon.fighterName || `Fighter ${icon.fighter}`}</span>
-              </div>
-            ))}
-          </div>
+          <IconReorderList
+            icons={icons}
+            selectedIndices={selectedIndices}
+            onSelect={setSelectedIndices}
+            onContextMenu={(x, y) => setPropsPopup({ x, y })}
+            onReorder={handleReorderIcon}
+            getLabel={(icon) => icon.fighterName || `Fighter ${icon.fighter}`}
+            getIconUrl={(icon) => icon.iconPath
+              ? `${API_URL}/menus/css/fighter-icon?path=${encodeURIComponent(icon.iconPath)}`
+              : null}
+          />
         </div>
 
         {propsPopup && selectedIcons.length > 0 && (

@@ -7013,8 +7013,8 @@
 }
 
 .sss-right-panel {
-  width: 220px;
-  min-width: 180px;
+  width: 280px;
+  min-width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -7120,12 +7120,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.25rem var(--space-2);
-  cursor: pointer;
-  font-size: var(--text-xs);
+  padding: 0.35rem var(--space-2);
+  cursor: grab;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   border-left: 2px solid transparent;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  user-select: none;
 }
 
 .sss-icon-item:hover {
@@ -7139,10 +7140,51 @@
   color: var(--color-text-primary);
 }
 
+.sss-icon-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* Drop position indicators while dragging */
+.sss-icon-item.drop-before {
+  box-shadow: inset 0 2px 0 var(--color-cyan);
+}
+
+.sss-icon-item.drop-after {
+  box-shadow: inset 0 -2px 0 var(--color-cyan);
+}
+
 .sss-icon-idx {
   font-weight: var(--font-semibold);
   min-width: 1.5rem;
   text-align: right;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.sss-icon-thumb {
+  flex-shrink: 0;
+  width: 44px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.sss-icon-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.sss-icon-thumb-empty {
+  font-size: var(--text-xs);
   color: var(--color-text-tertiary);
 }
 

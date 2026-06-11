@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import SssCanvas from './SssCanvas'
 import SssIconProperties from './SssIconProperties'
+import IconReorderList from './IconReorderList'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
 
@@ -263,6 +264,22 @@ export default function SssLayoutEditor() {
     updateIcons(maybeApplyTemplate(newIcons))
     setSelectedIndices([primaryIdx + 1])
   }, [currentIcons, primaryIdx, updateIcons, maybeApplyTemplate, swapIcons])
+
+  // Drag-and-drop reorder: move the icon identity from one slot to another;
+  // the slot layout fields stay with their positions
+  const handleReorderIcon = useCallback((from, to) => {
+    if (from === to) return
+    const SLOT_FIELDS = ['x', 'y', 'z', 'scaleX', 'scaleY', 'width', 'height', 'group']
+    const slots = currentIcons.map(ic =>
+      Object.fromEntries(SLOT_FIELDS.map(f => [f, ic[f]]))
+    )
+    const arr = [...currentIcons]
+    const [moved] = arr.splice(from, 1)
+    arr.splice(to, 0, moved)
+    const rezipped = arr.map((ic, i) => ({ ...ic, ...slots[i] }))
+    updateIcons(maybeApplyTemplate(rezipped))
+    setSelectedIndices([to])
+  }, [currentIcons, updateIcons, maybeApplyTemplate])
 
   // Page operations
   const handleAddPage = useCallback(() => {
@@ -561,34 +578,17 @@ export default function SssLayoutEditor() {
                 disabled={primaryIdx < 0 || primaryIdx >= currentIcons.length - 1}>&#9660;</button>
             </div>
           </div>
-          <div className="sss-icon-list">
-            {currentIcons.map((icon, idx) => (
-              <div
-                key={idx}
-                className={`sss-icon-item ${selectedIndices.includes(idx) ? 'selected' : ''}`}
-                onClick={(e) => {
-                  playSound('boop')
-                  if (e.shiftKey) {
-                    const s = new Set(selectedIndices)
-                    if (s.has(idx)) s.delete(idx); else s.add(idx)
-                    setSelectedIndices([...s])
-                  } else {
-                    setSelectedIndices([idx])
-                  }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  if (!selectedIndices.includes(idx)) setSelectedIndices([idx])
-                  setPropsPopup({ x: e.clientX, y: e.clientY })
-                }}
-              >
-                <span className="sss-icon-idx">{idx}</span>
-                <span className="sss-icon-name">
-                  {icon.stageName || STATUS_LABELS[icon.status] || '?'}
-                </span>
-              </div>
-            ))}
-          </div>
+          <IconReorderList
+            icons={currentIcons}
+            selectedIndices={selectedIndices}
+            onSelect={setSelectedIndices}
+            onContextMenu={(x, y) => setPropsPopup({ x, y })}
+            onReorder={handleReorderIcon}
+            getLabel={(icon) => icon.stageName || STATUS_LABELS[icon.status] || '?'}
+            getIconUrl={(icon) => icon.iconPath
+              ? `${API_URL}/menus/sss/stage-icon?path=${encodeURIComponent(icon.iconPath)}`
+              : null}
+          />
         </div>
 
         {/* Properties popup */}
