@@ -230,14 +230,14 @@ export default function PoseSkinSelectorModal({
         <div className="pss-footer">
           {generating ? (
             <div className="pss-progress">
-              <HexagonLoader size={92} label="Generating CSPs" />
+              <HexagonLoader
+                size={92}
+                label="Generating CSPs"
+                progress={progress.total ? ((progress.current - 1) / progress.total) * 100 : null}
+                centerLabel={progress.total ? `${progress.current}/${progress.total}` : null}
+                minimumVisibleProgress={4}
+              />
               <span>Generating {progress.current} / {progress.total}…</span>
-              <div className="pss-progress-bar">
-                <div
-                  className="pss-progress-fill"
-                  style={{ width: `${progress.total ? ((progress.current - 1) / progress.total) * 100 : 0}%` }}
-                />
-              </div>
             </div>
           ) : results ? (
             <div className={`pss-results ${results.error ? 'pss-error' : 'pss-success'}`}>
@@ -578,22 +578,6 @@ export default function PoseSkinSelectorModal({
           text-align: center;
           color: var(--color-text-secondary);
           font-size: var(--text-sm);
-        }
-
-        .pss-progress-bar {
-          width: min(100%, 22rem);
-          height: 6px;
-          background: var(--color-bg-deep);
-          border: 1px solid var(--color-border-subtle);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .pss-progress-fill {
-          height: 100%;
-          background: var(--gradient-cyan, var(--color-cyan));
-          border-radius: var(--radius-full);
-          transition: width 0.4s ease;
         }
 
         .pss-results {

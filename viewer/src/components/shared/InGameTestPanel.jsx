@@ -8,6 +8,7 @@
  */
 
 import DolphinEmbedPanel from './DolphinEmbedPanel'
+import HexagonLoader from './HexagonLoader'
 
 const VERDICT_LABEL = {
   healthy: 'PASS',
@@ -24,13 +25,18 @@ export default function InGameTestPanel({ test, onStart, label = 'Test in Game',
   if (testingInGame) {
     return (
       <div style={{ textAlign: 'center', padding: '1rem' }}>
-        <div className="edit-modal-action-spinner" style={{ width: 36, height: 36, margin: '0 auto 0.75rem' }} />
-        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+          <HexagonLoader
+            size={88}
+            label="Testing in game"
+            progress={Number.isFinite(testStatus?.percentage) ? testStatus.percentage : null}
+            centerLabel={`${Math.round(testStatus?.percentage || 0)}%`}
+            minimumVisibleProgress={4}
+          />
+        </div>
+        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
           {testStatus?.message || 'Working…'}
         </p>
-        <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', maxWidth: 420, margin: '0 auto' }}>
-          <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }} />
-        </div>
         {/* Captures keep their own window (the shot's resolution = window size). */}
         <DolphinEmbedPanel active={testMode !== 'capture'} />
         <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: '0.75rem' }}>

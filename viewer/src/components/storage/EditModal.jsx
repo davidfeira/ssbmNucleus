@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
+import HexagonLoader from '../shared/HexagonLoader'
 
 export default function EditModal({
   show,
@@ -676,14 +677,19 @@ export default function EditModal({
               : { width: '90%', maxWidth: '560px', maxHeight: '92%', overflowY: 'auto', textAlign: 'center', padding: '1.5rem' }}>
               {testingInGame ? (
                 <>
-                  <div className="edit-modal-action-spinner" style={{ width: 40, height: 40, margin: '0 auto 1rem' }}></div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                    <HexagonLoader
+                      size={88}
+                      label="Testing in game"
+                      progress={Number.isFinite(testStatus?.percentage) ? testStatus.percentage : null}
+                      centerLabel={`${Math.round(testStatus?.percentage || 0)}%`}
+                      minimumVisibleProgress={4}
+                    />
+                  </div>
                   <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '0.5rem' }}>Testing in game…</h3>
-                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+                  <p style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
                     {testStatus?.message || 'Working…'}
                   </p>
-                  <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', maxWidth: 480, margin: '0 auto 1rem' }}>
-                    <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }}></div>
-                  </div>
                   {/* Captures keep their own window (the shot's resolution = window size). */}
                   <DolphinEmbedPanel active={testMode !== 'capture'} fill />
                   <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', maxWidth: 560, margin: '1rem auto 0' }}>

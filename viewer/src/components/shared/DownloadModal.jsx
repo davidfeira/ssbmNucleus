@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { DOWNLOAD_PHASES } from '../../hooks/useDownloadQueue'
 import { playSound } from '../../utils/sounds'
 import { BACKEND_URL } from '../../config'
+import HexagonLoader from './HexagonLoader'
 import './DownloadModal.css'
 
 /**
@@ -114,7 +115,7 @@ export default function DownloadModal({
         {/* Status area */}
         <div className={`download-modal-status ${phase}`}>
           {isProcessing && (
-            <div className="download-spinner" />
+            <HexagonLoader size={56} label="Importing" />
           )}
 
           {phase === DOWNLOAD_PHASES.COMPLETE && !needsUserChoice && (
