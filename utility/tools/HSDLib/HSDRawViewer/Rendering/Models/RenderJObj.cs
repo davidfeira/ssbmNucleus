@@ -891,6 +891,10 @@ namespace HSDRawViewer.Rendering.Models
                 int index = TextureManager.Add(mips, width, height);
 
                 imageBufferTextureIndex.Add(rawImageData, index);
+                UpdateLog?.Invoke($"PreLoadTexture: NEW GL texture tmi={index} glId={TextureManager.GetGLID(index)} "
+                    + $"{width}x{height} dataLen={rawImageData.Length} "
+                    + $"tobj={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tobj):x8} "
+                    + $"arr={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rawImageData):x8}");
             }
         }
 
@@ -1170,11 +1174,30 @@ namespace HSDRawViewer.Rendering.Models
             return textures;
         }
 
+        // GL texture indexes for content-duplicate instances that were merged by
+        // an update (one array can only key one entry in imageBufferTextureIndex,
+        // but the duplicates' GL textures still need refreshing on later updates).
+        private readonly Dictionary<byte[], List<int>> _mergedGlIndexes = new Dictionary<byte[], List<int>>();
+
         /// <summary>
-        /// Updates a texture with new image data
+        /// Optional diagnostics sink for texture updates (set by streaming hosts).
+        /// </summary>
+        public static Action<string> UpdateLog;
+
+        /// <summary>
+        /// Updates a texture with new image data.
+        ///
+        /// Melee models frequently contain the SAME texture as multiple array
+        /// instances (visible + hidden duplicates across DOBJs/LODs), so TOBJs
+        /// are matched by CONTENT, not reference -- updating only a
+        /// reference-shared group can land entirely on a hidden duplicate and
+        /// leave the on-screen instance stale (silent no-op).
         /// </summary>
         public void UpdateTexture(int textureIndex, byte[] pngData)
         {
+            // Legacy index-based entry: indexes into a FRESH enumeration, which
+            // can diverge from a list the caller cached earlier. Callers holding
+            // a cached list should use the TextureInfo overload instead.
             var textures = GetTextureList();
 
             if (textureIndex < 0 || textureIndex >= textures.Count)
@@ -1182,40 +1205,50 @@ namespace HSDRawViewer.Rendering.Models
                 return;
             }
 
-            var texInfo = textures[textureIndex];
-            if (texInfo.Tobj?.ImageData?.ImageData == null)
+            UpdateTexture(textures[textureIndex], pngData);
+        }
+
+        /// <summary>
+        /// Updates the texture referenced by a TextureInfo from a PREVIOUSLY
+        /// CAPTURED texture list -- immune to enumeration drift between the
+        /// caller's cache and the live DOBJ set.
+        /// </summary>
+        public void UpdateTexture(TextureInfo texInfo, byte[] pngData)
+        {
+            if (texInfo?.Tobj?.ImageData?.ImageData == null)
             {
                 return;
             }
 
-            // Get the CURRENT texture index from the dictionary BEFORE InjectBitmap changes the bytes
             byte[] oldImageData = texInfo.Tobj.ImageData.ImageData;
-            if (!imageBufferTextureIndex.TryGetValue(oldImageData, out int texManagerIndex))
-            {
-                return;
-            }
 
-            int glTextureId = TextureManager.GetGLID(texManagerIndex);
-
-            if (glTextureId < 0)
-            {
-                return;
-            }
-
-            // Find ALL TOBJs that share this same texture data (by reference)
-            // We need to update all of them so they stay in sync
+            // Find ALL TOBJs whose texture content matches, and every distinct
+            // backing array among them.
             var tobjsToUpdate = new List<HSD_TOBJ>();
+            var oldArrays = new List<byte[]>();
             foreach (var dobj in RenderDobjs)
             {
                 if (dobj._dobj?.Mobj?.Textures == null)
                     continue;
                 foreach (var tobj in dobj._dobj.Mobj.Textures.List)
                 {
-                    if (tobj?.ImageData?.ImageData == oldImageData)
-                    {
-                        tobjsToUpdate.Add(tobj);
-                    }
+                    var data = tobj?.ImageData?.ImageData;
+                    if (data == null)
+                        continue;
+                    bool match = ReferenceEquals(data, oldImageData)
+                        || (data.Length == oldImageData.Length
+                            && System.MemoryExtensions.SequenceEqual<byte>(data, oldImageData));
+                    if (!match)
+                        continue;
+                    tobjsToUpdate.Add(tobj);
+                    if (!oldArrays.Any(a => ReferenceEquals(a, data)))
+                        oldArrays.Add(data);
                 }
+            }
+            if (tobjsToUpdate.Count == 0)
+            {
+                UpdateLog?.Invoke($"UpdateTexture: NO content match (oldData len={oldImageData.Length})");
+                return;
             }
 
             // Decode PNG to BGRA (matching original texture format)
@@ -1223,12 +1256,10 @@ namespace HSDRawViewer.Rendering.Models
             byte[] bgraData = new byte[image.Width * image.Height * 4];
             image.CopyPixelDataTo(bgraData);
 
-            // Update OpenGL texture for live preview (BGRA format)
-            GL.BindTexture(TextureTarget.Texture2D, glTextureId);
-            GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, image.Width, image.Height,
-                PixelFormat.Bgra, PixelType.UnsignedByte, bgraData);
+            UpdateLog?.Invoke($"UpdateTexture: tobjs={tobjsToUpdate.Count} arrays={oldArrays.Count} "
+                + $"{image.Width}x{image.Height}");
 
-            // Update HSD TOBJ data for export - update ALL TOBJs that share this texture
+            // Update HSD TOBJ data for export - update ALL matching TOBJs
             var imgFormat = texInfo.Tobj.ImageData?.Format ?? GXTexFmt.RGBA8;
             var palFormat = texInfo.Tobj.TlutData?.Format ?? GXTlutFmt.RGB565;
 
@@ -1245,13 +1276,21 @@ namespace HSDRawViewer.Rendering.Models
                     // Make all TOBJs share the same byte[] reference
                     tobj.ImageData.ImageData = newImageData;
                 }
+                UpdateLog?.Invoke($"UpdateTexture: injected tobj={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tobj):x8} "
+                    + $"arr={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tobj.ImageData.ImageData):x8}");
             }
 
-            // Update the dictionary: remove old key, add new key pointing to same texture index
-            if (newImageData != null)
+            // Deliberately NO GL writes and NO re-keying of imageBufferTextureIndex:
+            // MULTIPLE RenderJObj instances can render these shared HSD structs,
+            // each with its own GL bookkeeping. Mapping the new array onto this
+            // instance's old GL id pins OTHER instances (and later edits) to a
+            // stale texture. Instead, drop this instance's old keys and let every
+            // renderer's lazy PreLoadTexture rebuild from the new data on its
+            // next frame -- the one refresh path that works for all instances.
+            foreach (var arr in oldArrays)
             {
-                imageBufferTextureIndex.Remove(oldImageData);
-                imageBufferTextureIndex[newImageData] = texManagerIndex;
+                imageBufferTextureIndex.Remove(arr);
+                _mergedGlIndexes.Remove(arr);
             }
 
             texInfo.RgbaData = bgraData; // Also cache for thumbnails

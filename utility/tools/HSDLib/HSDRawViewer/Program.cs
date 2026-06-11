@@ -147,6 +147,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for stage texture export/import mode (Gr*.dat map_head models)
+            if (args.Length >= 1 && args[0] == "--stage-textures")
+            {
+                Console.WriteLine("Stage textures mode detected");
+                RunStageTexturesOperation(args);
+                return;
+            }
+
             // Check for MEX CSS info mode (reads MxDt.dat icon -> fighter mapping)
             if (args.Length >= 1 && args[0] == "--mex-css-info")
             {
@@ -1770,6 +1778,242 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: CSS doors operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Collect all textures from every model group under a stage DAT's
+        /// map_head root. Returns a flat list in stable traversal order with
+        /// the owning group index.
+        /// </summary>
+        static List<(int group, HSD_TOBJ tobj)> CollectStageTextures(HSDRawFile rawFile)
+        {
+            var root = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Gr.SBM_Map_Head);
+            if (root == null)
+                return null;
+
+            var head = (HSDRaw.Melee.Gr.SBM_Map_Head)root.Data;
+            var result = new List<(int, HSD_TOBJ)>();
+            var groups = head.ModelGroups?.Array;
+            if (groups == null)
+                return result;
+
+            for (int g = 0; g < groups.Length; g++)
+            {
+                var rootNode = groups[g]?.RootNode;
+                if (rootNode == null)
+                    continue;
+                foreach (var (_, tobj) in CollectAllTextures(rootNode))
+                    result.Add((g, tobj));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Rotate an RGB color's hue by `deg` and scale its saturation (HSL space).
+        /// </summary>
+        static (byte, byte, byte) RotateHue(byte r, byte g, byte b, float deg, float satScale)
+        {
+            float rf = r / 255f, gf = g / 255f, bf = b / 255f;
+            float max = Math.Max(rf, Math.Max(gf, bf)), min = Math.Min(rf, Math.Min(gf, bf));
+            float l = (max + min) / 2f, d = max - min;
+            float s = d == 0 ? 0 : d / (1f - Math.Abs(2f * l - 1f) + 1e-6f);
+            float h = 0;
+            if (d > 0)
+            {
+                if (max == rf) h = ((gf - bf) / d % 6f + 6f) % 6f;
+                else if (max == gf) h = (bf - rf) / d + 2f;
+                else h = (rf - gf) / d + 4f;
+                h *= 60f;
+            }
+            h = ((h + deg) % 360f + 360f) % 360f;
+            s = Math.Clamp(s * satScale, 0f, 1f);
+            float c = (1f - Math.Abs(2f * l - 1f)) * s;
+            float x = c * (1f - Math.Abs(h / 60f % 2f - 1f));
+            float m = l - c / 2f;
+            (float r2, float g2, float b2) = h switch
+            {
+                < 60f => (c, x, 0f),
+                < 120f => (x, c, 0f),
+                < 180f => (0f, c, x),
+                < 240f => (0f, x, c),
+                < 300f => (x, 0f, c),
+                _ => (c, 0f, x),
+            };
+            return ((byte)Math.Clamp((r2 + m) * 255f, 0, 255),
+                    (byte)Math.Clamp((g2 + m) * 255f, 0, 255),
+                    (byte)Math.Clamp((b2 + m) * 255f, 0, 255));
+        }
+
+        /// <summary>
+        /// Stage (Gr*.dat) texture export/import over the map_head model groups.
+        ///   Export: HSDRawViewer.exe --stage-textures export <stage.dat> <output_dir>
+        ///   Import: HSDRawViewer.exe --stage-textures import <stage.dat> <spec.json> <output.dat>
+        /// spec.json: {"replacements": [{"index": 4, "png": "..."}]} -- always
+        /// re-encodes in the texture's ORIGINAL format.
+        /// </summary>
+        static void RunStageTexturesOperation(string[] args)
+        {
+            try
+            {
+                string subCommand = args.Length >= 2 ? args[1].ToLower() : "";
+
+                if (subCommand == "export" && args.Length >= 4)
+                {
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+                    var allTex = CollectStageTextures(rawFile);
+                    if (allTex == null)
+                    {
+                        Console.WriteLine("ERROR: No map_head root found (not a stage file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine($"Found {allTex.Count} textures:");
+                    var manifest = new List<Dictionary<string, object>>();
+                    int index = 0;
+                    foreach (var (grp, tobj) in allTex)
+                    {
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string fileName = $"stage_t{index}_g{grp}_{w}x{h}_{fmt}.png";
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, fileName), System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        manifest.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["group"] = grp,
+                            ["width"] = w,
+                            ["height"] = h,
+                            ["format"] = fmt,
+                            ["filename"] = fileName,
+                        });
+                        Console.WriteLine($"  t{index} group {grp}: {w}x{h} {fmt}");
+                        index++;
+                    }
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "manifest.json"),
+                        JsonSerializer.Serialize(new Dictionary<string, object> { ["textures"] = manifest },
+                                                 new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"SUCCESS: Exported {index} textures");
+                }
+                else if (subCommand == "import" && args.Length >= 5)
+                {
+                    string datFile = args[2];
+                    string specFile = args[3];
+                    string outputDat = args[4];
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+                    var allTex = CollectStageTextures(rawFile);
+                    if (allTex == null || allTex.Count == 0)
+                    {
+                        Console.WriteLine("ERROR: No map_head textures found (not a stage file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    using var specDoc = JsonDocument.Parse(System.IO.File.ReadAllText(specFile));
+                    int replaced = 0;
+                    foreach (var entry in specDoc.RootElement.GetProperty("replacements").EnumerateArray())
+                    {
+                        int idx = entry.GetProperty("index").GetInt32();
+                        string pngPath = entry.GetProperty("png").GetString();
+                        if (idx < 0 || idx >= allTex.Count)
+                        {
+                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}); skipping");
+                            continue;
+                        }
+                        if (!System.IO.File.Exists(pngPath))
+                        {
+                            Console.WriteLine($"WARNING: png not found: {pngPath}; skipping");
+                            continue;
+                        }
+                        var tobj = allTex[idx].tobj;
+                        using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        using var resized = userImage.Clone(ctx => ctx.Resize(w, h));
+                        var imgFormat = tobj.ImageData.Format;
+                        var palFormat = tobj.TlutData != null ? tobj.TlutData.Format : HSDRaw.GX.GXTlutFmt.RGB565;
+                        tobj.InjectBitmap(resized, imgFormat, palFormat);
+                        replaced++;
+                        Console.WriteLine($"  t{idx}: replaced ({w}x{h} {imgFormat})");
+                    }
+                    // Optional material-color pass: {"materialTints": [{"hueShift": deg,
+                    // "saturationScale": 1.0, "groups": [..] (omit = all groups)}]}
+                    // Rotates the hue of every MOBJ DIFFUSE+AMBIENT color in the
+                    // targeted map_head model groups (stage glow/rim colors often
+                    // live in materials, not textures).
+                    int matCount = 0;
+                    if (specDoc.RootElement.TryGetProperty("materialTints", out var tintsEl))
+                    {
+                        var headRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Gr.SBM_Map_Head);
+                        var head = headRoot != null ? (HSDRaw.Melee.Gr.SBM_Map_Head)headRoot.Data : null;
+                        var modelGroups = head?.ModelGroups?.Array;
+                        if (modelGroups != null)
+                        {
+                            foreach (var tint in tintsEl.EnumerateArray())
+                            {
+                                float hueShift = tint.TryGetProperty("hueShift", out var hs) ? hs.GetSingle() : 0f;
+                                float satScale = tint.TryGetProperty("saturationScale", out var ss) ? ss.GetSingle() : 1f;
+                                HashSet<int> groupFilter = null;
+                                if (tint.TryGetProperty("groups", out var groupsEl))
+                                {
+                                    groupFilter = new HashSet<int>();
+                                    foreach (var g in groupsEl.EnumerateArray())
+                                        groupFilter.Add(g.GetInt32());
+                                }
+                                for (int g = 0; g < modelGroups.Length; g++)
+                                {
+                                    if (groupFilter != null && !groupFilter.Contains(g))
+                                        continue;
+                                    var rootNode = modelGroups[g]?.RootNode;
+                                    if (rootNode == null)
+                                        continue;
+                                    foreach (var jobj in rootNode.TreeList)
+                                    {
+                                        if (jobj.Dobj == null) continue;
+                                        foreach (var dobj in jobj.Dobj.List)
+                                        {
+                                            var mat = dobj.Mobj?.Material;
+                                            if (mat == null) continue;
+                                            (mat.DIF_R, mat.DIF_G, mat.DIF_B) =
+                                                RotateHue(mat.DIF_R, mat.DIF_G, mat.DIF_B, hueShift, satScale);
+                                            (mat.AMB_R, mat.AMB_G, mat.AMB_B) =
+                                                RotateHue(mat.AMB_R, mat.AMB_G, mat.AMB_B, hueShift, satScale);
+                                            matCount++;
+                                        }
+                                    }
+                                }
+                            }
+                            Console.WriteLine($"Material tints applied to {matCount} materials");
+                        }
+                    }
+
+                    rawFile.Save(outputDat);
+                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures (+{matCount} material tints), saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --stage-textures export <stage.dat> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --stage-textures import <stage.dat> <spec.json> <output.dat>");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: stage textures operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

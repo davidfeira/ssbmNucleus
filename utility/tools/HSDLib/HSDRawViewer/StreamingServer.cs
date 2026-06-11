@@ -90,6 +90,7 @@ namespace HSDRawViewer
                 _logWriter = new StreamWriter(logFile, append: true) { AutoFlush = true };
                 Log($"=== HSDRawViewer Streaming Server Started ===");
                 Log($"Log file: {logFile}");
+                HSDRawViewer.Rendering.Models.RenderJObj.UpdateLog = Log;
             }
             catch (Exception ex)
             {
@@ -222,9 +223,15 @@ namespace HSDRawViewer
                 Log($"RenderJObj created. DOBJs: {_renderJObj.DObjCount}");
             }
 
-            // Create host form - try VISIBLE to test if minimized breaks OpenGL
+            // Create host form. The window must exist and be "visible" for the
+            // OpenGL context (minimizing breaks it), but nobody needs to SEE it:
+            // frames are read back via GenerateBitmap. Park it far offscreen so
+            // headless/streaming sessions don't pop windows over the user's work.
             Log("Creating host form...");
             _hostForm = new Form();
+            _hostForm.StartPosition = FormStartPosition.Manual;
+            _hostForm.Location = new System.Drawing.Point(-32000, 100);
+            _hostForm.ShowInTaskbar = false;
             _hostForm.Size = new System.Drawing.Size(_frameWidth + 50, _frameHeight + 50);
             _hostForm.Text = "HSD Viewer (Streaming)";
             // Don't minimize - keep visible to ensure OpenGL works
@@ -778,12 +785,23 @@ namespace HSDRawViewer
                                 string base64Data = dataProp.GetString();
                                 byte[] pngData = Convert.FromBase64String(base64Data);
 
-                                // Use BeginInvoke to avoid deadlock
+                                // Use BeginInvoke to avoid deadlock. Update via the
+                                // CACHED TextureInfo -- the client's indexes refer to
+                                // _cachedTextureList, and a fresh enumeration inside
+                                // UpdateTexture(int) can drift from it.
                                 _hostForm.BeginInvoke((Action)(() =>
                                 {
                                     try
                                     {
-                                        _renderJObj.UpdateTexture(texIndex, pngData);
+                                        if (_cachedTextureList != null
+                                            && texIndex >= 0 && texIndex < _cachedTextureList.Count)
+                                        {
+                                            _renderJObj.UpdateTexture(_cachedTextureList[texIndex], pngData);
+                                        }
+                                        else
+                                        {
+                                            _renderJObj.UpdateTexture(texIndex, pngData);
+                                        }
                                     }
                                     catch (Exception ex)
                                     {

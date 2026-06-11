@@ -649,7 +649,18 @@ namespace HSDRawViewer
                             {
                                 try
                                 {
-                                    _renderJObj.UpdateTexture(texIndex, pngData);
+                                    // Update via the CACHED TextureInfo -- client indexes
+                                    // refer to _cachedTextureList; a fresh enumeration can
+                                    // drift from it (visible duplicates / DOBJ changes).
+                                    if (_cachedTextureList != null
+                                        && texIndex >= 0 && texIndex < _cachedTextureList.Count)
+                                    {
+                                        _renderJObj.UpdateTexture(_cachedTextureList[texIndex], pngData);
+                                    }
+                                    else
+                                    {
+                                        _renderJObj.UpdateTexture(texIndex, pngData);
+                                    }
                                     success = true;
                                 }
                                 catch (Exception ex)
