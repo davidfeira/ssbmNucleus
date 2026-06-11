@@ -223,22 +223,39 @@ def build_single_costume_iso(vanilla_iso, character, skin_zip, out_iso,
         shutil.rmtree(proj_dir, ignore_errors=True)
 
 
-def build_custom_character_iso(vanilla_iso, slug, out_iso, progress_cb=None, log=lambda m: None):
+def build_custom_character_iso(vanilla_iso, slug, out_iso, skin_zip=None,
+                               costume_index=None, progress_cb=None, log=lambda m: None):
     """Fresh project + the one custom fighter (storage/custom_characters/<slug>/
-    fighter.zip), placed into the CSS grid. Returns {name, cssIcon}."""
+    fighter.zip), placed into the CSS grid. Optionally targets a SPECIFIC skin:
+    `skin_zip` (a vault custom-skin zip) is imported onto the fighter and its new
+    slot selected, or `costume_index` picks one of the bundled costumes. Returns
+    {name, cssIcon, colorIndex}."""
     zip_path = CUSTOM_CHARACTERS_PATH / slug / "fighter.zip"
     if not zip_path.exists():
         raise FileNotFoundError(f"Custom character archive not found: {zip_path}")
+    if skin_zip and not Path(skin_zip).exists():
+        raise FileNotFoundError(f"Custom skin archive not found: {skin_zip}")
     proj_dir, proj = create_temp_project(vanilla_iso, log=log)
     try:
         mex = MexManager(str(MEXCLI_PATH), str(proj))
         log(f"Adding custom fighter '{slug}'…")
         res = mex._run_command("add-fighter", str(proj), str(zip_path))
         name = res.get("name") or slug
+        color_index = int(costume_index or 0)
+        if skin_zip:
+            log("Importing the custom skin onto the fighter…")
+            imp = mex.import_costume(name, str(skin_zip))
+            total = imp.get("totalCostumes")
+            if total is None:
+                fighter = mex.get_fighter_by_name(name)
+                total = fighter.get("costumeCount") if fighter else None
+            if not total:
+                raise RuntimeError("could not determine the imported costume index")
+            color_index = int(total) - 1
         log(f"Placing {name} into the CSS grid…")
         css_icon = place_custom_fighter_icon(mex, name)
         _export(mex, out_iso, progress_cb, log)
-        return {"name": name, "cssIcon": css_icon}
+        return {"name": name, "cssIcon": css_icon, "colorIndex": color_index}
     finally:
         shutil.rmtree(proj_dir, ignore_errors=True)
 

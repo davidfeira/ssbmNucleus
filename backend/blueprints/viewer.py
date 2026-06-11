@@ -467,10 +467,24 @@ def get_viewer_paths_vault():
 
         # Find scene file
         scene_path = find_scene_file(character)
-        scene_windows_path = to_windows_path(scene_path) if scene_path else None
 
         # Find AJ file
         aj_path = find_aj_file(character)
+
+        # Custom characters (pseudo keys like custom_characters/<slug>/skins):
+        # animations come from their own AJ inside fighter.zip; the scene config
+        # falls back to the donor skeleton
+        from core.metadata import custom_character_slug
+        slug = custom_character_slug(character)
+        if slug:
+            if aj_path is None:
+                aj_path = extract_custom_character_aj(slug)
+            if scene_path is None:
+                based_on = custom_character_based_on(slug)
+                if based_on:
+                    scene_path = find_scene_file(based_on)
+
+        scene_windows_path = to_windows_path(scene_path) if scene_path else None
         aj_windows_path = to_windows_path(aj_path) if aj_path else None
 
         return jsonify({

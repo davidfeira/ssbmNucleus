@@ -445,6 +445,61 @@ def start_custom_character_test():
     return jsonify({'success': True, 'message': 'Custom character test started'})
 
 
+@test_in_game_bp.route('/api/mex/test-in-game/custom-character-skin', methods=['POST'])
+def start_custom_character_skin_test():
+    """Test ONE specific skin of a custom (m-ex) fighter in game: build a temp
+    ISO with that fighter, import the chosen vault custom skin onto it (or pick a
+    bundled costume slot), select that exact costume on the CSS, play a short
+    match. Body: { slug, skinId? | costumeIndex?, colorName?, vanillaIsoPath,
+    slippiDolphinPath, observeSeconds? }."""
+    global _test_running
+    if os.name != 'nt':
+        return jsonify({'success': False, 'error': 'In-game testing is only supported on Windows.'}), 400
+    data = request.json or {}
+    slug = data.get('slug')
+    skin_id = data.get('skinId')
+    costume_index = data.get('costumeIndex')
+    color_name = data.get('colorName') or ''
+    if not slug:
+        return jsonify({'success': False, 'error': 'slug is required.'}), 400
+    if not skin_id and costume_index is None:
+        return jsonify({'success': False, 'error': 'skinId or costumeIndex is required.'}), 400
+    vanilla, slippi, obs, err = _common_inputs(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+
+    skin_zip = None
+    if skin_id:
+        skin_zip = STORAGE_PATH / 'custom_characters' / slug / 'skins' / f'{skin_id}.zip'
+        if not skin_zip.exists():
+            return jsonify({'success': False,
+                            'error': f'Custom skin archive not found: {skin_zip}'}), 400
+
+    with _test_lock:
+        if _test_running:
+            return jsonify({'success': False, 'error': 'A test is already running.'}), 409
+        _test_running = True
+
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_iso = (STORAGE_PATH / 'test-builds' / f'test_charskin_{slug}_{stamp}.iso')
+
+    def build(progress_cb, log):
+        from test_build import build_custom_character_iso
+        r = build_custom_character_iso(
+            vanilla, slug, str(out_iso),
+            skin_zip=str(skin_zip) if skin_zip else None,
+            costume_index=int(costume_index) if costume_index is not None else None,
+            progress_cb=progress_cb, log=log)
+        mod_name = f"{r['name']} — {color_name}" if color_name else r['name']
+        return ({'character': {'name': r['name'], 'cssIcon': r['cssIcon'],
+                               'colorIndex': r['colorIndex']}},
+                {'modName': mod_name, 'cssIcon': r['cssIcon'],
+                 'colorIndex': r['colorIndex']})
+
+    _start_build_test_job(out_iso, slippi, obs, build)
+    return jsonify({'success': True, 'message': 'Custom character skin test started'})
+
+
 @test_in_game_bp.route('/api/mex/test-in-game/custom-stage', methods=['POST'])
 def start_custom_stage_test():
     """Test ONE custom (m-ex) stage in game: build a temp ISO with just that stage

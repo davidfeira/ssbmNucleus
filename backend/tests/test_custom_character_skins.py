@@ -705,6 +705,53 @@ def test_parse_cli_json_handles_indented_output_with_noise():
     assert cc_module._parse_cli_json('') == {}
 
 
+def test_build_plan_carries_custom_costume_index():
+    """The custom-character-skin test passes a colorIndex through the manifest;
+    the runner's plan must carry it so both the memory-select path (color byte)
+    and the cursor fallback (set_costume) pick the right slot."""
+    from ingame.runner import build_plan
+    checks = build_plan({'character': {
+        'name': 'Testo', 'colorIndex': 2,
+        'cssIcon': {'x': -28.15, 'y': 2.0, 'index': 25, 'fighter': 0x21}}})
+    assert checks[0]['char']['kind'] == 'custom'
+    assert checks[0]['char']['costume'] == 2
+    # plain custom-character test (no colorIndex) keeps the default slot
+    checks = build_plan({'character': {
+        'name': 'Testo', 'cssIcon': {'x': 0.0, 'y': 0.0, 'index': 25}}})
+    assert checks[0]['char']['costume'] == 0
+
+
+def test_custom_character_skin_test_route_validation(tmp_path, monkeypatch):
+    """Input validation for /test-in-game/custom-character-skin (the build/run
+    itself needs MexCLI + Dolphin and is exercised live, not here)."""
+    import ingame.boot as boot_module
+    from blueprints import test_in_game as ti_module
+
+    monkeypatch.setattr(boot_module, 'dolphin_running', lambda: [])
+    monkeypatch.setattr(ti_module, 'STORAGE_PATH', tmp_path)
+
+    fake_iso = tmp_path / 'vanilla.iso'
+    fake_iso.write_bytes(b'\x00')
+    common = {'vanillaIsoPath': str(fake_iso), 'slippiDolphinPath': 'C:/Slippi'}
+
+    app = Flask(__name__)
+    app.register_blueprint(ti_module.test_in_game_bp)
+    with app.test_client() as c:
+        url = '/api/mex/test-in-game/custom-character-skin'
+        # no slug
+        res = c.post(url, json={'skinId': 'abc', **common})
+        assert res.status_code == 400
+        assert 'slug' in res.get_json()['error']
+        # neither skinId nor costumeIndex
+        res = c.post(url, json={'slug': 'testo', **common})
+        assert res.status_code == 400
+        assert 'skinId or costumeIndex' in res.get_json()['error']
+        # skin zip missing on disk
+        res = c.post(url, json={'slug': 'testo', 'skinId': 'nope', **common})
+        assert res.status_code == 400
+        assert 'not found' in res.get_json()['error']
+
+
 def test_custom_stage_set_folder(client):
     res = client.post('/api/mex/custom-stages/set-folder',
                       json={'stageId': 'stage-1', 'folderId': 'folder_aa11'})

@@ -90,7 +90,8 @@ def build_plan(manifest):
             "covers": covers + ["menu"],
             "char": {"kind": "custom", "x": float(css_icon["x"]),
                      "y": float(css_icon["y"]), "index": int(css_icon["index"]),
-                     "ckind": css_icon.get("fighter")},
+                     "ckind": css_icon.get("fighter"),
+                     "costume": int(character.get("colorIndex", 0) or 0)},
             "stage": stage,
             "hold": None,
             "move": None,
@@ -186,9 +187,10 @@ def _lock_vanilla(cur, name, costume):
     return cur.hovered() == css_index(name)
 
 
-def _lock_custom(cur, x, y, index):
+def _lock_custom(cur, x, y, index, costume=0):
     """Lock a custom m-ex fighter by its CSS icon coordinate (target = (x, y-3.5),
-    the validated icon->cursor offset); confirm the hovered grid index."""
+    the validated icon->cursor offset); confirm the hovered grid index, cycle to
+    the requested costume slot, then lock."""
     tx, ty = x, y - 3.5
     cur.unlock()
     cur.move_to(tx, ty)
@@ -197,6 +199,7 @@ def _lock_custom(cur, x, y, index):
             break
         cur.move_to(tx, ty, tol=0.7)
         time.sleep(0.12)
+    cur.set_costume(int(costume or 0))
     cur.p.center()
     time.sleep(0.15)
     cur.p.tap("A", 0.08)
@@ -206,7 +209,8 @@ def _lock_custom(cur, x, y, index):
 
 def _select_char(cur, char):
     if char["kind"] == "custom":
-        return _lock_custom(cur, char["x"], char["y"], char["index"])
+        return _lock_custom(cur, char["x"], char["y"], char["index"],
+                            int(char.get("costume", 0) or 0))
     return _lock_vanilla(cur, char["name"], int(char.get("costume", 0)))
 
 

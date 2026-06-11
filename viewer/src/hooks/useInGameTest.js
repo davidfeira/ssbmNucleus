@@ -103,6 +103,11 @@ export function useInGameTest() {
   const startCustomCharacterTest = ({ slug, name }) =>
     runTest('/test-in-game/custom-character', { slug, name })
 
+  // One SPECIFIC skin of a custom character: an added vault skin (skinId) or a
+  // bundled costume slot (costumeIndex).
+  const startCustomCharacterSkinTest = ({ slug, skinId, costumeIndex, colorName }) =>
+    runTest('/test-in-game/custom-character-skin', { slug, skinId, costumeIndex, colorName })
+
   const startCustomStageTest = ({ slug, name }) =>
     runTest('/test-in-game/custom-stage', { slug, name })
 
@@ -247,7 +252,8 @@ export function useInGameTest() {
 
   return {
     testingInGame, testStatus, testResult, testError,
-    startCostumeTest, startCustomCharacterTest, startCustomStageTest, startStageSkinTest,
+    startCostumeTest, startCustomCharacterTest, startCustomCharacterSkinTest,
+    startCustomStageTest, startStageSkinTest,
     captureStageScreenshot, capturePauseScreenshot,
     resetTest
   }

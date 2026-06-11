@@ -8,6 +8,7 @@ import { useCspManager } from '../../hooks/useCspManager'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
+import SkinCreator from '../SkinCreator'
 
 export default function CustomCharacterDetailView({ character, onBack, onDelete, onRename, API_URL }) {
   const [editingName, setEditingName] = useState(false)
@@ -26,6 +27,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [skinDropActive, setSkinDropActive] = useState(false)
   const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
   const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
+  const [skinCreatorCostume, setSkinCreatorCostume] = useState(null) // opens SkinCreator on this skin
   const audioRef = useRef(null)
   const skinFileRef = useRef(null)
   const seriesFileRef = useRef(null)
@@ -101,6 +103,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
       id: skin.id,
       character: charKey,
       color: skin.name || skin.color,
+      dat_name: skin.dat_name || skin.dat,
       has_csp: skin.has_csp,
       has_stock: skin.has_stock,
       cspUrl: `${base}/storage/${charKey}/${skin.csp_filename || `${skin.id}_csp.png`}`,
@@ -129,6 +132,41 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const openCostumeEditor = (costume) => {
     if (!costume.edit_id) return
     openSkinEditorFor(pseudoCostumes, { ...costume, id: costume.edit_id })
+  }
+
+  // Edit Textures: open the shared SkinCreator on this skin. Saving creates a
+  // NEW entry in this character's Custom Skins (SkinCreator routes the save by
+  // the pseudo-character key).
+  const handleStartSkinCreator = (itemData) => {
+    editModal.handleCancel()
+    setSkinCreatorCostume({
+      id: itemData.id,
+      character: itemData.character,
+      color: itemData.color,
+      dat_name: itemData.dat_name,
+    })
+  }
+
+  // Test in Game: build a temp ISO with this fighter + exactly this skin
+  // (added skins are imported as an extra costume slot; bundled costumes are
+  // selected by their slot index) and play a short match.
+  const handleTestInGame = () => {
+    const item = editModal.editingItem
+    if (!item) return
+    if (item.data.character?.endsWith('/costumes')) {
+      const costume = (detail?.costumes || []).find(c => c.edit_id === item.data.id)
+      inGameTest.startCustomCharacterSkinTest({
+        slug: character.slug,
+        costumeIndex: costume?.index ?? 0,
+        colorName: item.data.color,
+      })
+    } else {
+      inGameTest.startCustomCharacterSkinTest({
+        slug: character.slug,
+        skinId: item.data.id,
+        colorName: item.data.color,
+      })
+    }
   }
 
   // The modal's Delete: a bundled costume must come out of fighter.zip via
@@ -1034,7 +1072,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         slippiAdvancedOpen={editModal.slippiAdvancedOpen}
         onSlippiAdvancedToggle={() => editModal.setSlippiAdvancedOpen(!editModal.slippiAdvancedOpen)}
         onSave={editModal.handleSave}
-        onCancel={editModal.handleCancel}
+        onCancel={() => { inGameTest.resetTest(); editModal.handleCancel(); }}
         onDelete={handleModalDelete}
         onExport={editModal.handleExport}
         onCspChange={editModal.handleCspChange}
@@ -1043,9 +1081,22 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}
         onOpenCspManager={cspManager.openCspManager}
-        onStartSkinCreator={null}
+        onStartSkinCreator={handleStartSkinCreator}
         onView3D={() => editModal.setShow3DViewer(true)}
+        onTestInGame={handleTestInGame}
+        testingInGame={inGameTest.testingInGame}
+        testStatus={inGameTest.testStatus}
+        testResult={inGameTest.testResult}
+        testError={inGameTest.testError}
+        onResetTest={inGameTest.resetTest}
         API_URL={API_URL}
+      />
+      <SkinCreator
+        isOpen={skinCreatorCostume != null}
+        onClose={() => setSkinCreatorCostume(null)}
+        selectedCharacter={character.name}
+        onRefresh={fetchDetail}
+        initialCostume={skinCreatorCostume}
       />
       {editModal.show3DViewer && editModal.editingItem?.type === 'costume' && (
         <EmbeddedModelViewer

@@ -585,16 +585,34 @@ export default function SkinCreator({
 
       const datBlob = base64ToBlob(base64Data)
 
+      // A skin from a custom character's library (pseudo key
+      // custom_characters/<slug>/skins|costumes) saves back to that character's
+      // Custom Skins — the generic intake would misfile its DAT under the donor
+      // character. Keep the original Pl* DAT name: install keys costumes by it.
+      const charKey = initialCostume?.character
+      const customMatch = typeof charKey === 'string'
+        ? charKey.match(/^custom_characters\/([^/]+)\//)
+        : null
+
       const { default: JSZip } = await import('jszip')
       const zip = new JSZip()
-      zip.file(`${skinName.trim()}.dat`, datBlob)
+      const datName = customMatch && initialCostume?.dat_name
+        ? initialCostume.dat_name
+        : `${skinName.trim()}.dat`
+      zip.file(datName, datBlob)
       const zipBlob = await zip.generateAsync({ type: 'blob' })
 
       const formData = new FormData()
       formData.append('file', new File([zipBlob], `${skinName.trim()}.zip`))
-      formData.append('custom_title', skinName.trim())
+      let saveUrl = `${API_URL}/import/file`
+      if (customMatch) {
+        formData.append('name', skinName.trim())
+        saveUrl = `${API_URL}/custom-characters/${customMatch[1]}/skins/add`
+      } else {
+        formData.append('custom_title', skinName.trim())
+      }
 
-      const response = await fetch(`${API_URL}/import/file`, {
+      const response = await fetch(saveUrl, {
         method: 'POST',
         body: formData
       })

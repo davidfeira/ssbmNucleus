@@ -223,7 +223,7 @@ export default function EditModal({
                   <span>View 3D Model</span>
                 </button>
 
-                {/* Edit in Skin Creator Button (not offered for custom-character skins) */}
+                {/* Edit in Skin Creator Button */}
                 {onStartSkinCreator && (
                   <button
                     className="edit-modal-skincreator-btn"
