@@ -10,6 +10,7 @@ import ClearStorageSection from './settings/ClearStorageSection'
 import DiscordSection from './settings/DiscordSection'
 import VolumeSection from './settings/VolumeSection'
 import SetupSection from './settings/SetupSection'
+import AiStudioSection from './settings/AiStudioSection'
 
 export default function Settings({ metadata, onOpenFirstRunSetup }) {
 
@@ -29,6 +30,9 @@ export default function Settings({ metadata, onOpenFirstRunSetup }) {
 
         {/* Slippi Dolphin Path */}
         <SlippiPathSection API_URL={API_URL} />
+
+        {/* AI Studio (OpenRouter key) */}
+        <AiStudioSection API_URL={API_URL} />
 
         {/* First-Run Setup Wizard */}
         <SetupSection onOpenFirstRunSetup={onOpenFirstRunSetup} />

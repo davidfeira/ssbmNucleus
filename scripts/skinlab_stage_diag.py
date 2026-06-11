@@ -33,6 +33,8 @@ def main():
     ap.add_argument('--vanilla', required=True)
     ap.add_argument('--slippi', required=True)
     ap.add_argument('--chunks', type=int, default=0)
+    ap.add_argument('--range', default=None,
+                    help='limit chunking to an index range, e.g. "100-124"')
     args = ap.parse_args()
 
     import test_build
@@ -48,6 +50,9 @@ def main():
 
     if args.chunks:
         all_idx = sorted(by_index)
+        if args.range:
+            lo, hi = (int(x) for x in args.range.split('-'))
+            all_idx = [i for i in all_idx if lo <= i <= hi]
         size = (len(all_idx) + args.chunks - 1) // args.chunks
         groups = [(NAMES[i % 8], COLORS[i % 8], all_idx[i * size:(i + 1) * size])
                   for i in range(args.chunks)]

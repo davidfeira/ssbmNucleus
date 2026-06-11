@@ -3,21 +3,23 @@
   "code": "GrPs",
   "basis": {"textureCount": 115},
   "regions": {
-    "turf": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-    "deck": [22, 23, 24, 25, 26, 27, 53, 54],
-    "walls": [19, 20, 21, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42, 43, 44, 45, 50],
-    "billboards": [40, 51],
+    "turf": [15, 16, 17],
+    "turf_pattern": [18, 46, 47, 48, 49, 52],
+    "deck": [0, 1, 2, 3, 4, 9],
+    "walls": [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 50, 51],
     "stands": [62, 79],
     "lights": [59, 61, 72, 76, 78]
   },
   "protected": [],
   "notes": {
-    "turf": "the green field 256x256 set (includes transformation turf variants)",
-    "deck": "288x256 olive deck tiles (x6 copies) + under-deck shadows",
-    "walls": "stadium wall/stand sections (repeated left/right copies)",
-    "billboards": "40/51 = ad panel sides",
-    "stands": "62/79 = the orange crowd stands",
-    "lights": "white stadium light + sky bits",
-    "limitations": "the jumbotron screen + crowd masks are I4/I8 intensity textures - unmapped (re-encode loses color); screen content is engine-rendered anyway"
+    "turf": "corner wedges + side strips (15/16/17); the 5-14 CI8 greens are transformation variants not shown on the normal stage",
+    "turf_pattern": "the MAIN FIELD luminance sheets (18 + 46-49/52). LIMITATION: the field's green is MATANIM-driven (the transformation system re-asserts it every frame) - neither texture pushes NOR static material tints recolor it; would need matanim color-track editing. Pattern edits via these sheets show as luminance only",
+    "deck": "the gray platform ring around the turf (grayscale sheets 0-4 + 9)",
+    "walls": "stadium wall/billboard sections (incl. the 288x256 olives 22-27, which are walls NOT deck)",
+    "stands": "orange crowd stands",
+    "lights": "white stadium lights + sky bits",
+    "18": "the white Pokeball center circle - protected",
+    "limitations": "the jumbotron screen content is engine-rendered text; crowd masks are I4/I8 - unmapped",
+    "method": "regions localized via chunked solid-color in-game captures (skinlab_stage_diag --chunks), 2026-06-11"
   }
 }
