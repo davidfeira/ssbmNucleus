@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { API_URL } from '../../config'
 
-export default function DolphinEmbedPanel({ active }) {
+export default function DolphinEmbedPanel({ active, fill = false }) {
   const placeholderRef = useRef(null)
   const lastSentRef = useRef(null)   // JSON key of the last acknowledged post
   const busyRef = useRef(false)      // one request in flight at a time
@@ -100,18 +100,19 @@ export default function DolphinEmbedPanel({ active }) {
 
   if (!active) return null
 
-  return (
+  const placeholder = (
     <div
       ref={placeholderRef}
       style={{
-        // As big as fits: 4:3, capped by the container's width AND by the
-        // available height (~17rem reserved for the spinner/text/progress
-        // around it). 100cqh = the nearest size container's height (the
-        // EditModal test overlay); with no container it falls back to the
-        // viewport height, which is right for the inline detail-view panels.
         aspectRatio: '4 / 3',
-        width: 'clamp(280px, calc((100cqh - 17rem) * 4 / 3), 100%)',
-        margin: '1rem auto 0',
+        // fill: contain-fit 4:3 inside the flex-given stage (100cqw/100cqh =
+        // the stage's own size -- can never overflow, so nothing scrolls).
+        // inline: scale with the viewport (cq units fall back to viewport
+        // units with no container), ~17rem reserved for surrounding text.
+        width: fill
+          ? 'min(100cqw, calc(100cqh * 4 / 3))'
+          : 'clamp(280px, calc((100cqh - 17rem) * 4 / 3), 100%)',
+        margin: fill ? '0 auto' : '1rem auto 0',
         background: 'var(--color-bg-deep)',
         border: '1px solid var(--color-border-subtle)',
         borderRadius: 'var(--radius-md)',
@@ -125,6 +126,23 @@ export default function DolphinEmbedPanel({ active }) {
           The game appears here once Dolphin boots…
         </p>
       )}
+    </div>
+  )
+
+  if (!fill) return placeholder
+
+  // The stage: takes whatever space the flex-column parent has left and
+  // becomes the size container the placeholder fits into. minHeight: 0 lets
+  // it actually shrink instead of forcing overflow.
+  return (
+    <div
+      style={{
+        flex: '1 1 auto', minHeight: 0, width: '100%', marginTop: '1rem',
+        containerType: 'size',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {placeholder}
     </div>
   )
 }

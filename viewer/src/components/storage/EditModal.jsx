@@ -664,13 +664,16 @@ export default function EditModal({
             style={{
               position: 'absolute', inset: 0, zIndex: 20, borderRadius: 'inherit',
               background: 'rgba(8,8,16,0.92)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              containerType: 'size'
+              alignItems: 'center', justifyContent: 'center'
             }}
           >
-            {/* While testing, let the embedded Dolphin use the whole modal --
-                the 560px cap is for the result/error text states. */}
-            <div style={{ width: testingInGame ? '94%' : '90%', maxWidth: testingInGame ? 'none' : '560px', maxHeight: '92%', overflowY: 'auto', textAlign: 'center', padding: '1.5rem' }}>
+            {/* While testing: a fixed-height flex column, NEVER scrollable --
+                the embedded Dolphin floats over the page and wouldn't clip, so
+                the embed flex-fills whatever height the text leaves over. The
+                560px scrollable wrapper is for the result/error states. */}
+            <div style={testingInGame
+              ? { width: '94%', height: '94%', minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', padding: '1.5rem' }
+              : { width: '90%', maxWidth: '560px', maxHeight: '92%', overflowY: 'auto', textAlign: 'center', padding: '1.5rem' }}>
               {testingInGame ? (
                 <>
                   <div className="edit-modal-action-spinner" style={{ width: 40, height: 40, margin: '0 auto 1rem' }}></div>
@@ -682,7 +685,7 @@ export default function EditModal({
                     <div style={{ height: '100%', width: `${testStatus?.percentage || 0}%`, background: 'var(--gradient-gold, #f0c14b)', transition: 'width 0.3s ease' }}></div>
                   </div>
                   {/* Captures keep their own window (the shot's resolution = window size). */}
-                  <DolphinEmbedPanel active={testMode !== 'capture'} />
+                  <DolphinEmbedPanel active={testMode !== 'capture'} fill />
                   <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', maxWidth: 560, margin: '1rem auto 0' }}>
                     Builds a one-costume ISO and plays a short match in a throwaway Dolphin.
                     Your Slippi setup is untouched, and it never goes online.
