@@ -252,7 +252,10 @@ const EmbeddedModelViewer = forwardRef(({
     setIsConnected(false)
   }, [hasElectron])
 
-  // Update viewer window position to match placeholder
+  // Update viewer window position to match placeholder. Only sends when the
+  // target actually changed -- unconditional SetWindowPos every poll makes the
+  // native window visibly jitter.
+  const lastViewerPosRef = useRef(null)
   const updateViewerPosition = useCallback(() => {
     if (!placeholderRef.current || !hasElectron) return
 
@@ -275,6 +278,11 @@ const EmbeddedModelViewer = forwardRef(({
     const width = Math.round(rect.width * dpr)
     const height = Math.round(rect.height * dpr)
 
+    const last = lastViewerPosRef.current
+    if (last && last.x === x && last.y === y && last.width === width && last.height === height) {
+      return
+    }
+    lastViewerPosRef.current = { x, y, width, height }
     console.log('[EmbeddedViewer] Position:', { x, y, width, height, dpr, screenLeft, screenTop, chromeHeight })
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
@@ -327,14 +335,20 @@ const EmbeddedModelViewer = forwardRef(({
     const handleResize = () => updateViewerPosition()
 
     window.addEventListener('resize', handleResize)
-    window.addEventListener('scroll', handleResize)
+    window.addEventListener('scroll', handleResize, true)
 
-    // Also update periodically in case window moves (no good event for this)
+    // Track container layout changes directly
+    const ro = new ResizeObserver(handleResize)
+    if (placeholderRef.current) ro.observe(placeholderRef.current)
+
+    // Also poll for window MOVES (no DOM event exists) -- cheap because
+    // updateViewerPosition no-ops when nothing changed
     const intervalId = setInterval(updateViewerPosition, 500)
 
     return () => {
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('scroll', handleResize)
+      window.removeEventListener('scroll', handleResize, true)
+      ro.disconnect()
       clearInterval(intervalId)
     }
   }, [isConnected, hasElectron, updateViewerPosition])

@@ -1175,6 +1175,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         selectedStage={selectedStage}
         stageVariants={stageVariants}
         onBack={() => setSelectedStage(null)}
+        onRefresh={onRefresh}
         // Drag and drop
         draggedItem={draggedItem}
         dragOverIndex={dragOverIndex}

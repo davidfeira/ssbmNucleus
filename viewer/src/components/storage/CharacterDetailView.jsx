@@ -23,6 +23,7 @@ import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ContextMenu from './ContextMenu'
 import SkinCreator from '../SkinCreator'
+import AIStudioModal from './AIStudioModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseManagerModal from './PoseManagerModal'
 import ExtrasPageView from './ExtrasPageView'
@@ -50,6 +51,16 @@ export default function CharacterDetailView({
   onCostumesUpdated,
   API_URL
 }) {
+  // AI Skin Studio (feature-gated by the backend /ai-status probe)
+  const [aiStudioEnabled, setAiStudioEnabled] = useState(false)
+  const [showAiStudio, setShowAiStudio] = useState(false)
+  useEffect(() => {
+    fetch(`${API_URL}/skin-lab/ai-status`)
+      .then((r) => r.json())
+      .then((d) => setAiStudioEnabled(Boolean(d.enabled)))
+      .catch(() => setAiStudioEnabled(false))
+  }, [API_URL])
+
   // Drag and drop (shared useDragAndDrop instance)
   const {
     draggedItem,
@@ -339,6 +350,20 @@ export default function CharacterDetailView({
               <span className="create-mod-label">Create New Mod</span>
             </div>
           </div>
+          {aiStudioEnabled && (
+            <div
+              className="create-mod-card ai"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); setShowAiStudio(true); }}
+            >
+              <div className="create-mod-image-area">
+                <span className="create-mod-icon">✨</span>
+              </div>
+              <div className="create-mod-info">
+                <span className="create-mod-label">AI Skin Studio</span>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
@@ -441,6 +466,12 @@ export default function CharacterDetailView({
         onSkinCreatorChange={onSkinCreatorChange}
         onRefresh={onRefresh}
         initialCostume={skinCreatorInitialCostume}
+      />
+      <AIStudioModal
+        show={showAiStudio}
+        character={selectedCharacter}
+        onClose={() => setShowAiStudio(false)}
+        onSaved={onRefresh}
       />
       <PoseManagerModal
         show={showPoseManager}

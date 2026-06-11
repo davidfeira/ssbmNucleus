@@ -1,7 +1,11 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 
 // Keeps the embedded viewer window positioned over the 3D preview container.
+// Only sends a reposition when the target rect actually changed -- calling
+// SetWindowPos unconditionally on a timer makes the native window jitter.
 export function useViewerPosition({ skinCreatorCanvasRef, hasElectron, viewerWs, skinCreatorStep, panelSizes }) {
+  const lastPosRef = useRef(null)
+
   // Update embedded viewer window position to match the 3D preview container
   const updateViewerPosition = useCallback(() => {
     if (!skinCreatorCanvasRef.current || !hasElectron) return
@@ -24,6 +28,11 @@ export function useViewerPosition({ skinCreatorCanvasRef, hasElectron, viewerWs,
     const width = Math.round(rect.width * dpr)
     const height = Math.round(rect.height * dpr)
 
+    const last = lastPosRef.current
+    if (last && last.x === x && last.y === y && last.width === width && last.height === height) {
+      return
+    }
+    lastPosRef.current = { x, y, width, height }
     window.electron.viewerResize(x, y, width, height)
   }, [hasElectron])
 
@@ -34,14 +43,20 @@ export function useViewerPosition({ skinCreatorCanvasRef, hasElectron, viewerWs,
     const handleResize = () => updateViewerPosition()
 
     window.addEventListener('resize', handleResize)
-    window.addEventListener('scroll', handleResize)
+    window.addEventListener('scroll', handleResize, true)
 
-    // Also update periodically in case window moves (no good event for this)
+    // Track container layout changes directly
+    const ro = new ResizeObserver(handleResize)
+    if (skinCreatorCanvasRef.current) ro.observe(skinCreatorCanvasRef.current)
+
+    // Also poll for window MOVES (no DOM event exists) -- cheap because
+    // updateViewerPosition no-ops when nothing changed
     const intervalId = setInterval(updateViewerPosition, 500)
 
     return () => {
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('scroll', handleResize)
+      window.removeEventListener('scroll', handleResize, true)
+      ro.disconnect()
       clearInterval(intervalId)
     }
   }, [viewerWs, hasElectron, skinCreatorStep, updateViewerPosition])

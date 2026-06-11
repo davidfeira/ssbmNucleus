@@ -7,8 +7,10 @@
  * - Edit, CSP manager, context menu integration
  */
 
+import { useEffect, useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import StageAIStudioModal from './StageAIStudioModal'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
@@ -98,11 +100,24 @@ export default function StageDetailView({
   confirmDialogData,
   confirmDelete,
   cancelDelete,
+  // Refresh after AI Studio saves a variant
+  onRefresh,
   // API
   API_URL
 }) {
   const stageInfo = selectedStage
   const variants = stageVariants[selectedStage.code] || []
+
+  // AI Stage Studio (gated by backend probe + per-stage region map)
+  const [aiStages, setAiStages] = useState(null)
+  const [showAiStudio, setShowAiStudio] = useState(false)
+  useEffect(() => {
+    fetch(`${API_URL}/stage-lab/ai-status`)
+      .then((r) => r.json())
+      .then((d) => setAiStages(d.enabled ? (d.stages || []) : []))
+      .catch(() => setAiStages([]))
+  }, [API_URL])
+  const aiAvailable = Array.isArray(aiStages) && aiStages.includes(selectedStage.code)
 
   // In-game test (per stage skin / DAS variant)
   const inGameTest = useInGameTest()
@@ -120,7 +135,7 @@ export default function StageDetailView({
           ← Back to Stages
         </button>
 
-        {variants.length === 0 ? (
+        {variants.length === 0 && !aiAvailable ? (
           <div className="no-skins-message">
             <p>No stage variants yet. Add some to your storage!</p>
           </div>
@@ -191,9 +206,29 @@ export default function StageDetailView({
               </div>
             )
           })}
+          {aiAvailable && (
+            <div
+              className="create-mod-card ai"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); setShowAiStudio(true); }}
+            >
+              <div className="create-mod-image-area">
+                <span className="create-mod-icon">✨</span>
+              </div>
+              <div className="create-mod-info">
+                <span className="create-mod-label">AI Stage Studio</span>
+              </div>
+            </div>
+          )}
           </div>
         )}
       </div>
+      <StageAIStudioModal
+        show={showAiStudio}
+        stage={selectedStage}
+        onClose={() => setShowAiStudio(false)}
+        onSaved={onRefresh}
+      />
       <EditModal
         show={showEditModal}
         editingItem={editingItem}
