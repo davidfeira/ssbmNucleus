@@ -40,6 +40,24 @@ RELEASES_DIR = REPO_ROOT / 'releases'
 RELEASES_BASE_URL = 'https://releases.ssbmnucleus.net/windows'
 DEFAULT_BUCKET = 'nucleus-releases'
 
+# Known credential files (first hit wins; env vars already set take precedence)
+CRED_FILES = [
+    Path('D:/ssbm-backup/r2.env'),
+    REPO_ROOT.parent / 'meleeWebsite' / 'backend' / '.env',
+]
+
+
+def load_creds():
+    """Populate R2_* env vars from the saved credential files if not set."""
+    for f in CRED_FILES:
+        if not f.exists():
+            continue
+        for line in f.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if line.startswith('R2_') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
 
 def find_installer(version):
     """electron-builder names it '<productName> Setup <version>.exe'.
@@ -69,9 +87,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--notes', default='')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--version', help='publish a specific version instead of '
+                    'package.json (e.g. re-publishing an older built installer)')
     args = ap.parse_args()
 
-    version = json.loads((REPO_ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+    load_creds()
+    version = args.version or json.loads(
+        (REPO_ROOT / 'package.json').read_text(encoding='utf-8'))['version']
     if not re.match(r'^\d+\.\d+\.\d+', version):
         sys.exit(f'unexpected version in package.json: {version!r}')
 
