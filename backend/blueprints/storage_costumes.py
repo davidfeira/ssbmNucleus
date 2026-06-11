@@ -33,6 +33,44 @@ logger = logging.getLogger(__name__)
 
 storage_costumes_bp = Blueprint('storage_costumes', __name__)
 
+# Vanilla CSP texture size; HD previews are capped at 4x that
+CSP_SD_SIZE = (136, 188)
+CSP_HD_SIZE = (544, 752)
+
+
+def derive_csp_versions(image_bytes):
+    """Derive (sd_png_bytes, hd_png_bytes_or_None) from one uploaded image.
+
+    SD is the image shrunk to fit the vanilla 136x188 CSP texture (never
+    enlarged). The HD preview is kept only when the source is at least ~2x
+    the SD size -- upscaling a small image would just make a blurry "HD" --
+    and is capped at 4x.
+    """
+    from io import BytesIO
+    from PIL import Image
+
+    with Image.open(BytesIO(image_bytes)) as src:
+        img = src.convert('RGBA')
+
+    width, height = img.size
+
+    sd = img.copy()
+    if width > CSP_SD_SIZE[0] or height > CSP_SD_SIZE[1]:
+        sd.thumbnail(CSP_SD_SIZE, Image.LANCZOS)
+    sd_buf = BytesIO()
+    sd.save(sd_buf, format='PNG')
+
+    hd_bytes = None
+    if width >= CSP_SD_SIZE[0] * 2 or height >= CSP_SD_SIZE[1] * 2:
+        hd = img.copy()
+        if width > CSP_HD_SIZE[0] or height > CSP_HD_SIZE[1]:
+            hd.thumbnail(CSP_HD_SIZE, Image.LANCZOS)
+        hd_buf = BytesIO()
+        hd.save(hd_buf, format='PNG')
+        hd_bytes = hd_buf.getvalue()
+
+    return sd_buf.getvalue(), hd_bytes
+
 
 def find_folder_in_skins(skins, folder_id):
     """Find a folder by ID in the skins array."""
@@ -238,11 +276,17 @@ def rename_storage_costume():
 
 @storage_costumes_bp.route('/api/mex/storage/costumes/update-csp', methods=['POST'])
 def update_costume_csp():
-    """Update CSP image for a character costume (normal or HD)"""
+    """Update CSP image for a character costume.
+
+    With auto=true, one uploaded image is split into both versions: shrunk to
+    the in-game 136x188 texture, and kept (up to 4x) as the HD vault preview.
+    The legacy isHd flag updates just one of the two files.
+    """
     try:
         character = request.form.get('character')
         skin_id = request.form.get('skinId')
         is_hd = request.form.get('isHd', '').lower() == 'true'
+        auto = request.form.get('auto', '').lower() == 'true'
 
         if not character or not skin_id:
             return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
@@ -270,6 +314,55 @@ def update_costume_csp():
             'image/webp': '.webp', 'image/bmp': '.bmp'
         }
         ext = ext_map.get(csp_file.content_type, '.png')
+
+        # Auto mode: derive both SD (in-game) and HD (preview) from one image.
+        # Animated GIFs fall through to the legacy as-is path.
+        if auto and csp_file.content_type != 'image/gif':
+            sd_data, hd_data = derive_csp_versions(csp_data)
+
+            csp_filename = f"{skin_id}_csp.png"
+            (char_folder / csp_filename).write_bytes(sd_data)
+
+            temp_zip = char_folder / f"{skin_id}_temp.zip"
+            with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                    for item in source_zip.infolist():
+                        if item.filename.lower() not in ['csp.png', 'csp']:
+                            dest_zip.writestr(item, source_zip.read(item.filename))
+                    dest_zip.writestr('csp.png', sd_data)
+            zip_path.unlink()
+            temp_zip.rename(zip_path)
+
+            hd_filename = None
+            hd_size = None
+            if hd_data:
+                hd_filename = f"{skin_id}_csp_hd.png"
+                (char_folder / hd_filename).write_bytes(hd_data)
+                from PIL import Image
+                from io import BytesIO
+                with Image.open(BytesIO(hd_data)) as img:
+                    hd_size = f"{img.size[0]}x{img.size[1]}"
+
+            metadata = load_metadata()
+            if metadata is not None:
+                char_data = get_char_data(metadata, character)
+                if char_data is not None:
+                    for skin in char_data.get('skins', []):
+                        if skin['id'] == skin_id:
+                            skin['has_csp'] = True
+                            skin['csp_source'] = 'custom'
+                            skin['csp_filename'] = csp_filename
+                            if hd_filename:
+                                skin['has_hd_csp'] = True
+                                skin['hd_csp_source'] = 'custom'
+                                skin['hd_csp_filename'] = hd_filename
+                                skin['hd_csp_resolution'] = 'custom'
+                                skin['hd_csp_size'] = hd_size
+                            break
+                    save_metadata(metadata)
+
+            logger.info(f"[OK] Updated CSP for {character} - {skin_id} (auto, hd={'yes' if hd_data else 'no'})")
+            return jsonify({'success': True, 'message': 'CSP updated successfully', 'hasHd': bool(hd_data)})
 
         if is_hd:
             hd_csp_filename = f"{skin_id}_csp_hd{ext}"
@@ -469,7 +562,64 @@ def manage_csp(character, skin_id):
                 return jsonify({'success': False, 'error': 'No file provided'}), 400
 
             is_hd_upload = request.form.get('isHd', '').lower() == 'true'
+            auto = request.form.get('auto', '').lower() == 'true'
             alt_csps = skin.get('alternate_csps', [])
+
+            # Auto mode: one image becomes an SD + HD pair, grouped by a name
+            # derived from the uploaded filename (animated GIFs stay as-is below)
+            if auto and file.content_type != 'image/gif':
+                if 'alternate_csps' not in skin:
+                    skin['alternate_csps'] = []
+                    alt_csps = skin['alternate_csps']
+
+                sd_data, hd_data = derive_csp_versions(file.read())
+
+                stem = re.sub(r'[^\w\- ]', '', Path(file.filename or '').stem).strip() or 'custom'
+                existing_names = {a.get('pose_name') for a in alt_csps}
+                group_name = stem
+                suffix = 2
+                while group_name in existing_names:
+                    group_name = f"{stem} {suffix}"
+                    suffix += 1
+
+                ts = int(time.time())
+                n = len(alt_csps) + 1
+                now = datetime.now().isoformat()
+
+                sd_id = f"alt_{ts}"
+                sd_filename = f"{skin_id}_csp_alt_{n}.png"
+                (STORAGE_PATH / character / sd_filename).write_bytes(sd_data)
+                skin['alternate_csps'].append({
+                    'id': sd_id,
+                    'filename': sd_filename,
+                    'pose_name': group_name,
+                    'is_hd': False,
+                    'timestamp': now
+                })
+
+                if hd_data:
+                    hd_filename = f"{skin_id}_csp_alt_{n}_hd.png"
+                    (STORAGE_PATH / character / hd_filename).write_bytes(hd_data)
+                    skin['alternate_csps'].append({
+                        'id': f"alt_{ts}_hd",
+                        'filename': hd_filename,
+                        'pose_name': group_name,
+                        'is_hd': True,
+                        'timestamp': now
+                    })
+
+                save_metadata(metadata)
+
+                return jsonify({
+                    'success': True,
+                    'message': 'Alt CSP added',
+                    'altId': sd_id,
+                    'url': f"/storage/{character}/{sd_filename}",
+                    'isHd': False,
+                    'hasHd': bool(hd_data),
+                    'poseName': group_name
+                })
+
             new_alt_id = f"alt_{int(time.time())}{'_hd' if is_hd_upload else ''}"
 
             # Preserve original file extension (e.g. .gif for animated GIFs)

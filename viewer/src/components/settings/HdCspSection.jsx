@@ -3,18 +3,20 @@
  *
  * Features:
  * - Calculate missing HD CSPs
- * - Generate HD CSPs at 2x, 3x, or 4x resolution
+ * - Generate HD CSPs at 4x resolution
  * - Progress tracking during batch generation
  * - Success/error messaging
  */
 import { useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 
+// All HD portraits are rendered at 4x (matches the CSP manager)
+const HD_SCALE = 4
+
 export default function HdCspSection({ metadata, API_URL }) {
   const [generatingHdCsps, setGeneratingHdCsps] = useState(false)
   const [hdCspProgress, setHdCspProgress] = useState({ current: 0, total: 0 })
   const [hdCspMessage, setHdCspMessage] = useState({ text: '', type: '' })
-  const [hdCspResolution, setHdCspResolution] = useState('2x') // '2x' | '3x' | '4x'
 
   // Count skins missing HD CSPs
   const getHdCspStats = () => {
@@ -65,7 +67,7 @@ export default function HdCspSection({ metadata, API_URL }) {
     let successCount = 0
     let failCount = 0
 
-    const scaleNum = parseInt(hdCspResolution.replace('x', ''))
+    const scaleNum = HD_SCALE
 
     for (let i = 0; i < skinsToProcess.length; i++) {
       const skin = skinsToProcess[i]
@@ -117,7 +119,7 @@ export default function HdCspSection({ metadata, API_URL }) {
     <section className="settings-section">
       <h3>HD Portrait Generation</h3>
       <p className="section-description">
-        Batch generate high-resolution portraits for all skins in your vault.
+        Batch generate 4x high-resolution portraits for all skins in your vault.
       </p>
 
       <div className="hd-csp-tool">
@@ -129,23 +131,6 @@ export default function HdCspSection({ metadata, API_URL }) {
         </div>
 
         <div className="hd-csp-controls">
-          <div className="hd-csp-resolution-select">
-            <label>Resolution</label>
-            <div className="hd-csp-resolution-options">
-              {['2x', '3x', '4x'].map(res => (
-                <button
-                  key={res}
-                  className={`hd-csp-resolution-btn ${hdCspResolution === res ? 'active' : ''}`}
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('tick'); setHdCspResolution(res); }}
-                  disabled={generatingHdCsps}
-                >
-                  {res}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <button
             className="hd-csp-generate-btn"
             onMouseEnter={playHoverSound}

@@ -110,6 +110,9 @@ export const POSE_MANAGER_STYLES = `
           flex: 1;
           position: relative;
           overflow: hidden;
+          /* Never let the embedded native viewer collapse on short windows */
+          min-height: clamp(180px, 38vh, 320px);
+          min-width: 240px;
         }
 
         /* Category bar below viewer */

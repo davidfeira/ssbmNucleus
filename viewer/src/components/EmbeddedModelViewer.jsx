@@ -262,6 +262,19 @@ const EmbeddedModelViewer = forwardRef(({
     const rect = placeholderRef.current.getBoundingClientRect()
     const dpr = window.devicePixelRatio || 1
 
+    // Placeholder collapsed or hidden (tiny window, display:none, mid-layout):
+    // park the native window offscreen instead of pinning a stale/zero-size
+    // rect on top of other UI. A zero-size GL surface also breaks the viewer.
+    if (rect.width < 2 || rect.height < 2) {
+      const parked = { x: -32000, y: -32000, width: 64, height: 64 }
+      const last = lastViewerPosRef.current
+      if (!last || last.x !== parked.x || last.y !== parked.y) {
+        lastViewerPosRef.current = parked
+        window.electron.viewerResize(parked.x, parked.y, parked.width, parked.height)
+      }
+      return
+    }
+
     // Screen position = window position + element offset within window
     // On Windows, screenX/Y may have negative values for window chrome, so we use screenLeft/Top
     const screenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX
@@ -343,7 +356,7 @@ const EmbeddedModelViewer = forwardRef(({
 
     // Also poll for window MOVES (no DOM event exists) -- cheap because
     // updateViewerPosition no-ops when nothing changed
-    const intervalId = setInterval(updateViewerPosition, 500)
+    const intervalId = setInterval(updateViewerPosition, 250)
 
     return () => {
       window.removeEventListener('resize', handleResize)

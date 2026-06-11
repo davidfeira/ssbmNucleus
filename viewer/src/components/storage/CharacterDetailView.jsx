@@ -118,8 +118,6 @@ export default function CharacterDetailView({
     hdCspInfo,
     compareSliderPosition,
     alternativeCsps,
-    hdResolution,
-    setHdResolution,
     capturingHdCsp,
     lastImageUpdate,
     openCspManager,
@@ -393,6 +391,7 @@ export default function CharacterDetailView({
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}
         onOpenCspManager={openCspManager}
+        onOpenPoseManager={() => { playSound('boop'); setShowPoseManager(true); }}
         onStartSkinCreator={startSkinCreatorFromVault}
         onView3D={() => setShow3DViewer(true)}
         onTestInGame={() => inGameTest.startCostumeTest({
@@ -422,7 +421,6 @@ export default function CharacterDetailView({
         compareSliderPosition={compareSliderPosition}
         lastImageUpdate={lastImageUpdate}
         alternativeCsps={alternativeCsps}
-        hdResolution={hdResolution}
         capturingHdCsp={capturingHdCsp}
         onClose={closeCspManager}
         onCspManagerMainChange={handleCspManagerMainChange}
@@ -430,7 +428,6 @@ export default function CharacterDetailView({
         onSwapCsp={handleSwapCsp}
         onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
         onAddAlternativeCsp={handleAddAlternativeCsp}
-        onHdResolutionChange={setHdResolution}
         onCaptureHdCsp={handleCaptureHdCsp}
         onRegenerateAltHd={handleRegenerateAltHd}
         onResetToOriginal={handleResetToOriginal}

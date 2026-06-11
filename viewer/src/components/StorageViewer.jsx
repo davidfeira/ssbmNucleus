@@ -464,8 +464,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setPendingMainCsp,
     pendingMainCspPreview,
     setPendingMainCspPreview,
-    hdResolution,
-    setHdResolution,
     hdCspInfo,
     setHdCspInfo,
     compareSliderPosition,
@@ -1230,7 +1228,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         hdCspInfo={hdCspInfo}
         compareSliderPosition={compareSliderPosition}
         alternativeCsps={alternativeCsps}
-        hdResolution={hdResolution}
         capturingHdCsp={capturingHdCsp}
         closeCspManager={closeCspManager}
         handleCspManagerMainChange={handleCspManagerMainChange}
@@ -1238,7 +1235,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleSwapCsp={handleSwapCsp}
         handleRemoveAlternativeCsp={handleRemoveAlternativeCsp}
         handleAddAlternativeCsp={handleAddAlternativeCsp}
-        setHdResolution={setHdResolution}
         handleCaptureHdCsp={handleCaptureHdCsp}
         handleRegenerateAltHd={handleRegenerateAltHd}
         handleResetToOriginal={handleResetToOriginal}
@@ -1326,8 +1322,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           hdCspInfo,
           compareSliderPosition,
           alternativeCsps,
-          hdResolution,
-          setHdResolution,
           capturingHdCsp,
           lastImageUpdate,
           openCspManager,

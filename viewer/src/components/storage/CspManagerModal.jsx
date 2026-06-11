@@ -3,8 +3,8 @@
  *
  * Features:
  * - Active portrait display with HD comparison slider
- * - Alternative CSPs grid (swap/remove)
- * - HD Capture section (2x, 3x, 4x options)
+ * - Unified portraits grid (original + alternatives, click to set active)
+ * - One-click HD generation (always 4x)
  * - Save/Cancel actions
  * - Upload modal for Normal/HD slot selection
  */
@@ -12,63 +12,50 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 
-// Sub-modal for uploading CSPs with Normal/HD slot selection
+// Sub-modal for uploading a CSP. One image: the app scales it down for the
+// game and keeps up to a 4x copy as the HD vault preview.
 function CspUploadModal({
   show,
   uploadTarget, // 'main' or 'alt'
   existingNormalUrl,
-  existingHdUrl,
   onConfirm,
-  onCancel
+  onCancel,
+  onOpenPoseManager // optional: offer "generate from pose" path when adding an alt
 }) {
-  const [normalFile, setNormalFile] = useState(null)
-  const [normalPreview, setNormalPreview] = useState(null)
-  const [hdFile, setHdFile] = useState(null)
-  const [hdPreview, setHdPreview] = useState(null)
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
 
   if (!show) return null
 
-  const handleFileSelect = (e, isHd) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleFileSelect = (e) => {
+    const selected = e.target.files?.[0]
+    if (!selected) return
 
     const reader = new FileReader()
     reader.onload = (ev) => {
-      if (isHd) {
-        setHdFile(file)
-        setHdPreview(ev.target.result)
-      } else {
-        setNormalFile(file)
-        setNormalPreview(ev.target.result)
-      }
+      setFile(selected)
+      setPreview(ev.target.result)
     }
-    reader.readAsDataURL(file)
+    reader.readAsDataURL(selected)
   }
 
   const handleConfirm = () => {
-    onConfirm({ normalFile, hdFile })
-    // Reset state
-    setNormalFile(null)
-    setNormalPreview(null)
-    setHdFile(null)
-    setHdPreview(null)
+    onConfirm({ file })
+    setFile(null)
+    setPreview(null)
   }
 
   const handleCancel = () => {
-    setNormalFile(null)
-    setNormalPreview(null)
-    setHdFile(null)
-    setHdPreview(null)
+    setFile(null)
+    setPreview(null)
     onCancel()
   }
-
-  const hasAnyFile = normalFile || hdFile
 
   const modal = (
     <div className="csp-upload-overlay" onClick={handleCancel}>
       <div className="csp-upload-modal" onClick={(e) => e.stopPropagation()}>
         <div className="csp-upload-header">
-          <h3>{uploadTarget === 'main' ? 'Replace Active CSP' : 'Add Alternative CSP'}</h3>
+          <h3>{uploadTarget === 'main' ? 'Replace Active CSP' : 'Add CSP'}</h3>
           <button className="csp-upload-close" onClick={handleCancel}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -77,19 +64,18 @@ function CspUploadModal({
           </button>
         </div>
 
-        <div className="csp-upload-body">
-          {/* Normal CSP Slot */}
+        <div className="csp-upload-body csp-upload-body--single">
           <div className="csp-upload-slot">
-            <div className="csp-upload-slot-label">Normal CSP</div>
+            <div className="csp-upload-slot-label">Portrait Image</div>
             <div
-              className={`csp-upload-slot-preview ${normalPreview ? 'has-image' : ''}`}
-              onClick={() => document.getElementById('csp-upload-normal-input').click()}
+              className={`csp-upload-slot-preview ${preview ? 'has-image' : ''}`}
+              onClick={() => document.getElementById('csp-upload-input').click()}
             >
-              {normalPreview ? (
-                <img src={normalPreview} alt="Normal CSP preview" />
+              {preview ? (
+                <img src={preview} alt="Portrait preview" />
               ) : existingNormalUrl ? (
                 <>
-                  <img src={existingNormalUrl} alt="Existing Normal CSP" className="csp-upload-existing" />
+                  <img src={existingNormalUrl} alt="Current portrait" className="csp-upload-existing" />
                   <div className="csp-upload-slot-overlay">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -109,10 +95,10 @@ function CspUploadModal({
                   <span>Click to upload</span>
                 </div>
               )}
-              {normalPreview && (
+              {preview && (
                 <button
                   className="csp-upload-slot-clear"
-                  onClick={(e) => { e.stopPropagation(); setNormalFile(null); setNormalPreview(null); }}
+                  onClick={(e) => { e.stopPropagation(); setFile(null); setPreview(null); }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -124,67 +110,35 @@ function CspUploadModal({
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => handleFileSelect(e, false)}
+              onChange={handleFileSelect}
               style={{ display: 'none' }}
-              id="csp-upload-normal-input"
+              id="csp-upload-input"
             />
-          </div>
-
-          {/* HD CSP Slot */}
-          <div className="csp-upload-slot">
-            <div className="csp-upload-slot-label">
-              HD CSP
-              <span className="csp-upload-slot-badge">High Resolution</span>
-            </div>
-            <div
-              className={`csp-upload-slot-preview ${hdPreview ? 'has-image' : ''}`}
-              onClick={() => document.getElementById('csp-upload-hd-input').click()}
-            >
-              {hdPreview ? (
-                <img src={hdPreview} alt="HD CSP preview" />
-              ) : existingHdUrl ? (
-                <>
-                  <img src={existingHdUrl} alt="Existing HD CSP" className="csp-upload-existing" />
-                  <div className="csp-upload-slot-overlay">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="17 8 12 3 7 8"></polyline>
-                      <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <span>Click to replace</span>
-                  </div>
-                </>
-              ) : (
-                <div className="csp-upload-slot-empty">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  <span>Click to upload</span>
-                </div>
-              )}
-              {hdPreview && (
-                <button
-                  className="csp-upload-slot-clear"
-                  onClick={(e) => { e.stopPropagation(); setHdFile(null); setHdPreview(null); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              )}
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleFileSelect(e, true)}
-              style={{ display: 'none' }}
-              id="csp-upload-hd-input"
-            />
+            <p className="csp-upload-note">
+              One image is all you need — it's scaled down for the game, and a
+              high-res copy is kept for HD previews when the image is big enough.
+            </p>
           </div>
         </div>
+
+        {/* Alternative path: render a new portrait from a pose instead of uploading */}
+        {uploadTarget === 'alt' && onOpenPoseManager && (
+          <button
+            className="csp-upload-pose-option"
+            onClick={() => { handleCancel(); onOpenPoseManager(); }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="5" r="2"></circle>
+              <path d="M12 7v5"></path>
+              <path d="M9 22l3-6 3 6"></path>
+              <path d="M7 12l5 2 5-2"></path>
+            </svg>
+            <span>
+              <strong>Or generate from a pose</strong>
+              <small>Pose the 3D model and render portraits for any of your skins</small>
+            </span>
+          </button>
+        )}
 
         <div className="csp-upload-actions">
           <button className="csp-upload-btn csp-upload-btn--cancel" onClick={handleCancel}>
@@ -193,7 +147,7 @@ function CspUploadModal({
           <button
             className="csp-upload-btn csp-upload-btn--confirm"
             onClick={handleConfirm}
-            disabled={!hasAnyFile}
+            disabled={!file}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="20 6 9 17 4 12"></polyline>
@@ -217,7 +171,6 @@ export default function CspManagerModal({
   compareSliderPosition,
   lastImageUpdate,
   alternativeCsps,
-  hdResolution,
   capturingHdCsp,
   onClose,
   onCspManagerMainChange,
@@ -225,7 +178,6 @@ export default function CspManagerModal({
   onSwapCsp,
   onRemoveAlternativeCsp,
   onAddAlternativeCsp,
-  onHdResolutionChange,
   onCaptureHdCsp,
   onRegenerateAltHd,
   onResetToOriginal,
@@ -252,11 +204,11 @@ export default function CspManagerModal({
     setUploadModalOpen(true)
   }
 
-  const handleUploadConfirm = ({ normalFile, hdFile }) => {
+  const handleUploadConfirm = ({ file }) => {
     if (uploadTarget === 'main' && onUploadMainCsp) {
-      onUploadMainCsp({ normalFile, hdFile })
+      onUploadMainCsp({ file })
     } else if (uploadTarget === 'alt' && onUploadAltCsp) {
-      onUploadAltCsp({ normalFile, hdFile })
+      onUploadAltCsp({ file })
     }
     setUploadModalOpen(false)
     setUploadTarget(null)
@@ -282,9 +234,11 @@ export default function CspManagerModal({
     if (seenPoses.has(poseKey)) continue
     seenPoses.add(poseKey)
 
-    const nonHd = alternativeCsps.find(a =>
-      (a.poseName === alt.poseName || (!a.poseName && a.id === alt.id)) && !a.isHd
-    )
+    // Pose-less alts only group with themselves (null poseName must not
+    // cross-match other null-poseName alts)
+    const nonHd = alt.poseName
+      ? alternativeCsps.find(a => a.poseName === alt.poseName && !a.isHd)
+      : (!alt.isHd ? alt : null)
     const hd = alt.poseName
       ? alternativeCsps.find(a => a.poseName === alt.poseName && a.isHd)
       : null
@@ -352,23 +306,6 @@ export default function CspManagerModal({
             <h2>CSP Manager</h2>
             <span className="csp-manager-skin-name">{cspManagerSkin.color}</span>
           </div>
-          {onOpenPoseManager && (
-            <button
-              className="csp-manager-header-btn"
-              onClick={onOpenPoseManager}
-              title="Open pose manager"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="5" r="2"></circle>
-                <path d="M12 7v5"></path>
-                <path d="M9 22l3-6 3 6"></path>
-                <path d="M7 12l5 2 5-2"></path>
-                <path d="M5 10l4 2"></path>
-                <path d="M19 10l-4 2"></path>
-              </svg>
-              Manage Poses
-            </button>
-          )}
         </div>
 
         {/* Body - Two Column Layout */}
@@ -471,66 +408,73 @@ export default function CspManagerModal({
             </div>
           </div>
 
-          {/* Right: Alternatives Grid */}
+          {/* Right: Portraits Grid (original + alternatives, active highlighted) */}
           <div className="csp-manager-alternatives">
             <div className="csp-manager-alternatives-header">
-              <span>Alternative CSPs</span>
-              <span className="csp-manager-alternatives-count">({groupedAlts.length})</span>
-              {isAltActive && onResetToOriginal && (
-                <button
-                  className="csp-manager-reset-btn"
-                  onClick={onResetToOriginal}
-                  title="Reset to original CSP"
-                >
-                  Reset to Original
-                </button>
-              )}
+              <span>Portraits</span>
+              <span className="csp-manager-alternatives-count">
+                ({groupedAlts.length + (cspManagerSkin.has_csp ? 1 : 0)})
+              </span>
+              <span className="csp-manager-alternatives-hint">Click a portrait to make it active</span>
             </div>
             <div className="csp-manager-alternatives-grid">
-              {/* Show original CSP in grid when an alt is active */}
-              {isAltActive && cspManagerSkin.has_csp && (
+              {/* Original CSP - always shown, just another portrait */}
+              {cspManagerSkin.has_csp && (
                 <div
-                  className="csp-manager-alt-card csp-manager-alt-card--original"
-                  onClick={onResetToOriginal}
+                  className={`csp-manager-alt-card csp-manager-alt-card--original ${!isAltActive ? 'csp-manager-alt-card--active' : ''}`}
+                  onClick={() => isAltActive && onResetToOriginal && onResetToOriginal()}
                 >
                   <img
                     src={`${cspManagerSkin.cspUrl}?t=${lastImageUpdate}`}
                     alt="Original CSP"
                     className="csp-manager-alt-image"
                   />
-                  {hdCspInfo?.exists && (
-                    <div className="csp-manager-alt-hd-badge">HD</div>
-                  )}
-                  <div className="csp-manager-alt-overlay">
-                    <span>Click to restore</span>
+                  <div className="csp-manager-alt-badges">
+                    {!isAltActive ? (
+                      <div className="csp-manager-alt-active-badge">Active</div>
+                    ) : (
+                      <div className="csp-manager-alt-original-badge">Original</div>
+                    )}
+                    {hdCspInfo?.exists && (
+                      <div className="csp-manager-alt-hd-badge">HD</div>
+                    )}
                   </div>
+                  <div className="csp-manager-alt-pose-label">Original</div>
+                  {isAltActive && (
+                    <div className="csp-manager-alt-overlay">
+                      <span>Set Active</span>
+                    </div>
+                  )}
                 </div>
               )}
               {groupedAlts.map((group) => {
-                // Don't show active group in grid - it's in the main display
-                if (group.isActive) return null
-
                 const displayAlt = group.displayAlt
                 if (!displayAlt) return null
 
                 return (
                   <div
                     key={group.poseName || displayAlt.id}
-                    className="csp-manager-alt-card"
-                    onClick={() => onSwapCsp(group.swapIndex)}
+                    className={`csp-manager-alt-card ${group.isActive ? 'csp-manager-alt-card--active' : ''}`}
+                    onClick={() => !group.isActive && onSwapCsp(group.swapIndex)}
                   >
                     <img src={displayAlt.url} alt={group.poseName || 'Alternative'} className="csp-manager-alt-image" />
+                    <div className="csp-manager-alt-badges">
+                      {group.isActive && (
+                        <div className="csp-manager-alt-active-badge">Active</div>
+                      )}
+                      {group.hd && (
+                        <div className="csp-manager-alt-hd-badge">HD</div>
+                      )}
+                    </div>
                     {/* Pose name label */}
                     {group.poseName && (
                       <div className="csp-manager-alt-pose-label">{group.poseName}</div>
                     )}
-                    {/* HD badge - show if this group has an HD version */}
-                    {group.hd && (
-                      <div className="csp-manager-alt-hd-badge">HD</div>
+                    {!group.isActive && (
+                      <div className="csp-manager-alt-overlay">
+                        <span>Set Active</span>
+                      </div>
                     )}
-                    <div className="csp-manager-alt-overlay">
-                      <span>Click to set active</span>
-                    </div>
                     <button
                       className="csp-manager-alt-remove"
                       onClick={(e) => { e.stopPropagation(); onRemoveAlternativeCsp(group.swapIndex); }}
@@ -556,38 +500,43 @@ export default function CspManagerModal({
           </div>
         </div>
 
-        {/* HD Capture Section */}
+        {/* Bottom bar: pose manager (left) + HD capture, always 4x (right) */}
         <div className="csp-manager-hd-section">
-          <div className="csp-manager-hd-label">
-            <span>HD Capture</span>
-            {hdCspInfo?.exists && (
+          {onOpenPoseManager && (
+            <button
+              className="csp-manager-poses-btn"
+              onClick={onOpenPoseManager}
+              title="Pose the 3D model and batch-render portraits from it"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="5" r="2"></circle>
+                <path d="M12 7v5"></path>
+                <path d="M9 22l3-6 3 6"></path>
+                <path d="M7 12l5 2 5-2"></path>
+              </svg>
+              Manage Poses
+            </button>
+          )}
+          <div className="csp-manager-hd-controls">
+            {hasActiveHd ? (
               <span className="csp-manager-hd-badge">
-                {hdCspInfo.size || hdCspInfo.resolution}
+                HD {isAltActive ? '' : (hdCspInfo?.size || hdCspInfo?.resolution || '')}
+              </span>
+            ) : (
+              <span className="csp-manager-hd-hint">
+                Re-renders the active portrait at 4x
               </span>
             )}
-          </div>
-          <div className="csp-manager-hd-controls">
-            <div className="csp-manager-hd-options">
-              {['2x', '3x', '4x'].map(res => (
-                <button
-                  key={res}
-                  className={`csp-manager-hd-option ${hdResolution === res ? 'csp-manager-hd-option--active' : ''}`}
-                  onClick={() => onHdResolutionChange(res)}
-                >
-                  {res}
-                </button>
-              ))}
-            </div>
             <button
               className="csp-manager-hd-capture-btn"
               onClick={onCaptureHdCsp}
               disabled={capturingHdCsp}
-              title={`Capture CSP at ${hdResolution} resolution`}
+              title="Re-render the active portrait at 4x resolution"
             >
               {capturingHdCsp ? (
                 <>
                   <span className="csp-manager-spinner"></span>
-                  Capturing...
+                  Generating...
                 </>
               ) : (
                 <>
@@ -595,7 +544,7 @@ export default function CspManagerModal({
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                     <circle cx="12" cy="13" r="4"></circle>
                   </svg>
-                  Capture HD CSP
+                  {hasActiveHd ? 'Regenerate HD' : 'Generate HD'}
                 </>
               )}
             </button>
@@ -622,9 +571,9 @@ export default function CspManagerModal({
           show={uploadModalOpen}
           uploadTarget={uploadTarget}
           existingNormalUrl={uploadTarget === 'main' ? activeDisplayUrl : null}
-          existingHdUrl={uploadTarget === 'main' && hasActiveHd ? activeHdUrl : null}
           onConfirm={handleUploadConfirm}
           onCancel={handleUploadCancel}
+          onOpenPoseManager={onOpenPoseManager}
         />
       </div>
     </div>

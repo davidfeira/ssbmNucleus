@@ -825,16 +825,30 @@
   min-height: 0;
 }
 
-/* CSP Section - Left Column */
+/* CSP Section - Left Column (grows to take leftover space) */
 .edit-modal-csp-section {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  width: clamp(14rem, 42%, 24rem);
+  min-height: 0;
+  min-width: 14rem;
+}
+
+/* Sizing area for the hero panel: a size container so the panel can
+   scale to whichever axis runs out first while hugging the image */
+.edit-modal-csp-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .edit-modal-csp-container {
-  flex: 1;
+  /* As big as fits: full width, or full height scaled by the image's aspect */
+  aspect-ratio: var(--panel-aspect, 0.75);
+  width: min(100cqw, calc(100cqh * var(--panel-aspect, 0.75)));
   position: relative;
   background: var(--color-bg-deep);
   border-radius: var(--radius-lg);
@@ -944,13 +958,14 @@
   display: none;
 }
 
-/* Stock Section - Middle Column */
+/* Action Buttons - Middle Column */
 .edit-modal-stock-section {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--space-2);
-  width: clamp(5.5rem, 14%, 7.5rem);
+  width: clamp(8rem, 18%, 10.5rem);
 }
 
 .edit-modal-stock-container {
@@ -1000,6 +1015,18 @@
   text-align: center;
 }
 
+/* Stock icon placed under the CSP in the left column */
+.edit-modal-stock-container--under-csp {
+  flex: 0 0 auto;
+  width: clamp(4.5rem, 30%, 6rem);
+  align-self: center;
+  margin-top: var(--space-4);
+}
+
+.edit-modal-stock-container--under-csp + .edit-modal-stock-label {
+  margin-top: var(--space-2);
+}
+
 /* View 3D Button */
 .edit-modal-view3d-btn {
   display: flex;
@@ -1016,7 +1043,6 @@
   font-weight: var(--font-semibold);
   cursor: pointer;
   transition: all var(--transition-fast);
-  margin-top: auto;
 }
 
 .edit-modal-view3d-btn:hover:not(:disabled) {
@@ -1458,7 +1484,19 @@
   }
 
   .edit-modal-csp-section {
-    width: clamp(16rem, 100%, 24rem);
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Wrapped layout: column height is content-driven, so a size container
+     would collapse — fall back to width-driven panel sizing */
+  .edit-modal-csp-stage {
+    container-type: normal;
+    flex: 0 0 auto;
+  }
+
+  .edit-modal-csp-container {
+    width: min(100%, calc(28rem * var(--panel-aspect, 0.75)));
   }
 
   .edit-modal-controls-section {

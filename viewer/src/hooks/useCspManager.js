@@ -12,6 +12,9 @@
 import { useState } from 'react'
 import { playSound } from '../utils/sounds'
 
+// All HD portraits are rendered at 4x (544x752) - one less knob to think about
+const HD_SCALE = 4
+
 export function useCspManager({
   API_URL,
   onRefresh,
@@ -25,7 +28,6 @@ export function useCspManager({
   const [alternativeCsps, setAlternativeCsps] = useState([]) // Array of { id, url, file }
   const [pendingMainCsp, setPendingMainCsp] = useState(null) // New main CSP file pending save
   const [pendingMainCspPreview, setPendingMainCspPreview] = useState(null) // Preview URL
-  const [hdResolution, setHdResolution] = useState('4x') // '2x' | '4x' | '8x' | '16x'
   const [hdCspInfo, setHdCspInfo] = useState(null) // { exists: bool, resolution: '4x', size: '1024x1365' }
   const [compareSliderPosition, setCompareSliderPosition] = useState(50) // 0-100% for before/after slider
   const [lastImageUpdate, setLastImageUpdate] = useState(Date.now()) // For cache-busting images
@@ -115,7 +117,6 @@ export function useCspManager({
     setAlternativeCsps(alts)
     setPendingMainCsp(null)
     setPendingMainCspPreview(null)
-    setHdResolution('4x')
     setCompareSliderPosition(50) // Reset slider to middle
     if (skinData.has_hd_csp) {
       setHdCspInfo({
@@ -336,7 +337,7 @@ export function useCspManager({
     const altCsp = alternativeCsps[altIndex]
     if (!altCsp) return
 
-    const scaleNum = parseInt(hdResolution.replace('x', ''))
+    const scaleNum = HD_SCALE
 
     try {
       const response = await fetch(
@@ -376,7 +377,7 @@ export function useCspManager({
   const handleCaptureHdCsp = async () => {
     if (!cspManagerSkin) return
 
-    const scaleNum = parseInt(hdResolution.replace('x', ''))
+    const scaleNum = HD_SCALE
     setCapturingHdCsp(true)
 
     try {
@@ -445,56 +446,26 @@ export function useCspManager({
     }
   }
 
-  // Upload main CSP with optional HD version
-  const handleUploadMainCsp = async ({ normalFile, hdFile }) => {
-    if (!cspManagerSkin) return
-    if (!normalFile && !hdFile) return
+  // Upload main CSP - one image, backend derives in-game + HD preview sizes
+  const handleUploadMainCsp = async ({ file }) => {
+    if (!cspManagerSkin || !file) return
 
     try {
-      // Upload normal CSP if provided
-      if (normalFile) {
-        const formData = new FormData()
-        formData.append('character', cspManagerSkin.character)
-        formData.append('skinId', cspManagerSkin.id)
-        formData.append('csp', normalFile)
+      const formData = new FormData()
+      formData.append('character', cspManagerSkin.character)
+      formData.append('skinId', cspManagerSkin.id)
+      formData.append('csp', file)
+      formData.append('auto', 'true')
 
-        const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
-          method: 'POST',
-          body: formData
-        })
+      const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
+        method: 'POST',
+        body: formData
+      })
 
-        const data = await response.json()
-        if (!data.success) {
-          alert(`Failed to upload CSP: ${data.error}`)
-          return
-        }
-      }
-
-      // Upload HD CSP if provided
-      if (hdFile) {
-        const formData = new FormData()
-        formData.append('character', cspManagerSkin.character)
-        formData.append('skinId', cspManagerSkin.id)
-        formData.append('csp', hdFile)
-        formData.append('isHd', 'true')
-
-        const response = await fetch(`${API_URL}/storage/costumes/update-csp`, {
-          method: 'POST',
-          body: formData
-        })
-
-        const data = await response.json()
-        if (!data.success) {
-          alert(`Failed to upload HD CSP: ${data.error}`)
-          return
-        }
-
-        // Update HD info
-        setHdCspInfo({
-          exists: true,
-          resolution: 'Custom',
-          size: 'HD'
-        })
+      const data = await response.json()
+      if (!data.success) {
+        alert(`Failed to upload CSP: ${data.error}`)
+        return
       }
 
       playSound('camera')
@@ -507,78 +478,25 @@ export function useCspManager({
     }
   }
 
-  // Upload alternative CSP with optional HD version
-  const handleUploadAltCsp = async ({ normalFile, hdFile }) => {
-    if (!cspManagerSkin) return
-    if (!normalFile && !hdFile) return
+  // Upload alternative CSP - one image, backend derives the SD + HD pair
+  const handleUploadAltCsp = async ({ file }) => {
+    if (!cspManagerSkin || !file) return
 
     try {
-      let newAltId = null
+      const formData = new FormData()
+      formData.append('action', 'add')
+      formData.append('file', file)
+      formData.append('auto', 'true')
 
-      // Upload normal alt CSP if provided
-      if (normalFile) {
-        const formData = new FormData()
-        formData.append('action', 'add')
-        formData.append('file', normalFile)
+      const response = await fetch(
+        `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
+        { method: 'POST', body: formData }
+      )
 
-        const response = await fetch(
-          `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
-          { method: 'POST', body: formData }
-        )
-
-        const data = await response.json()
-
-        if (data.success) {
-          newAltId = data.altId
-          const newAlt = {
-            id: data.altId,
-            url: data.url,
-            poseName: null,
-            isHd: false,
-            file: null
-          }
-          setAlternativeCsps(prev => [...prev, newAlt])
-          if (onUpdateEditingItemAlts) {
-            onUpdateEditingItemAlts(prev => [...prev, newAlt])
-          }
-        } else {
-          alert(`Failed to add CSP: ${data.error}`)
-          return
-        }
-      }
-
-      // Upload HD alt CSP if provided
-      if (hdFile) {
-        const formData = new FormData()
-        formData.append('action', 'add')
-        formData.append('file', hdFile)
-        formData.append('isHd', 'true')
-        if (newAltId) {
-          formData.append('pairWithAltId', newAltId)
-        }
-
-        const response = await fetch(
-          `${API_URL}/storage/costumes/${encodeURIComponent(cspManagerSkin.character)}/${encodeURIComponent(cspManagerSkin.id)}/csp/manage`,
-          { method: 'POST', body: formData }
-        )
-
-        const data = await response.json()
-
-        if (data.success) {
-          const newHdAlt = {
-            id: data.altId,
-            url: data.url,
-            poseName: null,
-            isHd: true,
-            file: null
-          }
-          setAlternativeCsps(prev => [...prev, newHdAlt])
-          if (onUpdateEditingItemAlts) {
-            onUpdateEditingItemAlts(prev => [...prev, newHdAlt])
-          }
-        } else {
-          alert(`Failed to add HD CSP: ${data.error}`)
-        }
+      const data = await response.json()
+      if (!data.success) {
+        alert(`Failed to add CSP: ${data.error}`)
+        return
       }
 
       playSound('camera')
@@ -637,8 +555,6 @@ export function useCspManager({
     setPendingMainCsp,
     pendingMainCspPreview,
     setPendingMainCspPreview,
-    hdResolution,
-    setHdResolution,
     hdCspInfo,
     setHdCspInfo,
     compareSliderPosition,

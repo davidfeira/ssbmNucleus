@@ -1113,7 +1113,6 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         compareSliderPosition={cspManager.compareSliderPosition}
         lastImageUpdate={cspManager.lastImageUpdate}
         alternativeCsps={cspManager.alternativeCsps}
-        hdResolution={cspManager.hdResolution}
         capturingHdCsp={cspManager.capturingHdCsp}
         onClose={cspManager.closeCspManager}
         onCspManagerMainChange={cspManager.handleCspManagerMainChange}
@@ -1121,7 +1120,6 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         onSwapCsp={cspManager.handleSwapCsp}
         onRemoveAlternativeCsp={cspManager.handleRemoveAlternativeCsp}
         onAddAlternativeCsp={cspManager.handleAddAlternativeCsp}
-        onHdResolutionChange={cspManager.setHdResolution}
         onCaptureHdCsp={cspManager.handleCaptureHdCsp}
         onRegenerateAltHd={cspManager.handleRegenerateAltHd}
         onResetToOriginal={cspManager.handleResetToOriginal}

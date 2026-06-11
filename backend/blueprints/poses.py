@@ -238,7 +238,7 @@ def batch_generate_pose_csps():
         "character": "Fox",
         "poseName": "jump",
         "skinIds": ["skin-id-1", "skin-id-2"],
-        "hdResolution": "2x"  // Optional, e.g., "2x", "3x", "4x"
+        "hdResolution": "4x"  // Optional; defaults to 4x. "1x" skips the HD pass.
     }
     """
     try:
@@ -248,13 +248,13 @@ def batch_generate_pose_csps():
         skin_ids = data.get('skinIds', [])
         hd_resolution = data.get('hdResolution')
 
-        # Parse resolution to scale factor
-        hd_scale = 1
-        if hd_resolution:
+        # Parse resolution to scale factor; HD at 4x is the default
+        hd_scale = 4
+        if hd_resolution is not None:
             try:
-                hd_scale = int(hd_resolution.replace('x', ''))
-            except (ValueError, AttributeError):
-                hd_scale = 1
+                hd_scale = int(str(hd_resolution).lower().replace('x', '').strip())
+            except ValueError:
+                hd_scale = 4
 
         if not character or not pose_name or not skin_ids:
             return jsonify({

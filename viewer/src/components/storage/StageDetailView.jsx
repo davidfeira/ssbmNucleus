@@ -77,7 +77,6 @@ export default function StageDetailView({
   hdCspInfo,
   compareSliderPosition,
   alternativeCsps,
-  hdResolution,
   capturingHdCsp,
   closeCspManager,
   handleCspManagerMainChange,
@@ -85,7 +84,6 @@ export default function StageDetailView({
   handleSwapCsp,
   handleRemoveAlternativeCsp,
   handleAddAlternativeCsp,
-  setHdResolution,
   handleCaptureHdCsp,
   handleRegenerateAltHd,
   handleSaveCspManager,
@@ -295,7 +293,6 @@ export default function StageDetailView({
         compareSliderPosition={compareSliderPosition}
         lastImageUpdate={lastImageUpdate}
         alternativeCsps={alternativeCsps}
-        hdResolution={hdResolution}
         capturingHdCsp={capturingHdCsp}
         onClose={closeCspManager}
         onCspManagerMainChange={handleCspManagerMainChange}
@@ -303,7 +300,6 @@ export default function StageDetailView({
         onSwapCsp={handleSwapCsp}
         onRemoveAlternativeCsp={handleRemoveAlternativeCsp}
         onAddAlternativeCsp={handleAddAlternativeCsp}
-        onHdResolutionChange={setHdResolution}
         onCaptureHdCsp={handleCaptureHdCsp}
         onRegenerateAltHd={handleRegenerateAltHd}
         onSave={handleSaveCspManager}
