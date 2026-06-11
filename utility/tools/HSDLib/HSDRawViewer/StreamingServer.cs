@@ -785,10 +785,16 @@ namespace HSDRawViewer
                                 string base64Data = dataProp.GetString();
                                 byte[] pngData = Convert.FromBase64String(base64Data);
 
-                                // Use BeginInvoke to avoid deadlock. Update via the
-                                // CACHED TextureInfo -- the client's indexes refer to
+                                // Use BeginInvoke to avoid deadlock (the UI thread must
+                                // never wait on this socket). Update via the CACHED
+                                // TextureInfo -- the client's indexes refer to
                                 // _cachedTextureList, and a fresh enumeration inside
                                 // UpdateTexture(int) can drift from it.
+                                // The ack must only go out AFTER the UI thread applied
+                                // the update: clients treat it as "applied", and acking
+                                // early let frame grabs race a backlog of pending
+                                // updates (stale review-sheet panels).
+                                var applied = new TaskCompletionSource<object>();
                                 _hostForm.BeginInvoke((Action)(() =>
                                 {
                                     try
@@ -807,7 +813,12 @@ namespace HSDRawViewer
                                     {
                                         LogError($"Error updating texture {texIndex}", ex);
                                     }
+                                    finally
+                                    {
+                                        applied.TrySetResult(null);
+                                    }
                                 }));
+                                await applied.Task;
 
                                 await SendJsonAsync(webSocket, new { type = "textureUpdated", index = texIndex, success = true });
                             }

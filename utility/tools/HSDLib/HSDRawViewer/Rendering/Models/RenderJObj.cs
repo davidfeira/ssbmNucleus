@@ -1263,6 +1263,15 @@ namespace HSDRawViewer.Rendering.Models
             var imgFormat = texInfo.Tobj.ImageData?.Format ?? GXTexFmt.RGBA8;
             var palFormat = texInfo.Tobj.TlutData?.Format ?? GXTlutFmt.RGB565;
 
+            // Size-increasing pushes carry MORE detail than the original slot
+            // (the tiny-texture upscale for composites) -- a 16-color CI4
+            // palette would posterize it, so step those up to CI8.
+            if (imgFormat == GXTexFmt.CI4
+                && (image.Width > texInfo.Width || image.Height > texInfo.Height))
+            {
+                imgFormat = GXTexFmt.CI8;
+            }
+
             byte[] newImageData = null;
             foreach (var tobj in tobjsToUpdate)
             {

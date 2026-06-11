@@ -203,6 +203,10 @@ def _sheet_from_session(base_url):
     """Front/back/CSP review sheet via the live session endpoints."""
     session = requests.get(f'{base_url}/status', timeout=30).json().get('session') or {}
     csp_cam = session.get('camera') or {}
+    # The GL texture rebuild after edits is lazy (next render), and a frame
+    # grab silently falls back to the latest frame on timeout — so the very
+    # first panel could capture a pre-update frame. Burn a settle grab first.
+    requests.get(f'{base_url}/frame?fresh=8', timeout=30)
     panels = []
     for label, cam in (
             ('front', {'rotX': 0, 'rotY': 0, 'scale': 0.75, 'x': 0, 'y': 10}),

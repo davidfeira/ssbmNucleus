@@ -800,6 +800,27 @@ def _texture_png_array(session, index):
     return np.array(Image.open(io.BytesIO(png)).convert('RGBA'))
 
 
+# Some fighters keep almost no texture real estate -- Pichu's whole body is an
+# 8x8 solid-yellow swatch, and Pikachu/Jigglypuff are similar. A material
+# composited into that can only average to one mushy color (and on 64px ear
+# textures it shows as giant pattern chunks). UVs are normalized, so pushing a
+# LARGER texture maps onto the model identically -- the viewer re-encodes the
+# TOBJ at the pushed size. Blow tiny canvases up before compositing.
+MIN_COMPOSITE_RES = 128
+
+
+def _upscale_for_composite(arr):
+    h, w = arr.shape[:2]
+    longest = max(w, h)
+    if longest >= MIN_COMPOSITE_RES:
+        return arr
+    k = 1
+    while longest * k < MIN_COMPOSITE_RES:
+        k *= 2
+    img = Image.fromarray(arr, 'RGBA').resize((w * k, h * k), Image.LANCZOS)
+    return np.array(img)
+
+
 def _push_array(session, index, arr):
     buf = io.BytesIO()
     Image.fromarray(arr, 'RGBA').save(buf, format='PNG')
@@ -888,7 +909,7 @@ def composite_textures():
                 skipped.append({'index': index, 'reason': 'protected'})
                 continue
             try:
-                arr = _texture_png_array(session, index)
+                arr = _upscale_for_composite(_texture_png_array(session, index))
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
                 result = compose_mod.composite(arr, mat_arr, mask,
                                                lum_lo=lum_lo, lum_hi=lum_hi)

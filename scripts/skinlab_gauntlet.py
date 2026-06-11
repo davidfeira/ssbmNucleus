@@ -147,6 +147,10 @@ def capture_review_sheet(lab):
     plus the CSP-camera shot (the vault-facing view users actually see).
     Returns (jpeg_bytes, PIL.Image)."""
     csp_cam = (lab.session.get('camera') or {})  # the scene's CSP framing
+    # The GL texture rebuild after edits is lazy (next render), and a frame
+    # grab silently falls back to the latest frame on timeout — so the very
+    # first panel could capture a pre-update frame. Burn a settle grab first.
+    lab.frame(fresh=8)
     panels = []
     for label, cam in (
             ('front', {'rotX': 0, 'rotY': 0, 'scale': 0.75, 'x': 0, 'y': 10}),
