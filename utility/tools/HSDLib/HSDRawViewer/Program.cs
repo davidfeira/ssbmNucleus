@@ -1848,6 +1848,166 @@ namespace HSDRawViewer
         }
 
         /// <summary>
+        /// Standalone *_image roots that do NOT alias any map_head TOBJ
+        /// buffer -- e.g. Pokémon Stadium's GrdPSNormalBase* field surfaces,
+        /// which the game's transformation engine uploads by symbol name
+        /// (replacing a map_head texture does nothing for those). Format
+        /// parses from the root name; dimensions are inferred from the data
+        /// length (square power-of-two first, then 2:1). Returns detached
+        /// TOBJ wrappers so the normal codecs apply.
+        /// </summary>
+        static List<(HSDRootNode root, HSD_TOBJ tobj)> CollectRootImages(HSDRawFile rawFile)
+        {
+            var fmtTokens = new (string token, HSDRaw.GX.GXTexFmt fmt, int bpp)[]
+            {
+                ("_CMPR_", HSDRaw.GX.GXTexFmt.CMP, 4),
+                ("_RGBA8_", HSDRaw.GX.GXTexFmt.RGBA8, 32),
+                ("_RGB5A3_", HSDRaw.GX.GXTexFmt.RGB5A3, 16),
+                ("_RGB565_", HSDRaw.GX.GXTexFmt.RGB565, 16),
+                ("_IA8_", HSDRaw.GX.GXTexFmt.IA8, 16),
+                ("_IA4_", HSDRaw.GX.GXTexFmt.IA4, 8),
+                ("_I8_", HSDRaw.GX.GXTexFmt.I8, 8),
+                ("_I4_", HSDRaw.GX.GXTexFmt.I4, 4),
+            };
+            var result = new List<(HSDRootNode, HSD_TOBJ)>();
+
+            var aliased = new HashSet<string>();
+            var mapTex = CollectStageTextures(rawFile);
+            if (mapTex != null)
+                foreach (var (_, t) in mapTex)
+                    if (t?.ImageData?.ImageData != null)
+                        aliased.Add(Convert.ToHexString(System.Security.Cryptography.MD5.HashData(t.ImageData.ImageData)));
+
+            foreach (var r in rawFile.Roots)
+            {
+                if (r.Name == null || !r.Name.EndsWith("_image"))
+                    continue;
+                var data = r.Data?._s?.GetData();
+                if (data == null || data.Length == 0)
+                    continue;
+                if (aliased.Contains(Convert.ToHexString(System.Security.Cryptography.MD5.HashData(data))))
+                    continue;
+                var ft = fmtTokens.FirstOrDefault(t => r.Name.Contains(t.token));
+                if (ft.token == null)
+                    continue;   // C4/C8 roots would need their tlut root; none unaliased so far
+                long pixels = (long)data.Length * 8 / ft.bpp;
+                int w = 0, h = 0;
+                for (int side = 1; side <= 1024; side *= 2)
+                {
+                    if ((long)side * side == pixels) { w = side; h = side; break; }
+                    if ((long)side * side * 2 == pixels) { w = side * 2; h = side; break; }
+                }
+                if (w == 0)
+                    continue;
+                var tobj = new HSD_TOBJ();
+                tobj.ImageData = new HSD_Image
+                {
+                    Width = (short)w,
+                    Height = (short)h,
+                    Format = ft.fmt,
+                    ImageData = data,
+                };
+                result.Add((r, tobj));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Rotate an RGB color's hue (0..1 floats) by `deg` and scale its
+        /// saturation (HSL space). Float twin of <see cref="RotateHue"/> for
+        /// animation color tracks.
+        /// </summary>
+        static (float, float, float) RotateHueF(float rf, float gf, float bf, float deg, float satScale)
+        {
+            float max = Math.Max(rf, Math.Max(gf, bf)), min = Math.Min(rf, Math.Min(gf, bf));
+            float l = (max + min) / 2f, d = max - min;
+            float s = d == 0 ? 0 : d / (1f - Math.Abs(2f * l - 1f) + 1e-6f);
+            float h = 0;
+            if (d > 0)
+            {
+                if (max == rf) h = ((gf - bf) / d % 6f + 6f) % 6f;
+                else if (max == gf) h = (bf - rf) / d + 2f;
+                else h = (rf - gf) / d + 4f;
+                h *= 60f;
+            }
+            h = ((h + deg) % 360f + 360f) % 360f;
+            s = Math.Clamp(s * satScale, 0f, 1f);
+            float c = (1f - Math.Abs(2f * l - 1f)) * s;
+            float x = c * (1f - Math.Abs(h / 60f % 2f - 1f));
+            float m = l - c / 2f;
+            (float r2, float g2, float b2) = h switch
+            {
+                < 60f => (c, x, 0f),
+                < 120f => (x, c, 0f),
+                < 180f => (0f, c, x),
+                < 240f => (0f, x, c),
+                < 300f => (x, 0f, c),
+                _ => (c, 0f, x),
+            };
+            return (Math.Clamp(r2 + m, 0f, 1f), Math.Clamp(g2 + m, 0f, 1f), Math.Clamp(b2 + m, 0f, 1f));
+        }
+
+        /// <summary>
+        /// Rotate the hue of R/G/B keyframe-track triples on an AOBJ. Each
+        /// entry in `firstChannels` names the R track of a triple (G and B
+        /// are the next two track ids). Stage matanims re-assert these colors
+        /// every frame in-game, overriding any static MOBJ color edit -- this
+        /// is what makes e.g. Pokémon Stadium's turf immune to materialTints.
+        /// Tracks are resampled at the union of the triple's keyframes and
+        /// re-encoded linearly. Only complete triples are rotated (a partial
+        /// triple's missing channels live in the static material, which the
+        /// MOBJ pass already handles). Returns the number of triples changed.
+        /// </summary>
+        static int RotateAobjColorTriples(HSDRaw.Common.Animation.HSD_AOBJ aobj,
+                                          float deg, float satScale, params byte[] firstChannels)
+        {
+            if (aobj?.FObjDesc == null)
+                return 0;
+            var tracks = aobj.FObjDesc.List;
+            int changed = 0;
+            foreach (var first in firstChannels)
+            {
+                var rT = tracks.Find(t => t.TrackType == first);
+                var gT = tracks.Find(t => t.TrackType == first + 1);
+                var bT = tracks.Find(t => t.TrackType == first + 2);
+                if (rT == null || gT == null || bT == null)
+                    continue;
+
+                var rp = new HSDRaw.Tools.FOBJ_Player(rT.TrackType, rT.GetDecodedKeys());
+                var gp = new HSDRaw.Tools.FOBJ_Player(gT.TrackType, gT.GetDecodedKeys());
+                var bp = new HSDRaw.Tools.FOBJ_Player(bT.TrackType, bT.GetDecodedKeys());
+
+                var frames = new SortedSet<float>();
+                foreach (var k in rp.Keys) frames.Add(k.Frame);
+                foreach (var k in gp.Keys) frames.Add(k.Frame);
+                foreach (var k in bp.Keys) frames.Add(k.Frame);
+                if (frames.Count == 0)
+                    continue;
+
+                var rk = new List<HSDRaw.Tools.FOBJKey>();
+                var gk = new List<HSDRaw.Tools.FOBJKey>();
+                var bk = new List<HSDRaw.Tools.FOBJKey>();
+                foreach (var f in frames)
+                {
+                    var (nr, ng, nb) = RotateHueF(
+                        Math.Clamp(rp.GetValue(f), 0f, 1f),
+                        Math.Clamp(gp.GetValue(f), 0f, 1f),
+                        Math.Clamp(bp.GetValue(f), 0f, 1f), deg, satScale);
+                    rk.Add(new HSDRaw.Tools.FOBJKey { Frame = f, Value = nr, InterpolationType = HSDRaw.Common.Animation.GXInterpolationType.HSD_A_OP_LIN });
+                    gk.Add(new HSDRaw.Tools.FOBJKey { Frame = f, Value = ng, InterpolationType = HSDRaw.Common.Animation.GXInterpolationType.HSD_A_OP_LIN });
+                    bk.Add(new HSDRaw.Tools.FOBJKey { Frame = f, Value = nb, InterpolationType = HSDRaw.Common.Animation.GXInterpolationType.HSD_A_OP_LIN });
+                }
+                rT.SetKeys(rk, rT.TrackType);
+                gT.SetKeys(gk, gT.TrackType);
+                bT.SetKeys(bk, bT.TrackType);
+                // decoded keys are rebased to frame 0
+                rT.StartFrame = 0; gT.StartFrame = 0; bT.StartFrame = 0;
+                changed++;
+            }
+            return changed;
+        }
+
+        /// <summary>
         /// Stage (Gr*.dat) texture export/import over the map_head model groups.
         ///   Export: HSDRawViewer.exe --stage-textures export <stage.dat> <output_dir>
         ///   Import: HSDRawViewer.exe --stage-textures import <stage.dat> <spec.json> <output.dat>
@@ -1859,6 +2019,111 @@ namespace HSDRawViewer
             try
             {
                 string subCommand = args.Length >= 2 ? args[1].ToLower() : "";
+
+                if (subCommand == "dump" && args.Length >= 3)
+                {
+                    // Diagnostic: where do a stage's colors live? Lists every
+                    // root, and per map_head group the material colors, matanim
+                    // color tracks, and vertex-color usage.
+                    var rawFile = new HSDRawFile(args[2]);
+                    foreach (var r in rawFile.Roots)
+                        Console.WriteLine($"ROOT: {r.Name} ({r.Data?.GetType().Name}) len={r.Data?._s?.Length ?? -1}");
+
+                    // Do standalone *_image roots alias map_head TOBJ buffers,
+                    // or are they separate copies the game swaps in (e.g.
+                    // Stadium's transformation field bases)?
+                    {
+                        var tobjHashes = new Dictionary<string, List<int>>();
+                        var allTex2 = CollectStageTextures(rawFile);
+                        if (allTex2 != null)
+                            for (int i = 0; i < allTex2.Count; i++)
+                            {
+                                var data = allTex2[i].tobj?.ImageData?.ImageData;
+                                if (data == null) continue;
+                                var h = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(data));
+                                if (!tobjHashes.TryGetValue(h, out var lst))
+                                    tobjHashes[h] = lst = new List<int>();
+                                lst.Add(i);
+                            }
+                        foreach (var r in rawFile.Roots)
+                        {
+                            if (r.Name == null || !r.Name.EndsWith("_image"))
+                                continue;
+                            var data = r.Data?._s?.GetData();
+                            if (data == null) continue;
+                            var h = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(data));
+                            var match = tobjHashes.TryGetValue(h, out var idxs)
+                                ? $"ALIASES map_head tex [{string.Join(",", idxs)}]"
+                                : "no map_head match";
+                            Console.WriteLine($"IMGROOT: {r.Name} len={data.Length} md5={h.Substring(0, 8)} {match}");
+                        }
+                    }
+                    foreach (var r in rawFile.Roots)
+                    {
+                        if (!(r.Data is HSDRaw.Melee.Gr.SBM_Map_Head head))
+                            continue;
+                        var groups = head.ModelGroups?.Array;
+                        if (groups == null) continue;
+                        for (int g = 0; g < groups.Length; g++)
+                        {
+                            var rootNode = groups[g]?.RootNode;
+                            int dobjs = 0, colored = 0, vtxColor = 0;
+                            if (rootNode != null)
+                                foreach (var jobj in rootNode.TreeList)
+                                {
+                                    if (jobj.Dobj == null) continue;
+                                    foreach (var dobj in jobj.Dobj.List)
+                                    {
+                                        dobjs++;
+                                        var mat = dobj.Mobj?.Material;
+                                        if (mat != null && (mat.DIF_R != mat.DIF_G || mat.DIF_G != mat.DIF_B))
+                                        {
+                                            colored++;
+                                            Console.WriteLine($"  g{g} dobj{dobjs - 1} MOBJ DIF=({mat.DIF_R},{mat.DIF_G},{mat.DIF_B}) AMB=({mat.AMB_R},{mat.AMB_G},{mat.AMB_B})");
+                                        }
+                                        if (dobj.Pobj != null)
+                                            foreach (var pobj in dobj.Pobj.List)
+                                                if (pobj.ToGXAttributes().Any(a => a.AttributeName == HSDRaw.GX.GXAttribName.GX_VA_CLR0))
+                                                    vtxColor++;
+                                    }
+                                }
+                            Console.WriteLine($"GROUP {g}: {dobjs} dobjs, {colored} colored materials, {vtxColor} pobjs with vertex colors");
+                            var majArr = groups[g]?.MaterialAnimations?.Array;
+                            if (majArr == null) continue;
+                            for (int m = 0; m < majArr.Length; m++)
+                            {
+                                if (majArr[m] == null) continue;
+                                int jIdx = 0;
+                                foreach (var maj in majArr[m].TreeList)
+                                {
+                                    int aIdx = 0;
+                                    if (maj.MaterialAnimation != null)
+                                        foreach (var ma in maj.MaterialAnimation.List)
+                                        {
+                                            void DumpAobj(HSDRaw.Common.Animation.HSD_AOBJ ao, string tag)
+                                            {
+                                                if (ao?.FObjDesc == null) return;
+                                                foreach (var t in ao.FObjDesc.List)
+                                                {
+                                                    var keys = t.GetDecodedKeys();
+                                                    var first = keys.Count > 0 ? keys[0].Value : float.NaN;
+                                                    var last = keys.Count > 0 ? keys[keys.Count - 1].Value : float.NaN;
+                                                    Console.WriteLine($"  g{g} maj{m}/{jIdx} anim{aIdx} {tag} track {(HSDRaw.Common.Animation.MatTrackType)t.TrackType}({t.TrackType}) keys={keys.Count} first={first:0.###} last={last:0.###}");
+                                                }
+                                            }
+                                            DumpAobj(ma.AnimationObject, "mat");
+                                            if (ma.TextureAnimation != null)
+                                                foreach (var ta in ma.TextureAnimation.List)
+                                                    DumpAobj(ta.AnimationObject, $"tex({ta.GXTexMapID})");
+                                            aIdx++;
+                                        }
+                                    jIdx++;
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
 
                 if (subCommand == "export" && args.Length >= 4)
                 {
@@ -1902,6 +2167,31 @@ namespace HSDRawViewer
                         Console.WriteLine($"  t{index} group {grp}: {w}x{h} {fmt}");
                         index++;
                     }
+                    // Standalone root images (e.g. Stadium's NormalBase field
+                    // surfaces) continue the index space after map_head.
+                    foreach (var (root, tobj) in CollectRootImages(rawFile))
+                    {
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string fileName = $"stage_t{index}_root_{w}x{h}_{fmt}.png";
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, fileName), System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        manifest.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["root"] = root.Name,
+                            ["width"] = w,
+                            ["height"] = h,
+                            ["format"] = fmt,
+                            ["filename"] = fileName,
+                        });
+                        Console.WriteLine($"  t{index} root {root.Name}: {w}x{h} {fmt}");
+                        index++;
+                    }
                     System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "manifest.json"),
                         JsonSerializer.Serialize(new Dictionary<string, object> { ["textures"] = manifest },
                                                  new JsonSerializerOptions { WriteIndented = true }));
@@ -1923,15 +2213,18 @@ namespace HSDRawViewer
                         return;
                     }
 
+                    // Root images continue the index space after map_head.
+                    var rootImages = CollectRootImages(rawFile);
+
                     using var specDoc = JsonDocument.Parse(System.IO.File.ReadAllText(specFile));
                     int replaced = 0;
                     foreach (var entry in specDoc.RootElement.GetProperty("replacements").EnumerateArray())
                     {
                         int idx = entry.GetProperty("index").GetInt32();
                         string pngPath = entry.GetProperty("png").GetString();
-                        if (idx < 0 || idx >= allTex.Count)
+                        if (idx < 0 || idx >= allTex.Count + rootImages.Count)
                         {
-                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}); skipping");
+                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}+{rootImages.Count}); skipping");
                             continue;
                         }
                         if (!System.IO.File.Exists(pngPath))
@@ -1939,7 +2232,8 @@ namespace HSDRawViewer
                             Console.WriteLine($"WARNING: png not found: {pngPath}; skipping");
                             continue;
                         }
-                        var tobj = allTex[idx].tobj;
+                        var isRoot = idx >= allTex.Count;
+                        var tobj = isRoot ? rootImages[idx - allTex.Count].tobj : allTex[idx].tobj;
                         using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
                         int w = tobj.ImageData.Width;
                         int h = tobj.ImageData.Height;
@@ -1947,8 +2241,25 @@ namespace HSDRawViewer
                         var imgFormat = tobj.ImageData.Format;
                         var palFormat = tobj.TlutData != null ? tobj.TlutData.Format : HSDRaw.GX.GXTlutFmt.RGB565;
                         tobj.InjectBitmap(resized, imgFormat, palFormat);
+                        if (isRoot)
+                        {
+                            // Detached wrapper: copy the re-encoded bytes back
+                            // into the root's own data block (same dims+format
+                            // keeps the length identical -- the game uploads
+                            // this buffer by symbol name).
+                            var root = rootImages[idx - allTex.Count].root;
+                            var newBytes = tobj.ImageData.ImageData;
+                            var oldLen = root.Data._s.Length;
+                            if (newBytes.Length != oldLen)
+                                Console.WriteLine($"WARNING: root {root.Name} re-encode length {newBytes.Length} != original {oldLen}");
+                            root.Data._s.SetData(newBytes);
+                            Console.WriteLine($"  t{idx}: replaced ROOT {root.Name} ({w}x{h} {imgFormat})");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  t{idx}: replaced ({w}x{h} {imgFormat})");
+                        }
                         replaced++;
-                        Console.WriteLine($"  t{idx}: replaced ({w}x{h} {imgFormat})");
                     }
                     // Optional material-color pass: {"materialTints": [{"hueShift": deg,
                     // "saturationScale": 1.0, "groups": [..] (omit = all groups)}]}
@@ -1956,6 +2267,7 @@ namespace HSDRawViewer
                     // targeted map_head model groups (stage glow/rim colors often
                     // live in materials, not textures).
                     int matCount = 0;
+                    int matAnimCount = 0;
                     if (specDoc.RootElement.TryGetProperty("materialTints", out var tintsEl))
                     {
                         var headRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.Melee.Gr.SBM_Map_Head);
@@ -1995,14 +2307,46 @@ namespace HSDRawViewer
                                             matCount++;
                                         }
                                     }
+
+                                    // Matanims re-assert material colors every frame
+                                    // in-game (Pokémon Stadium's turf), overriding the
+                                    // static MOBJ pass above -- rotate their color
+                                    // keyframe tracks too (ambient/diffuse + TEV consts).
+                                    var matAnimJoints = modelGroups[g]?.MaterialAnimations?.Array;
+                                    if (matAnimJoints != null)
+                                    {
+                                        foreach (var majRoot in matAnimJoints)
+                                        {
+                                            if (majRoot == null) continue;
+                                            foreach (var maj in majRoot.TreeList)
+                                            {
+                                                var matAnim = maj.MaterialAnimation;
+                                                if (matAnim == null) continue;
+                                                foreach (var ma in matAnim.List)
+                                                {
+                                                    matAnimCount += RotateAobjColorTriples(
+                                                        ma.AnimationObject, hueShift, satScale,
+                                                        (byte)HSDRaw.Common.Animation.MatTrackType.HSD_A_M_AMBIENT_R,
+                                                        (byte)HSDRaw.Common.Animation.MatTrackType.HSD_A_M_DIFFUSE_R);
+                                                    if (ma.TextureAnimation != null)
+                                                        foreach (var ta in ma.TextureAnimation.List)
+                                                            matAnimCount += RotateAobjColorTriples(
+                                                                ta.AnimationObject, hueShift, satScale,
+                                                                (byte)HSDRaw.Common.Animation.TexTrackType.HSD_A_T_KONST_R,
+                                                                (byte)HSDRaw.Common.Animation.TexTrackType.HSD_A_T_TEV0_R,
+                                                                (byte)HSDRaw.Common.Animation.TexTrackType.HSD_A_T_TEV1_R);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            Console.WriteLine($"Material tints applied to {matCount} materials");
+                            Console.WriteLine($"Material tints applied to {matCount} materials, {matAnimCount} matanim color triples");
                         }
                     }
 
                     rawFile.Save(outputDat);
-                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures (+{matCount} material tints), saved to: {outputDat}");
+                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures (+{matCount} material tints, +{matAnimCount} matanim triples), saved to: {outputDat}");
                 }
                 else
                 {

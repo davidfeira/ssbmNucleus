@@ -35,6 +35,7 @@ def main():
     from core.config import STORAGE_PATH
     from ingame.capture import capture_stage
     from ingame.melee_sss import INTERNAL_STAGE_ID
+    from skinlab.stage_ops import stage_file_name
 
     plans = json.loads(Path(args.plans).read_text(encoding='utf-8'))
     only = {s.strip() for s in args.only.split(',') if s.strip()}
@@ -55,7 +56,7 @@ def main():
         print(f'=== {code} -> {variant} ("{plan["skin_name"]}")', flush=True)
         try:
             work = DEFAULT_EXPORTS / code / variant
-            out_dat = work / f'{code}.dat'
+            out_dat = work / stage_file_name(code)
             if plan['steps'] or plan.get('materialTints'):
                 outputs = apply_plan(code, plan, DEFAULT_EXPORTS / code / 'textures',
                                      work / 'pngs')
@@ -66,13 +67,13 @@ def main():
                 (work / 'spec.json').write_text(json.dumps(spec, indent=1),
                                                 encoding='utf-8')
                 subprocess.run([str(DEFAULT_HSDCLI), '--stage-textures', 'import',
-                                str(Path(DEFAULT_DATS) / f'{code}.dat'),
+                                str(Path(DEFAULT_DATS) / stage_file_name(code)),
                                 str(work / 'spec.json'), str(out_dat)],
                                capture_output=True, text=True, timeout=300)
             if not out_dat.exists():
                 raise RuntimeError('variant dat missing (steps empty or import failed)')
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                z.write(out_dat, f'{code}.dat')
+                z.write(out_dat, stage_file_name(code))
 
             iso = STORAGE_PATH / 'test-builds' / f'mine_{code}.iso'
             try:

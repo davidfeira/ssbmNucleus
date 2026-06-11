@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 STAGE_DATS_DIR = STORAGE_PATH / 'skinlab_stages'
 STAGE_REGIONS_DIR = Path(__file__).resolve().parents[1] / 'assets' / 'texture_regions' / 'stages'
 
+# NTSC loads localized .usd files for stages with on-screen text. Stadium's
+# jumbotron is English only in GrPs.usd -- basing variants on GrPs.dat ships
+# the Japanese stage (and a DIFFERENT texture enumeration, which broke the
+# region map). Community DAS variants all ship GrPs.usd.
+STAGE_FILE_EXT = {'GrPs': '.usd'}
+
+
+def stage_file_name(code):
+    return f"{code}{STAGE_FILE_EXT.get(code, '.dat')}"
+
 
 class StageOpsError(Exception):
     pass
@@ -36,7 +46,7 @@ def stage_region_map(code):
 def ensure_exports(code):
     """Export the vanilla stage's textures via the CLI if not already done.
     Returns the export directory (with manifest.json)."""
-    dat = STAGE_DATS_DIR / f'{code}.dat'
+    dat = STAGE_DATS_DIR / stage_file_name(code)
     if not dat.exists():
         raise StageOpsError(
             f'Vanilla stage dat missing: {dat} (run the stage extraction once)')
@@ -127,9 +137,9 @@ def apply_stage_plan(code, steps, material_tints, work_dir, generate_material,
     spec_path = work_dir / 'spec.json'
     spec_path.write_text(json.dumps(spec, indent=1), encoding='utf-8')
 
-    out_dat = work_dir / f'{code}.dat'
+    out_dat = work_dir / stage_file_name(code)
     r = subprocess.run([str(HSDRAW_EXE), '--stage-textures', 'import',
-                        str(STAGE_DATS_DIR / f'{code}.dat'),
+                        str(STAGE_DATS_DIR / stage_file_name(code)),
                         str(spec_path), str(out_dat)],
                        capture_output=True, text=True, timeout=300,
                        **get_subprocess_args())

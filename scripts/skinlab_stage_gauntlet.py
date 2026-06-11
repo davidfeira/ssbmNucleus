@@ -71,12 +71,14 @@ def region_summary(code):
 
 def make_das_zip(code, dat_path, variant_id):
     from test_build import DAS_STAGES
+
+    from skinlab.stage_ops import stage_file_name
     folder = DAS_STAGES[code][0]
     das_dir = REPO / 'storage' / 'das' / folder
     das_dir.mkdir(parents=True, exist_ok=True)
     zip_path = das_dir / f'{variant_id}.zip'
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-        z.write(dat_path, f'{code}.dat')
+        z.write(dat_path, stage_file_name(code))
     return zip_path, folder
 
 
@@ -105,13 +107,15 @@ def capture_variant(code, folder, variant_id, vanilla, slippi, out_png):
 
 def run_plan(code, plan, name, exports_dir, out_dir, vanilla, slippi, hsdcli):
     import subprocess
+
+    from skinlab.stage_ops import stage_file_name
     work = out_dir / name
     outputs = apply_plan(code, plan, exports_dir, work / 'pngs')
     spec = {'replacements': [{'index': i, 'png': str(p)} for i, p in outputs.items()]}
     (work / 'spec.json').write_text(json.dumps(spec, indent=1), encoding='utf-8')
-    out_dat = work / f'{code}.dat'
+    out_dat = work / stage_file_name(code)
     subprocess.run([hsdcli, '--stage-textures', 'import',
-                    str(Path(DEFAULT_DATS) / f'{code}.dat'),
+                    str(Path(DEFAULT_DATS) / stage_file_name(code)),
                     str(work / 'spec.json'), str(out_dat)],
                    capture_output=True, text=True, timeout=300, check=False)
     if not out_dat.exists():

@@ -57,8 +57,9 @@ You can emit four kinds of steps:
 3. {{"op": "tint", "region": "<name>", "hue": 0-360, "saturation": 0-100}} --
    colorizes outright (works on grays), keeps lightness.
 4. {{"op": "material-tint", "hueShift": -180..180}} -- rotates the stage's
-   MATERIAL colors (glow rims, light accents that are not textures). At most
-   one of these; powerful, affects the whole stage's accent palette.
+   MATERIAL colors (glow rims, light accents, and animated material colors
+   like Pokemon Stadium's turf green that are not textures). At most one of
+   these; powerful, affects the whole stage's accent palette.
 
 Rules:
 - 3 to 6 steps total. At most 3 composite steps.
@@ -163,7 +164,8 @@ def stage_ai_create():
         return jsonify({'success': False,
                         'error': 'Slippi Dolphin path missing (set it in Settings)'}), 400
 
-    from skinlab.stage_ops import StageOpsError, apply_stage_plan, stage_region_map
+    from skinlab.stage_ops import (StageOpsError, apply_stage_plan,
+                                   stage_file_name, stage_region_map)
 
     rm = stage_region_map(code)
     if rm is None:
@@ -252,7 +254,7 @@ def stage_ai_create():
                 das_dir.mkdir(parents=True, exist_ok=True)
                 tmp_zip = das_dir / '_ai-pending.zip'
                 with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as z:
-                    z.write(dat_path, f'{code}.dat')
+                    z.write(dat_path, stage_file_name(code))
                 iso = STORAGE_PATH / 'test-builds' / f'stagelab_{code}.iso'
                 try:
                     test_build.build_stage_skin_iso(vanilla, code, folder,
@@ -303,7 +305,7 @@ def stage_ai_create():
                     steps = steps + fixes
                     tints = tints + fix_tints
 
-            keep_dat = STORAGE_PATH / 'skinlab_stages' / f'_pending_{code}.dat'
+            keep_dat = STORAGE_PATH / 'skinlab_stages' / f'_pending_{stage_file_name(code)}'
             shutil.copy2(out_dat, keep_dat)
             with _pending_lock:
                 _pending.clear()
@@ -332,6 +334,7 @@ def stage_ai_create():
 
 @stage_lab_ai_bp.route('/api/mex/stage-lab/save', methods=['POST'])
 def stage_ai_save():
+    from skinlab.stage_ops import stage_file_name
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     with _pending_lock:
@@ -349,7 +352,7 @@ def stage_ai_save():
         i += 1
         slug = f'{base}-{i}'
     with zipfile.ZipFile(das_dir / f'{slug}.zip', 'w', zipfile.ZIP_DEFLATED) as z:
-        z.write(p['dat'], f"{p['code']}.dat")
+        z.write(p['dat'], stage_file_name(p['code']))
     (das_dir / f'{slug}_screenshot.png').write_bytes(p['png'])
     Path(p['dat']).unlink(missing_ok=True)
     return jsonify({'success': True, 'variantId': slug, 'folder': p['folder']})
