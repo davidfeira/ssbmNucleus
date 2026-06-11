@@ -930,9 +930,11 @@ export default function ProjectSelector({
 
   const projectManagementMenu = (
     <div className={`project-management-shell${showModal ? ' project-management-shell--modal' : ''}`}>
-      <div className="project-management-header">
-        <HeadingTag>{viewConfig.title}</HeadingTag>
-      </div>
+      {showModal && (
+        <div className="project-management-header">
+          <HeadingTag>{viewConfig.title}</HeadingTag>
+        </div>
+      )}
 
       <div className={`project-management-body${showModal ? ' project-management-body--modal' : ''}`}>
         <section className="project-list-panel">
