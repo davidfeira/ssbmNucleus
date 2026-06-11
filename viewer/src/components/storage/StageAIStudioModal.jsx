@@ -31,6 +31,8 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   const [planner, setPlanner] = useState(PLANNERS[0].id)
   const [imageModel, setImageModel] = useState(
     localStorage.getItem('ai_studio_image_model') || IMAGE_MODELS[0].model)
+  const [reviewPass, setReviewPass] = useState(false)
+  const [assessment, setAssessment] = useState(null)
   const [phase, setPhase] = useState('form')        // form | running | preview | saving
   const [status, setStatus] = useState(null)
   const [screenshot, setScreenshot] = useState(null)
@@ -86,6 +88,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
       setSkinName(d.skinName || theme)
       setSteps(d.steps || [])
       setCostInfo({ cost: d.estCostUsd, generation: d.generation || [] })
+      setAssessment(d.assessment || null)
       setPhase('preview')
       playSound('achievement')
       cleanupSocket()
@@ -107,6 +110,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
           plannerModel: planner,
           imageProvider: IMAGE_MODELS.find((m) => m.model === imageModel)?.provider,
           imageModel,
+          reviewPass,
           openrouterKey: localStorage.getItem('openrouter_api_key') || undefined,
           vanillaIsoPath,
           slippiDolphinPath,
@@ -193,6 +197,11 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
                 <option key={m.model} value={m.model}>{m.label}</option>
               ))}
             </select>
+            <label className="ai-studio-label" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={reviewPass}
+                     onChange={(e) => setReviewPass(e.target.checked)} />
+              Review pass — the AI critiques the screenshot and fixes it (adds ~3 min)
+            </label>
             <div className="ai-studio-progress-message">
               The preview is a real in-game screenshot — expect a few minutes.
             </div>
@@ -227,6 +236,9 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
                   </span>
                 ))}
               </div>
+            )}
+            {assessment && (
+              <div className="ai-studio-progress-message">“{assessment}”</div>
             )}
             {costInfo && costInfo.generation.length > 0 && (
               <div className="ai-studio-genlog">

@@ -70,6 +70,24 @@ Rules:
 
 Reply with ONLY JSON: {{"skin_name": "<short name>", "steps": [...]}}"""
 
+REVIEW_PROMPT = """You previously designed a Melee costume for the theme
+"{theme}" and your plan was executed. The attached image is the ACTUAL result
+rendered on the 3D model (front, back, and the character-select framing).
+
+Critique it against the theme. Look specifically for: parts that still look
+STOCK/untouched (original colors: {color_facts}), regions whose color clashes
+with the theme, and anything too subtle to read. Check ALL three views.
+
+If it already reads well, reply {{"assessment": "<one sentence>", "steps": []}}.
+Otherwise reply with up to 3 FIX steps using the same ops:
+  {{"op": "composite", "region": "<name>", "material_prompt": "...",
+    "modulate": {{"lo": .., "hi": ..}}}}
+  {{"op": "tint", "region": "<name>", "hue": 0-360, "saturation": 0-100}}
+  {{"op": "hue-shift", "region": "<name>", "hueShift": -180..180,
+    "saturationShift": -100..100}}
+
+Reply with ONLY JSON: {{"assessment": "<one sentence>", "steps": [...]}}"""
+
 HUE_NAMES = [(15, 'red'), (40, 'orange'), (65, 'yellow'), (95, 'olive'),
              (150, 'green'), (185, 'teal'), (250, 'blue'), (290, 'purple'),
              (330, 'magenta'), (360, 'red')]
@@ -159,10 +177,20 @@ def _vanilla_nr_code(character):
     return None
 
 
-def _call_planner(model, prompt, key):
+def _call_planner(model, prompt, key, image_jpeg=None):
+    """Text call, or vision call when image_jpeg bytes are provided."""
+    if image_jpeg is not None:
+        content = [
+            {'type': 'text', 'text': prompt},
+            {'type': 'image_url', 'image_url': {
+                'url': 'data:image/jpeg;base64,'
+                       + base64.b64encode(image_jpeg).decode('ascii')}},
+        ]
+    else:
+        content = prompt
     r = requests.post(OPENROUTER_URL, timeout=180, json={
         'model': model,
-        'messages': [{'role': 'user', 'content': prompt}],
+        'messages': [{'role': 'user', 'content': content}],
         'max_tokens': 2000,
     }, headers={'Authorization': f'Bearer {key}'})
     body = r.json()
@@ -226,6 +254,7 @@ def ai_create():
     model = (data.get('plannerModel') or DEFAULT_PLANNER).strip()
     image_provider = (data.get('imageProvider') or 'openrouter').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
+    review_pass = data.get('reviewPass', True)   # cheap for characters: default ON
     key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not character or not theme:
         return jsonify({'success': False, 'error': 'character and theme are required'}), 400
@@ -275,41 +304,72 @@ def ai_create():
                 raise RuntimeError(err)
             skin_name = ((plan.get('skin_name') or theme)[:60])
 
-            n = len(steps)
             gen_log = []
             img_label = (image_model or ('nano banana' if image_provider == 'openrouter'
                                          else 'sd-turbo'))
             img_cost = 0.03 if image_provider == 'openrouter' else 0.0
-            for i, s in enumerate(steps):
-                pct = 30 + int(55 * i / n)
-                label = s['op'] + ' ' + s['region']
-                emit('applying', pct, f'Step {i + 1}/{n}: {label}…')
-                if s['op'] == 'composite':
-                    emit('applying', pct, f'Step {i + 1}/{n}: {label} — material via '
-                         f'{img_label}' + (f' (~{int(img_cost * 100)}¢)' if img_cost
-                                           else ' (local, free)'))
-                    gen = {'prompt': s['material_prompt'], 'provider': image_provider}
-                    if image_model:
-                        gen['model'] = image_model
-                    t0 = time.time()
-                    rr = requests.post(f'{base_url}/composite', timeout=900, json={
-                        'region': s['region'],
-                        'material': {'generate': gen},
-                        'modulate': s.get('modulate') or {}}).json()
-                    gen_log.append({'model': img_label, 'provider': image_provider,
-                                    'seconds': round(time.time() - t0, 1),
-                                    'estCostUsd': img_cost})
-                elif s['op'] == 'tint':
-                    rr = requests.post(f'{base_url}/tint', timeout=120, json={
-                        'region': s['region'], 'hue': s['hue'],
-                        'saturation': s.get('saturation', 60)}).json()
-                else:
-                    rr = requests.post(f'{base_url}/hue-shift', timeout=120, json={
-                        'region': s['region'],
-                        'hueShift': s.get('hueShift', 0),
-                        'saturationShift': s.get('saturationShift', 0)}).json()
-                if not rr.get('success'):
-                    raise RuntimeError(f"{label} failed: {rr.get('error')}")
+
+            def run_steps(step_list, lo_pct, hi_pct, tag=''):
+                n = len(step_list)
+                for i, s in enumerate(step_list):
+                    pct = lo_pct + int((hi_pct - lo_pct) * i / max(1, n))
+                    label = s['op'] + ' ' + s['region']
+                    emit('applying', pct, f'{tag}Step {i + 1}/{n}: {label}…')
+                    if s['op'] == 'composite':
+                        emit('applying', pct, f'{tag}Step {i + 1}/{n}: {label} — '
+                             f'material via {img_label}'
+                             + (f' (~{int(img_cost * 100)}¢)' if img_cost
+                                else ' (local, free)'))
+                        gen = {'prompt': s['material_prompt'],
+                               'provider': image_provider}
+                        if image_model:
+                            gen['model'] = image_model
+                        t0 = time.time()
+                        rr = requests.post(f'{base_url}/composite', timeout=900, json={
+                            'region': s['region'],
+                            'material': {'generate': gen},
+                            'modulate': s.get('modulate') or {}}).json()
+                        gen_log.append({'model': img_label,
+                                        'provider': image_provider,
+                                        'seconds': round(time.time() - t0, 1),
+                                        'estCostUsd': img_cost})
+                    elif s['op'] == 'tint':
+                        rr = requests.post(f'{base_url}/tint', timeout=120, json={
+                            'region': s['region'], 'hue': s['hue'],
+                            'saturation': s.get('saturation', 60)}).json()
+                    else:
+                        rr = requests.post(f'{base_url}/hue-shift', timeout=120, json={
+                            'region': s['region'],
+                            'hueShift': s.get('hueShift', 0),
+                            'saturationShift': s.get('saturationShift', 0)}).json()
+                    if not rr.get('success'):
+                        raise RuntimeError(f"{label} failed: {rr.get('error')}")
+
+            run_steps(steps, 30, 65)
+
+            # Self-review round: the planner looks at its own render and emits
+            # fix steps. Nearly free for characters (sheet renders in seconds).
+            assessment = None
+            fixes = []
+            if review_pass:
+                emit('reviewing', 70, 'Rendering for self-review…')
+                sheet1 = _sheet_from_session(base_url)
+                emit('reviewing', 75, f'{model.split("/")[-1]} is reviewing the result…')
+                try:
+                    reply = _call_planner(
+                        model,
+                        REVIEW_PROMPT.format(
+                            theme=theme,
+                            color_facts=_color_facts(rm.get('liveMaskHints'))),
+                        key, image_jpeg=sheet1)
+                    review = _extract_json(reply) or {}
+                    assessment = (review.get('assessment') or '')[:200] or None
+                    fixes, _err = _validate(review, set(rm['regions']))
+                    fixes = fixes or []
+                except Exception as e:
+                    logger.warning(f'[ai-studio] review pass skipped: {e}')
+                if fixes:
+                    run_steps(fixes, 78, 88, tag='Fix ')
 
             emit('rendering', 90, 'Rendering the preview…')
             sheet = _sheet_from_session(base_url)
@@ -317,7 +377,8 @@ def ai_create():
                 'success': True,
                 'sheet': 'data:image/jpeg;base64,' + base64.b64encode(sheet).decode('ascii'),
                 'skinName': skin_name,
-                'steps': steps,
+                'steps': steps + fixes,
+                'assessment': assessment,
                 'generation': gen_log,
                 'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
             })

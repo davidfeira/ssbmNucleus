@@ -70,6 +70,24 @@ Rules:
 Reply with ONLY JSON: {{"skin_name": "<short name>", "steps": [...]}}"""
 
 
+STAGE_REVIEW_PROMPT = """You previously designed a Melee STAGE reskin for the
+theme "{theme}" and your plan was executed. The attached image is the ACTUAL
+in-game screenshot of the result.
+
+Critique it against the theme. Look for: regions that still look STOCK,
+surfaces whose color clashes with the theme, muddy/crusty textures, and
+readability problems (the playfield must stay distinct from the background).
+
+Regions you can target:
+{region_summary}
+
+If it already reads well, reply {{"assessment": "<one sentence>", "steps": []}}.
+Otherwise reply with up to 3 FIX steps using the same ops (composite /
+tint / hue-shift / material-tint) as before.
+
+Reply with ONLY JSON: {{"assessment": "<one sentence>", "steps": [...]}}"""
+
+
 def _validate_stage(plan, regions):
     if not isinstance(plan, dict) or not isinstance(plan.get('steps'), list):
         return None, None, 'the model returned no steps'
@@ -129,6 +147,7 @@ def stage_ai_create():
     model = (data.get('plannerModel') or DEFAULT_PLANNER).strip()
     image_provider = (data.get('imageProvider') or 'openrouter').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
+    review_pass = bool(data.get('reviewPass'))   # opt-in: costs another ISO + boot
     key = (data.get('openrouterKey') or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     vanilla = (data.get('vanillaIsoPath') or '').strip()
     slippi = (data.get('slippiDolphinPath') or '').strip()
@@ -226,28 +245,63 @@ def stage_ai_create():
             out_dat = apply_stage_plan(code, steps, tints, work, gen, on_step=on_step)
 
             folder, framing_key = test_build.DAS_STAGES[code]
-            emit('building', 60, 'Building the test ISO…')
-            # the capture build reads the variant from the das folder; stage a temp zip
-            das_dir = STORAGE_PATH / 'das' / folder
-            das_dir.mkdir(parents=True, exist_ok=True)
-            tmp_zip = das_dir / '_ai-pending.zip'
-            with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as z:
-                z.write(out_dat, f'{code}.dat')
-            iso = STORAGE_PATH / 'test-builds' / f'stagelab_{code}.iso'
-            try:
-                test_build.build_stage_skin_iso(vanilla, code, folder, '_ai-pending',
-                                                str(iso), button='X',
-                                                log=lambda m: None)
-                emit('capturing', 80, 'Capturing the in-game screenshot…')
-                res = capture_stage(str(iso), slippi, str(STORAGE_PATH / 'test-runs'),
-                                    internal_id=INTERNAL_STAGE_ID[framing_key],
-                                    hold='X', framing_key=framing_key,
-                                    log=lambda m: None, settle=4.0)
-            finally:
-                iso.unlink(missing_ok=True)
-                tmp_zip.unlink(missing_ok=True)
+
+            def build_and_capture(dat_path, lo_pct):
+                emit('building', lo_pct, 'Building the test ISO…')
+                das_dir = STORAGE_PATH / 'das' / folder
+                das_dir.mkdir(parents=True, exist_ok=True)
+                tmp_zip = das_dir / '_ai-pending.zip'
+                with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as z:
+                    z.write(dat_path, f'{code}.dat')
+                iso = STORAGE_PATH / 'test-builds' / f'stagelab_{code}.iso'
+                try:
+                    test_build.build_stage_skin_iso(vanilla, code, folder,
+                                                    '_ai-pending', str(iso),
+                                                    button='X', log=lambda m: None)
+                    emit('capturing', lo_pct + 15, 'Capturing the in-game screenshot…')
+                    return capture_stage(str(iso), slippi,
+                                         str(STORAGE_PATH / 'test-runs'),
+                                         internal_id=INTERNAL_STAGE_ID[framing_key],
+                                         hold='X', framing_key=framing_key,
+                                         log=lambda m: None, settle=4.0)
+                finally:
+                    iso.unlink(missing_ok=True)
+                    tmp_zip.unlink(missing_ok=True)
+
+            res = build_and_capture(out_dat, 55)
             if not res.get('png'):
                 raise StageOpsError(f"capture failed: {res.get('reason')}")
+
+            # Optional self-review round: the planner critiques the actual
+            # in-game screenshot, then the FULL plan + fixes re-applies and a
+            # second ISO/capture verifies (costs another ~2-3 minutes).
+            assessment = None
+            fixes, fix_tints = [], []
+            if review_pass:
+                emit('reviewing', 75, f'{model.split("/")[-1]} is reviewing the screenshot…')
+                try:
+                    from blueprints.skin_lab_ai import _call_planner
+                    reply = _call_planner(
+                        model,
+                        STAGE_REVIEW_PROMPT.format(theme=theme,
+                                                   region_summary=region_summary),
+                        key, image_jpeg=res['png'])
+                    review = _extract_json(reply) or {}
+                    assessment = (review.get('assessment') or '')[:200] or None
+                    fixes, fix_tints, _err = _validate_stage(review, set(rm['regions']))
+                    fixes, fix_tints = fixes or [], fix_tints or []
+                except Exception as e:
+                    logger.warning(f'[stage-studio] review pass skipped: {e}')
+                if fixes or fix_tints:
+                    emit('applying', 80, f'Applying {len(fixes) + len(fix_tints)} fix step(s)…')
+                    work2 = work / 'review'
+                    out_dat = apply_stage_plan(code, steps + fixes,
+                                               tints + fix_tints, work2, gen)
+                    res = build_and_capture(out_dat, 85)
+                    if not res.get('png'):
+                        raise StageOpsError(f"re-capture failed: {res.get('reason')}")
+                    steps = steps + fixes
+                    tints = tints + fix_tints
 
             keep_dat = STORAGE_PATH / 'skinlab_stages' / f'_pending_{code}.dat'
             shutil.copy2(out_dat, keep_dat)
@@ -262,6 +316,7 @@ def stage_ai_create():
                               + base64.b64encode(res['png']).decode('ascii'),
                 'skinName': skin_name,
                 'steps': steps + ([{'op': 'material-tint', **t} for t in tints]),
+                'assessment': assessment,
                 'generation': gen_log,
                 'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
             })

@@ -35,6 +35,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
   const [skinName, setSkinName] = useState('')
   const [steps, setSteps] = useState([])
   const [costInfo, setCostInfo] = useState(null)
+  const [assessment, setAssessment] = useState(null)
   const [error, setError] = useState(null)
   const socketRef = useRef(null)
 
@@ -78,6 +79,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
       setSkinName(d.skinName || theme)
       setSteps(d.steps || [])
       setCostInfo({ cost: d.estCostUsd, generation: d.generation || [] })
+      setAssessment(d.assessment || null)
       setPhase('preview')
       playSound('achievement')
       cleanupSocket()
@@ -215,6 +217,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
                   </span>
                 ))}
               </div>
+            )}
+            {assessment && (
+              <div className="ai-studio-progress-message">“{assessment}”</div>
             )}
             {costInfo && costInfo.generation.length > 0 && (
               <div className="ai-studio-genlog">
