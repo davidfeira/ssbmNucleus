@@ -17,9 +17,11 @@ const FIT_BADGES = {
 }
 
 /* a model is UNLOCKED when the studios can actually run it: local needs the
-   engine installed AND weights downloaded (and not disabled); api needs a key */
-function lockReason(model, engineOk) {
-  if (model.kind === 'api') return model.requiresKey ? 'needs an OpenRouter key' : null
+   engine installed AND weights downloaded (and not disabled); api needs a key.
+   hasKey folds in the localStorage key — the backend's requiresKey flag only
+   knows about its own env var. */
+function lockReason(model, engineOk, hasKey) {
+  if (model.kind === 'api') return hasKey ? null : 'needs an OpenRouter key'
   if (!engineOk && !model.downloaded) return 'install the engine + download'
   if (!engineOk) return 'install the engine'
   if (!model.downloaded) return model.partial ? 'resume the download' : 'not downloaded yet'
@@ -40,7 +42,7 @@ function compactHint(model, download, locked) {
 }
 
 function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle,
-                    engineOk }) {
+                    engineOk, hasKey }) {
   const [download, setDownload] = useState(null)   // {bytesDone, bytesTotal}
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -116,7 +118,7 @@ function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle,
   const isLocal = model.kind === 'local'
   const fit = FIT_BADGES[model.fit] || FIT_BADGES.good
   const downloading = Boolean(download) || model.downloading
-  const locked = downloading ? null : lockReason(model, engineOk)
+  const locked = downloading ? null : lockReason(model, engineOk, hasKey)
   const stats = model.stats
   const speed = stats?.avgSeconds != null
     ? `~${Math.round(stats.avgSeconds)}s/image measured (${stats.runs} runs)`
@@ -176,7 +178,7 @@ function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle,
               </span>
             )}
             {speed && <span>{speed}</span>}
-            {!isLocal && model.requiresKey && <span>needs an OpenRouter key</span>}
+            {!isLocal && !hasKey && <span>needs an OpenRouter key</span>}
           </div>
 
           {downloading && (
@@ -237,7 +239,8 @@ function ModelRow({ API_URL, model, socket, onChanged, expanded, onToggle,
 }
 
 export default function ModelCatalog({ API_URL, models, socket, onChanged,
-                                       localOnly = false, engineOk = false }) {
+                                       localOnly = false, engineOk = false,
+                                       hasKey = false }) {
   const [expandedId, setExpandedId] = useState(null)
   if (!models) return null
   const local = models.models.filter((m) => m.kind === 'local')
@@ -256,7 +259,7 @@ export default function ModelCatalog({ API_URL, models, socket, onChanged,
       {[...local, ...api].map((m) => (
         <ModelRow key={m.id} API_URL={API_URL} model={m} socket={socket}
                   onChanged={onChanged} expanded={expandedId === m.id}
-                  engineOk={engineOk}
+                  engineOk={engineOk} hasKey={hasKey}
                   onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)} />
       ))}
       <div className="aistudio-storage-footer">

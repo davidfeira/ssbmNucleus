@@ -144,7 +144,7 @@ export default function AiStudioSection({ API_URL }) {
                   <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
                                      onChanged={onChanged} />
                   <ModelCatalog API_URL={API_URL} models={models} socket={socket}
-                                onChanged={onChanged} localOnly
+                                onChanged={onChanged} localOnly hasKey={hasKey}
                                 engineOk={Boolean(status?.engine?.installed && status?.engine?.ok)} />
                 </>
               ) : (
@@ -154,7 +154,7 @@ export default function AiStudioSection({ API_URL }) {
                   <EngineInstallCard API_URL={API_URL} status={status} socket={socket}
                                      onChanged={onChanged} />
                   <ModelCatalog API_URL={API_URL} models={models} socket={socket}
-                                onChanged={onChanged}
+                                onChanged={onChanged} hasKey={hasKey}
                                 engineOk={Boolean(status?.engine?.installed && status?.engine?.ok)} />
                   <TierRoutingCard API_URL={API_URL} status={status} models={models}
                                    hasKey={hasKey} onChanged={onChanged} />
