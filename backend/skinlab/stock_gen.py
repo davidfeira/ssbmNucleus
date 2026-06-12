@@ -532,9 +532,13 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     # bone is the CROWN, so the face is still WIDENING just below it -- cuts
     # are forbidden until a face-height's worth of rows below the bone, or a
     # crown dip-then-cheek-regrowth reads as a neck (the Pikachu strip bug).
+    # floor anchored at max(bone, head top + 10%): a crown bone needs the
+    # protection below itself (the face is still widening), but a bone that
+    # sits at NECK level (chibi meshes whose head is above the bone) must
+    # not block the legitimate neck pinch right below it
     ys_op, _ = np.where(op)
     bbox_h = float(ys_op.max() - ys_op.min() + 1) if len(ys_op) else H
-    cut_floor = head_y + 0.10 * bbox_h
+    cut_floor = max(head_y, profile[0][0] + 0.10 * bbox_h)
     widths = [x1 - x0 + 1 for _y, x0, x1 in profile]
     peak = 0
     dip = None
