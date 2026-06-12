@@ -716,8 +716,10 @@ def generate_head_shot(dat_filepath):
     dat_name = os.path.splitext(os.path.basename(dat_filepath))[0]
     output = os.path.join(dat_dir, f"{dat_name}_headshot.png")
 
+    # scale 2 = 272x376: crop decisions get real pixel detail to work with;
+    # the icon is downscaled at the very end anyway
     cmd = [HSDRAW_EXE, "--csp", os.path.abspath(dat_filepath), output,
-           "--head-shot", "--no-shadow", "--head-bone", str(head_bone)]
+           "--head-shot", "--scale", "2", "--head-bone", str(head_bone)]
     arm_bones = CHARACTER_ARM_BONES.get(character)
     if arm_bones:
         cmd.extend(["--collapse-bones", f"{arm_bones[0]},{arm_bones[1]}"])

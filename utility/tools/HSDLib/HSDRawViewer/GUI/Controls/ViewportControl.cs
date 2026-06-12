@@ -153,6 +153,13 @@ namespace HSDRawViewer.GUI
         public static int CSPWidth { get; set; } = 136 * 2;
         public static int CSPHeight { get; set; } = 188 * 2;
 
+        /// <summary>
+        /// Skip the CSPMaker post-process (outline + synthetic drop shadow).
+        /// Head-shot renders for stock icon generation need the raw
+        /// silhouette -- the fake shadow pollutes it.
+        /// </summary>
+        public static bool SkipCSPPostProcess { get; set; } = false;
+
         private List<IDrawable> Drawables { get; set; } = new List<IDrawable>();
 
         private bool Selecting = false;
@@ -728,7 +735,8 @@ namespace HSDRawViewer.GUI
                         resize.Mutate(ctx => ctx.Flip(FlipMode.Horizontal));
 
                     // generate csp
-                    Converters.SBM.CSPMaker.MakeCSP(resize);
+                    if (!SkipCSPPostProcess)
+                        Converters.SBM.CSPMaker.MakeCSP(resize);
 
                     // crop
                     resize.Mutate(ctx => ctx.Crop(new Rectangle((glControl.Width - CSPWidth) / 4, (glControl.Height - CSPHeight) / 4, CSPWidth / 2, CSPHeight / 2)));

@@ -332,7 +332,20 @@ namespace HSDRawViewer
                     headShot = true;
                     argsList.RemoveAt(headShotArg);
                     args = argsList.ToArray();
-                    Console.WriteLine("Head-shot mode: bind pose + auto-framed camera");
+                    // raw silhouette: the CSPMaker post-process stamps a fake
+                    // drop shadow that pollutes the crop's alpha mask
+                    GUI.ViewportControl.SkipCSPPostProcess = true;
+                    Console.WriteLine("Head-shot mode: bind pose + auto-framed camera, raw silhouette");
+                }
+
+                // strip the legacy --no-shadow flag (the shadow was never a
+                // scene object -- it is CSPMaker post-processing, handled
+                // above) so it can't be mistaken for a positional argument
+                int noShadowArg = argsList.IndexOf("--no-shadow");
+                if (noShadowArg >= 0)
+                {
+                    argsList.RemoveAt(noShadowArg);
+                    args = argsList.ToArray();
                 }
 
                 // --head-shot-yaw N: 3/4-view angle in degrees for head shots

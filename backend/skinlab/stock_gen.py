@@ -434,7 +434,7 @@ def _pixelize_icon(crop_img, out_size=24):
     return icon.astype(np.float64)
 
 
-def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
+def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     """Stock icon for a MODEL IMPORT from a HEAD-SHOT render (bind pose,
     auto-framed, shadowless) + the projected head-bone position.
 
@@ -578,6 +578,9 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
     masked = csp_rgba.astype(np.uint8).copy()
     masked[..., 3] = np.where(mask, masked[..., 3], 0)
     crop = Image.fromarray(masked).crop(box)
+    if debug_out is not None:
+        debug_out.update({'box': box, 'y_top': y_top, 'y_end': y_end,
+                          'crop': crop.copy(), 'start': start})
     return _pixelize_icon(crop, out_size)
 
 
