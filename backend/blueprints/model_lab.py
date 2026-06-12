@@ -18,9 +18,14 @@ it onto the character's preserved skeleton:
 
 POST /api/mex/model-lab/create {character, theme?, meshFile?, meshName?,
                                 rotY?, maxTris?}
-  -> background thread; events: modellab_progress {stage, percentage, message},
-     modellab_complete {success, preview, character}, modellab_error {error}.
-GET  /api/mex/model-lab/status -> {enabled, canGenerate, canUpload, running}
+  -> background thread; STOPS after the mesh exists and emits
+     modellab_mesh_ready {preview, character, canRegenerate} — a software
+     render of the RAW model so a bad generation can be thrown away without
+     paying for rigging. modellab_progress / modellab_error as usual.
+POST /api/mex/model-lab/rig -> rig the approved pending mesh; events:
+     modellab_progress, modellab_complete {success, preview, character}.
+GET  /api/mex/model-lab/status -> {enabled, canGenerate, canUpload, running,
+     hasPendingMesh, hasPending}
 POST /api/mex/model-lab/save {name} -> vault via unified intake (CSP/stock
      come from the intake's auto-generation)
 POST /api/mex/model-lab/discard
@@ -56,6 +61,9 @@ _running = False
 # the last finished generation, waiting on save/discard:
 # {datBytes, character, datName, preview, workDir}
 _pending = None
+# a generated/uploaded mesh awaiting approval before rigging:
+# {meshPath, workDir, character, theme, rotY, maxTris, preview}
+_pending_mesh = None
 
 _CHAR_TO_CODE = {
     'Fox': 'Fx', 'Falco': 'Fc', 'Captain Falcon': 'Ca', 'Donkey Kong': 'Dk',
@@ -170,18 +178,40 @@ def _render_preview(dat_path, work_dir):
     return 'data:image/png;base64,' + base64.b64encode(png.read_bytes()).decode()
 
 
-def _pipeline(character, theme, mesh_path, rot_y, max_tris, work_dir):
-    """The full generation; returns the _pending session dict."""
+def _mesh_stage(character, theme, mesh_path, work_dir):
+    """Stage 1: obtain the mesh (generate or use the upload) and render a
+    raw-model preview for approval. Returns the _pending_mesh dict."""
     log = lambda m: logger.info(f'[model-lab] {m}')  # noqa: E731
 
-    _progress('rigkit', 5, 'Preparing the character rig kit…')
-    kit = _rig_kit(character, log)
-
     if mesh_path is None:
-        _progress('generate', 12, 'Generating the 3D model…')
+        _progress('generate', 15, 'Generating the 3D model…')
         mesh_path = _generate_mesh(theme, work_dir, log)
 
-    _progress('rig', 55, 'Rigging the model onto the skeleton…')
+    _progress('mesh_preview', 85, 'Rendering the model preview…')
+    from modellab.rig import render_mesh_preview
+    png = work_dir / 'mesh_preview.png'
+    render_mesh_preview(mesh_path, png)
+    preview = ('data:image/png;base64,'
+               + base64.b64encode(png.read_bytes()).decode())
+
+    return {
+        'meshPath': str(mesh_path),
+        'workDir': str(work_dir),
+        'character': character,
+        'theme': theme,
+        'preview': preview,
+    }
+
+
+def _rig_stage(character, mesh_path, rot_y, max_tris, work_dir):
+    """Stage 2 (after approval): rig the mesh, import it over the vanilla
+    costume, render the costume preview. Returns the _pending session dict."""
+    log = lambda m: logger.info(f'[model-lab] {m}')  # noqa: E731
+
+    _progress('rigkit', 8, 'Preparing the character rig kit…')
+    kit = _rig_kit(character, log)
+
+    _progress('rig', 35, 'Rigging the model onto the skeleton…')
     from modellab.rig import rig_mesh
     rigged = work_dir / 'rigged.smd'
     code = _CHAR_TO_CODE.get(character)
@@ -189,7 +219,7 @@ def _pipeline(character, theme, mesh_path, rot_y, max_tris, work_dir):
              rot_y=rot_y or 0.0, max_tris=max_tris or 6000,
              char_code=f'Pl{code}' if code else None, log=log)
 
-    _progress('import', 75, 'Building the costume DAT…')
+    _progress('import', 70, 'Building the costume DAT…')
     base_dat, code_nr = _vanilla_costume(character)
     sym = _joint_symbol(base_dat)
     out_dat = work_dir / f'{code_nr}.dat'
@@ -218,13 +248,16 @@ def status():
         'canGenerate': can_generate,
         'canUpload': True,
         'running': _running,
+        'hasPendingMesh': _pending_mesh is not None,
         'hasPending': _pending is not None,
     })
 
 
 @model_lab_bp.route('/api/mex/model-lab/create', methods=['POST'])
 def create():
-    global _running, _pending
+    """Stage 1: generate/accept the mesh, render the raw-model preview, stop.
+    Rigging only happens after approval via /rig."""
+    global _running, _pending, _pending_mesh
     data = request.get_json(silent=True) or {}
     character = data.get('character')
     theme = (data.get('theme') or '').strip()
@@ -245,6 +278,9 @@ def create():
                             'error': 'a generation is already running'}), 409
         _running = True
         _pending = None
+        if _pending_mesh is not None:          # regenerate: drop the old mesh
+            shutil.rmtree(_pending_mesh.get('workDir', ''), ignore_errors=True)
+            _pending_mesh = None
 
     work_dir = Path(tempfile.mkdtemp(prefix='modellab_'))
     mesh_path = None
@@ -257,20 +293,63 @@ def create():
     app = current_app._get_current_object()
 
     def run():
-        global _running, _pending
+        global _running, _pending_mesh
         try:
             with app.app_context():
-                session = _pipeline(character, theme, mesh_path, rot_y,
-                                    max_tris, work_dir)
-                _pending = session
-                _emit('modellab_complete', {
+                session = _mesh_stage(character, theme, mesh_path, work_dir)
+                session['rotY'] = rot_y
+                session['maxTris'] = max_tris
+                _pending_mesh = session
+                _emit('modellab_mesh_ready', {
                     'success': True,
                     'preview': session['preview'],
                     'character': character,
+                    'canRegenerate': bool(theme),
                 })
         except Exception as e:
-            logger.exception('[model-lab] generation failed')
+            logger.exception('[model-lab] mesh stage failed')
             shutil.rmtree(work_dir, ignore_errors=True)
+            _emit('modellab_error', {'error': str(e)})
+        finally:
+            with _lock:
+                _running = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'success': True})
+
+
+@model_lab_bp.route('/api/mex/model-lab/rig', methods=['POST'])
+def rig():
+    """Stage 2: rig the approved pending mesh into a costume."""
+    global _running, _pending, _pending_mesh
+    if _pending_mesh is None:
+        return jsonify({'success': False, 'error': 'no mesh to rig'}), 400
+    with _lock:
+        if _running:
+            return jsonify({'success': False,
+                            'error': 'a generation is already running'}), 409
+        _running = True
+
+    mesh = _pending_mesh
+    app = current_app._get_current_object()
+
+    def run():
+        global _running, _pending, _pending_mesh
+        try:
+            with app.app_context():
+                session = _rig_stage(mesh['character'], Path(mesh['meshPath']),
+                                     mesh.get('rotY') or 0,
+                                     mesh.get('maxTris') or 6000,
+                                     Path(mesh['workDir']))
+                _pending = session
+                _pending_mesh = None    # consumed (same workDir carries over)
+                _emit('modellab_complete', {
+                    'success': True,
+                    'preview': session['preview'],
+                    'character': mesh['character'],
+                })
+        except Exception as e:
+            logger.exception('[model-lab] rig stage failed')
             _emit('modellab_error', {'error': str(e)})
         finally:
             with _lock:
@@ -315,8 +394,11 @@ def save():
 
 @model_lab_bp.route('/api/mex/model-lab/discard', methods=['POST'])
 def discard():
-    global _pending
+    global _pending, _pending_mesh
     if _pending is not None:
         shutil.rmtree(_pending.get('workDir', ''), ignore_errors=True)
         _pending = None
+    if _pending_mesh is not None:
+        shutil.rmtree(_pending_mesh.get('workDir', ''), ignore_errors=True)
+        _pending_mesh = None
     return jsonify({'success': True})

@@ -11,10 +11,13 @@ import ProgressPanel from '../export/ProgressPanel'
  */
 export default function AIModelStudioModal({ show, character, onClose, onSaved }) {
   const [status, setStatus] = useState(null)
-  const [phase, setPhase] = useState('form')   // form | running | preview | saving
+  // form | running | mesh (raw-model approval) | rigging | preview | saving
+  const [phase, setPhase] = useState('form')
   const [theme, setTheme] = useState('')
   const [meshFile, setMeshFile] = useState(null)     // data URL
   const [meshName, setMeshName] = useState('')
+  const [meshPreview, setMeshPreview] = useState(null)  // raw-model render
+  const [canRegenerate, setCanRegenerate] = useState(false)
   const [preview, setPreview] = useState(null)
   const [skinName, setSkinName] = useState('')
   const [error, setError] = useState(null)
@@ -57,13 +60,7 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
     reader.readAsDataURL(f)
   }
 
-  const run = async () => {
-    if (!theme.trim() && !meshFile) return
-    playSound('start')
-    setPhase('running')
-    setError(null)
-    setStatus({ percentage: null, message: 'Starting…' })
-
+  const openSocket = (failPhase) => {
     cleanupSocket()
     const socket = io(BACKEND_URL)
     socketRef.current = socket
@@ -72,6 +69,13 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
       ...d,
       percentage: Number.isFinite(d.percentage) ? d.percentage : prev?.percentage,
     })))
+    socket.on('modellab_mesh_ready', (d) => {
+      setMeshPreview(d.preview)
+      setCanRegenerate(Boolean(d.canRegenerate))
+      setPhase('mesh')
+      playSound('achievement')
+      cleanupSocket()
+    })
     socket.on('modellab_complete', (d) => {
       setPreview(d.preview)
       setSkinName(theme.trim() || meshName.replace(/\.[^.]+$/, ''))
@@ -81,10 +85,20 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
     })
     socket.on('modellab_error', (d) => {
       setError(d.error || 'Model Studio failed')
-      setPhase('form')
+      setPhase(failPhase)
       playSound('error')
       cleanupSocket()
     })
+  }
+
+  const run = async () => {
+    if (!theme.trim() && !meshFile) return
+    playSound('start')
+    setPhase('running')
+    setError(null)
+    setMeshPreview(null)
+    setStatus({ percentage: null, message: 'Starting…' })
+    openSocket('form')
 
     try {
       const res = await fetch(`${API_URL}/model-lab/create`, {
@@ -106,6 +120,28 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
     } catch (err) {
       setError(`Could not start: ${err.message}`)
       setPhase('form')
+      cleanupSocket()
+    }
+  }
+
+  const rigNow = async () => {
+    playSound('start')
+    setPhase('rigging')
+    setError(null)
+    setStatus({ percentage: null, message: 'Rigging…' })
+    openSocket('mesh')
+
+    try {
+      const res = await fetch(`${API_URL}/model-lab/rig`, { method: 'POST' })
+      const data = await res.json()
+      if (!data.success) {
+        setError(data.error || 'Could not start rigging')
+        setPhase('mesh')
+        cleanupSocket()
+      }
+    } catch (err) {
+      setError(`Could not start rigging: ${err.message}`)
+      setPhase('mesh')
       cleanupSocket()
     }
   }
@@ -134,13 +170,14 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
     await fetch(`${API_URL}/model-lab/discard`, { method: 'POST' }).catch(() => {})
     setPhase('form')
     setPreview(null)
+    setMeshPreview(null)
     setMeshFile(null)
     setMeshName('')
   }
 
   const handleClose = () => {
-    if (phase === 'running') return
-    if (phase === 'preview') discard()
+    if (phase === 'running' || phase === 'rigging') return
+    if (phase === 'preview' || phase === 'mesh') discard()
     onClose()
   }
 
@@ -185,21 +222,44 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
               <button className="ai-studio-btn primary"
                       disabled={!theme.trim() && !meshFile}
                       onClick={run}>
-                {meshFile ? 'Rig & Import' : 'Generate'}
+                {meshFile ? 'Preview model' : 'Generate'}
               </button>
               <button className="ai-studio-btn" onClick={handleClose}>Cancel</button>
             </div>
           </div>
         )}
 
-        {phase === 'running' && (
+        {(phase === 'running' || phase === 'rigging') && (
           <ProgressPanel
-            title="Building your model…"
+            title={phase === 'rigging' ? 'Rigging your model…' : 'Building your model…'}
             label="Model Studio progress"
             progressValue={Number.isFinite(status?.percentage) ? status.percentage : null}
             metaText={Number.isFinite(status?.percentage) ? `${Math.round(status.percentage)}%` : null}
             messageText={status?.message || 'Starting…'}
           />
+        )}
+
+        {phase === 'mesh' && (
+          <div className="ai-studio-preview">
+            {meshPreview
+              ? <img className="ai-studio-sheet" src={meshPreview} alt="raw model preview" />
+              : <div className="ai-studio-step">no model preview available</div>}
+            <p className="ai-studio-label" style={{ opacity: 0.7 }}>
+              This is the raw model before rigging. If it looks wrong,
+              {canRegenerate ? ' regenerate or' : ''} discard it — rigging is
+              the slow part.
+            </p>
+            {error && <div className="ai-studio-error">{error}</div>}
+            <div className="ai-studio-actions">
+              <button className="ai-studio-btn primary" onClick={rigNow}>
+                Rig onto {character}
+              </button>
+              {canRegenerate && (
+                <button className="ai-studio-btn" onClick={run}>Regenerate</button>
+              )}
+              <button className="ai-studio-btn" onClick={discard}>Discard</button>
+            </div>
+          </div>
         )}
 
         {(phase === 'preview' || phase === 'saving') && (

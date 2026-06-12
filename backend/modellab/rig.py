@@ -139,6 +139,82 @@ def load_foreign(path: Path) -> ForeignMesh:
     return load_foreign_trimesh(path)
 
 
+# --------------------------------------------------------------------------- #
+# raw-mesh preview (no rig, no GL: painter's-algorithm software render)       #
+# --------------------------------------------------------------------------- #
+def _face_colors(foreign: ForeignMesh) -> np.ndarray:
+    """(T, 3) base color per triangle: texture sampled at the UV centroid."""
+    from PIL import Image
+
+    T = len(foreign.tri_pos)
+    colors = np.full((T, 3), 0.72)
+    mats = np.asarray(foreign.tri_mat)
+    uv_cent = foreign.tri_uv.mean(axis=1)
+    for mat in set(foreign.tri_mat):
+        tex = foreign.textures.get(mat)
+        if tex is None:
+            continue
+        img = tex if not isinstance(tex, (str, Path)) else Image.open(tex)
+        arr = np.asarray(img.convert("RGB"), dtype=np.float64) / 255.0
+        h, w = arr.shape[:2]
+        idx = np.where(mats == mat)[0]
+        uv = uv_cent[idx] % 1.0
+        px = np.clip((uv[:, 0] * (w - 1)).astype(int), 0, w - 1)
+        py = np.clip(((1.0 - uv[:, 1]) * (h - 1)).astype(int), 0, h - 1)
+        colors[idx] = arr[py, px]
+    return colors
+
+
+def render_mesh_preview(mesh_path, out_png, size=420, yaws=(20.0, 110.0)):
+    """Render the RAW foreign mesh (front-ish + side view, lambert shading,
+    textured faces) so a generated model can be judged BEFORE rigging."""
+    from PIL import Image, ImageDraw
+
+    foreign = load_foreign(Path(mesh_path))
+    base = _face_colors(foreign)
+    light = np.array([0.35, 0.55, 0.75])
+    light = light / np.linalg.norm(light)
+
+    panes = []
+    for yaw in yaws:
+        a = math.radians(yaw)
+        rot = np.array([
+            [math.cos(a), 0, math.sin(a)],
+            [0, 1, 0],
+            [-math.sin(a), 0, math.cos(a)],
+        ])
+        tris = foreign.tri_pos @ rot.T          # (T, 3, 3)
+        n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+        nl = np.linalg.norm(n, axis=1, keepdims=True)
+        n = n / np.maximum(nl, 1e-12)
+        shade = 0.34 + 0.66 * np.clip(np.abs(n @ light), 0, 1)
+        rgb = np.clip(base * shade[:, None] * 255, 0, 255).astype(np.uint8)
+
+        xy = tris[:, :, [0, 1]].copy()
+        xy[:, :, 1] *= -1.0                      # y up -> image down
+        lo = xy.reshape(-1, 2).min(axis=0)
+        hi = xy.reshape(-1, 2).max(axis=0)
+        span = max((hi - lo).max(), 1e-9)
+        margin = 0.07 * size
+        pts = (xy - lo) / span * (size - 2 * margin) + margin
+        # center the smaller axis
+        used = (hi - lo) / span * (size - 2 * margin)
+        pts += (size - 2 * margin - used) / 2
+
+        im = Image.new("RGB", (size, size), (23, 30, 42))
+        draw = ImageDraw.Draw(im)
+        order = np.argsort(tris[:, :, 2].mean(axis=1))   # far first
+        for t in order:
+            draw.polygon([tuple(p) for p in pts[t]], fill=tuple(rgb[t]))
+        panes.append(im)
+
+    out = Image.new("RGB", (size * len(panes), size), (23, 30, 42))
+    for i, im in enumerate(panes):
+        out.paste(im, (i * size, 0))
+    out.save(out_png)
+    return out_png
+
+
 def decimate(foreign: ForeignMesh, max_tris: int) -> ForeignMesh:
     """Reduce the foreign mesh to ~max_tris, re-projecting UVs and normals
     from the original surface (fast_simplification drops attributes)."""
@@ -584,6 +660,77 @@ def transfer_weights(
                 snapped += 1
         print(f"  consensus pass: snapped {snapped} outlier corners "
               f"({len(consensus)} unique verts)")
+
+    # triangle coherence: vanilla triangles only ever span ADJACENT bones
+    # (elbow, knee). A triangle whose corners ride skeleton-DISTANT bones
+    # (hip vs head) stretches into a giant shard the moment the pose spreads
+    # them — the dominant close-up artifact on cross-rigged capes/feathers.
+    # Enforce: each triangle's welded verts must share a bone or sit within
+    # tree distance 3; snap the lone offender to its mates' blend.
+    _dist_memo: dict = {}
+
+    def tree_dist(a, b, cap=6):
+        if a == b:
+            return 0
+        key = (a, b) if a < b else (b, a)
+        hit = _dist_memo.get(key)
+        if hit is not None:
+            return hit
+        seen_a, seen_b = {a: 0}, {b: 0}
+        ca, cb = a, b
+        result = cap + 1
+        for step in range(1, cap + 1):
+            if ca in parents and parents[ca] >= 0:
+                ca = parents[ca]
+                if ca in seen_b:
+                    result = step + seen_b[ca]
+                    break
+                seen_a[ca] = step
+            if cb in parents and parents[cb] >= 0:
+                cb = parents[cb]
+                if cb in seen_a:
+                    result = step + seen_a[cb]
+                    break
+                seen_b[cb] = step
+        _dist_memo[key] = result
+        return result
+
+    vert_of = {}
+    corner_vert = [vert_of.setdefault(key, len(vert_of)) for key in pos_key]
+    n_tri = len(pts) // 3
+    for _ in range(3):
+        fixes: dict = {}
+        for t in range(n_tri):
+            cs = [t * 3, t * 3 + 1, t * 3 + 2]
+            sets = [dict(out[c]) for c in cs]
+            if set(sets[0]) & set(sets[1]) & set(sets[2]):
+                continue
+            prims = [out[c][0][0] for c in cs]
+            d01 = tree_dist(prims[0], prims[1])
+            d02 = tree_dist(prims[0], prims[2])
+            d12 = tree_dist(prims[1], prims[2])
+            if max(d01, d02, d12) <= 3:
+                continue
+            # offender = the corner farthest from BOTH its mates
+            far = [d01 + d02, d01 + d12, d02 + d12]
+            o = int(np.argmax(far))
+            mates = [i for i in range(3) if i != o]
+            blend: dict = {}
+            for i in mates:
+                for b, w in sets[i].items():
+                    blend[b] = blend.get(b, 0.0) + w
+            top = sorted(blend.items(), key=lambda kv: -kv[1])[:max_weights]
+            total = sum(w for _, w in top) or 1.0
+            fixes[corner_vert[cs[o]]] = [(b, w / total) for b, w in top]
+        if not fixes:
+            break
+        n_fixed = 0
+        for k in range(len(pts)):
+            if corner_vert[k] in fixes:
+                out[k] = fixes[corner_vert[k]]
+                n_fixed += 1
+        print(f"  triangle coherence: re-bound {len(fixes)} verts "
+              f"({n_fixed} corners)")
     return out
 
 
