@@ -1,4 +1,5 @@
-﻿using HSDRaw.Common;
+﻿using HSDRaw;
+using HSDRaw.Common;
 using HSDRaw.MEX;
 using HSDRaw.MEX.Stages;
 using mexLib.Attributes;
@@ -96,6 +97,17 @@ namespace mexLib.Types
         [Browsable(false)]
         public ObservableCollection<MexItem> Items { get; set; } = new ObservableCollection<MexItem>();
 
+        // Embedded map GOBJ function table (classic MexTK/stage.yml packages
+        // ship the array itself instead of a pointer into the stage dat).
+        // When non-empty, ToMxDt writes the array as a reference and ignores
+        // MapDescPointer. Older stage.json files simply lack this field.
+        [Browsable(false)]
+        public ObservableCollection<MexMapGOBJ> MapGOBJs { get; set; } = new ObservableCollection<MexMapGOBJ>();
+
+        // Embedded moving collision point table (same classic-package source).
+        [Browsable(false)]
+        public ObservableCollection<MexMovingCollision> MovingCollisions { get; set; } = new ObservableCollection<MexMovingCollision>();
+
         [Browsable(false)]
         public MexPlaylist Playlist { get; set; } = new MexPlaylist();
 
@@ -157,7 +169,48 @@ namespace mexLib.Types
                 OnUnknown4 = OnUnknown4,
                 UnknownValue = UnknownValue,
             };
-            stage._s.SetInt32(44, (int)MovingCollisionPointer);
+
+            // Classic packages carry the map GOBJ table itself; embed it as a
+            // real array reference instead of a raw pointer.
+            if (MapGOBJs.Count > 0)
+            {
+                HSDArrayAccessor<MEX_MapGOBJFunctions> gobjs = new();
+                for (int i = 0; i < MapGOBJs.Count; i++)
+                {
+                    MexMapGOBJ g = MapGOBJs[i];
+                    gobjs.Set(i, new MEX_MapGOBJFunctions()
+                    {
+                        OnCreation = g.OnCreation,
+                        OnDeletion = g.OnDeletion,
+                        OnFrame = g.OnFrame,
+                        OnUnk = g.OnUnk,
+                        Bitflags = g.Bitflags,
+                    });
+                }
+                stage.GOBJFunctions = gobjs;
+            }
+
+            if (MovingCollisions.Count > 0)
+            {
+                HSDArrayAccessor<MEX_MovingCollisionPoint> points = new();
+                for (int i = 0; i < MovingCollisions.Count; i++)
+                {
+                    MexMovingCollision m = MovingCollisions[i];
+                    points.Set(i, new MEX_MovingCollisionPoint()
+                    {
+                        LineID = m.LineID,
+                        GOBJID = m.GobjID,
+                        Unknown = m.Unknown,
+                    });
+                }
+                stage.MovingCollisionPoint = points;
+                stage.MovingCollisionPointCount = MovingCollisions.Count;
+            }
+            else
+            {
+                stage._s.SetInt32(44, (int)MovingCollisionPointer);
+            }
+
             gen.Data.StageFunctions.Set(index, stage);
         }
         /// <summary>
@@ -258,7 +311,30 @@ namespace mexLib.Types
             }
         }
         /// <summary>
-        /// 
+        /// One entry of an embedded map GOBJ function table (classic
+        /// MexTK-package source; addresses point into the stage dat's code).
+        /// </summary>
+        public class MexMapGOBJ
+        {
+            public uint OnCreation { get; set; }
+            public uint OnDeletion { get; set; }
+            public uint OnFrame { get; set; }
+            public uint OnUnk { get; set; }
+            public uint Bitflags { get; set; }
+        }
+
+        /// <summary>
+        /// One entry of an embedded moving collision point table.
+        /// </summary>
+        public class MexMovingCollision
+        {
+            public short LineID { get; set; }
+            public short GobjID { get; set; }
+            public short Unknown { get; set; }
+        }
+
+        /// <summary>
+        ///
         /// </summary>
         public class StagePackOptions
         {
