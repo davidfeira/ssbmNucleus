@@ -1177,6 +1177,203 @@ def part_deform(foreign: ForeignMesh, vert_parts, src_bone_parts, src_bone_pos,
     return True
 
 
+def _part_chain(part, bone_parts, parents, positions):
+    """Main bone chain of a body part: root (the part bone whose parent is
+    outside the part) -> deepest descendant, as an ordered list of bone ids."""
+    members = {b for b, p in bone_parts.items() if p == part and b in positions}
+    if not members:
+        return []
+    roots = [b for b in members if parents.get(b) not in members]
+    if not roots:
+        roots = [min(members)]
+    kids: dict = {}
+    for b in members:
+        par = parents.get(b)
+        if par in members:
+            kids.setdefault(par, []).append(b)
+
+    best = []
+    for root in roots:
+        # DFS for the longest cumulative-length path
+        stack = [(root, [root], 0.0)]
+        local_best = ([root], 0.0)
+        while stack:
+            cur, path, dist = stack.pop()
+            if dist >= local_best[1]:
+                local_best = (path, dist)
+            for c in kids.get(cur, []):
+                seg = float(np.linalg.norm(np.asarray(positions[c])
+                                           - np.asarray(positions[cur])))
+                stack.append((c, path + [c], dist + seg))
+        if local_best[1] >= (best[1] if best else -1):
+            best = local_best
+    return best[0]
+
+
+def _chain_param(chain, positions):
+    """Cumulative-length fraction (0..1) at every chain joint + total len."""
+    pos = [np.asarray(positions[b]) for b in chain]
+    seg = [0.0]
+    for i in range(1, len(pos)):
+        seg.append(seg[-1] + float(np.linalg.norm(pos[i] - pos[i - 1])))
+    total = seg[-1] or 1.0
+    return [s / total for s in seg], total, pos
+
+
+def _chain_point(t, fracs, pos):
+    """Interpolated point + tangent on a chain polyline at fraction t."""
+    t = min(max(t, 0.0), 1.0)
+    for i in range(1, len(fracs)):
+        if t <= fracs[i] or i == len(fracs) - 1:
+            f0, f1 = fracs[i - 1], fracs[i]
+            a = 0.0 if f1 <= f0 else (t - f0) / (f1 - f0)
+            p = pos[i - 1] + a * (pos[i] - pos[i - 1])
+            d = pos[i] - pos[i - 1]
+            n = np.linalg.norm(d)
+            if n < 1e-9:
+                d = pos[-1] - pos[0]
+                n = max(np.linalg.norm(d), 1e-9)
+            return p, d / n
+    return pos[-1], np.array([0, 1, 0.0])
+
+
+def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
+                   tgt_parts, tgt_parents, tgt_pos,
+                   src_geom=None, tgt_geom=None, log=print):
+    """Skeleton-correspondence deform (replaces the rigid 8-part version):
+    every SOURCE bone maps to the point at the same length-fraction along its
+    part's TARGET chain, with an anisotropic affine — longitudinal scale =
+    chain length ratio, radial scale = part mesh-thickness ratio, rotation =
+    chain tangent alignment. Verts blend their bones' affines BY THEIR SOURCE
+    SKIN WEIGHTS, so shoulders/hips deform like skin instead of tearing at
+    part boundaries. Both skeletons in their own wait space."""
+    def radius(geom, fracs, pos):
+        if geom is None or len(geom) < 12:
+            return None
+        arr = np.asarray(geom)
+        # median distance from the chain polyline (sampled at joints)
+        d = np.min(np.linalg.norm(arr[:, None, :] - np.asarray(pos)[None, :, :],
+                                  axis=2), axis=1)
+        return float(np.median(d))
+
+    parts = [p for p in set(src_parts.values())
+             if p not in (None, "util")]
+    bone_affine: dict = {}
+    part_params: dict = {}
+    info = []
+    for part in parts:
+        tgt_part = part
+        if part not in set(tgt_parts.values()):
+            if part != "cloth":
+                continue
+            tgt_part = "torso"
+        if part == "cloth" and "cloth" not in set(tgt_parts.values()):
+            tgt_part = "torso"
+        s_chain = _part_chain(part, src_parts, src_parents, src_pos)
+        t_chain = _part_chain(tgt_part, tgt_parts, tgt_parents, tgt_pos)
+        if len(s_chain) < 2 or len(t_chain) < 2:
+            continue
+        s_fr, s_len, s_cpos = _chain_param(s_chain, src_pos)
+        t_fr, t_len, t_cpos = _chain_param(t_chain, tgt_pos)
+
+        def trimmed_rms(geom):
+            # 3D spread with the farthest 15% dropped (swords/sleeves/props):
+            # the ONE robust size signal — axis-projected spans and chain
+            # radii both misfire on jackets, capes and structurally
+            # different skeletons (tried; produced nub arms / balloon chests)
+            if geom is None or len(geom) < 12:
+                return None
+            arr = np.asarray(geom)
+            c = arr.mean(axis=0)
+            d2 = ((arr - c) ** 2).sum(axis=1)
+            keep = d2 <= np.percentile(d2, 85)
+            return float(np.sqrt(d2[keep].mean()))
+
+        s_sp = trimmed_rms((src_geom or {}).get(part))
+        t_sp = trimmed_rms((tgt_geom or {}).get(tgt_part))
+        if s_sp and t_sp and s_sp > 1e-6:
+            s_long = t_sp / s_sp
+        else:
+            s_long = t_len / s_len if s_len > 1e-6 else 1.0
+        s_rad = s_long          # uniform: anisotropy measurements unreliable
+        if part == "head":
+            s_long = s_rad = float(np.clip(s_long, 0.95, 1.1))
+        s_long = float(np.clip(s_long, 0.5, 2.0))
+        s_rad = float(np.clip(s_rad, 0.5, 2.0))
+        info.append(f"{part}:L{s_long:.2f}/R{s_rad:.2f}")
+
+        # ONE anisotropic affine per part (per-bone anchors scrambled regions
+        # whose chains bend differently): rotate the part axis onto the
+        # target's, scale length and thickness independently, pivot limbs at
+        # their root joint and core parts at the chain midpoint
+        src_dir = np.asarray(s_cpos[-1]) - np.asarray(s_cpos[0])
+        tgt_dir = np.asarray(t_cpos[-1]) - np.asarray(t_cpos[0])
+        if part in ("l_arm", "r_arm", "l_leg", "r_leg", "cloth"):
+            pivot_s, pivot_t = np.asarray(s_cpos[0]), np.asarray(t_cpos[0])
+        else:
+            pivot_s = np.asarray(s_cpos).mean(axis=0)
+            pivot_t = np.asarray(t_cpos).mean(axis=0)
+        part_params[part] = [s_long, s_rad, src_dir, tgt_dir, pivot_s, pivot_t]
+
+    if not part_params:
+        return False
+    # l/r symmetry: wait poses bend limbs asymmetrically; anatomy doesn't
+    for a, b in (("l_arm", "r_arm"), ("l_leg", "r_leg")):
+        if a in part_params and b in part_params:
+            ml = (part_params[a][0] + part_params[b][0]) / 2
+            mr = (part_params[a][1] + part_params[b][1]) / 2
+            part_params[a][0] = part_params[b][0] = ml
+            part_params[a][1] = part_params[b][1] = mr
+
+    for part, (s_long, s_rad, src_dir, tgt_dir, pivot_s, pivot_t) \
+            in part_params.items():
+        R = _rot_between_vec(src_dir, tgt_dir)
+        u = src_dir / max(np.linalg.norm(src_dir), 1e-9)
+        S = s_long * np.outer(u, u) + s_rad * (np.eye(3) - np.outer(u, u))
+        bone_affine[part] = (R @ S, pivot_s, pivot_t)
+    fb = bone_affine.get("torso") or next(iter(bone_affine.values()))
+
+    pts = foreign.tri_pos.reshape(-1, 3)
+    wpp = [w for tw in foreign.tri_src_w for w in tw]
+    out = np.empty_like(pts)
+    part_w_cache: dict = {}
+    for k in range(len(pts)):
+        # blend PART affines by the vert's source-weight part distribution —
+        # shoulder/hip verts carry mixed weights and deform like skin instead
+        # of tearing at a part boundary
+        acc = np.zeros(3)
+        tot = 0.0
+        for b, w in wpp[k]:
+            p = src_parts.get(b)
+            aff = bone_affine.get(p)
+            if aff is None:
+                continue
+            M, sp, tp = aff
+            acc += w * (M @ (pts[k] - sp) + tp)
+            tot += w
+        if tot <= 1e-9:
+            M, sp, tp = fb
+            out[k] = M @ (pts[k] - sp) + tp
+        else:
+            out[k] = acc / tot
+    foreign.tri_pos = out.reshape(foreign.tri_pos.shape)
+    log("segment deform: " + "  ".join(sorted(info)))
+    return True
+
+
+def _rot_between_vec(u, v):
+    u = u / max(np.linalg.norm(u), 1e-9)
+    v = v / max(np.linalg.norm(v), 1e-9)
+    c = float(np.dot(u, v))
+    ax = np.cross(u, v)
+    s = float(np.linalg.norm(ax))
+    if s < 1e-8:
+        return np.eye(3) if c > 0 else -np.eye(3)
+    ax = ax / s
+    K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
+    return np.eye(3) + s * K + (1 - c) * (K @ K)
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
@@ -1331,9 +1528,14 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                 if p and p != "util":
                     tgt_geom.setdefault(p, []).append(target_pts[s_corner])
                 s_corner += 1
-        deformed = part_deform(foreign, vert_parts, src_parts, src_bone_pos,
-                               tgt_parts, pose_world,
-                               src_geom=src_geom, tgt_geom=tgt_geom, log=log)
+        src_parents_map = {b.id: b.parent for b in foreign.src_smd.bones
+                           if b.name.startswith("JOBJ_")}
+        tgt_parents_map = {b.id: b.parent for b in rigkit.bones
+                           if b.name.startswith("JOBJ_")}
+        deformed = segment_deform(foreign, src_parts, src_parents_map,
+                                  src_bone_pos, tgt_parts, tgt_parents_map,
+                                  pose_world, src_geom=src_geom,
+                                  tgt_geom=tgt_geom, log=log)
         if deformed:
             # residual floor snap (legs already land on the target's leg
             # anchors; this only closes small global error)

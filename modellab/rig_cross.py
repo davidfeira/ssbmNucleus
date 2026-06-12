@@ -25,6 +25,7 @@ VANILLA_ISO = r"C:\Users\david\projects\melee\working\melee-vanilla-v1.02-workin
 src_slug = sys.argv[1]
 src_code = sys.argv[2]
 tag = sys.argv[3] if len(sys.argv) > 3 else "v1"
+rig_only = "--rig-only" in sys.argv     # stop after the SMD (fast QA loop)
 
 
 def joint_symbol(dat_path):
@@ -59,6 +60,10 @@ rig_mesh(str(RK / "fox" / "fox_vanilla.smd"),
          char_code="PlFx", src_char_code=src_code,
          target_pose=str(RK / "fox" / "fox_wait1.json"),
          src_pose=str(wait))
+
+if rig_only:
+    print(f"rig-only: wrote {out_smd}")
+    sys.exit(0)
 
 # 3. import over the vanilla Fox costume (skeleton preserved)
 base = FILES / "PlFxNr.dat"
