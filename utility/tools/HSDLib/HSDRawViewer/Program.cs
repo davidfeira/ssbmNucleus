@@ -1153,6 +1153,22 @@ namespace HSDRawViewer
                         try
                         {
                             var headJobj = renderJObj.RootJObj?.GetJObjAtIndex(headBoneIndex);
+                            if (headJobj == null && renderJObj.RootJObj != null)
+                            {
+                                // swapped skeletons can be truncated; the
+                                // topmost bone is a fair head approximation
+                                float bestY = float.MinValue;
+                                foreach (var j in renderJObj.RootJObj.Enumerate)
+                                {
+                                    var p = j.WorldTransform.ExtractTranslation();
+                                    if (p.Y > bestY)
+                                    {
+                                        bestY = p.Y;
+                                        headJobj = j;
+                                    }
+                                }
+                                Console.WriteLine($"Head bone {headBoneIndex} not found; using topmost bone (y={bestY:F1})");
+                            }
                             if (headJobj == null)
                             {
                                 Console.WriteLine($"Head bone {headBoneIndex} not found in JOBJ tree");

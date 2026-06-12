@@ -67,9 +67,25 @@ def _dat_textures(dat_path):
     return out
 
 
+def _structure_corr(a, b):
+    """Pearson correlation of two textures' downsampled grayscales -- a
+    recolor keeps the image's spatial structure (hue moves, luminance
+    pattern stays put), a different model's art does not."""
+    ga = np.asarray(Image.fromarray(a).convert('L').resize((16, 16), Image.BOX),
+                    dtype=np.float64).ravel()
+    gb = np.asarray(Image.fromarray(b).convert('L').resize((16, 16), Image.BOX),
+                    dtype=np.float64).ravel()
+    sa, sb = ga.std(), gb.std()
+    if sa < 1e-6 or sb < 1e-6:
+        return None    # flat texture, no structure to compare
+    return float(((ga - ga.mean()) * (gb - gb.mean())).mean() / (sa * sb))
+
+
 def texture_pixel_pairs(vanilla_dat_path, modded_dat_path):
     """Aligned (src_px, dst_px) Nx3 float arrays from two costume DATs, or
-    None if the texture lists do not line up (different model)."""
+    None if this is a different model: texture lists that don't line up, OR
+    same-shaped textures whose CONTENT doesn't correlate (model imports that
+    reuse the vanilla texture dimensions)."""
     try:
         van = _dat_textures(vanilla_dat_path)
         mod = _dat_textures(modded_dat_path)
@@ -81,17 +97,25 @@ def texture_pixel_pairs(vanilla_dat_path, modded_dat_path):
     n = min(len(van), len(mod))
     matched = 0
     src, dst = [], []
+    corrs = []
     for i in range(n):
         a, b = van[i], mod[i]
         if a is None or b is None or a.shape != b.shape:
             continue
         matched += 1
+        c = _structure_corr(a, b)
+        if c is not None:
+            corrs.append(c)
         op = (a[..., 3] > 128) & (b[..., 3] > 128)
         src.append(a[op][:, :3].astype(np.float64))
         dst.append(b[op][:, :3].astype(np.float64))
     # a recolor keeps the texture list; lots of shape mismatches mean a
     # different model and index-pairing would produce garbage transforms
     if matched < max(n, 1) * 0.7:
+        return None
+    if corrs and float(np.median(corrs)) < 0.3:
+        logger.info(f"stock_gen: textures align but content does not "
+                    f"(median corr {np.median(corrs):.2f}) -> model import")
         return None
     if not src:
         return None
@@ -441,40 +465,53 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
                 return int(xs[s]), int(xs[e])
         return None
 
-    # top of the head: first row whose central run contains the head column
-    y_top = None
-    for y in range(H):
-        if run_at(y, hx) is not None:
-            y_top = y
+    # start AT the bone row and walk both ways. Scanning from the image top
+    # used to latch onto thin protrusions (Pichu-style ears/antennae), die at
+    # the first gap, and emit a sliver icon.
+    start = None
+    for dy in range(0, H):
+        for y in (int(head_y) - dy, int(head_y) + dy):
+            if 0 <= y < H and run_at(y, hx) is not None:
+                start = y
+                break
+        if start is not None:
             break
-    if y_top is None:
+    if start is None:
         return None
 
-    # walk down collecting the head run (arms are collapsed in the head-shot
-    # render, so the run is head -> neck -> torso). Heads widen GRADUALLY;
-    # a sudden width jump means another part merged into the row (a tail or
-    # prop behind the model at the 3/4 angle) -- clip such rows to a window
-    # around the tracked anchor so the merge can't hijack the profile.
-    profile = []   # (y, x0, x1)
-    anchor = hx
-    misses = 0
-    prev_w = None
-    for y in range(y_top, H):
-        r = run_at(y, anchor)
-        if r is None:
-            misses += 1
-            if misses > 2:
-                break
-            continue
+    def walk(y_from, step, anchor):
+        """Collect (y, x0, x1) rows from y_from in direction step. Heads
+        widen GRADUALLY; a sudden width jump means another part merged into
+        the row (a tail or prop behind the model at the 3/4 angle) -- clip
+        such rows to a window around the tracked anchor."""
+        out = []
         misses = 0
-        w = r[1] - r[0] + 1
-        if prev_w is not None and prev_w >= 6 and w > max(prev_w * 1.5, prev_w + 8):
-            half = int(prev_w * 1.3 / 2) + 1
-            r = (max(r[0], anchor - half), min(r[1], anchor + half))
+        prev_w = None
+        y = y_from
+        while 0 <= y < H:
+            r = run_at(y, anchor)
+            if r is None:
+                misses += 1
+                if misses > 2:
+                    break
+                y += step
+                continue
+            misses = 0
             w = r[1] - r[0] + 1
-        profile.append((y, r[0], r[1]))
-        anchor = (r[0] + r[1]) // 2
-        prev_w = w
+            if prev_w is not None and prev_w >= 6 and w > max(prev_w * 1.5, prev_w + 8):
+                half = int(prev_w * 1.3 / 2) + 1
+                r = (max(r[0], anchor - half), min(r[1], anchor + half))
+                w = r[1] - r[0] + 1
+            out.append((y, r[0], r[1]))
+            anchor = (r[0] + r[1]) // 2
+            prev_w = w
+            y += step
+        return out
+
+    start_run = run_at(start, hx)
+    up = walk(start - 1, -1, (start_run[0] + start_run[1]) // 2)
+    down = walk(start, +1, hx)
+    profile = up[::-1] + down   # ordered top -> bottom
 
     # cut at the neck: either a hard width pinch below the head's widest row,
     # or the dip-then-regrowth where the torso/shoulders widen again
@@ -499,6 +536,7 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
     if not profile:
         return None
     rows = {y: (x0, x1) for y, x0, x1 in profile}
+    y_top = profile[0][0]
     y_end = profile[-1][0]
     x_left = min(r[0] for r in rows.values())
     x_right = max(r[1] for r in rows.values())

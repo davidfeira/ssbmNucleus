@@ -120,6 +120,11 @@ CHARACTER_HEAD_BONES = {
     'Roy': 62,
     'Falco': 39,
     'Dr. Mario': 24,
+    # detect_character() name variants (it says 'C. Falcon'/'DK', the asset
+    # folders agree) -- missing aliases silently disabled head shots
+    'C. Falcon': 39,
+    'DK': 44,
+    'Young Link (Girl)': 89,
 }
 
 # RightArm/LeftArm (shoulder) JOBJ indexes per character, from the vanilla
@@ -153,6 +158,9 @@ CHARACTER_ARM_BONES = {
     'Roy': (73, 31),
     'Falco': (50, 24),
     'Dr. Mario': (32, 9),
+    'C. Falcon': (46, 24),
+    'DK': (52, 30),
+    'Young Link (Girl)': (101, 73),
 }
 
 # Characters that use scene mode (only YML, no .anim file)
