@@ -68,18 +68,25 @@ export default function PoseSkinSelectorModal({
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [results, setResults] = useState(null)
 
-  // Fetch skins for this character
+  // Fetch skins for this character. Custom characters share poses between
+  // their bundled costumes and added skins, so offer both lists.
   const fetchSkins = useCallback(async () => {
     if (!character) return
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/storage/costumes?character=${encodeURIComponent(character)}`)
-      const data = await response.json()
-      if (data.success) {
-        // Filter to only this character's skins
-        const characterSkins = data.costumes.filter(c => c.character === character)
-        setSkins(characterSkins)
+      const keys = character.startsWith('custom_characters/')
+        ? [character.replace(/\/(skins|costumes)$/, '/costumes'),
+           character.replace(/\/(skins|costumes)$/, '/skins')]
+        : [character]
+      const all = []
+      for (const key of keys) {
+        const response = await fetch(`${API_URL}/storage/costumes?character=${encodeURIComponent(key)}`)
+        const data = await response.json()
+        if (data.success) {
+          all.push(...data.costumes.filter(c => c.character === key))
+        }
       }
+      setSkins(all)
     } catch (err) {
       console.error('[PoseSkinSelector] Fetch skins error:', err)
     } finally {
@@ -134,11 +141,14 @@ export default function PoseSkinSelectorModal({
     for (let i = 0; i < skinList.length; i++) {
       setProgress({ current: i + 1, total: skinList.length })
       try {
+        // Custom characters mix two skin containers (bundled costumes +
+        // added skins) — address each skin under its own character key.
+        const skinChar = skins.find(s => s.folder === skinList[i])?.character || character
         const response = await fetch(`${API_URL}/storage/poses/batch-generate-csp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            character,
+            character: skinChar,
             poseName,
             skinIds: [skinList[i]],
             hdResolution: '4x'

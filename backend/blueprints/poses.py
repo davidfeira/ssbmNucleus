@@ -6,6 +6,7 @@ Handles saving, listing, deleting poses and batch CSP generation using poses.
 
 import os
 import re
+import json
 import time
 import shutil
 import zipfile
@@ -18,12 +19,80 @@ from flask import Blueprint, request, jsonify, send_file
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR
 from core.constants import CHAR_PREFIXES
 from core.costume_files import find_extracted_costume_archive
-from core.metadata import load_metadata, save_metadata
+from core.metadata import load_metadata, save_metadata, get_char_data, custom_character_slug
 from generate_csp import generate_single_csp_internal, apply_character_specific_layers
 
 logger = logging.getLogger(__name__)
 
 poses_bp = Blueprint('poses', __name__)
+
+
+def _pose_character_key(character):
+    """Directory key for a character's poses. The two custom-character pseudo
+    keys ('custom_characters/<slug>/skins' and '.../costumes') share ONE
+    folder so a pose made on a bundled costume serves the added skins too."""
+    slug = custom_character_slug(character)
+    return f'custom_characters/{slug}' if slug else character
+
+
+def _poses_dir(character):
+    return VANILLA_ASSETS_DIR / "custom_poses" / _pose_character_key(character)
+
+
+def _character_aj_file(character):
+    """AJ archive for pose rendering: vanilla assets for canonical characters,
+    the fighter.zip animation archive (cached) for custom characters."""
+    slug = custom_character_slug(character)
+    if slug:
+        from blueprints.viewer import extract_custom_character_aj
+        return extract_custom_character_aj(slug)
+    char_prefix = CHAR_PREFIXES.get(character)
+    if not char_prefix:
+        return None
+    return VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+
+
+def _custom_base_costume_dat(slug, temp_dir):
+    """Extract a custom character's first bundled costume DAT (for pose
+    thumbnails). Prefers the materialized costumes/<stem>.zip, falls back to
+    the inner costume zip of fighter.zip."""
+    char_dir = STORAGE_PATH / 'custom_characters' / slug
+    try:
+        with open(char_dir / 'fighter.json', 'r', encoding='utf-8') as f:
+            costumes = json.load(f).get('costumes', [])
+    except Exception:
+        return None
+
+    def _dat_from_zip(zf):
+        for n in zf.namelist():
+            if n.lower().endswith(('.dat', '.usd')) and not n.endswith('/'):
+                out = Path(temp_dir) / Path(n).name
+                out.write_bytes(zf.read(n))
+                return out
+        return None
+
+    for costume in costumes:
+        stem = Path((costume.get('file') or {}).get('fileName') or '').stem
+        if not stem:
+            continue
+        zip_path = char_dir / 'costumes' / f'{stem}.zip'
+        if zip_path.exists():
+            with zipfile.ZipFile(zip_path) as zf:
+                dat = _dat_from_zip(zf)
+                if dat:
+                    return dat
+        fighter_zip = char_dir / 'fighter.zip'
+        if fighter_zip.exists():
+            with zipfile.ZipFile(fighter_zip) as outer:
+                inner_name = next((n for n in outer.namelist()
+                                   if n.split('/')[-1].lower() == f'{stem}.zip'.lower()), None)
+                if inner_name:
+                    import io
+                    with zipfile.ZipFile(io.BytesIO(outer.read(inner_name))) as zf:
+                        dat = _dat_from_zip(zf)
+                        if dat:
+                            return dat
+    return None
 
 
 @poses_bp.route('/api/mex/storage/poses/save', methods=['POST'])
@@ -54,7 +123,7 @@ def save_pose():
             }), 400
 
         # Create poses directory if needed
-        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        poses_dir = _poses_dir(character)
         poses_dir.mkdir(parents=True, exist_ok=True)
 
         # Build YAML content
@@ -86,39 +155,51 @@ camera:
 
         logger.info(f"[OK] Saved pose '{safe_name}' for {character} at {pose_path}")
 
-        # Generate thumbnail using vanilla Nr costume
+        # Generate thumbnail using the character's base costume
         thumbnail_path = None
+        temp_dir = None
         try:
-            char_prefix = CHAR_PREFIXES.get(character)
-            if char_prefix:
-                costume_code = f"Pl{char_prefix}Nr"
-                vanilla_dat = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
-                # AJ file contains animations - needed for loading animation by symbol
-                aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
+            slug = custom_character_slug(character)
+            base_dat = None
+            aj_file = None
+            if slug:
+                temp_dir = tempfile.mkdtemp(prefix='pose_thumb_')
+                base_dat = _custom_base_costume_dat(slug, temp_dir)
+                aj_file = _character_aj_file(character)
+            else:
+                char_prefix = CHAR_PREFIXES.get(character)
+                if char_prefix:
+                    costume_code = f"Pl{char_prefix}Nr"
+                    base_dat = VANILLA_ASSETS_DIR / character / costume_code / f"{costume_code}.dat"
+                    # AJ file contains animations - needed for loading animation by symbol
+                    aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
 
-                if vanilla_dat.exists():
-                    logger.info(f"Generating pose thumbnail using {vanilla_dat}")
-                    logger.info(f"AJ file: {aj_file} (exists: {aj_file.exists()})")
+            if base_dat and Path(base_dat).exists():
+                logger.info(f"Generating pose thumbnail using {base_dat}")
+                logger.info(f"AJ file: {aj_file} (exists: {aj_file.exists() if aj_file else False})")
 
-                    # Generate CSP with the pose scene file and AJ file for animations
-                    csp_path = generate_single_csp_internal(
-                        str(vanilla_dat),
-                        character,
-                        str(pose_path),  # Use pose YAML as scene file
-                        str(aj_file) if aj_file.exists() else None,
-                        1  # 1x scale for thumbnails
-                    )
+                # Generate CSP with the pose scene file and AJ file for animations
+                csp_path = generate_single_csp_internal(
+                    str(base_dat),
+                    character,
+                    str(pose_path),  # Use pose YAML as scene file
+                    str(aj_file) if aj_file and Path(aj_file).exists() else None,
+                    1  # 1x scale for thumbnails
+                )
 
-                    if csp_path and Path(csp_path).exists():
-                        # Move CSP to thumbnail location
-                        thumbnail_path = poses_dir / f"{safe_name}_thumb.png"
-                        shutil.move(csp_path, thumbnail_path)
-                        logger.info(f"[OK] Generated pose thumbnail at {thumbnail_path}")
-                else:
-                    logger.warning(f"Vanilla DAT not found: {vanilla_dat}")
+                if csp_path and Path(csp_path).exists():
+                    # Move CSP to thumbnail location
+                    thumbnail_path = poses_dir / f"{safe_name}_thumb.png"
+                    shutil.move(csp_path, thumbnail_path)
+                    logger.info(f"[OK] Generated pose thumbnail at {thumbnail_path}")
+            else:
+                logger.warning(f"Base DAT not found for {character}")
         except Exception as thumb_err:
             logger.error(f"Failed to generate pose thumbnail: {thumb_err}", exc_info=True)
             # Continue without thumbnail - pose was still saved
+        finally:
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         return jsonify({
             'success': True,
@@ -134,11 +215,11 @@ camera:
         }), 500
 
 
-@poses_bp.route('/api/mex/storage/poses/list/<character>', methods=['GET'])
+@poses_bp.route('/api/mex/storage/poses/list/<path:character>', methods=['GET'])
 def list_poses(character):
     """List all saved poses for a character."""
     try:
-        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        poses_dir = _poses_dir(character)
 
         if not poses_dir.exists():
             return jsonify({
@@ -146,6 +227,7 @@ def list_poses(character):
                 'poses': []
             })
 
+        pose_key = _pose_character_key(character)
         poses = []
         for pose_file in poses_dir.glob("*.yml"):
             thumb_path = poses_dir / f"{pose_file.stem}_thumb.png"
@@ -153,7 +235,7 @@ def list_poses(character):
                 'name': pose_file.stem,
                 'path': str(pose_file),
                 'hasThumbnail': thumb_path.exists(),
-                'thumbnailUrl': f"/storage/poses/{character}/{pose_file.stem}_thumb.png" if thumb_path.exists() else None
+                'thumbnailUrl': f"/storage/poses/{pose_key}/{pose_file.stem}_thumb.png" if thumb_path.exists() else None
             })
 
         return jsonify({
@@ -168,11 +250,11 @@ def list_poses(character):
         }), 500
 
 
-@poses_bp.route('/storage/poses/<character>/<filename>')
+@poses_bp.route('/storage/poses/<path:character>/<filename>')
 def serve_pose_thumbnail(character, filename):
     """Serve pose thumbnail images."""
     try:
-        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        poses_dir = _poses_dir(character)
         full_path = poses_dir / filename
         logger.info(f"Serving pose thumbnail: {full_path}")
         logger.info(f"Directory exists: {poses_dir.exists()}, File exists: {full_path.exists()}")
@@ -201,7 +283,7 @@ def delete_pose():
                 'error': 'Missing character or poseName parameter'
             }), 400
 
-        poses_dir = VANILLA_ASSETS_DIR / "custom_poses" / character
+        poses_dir = _poses_dir(character)
         pose_path = poses_dir / f"{pose_name}.yml"
         thumb_path = poses_dir / f"{pose_name}_thumb.png"
 
@@ -263,22 +345,20 @@ def batch_generate_pose_csps():
             }), 400
 
         # Get pose file path
-        pose_path = VANILLA_ASSETS_DIR / "custom_poses" / character / f"{pose_name}.yml"
+        pose_path = _poses_dir(character) / f"{pose_name}.yml"
         if not pose_path.exists():
             return jsonify({
                 'success': False,
                 'error': f'Pose {pose_name} not found'
             }), 404
 
-        # Get AJ file path
-        char_prefix = CHAR_PREFIXES.get(character)
-        if not char_prefix:
+        # Get AJ file path (vanilla assets, or the custom character's archive)
+        aj_file = _character_aj_file(character)
+        if aj_file is None and not custom_character_slug(character):
             return jsonify({
                 'success': False,
                 'error': f'Unknown character: {character}'
             }), 400
-
-        aj_file = VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
 
         # Load metadata to find skin ZIPs
         metadata = load_metadata()
@@ -288,7 +368,7 @@ def batch_generate_pose_csps():
                 'error': 'Metadata file not found'
             }), 404
 
-        char_data = metadata.get('characters', {}).get(character, {})
+        char_data = get_char_data(metadata, character) or {}
         skins = char_data.get('skins', [])
 
         # Build skin lookup by ID
@@ -353,7 +433,7 @@ def batch_generate_pose_csps():
                         str(dat_file),
                         character,
                         str(pose_path),
-                        str(aj_file) if aj_file.exists() else None,
+                        str(aj_file) if aj_file and Path(aj_file).exists() else None,
                         gen_scale
                     )
 

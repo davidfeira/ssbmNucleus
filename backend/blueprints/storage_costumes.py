@@ -122,7 +122,11 @@ def list_storage_costumes():
 
         characters_data = metadata.get('characters', {})
         if character:
-            characters_data = {character: characters_data.get(character, {})}
+            if character in characters_data:
+                characters_data = {character: characters_data[character]}
+            else:
+                # custom-character pseudo keys (.../skins, .../costumes)
+                characters_data = {character: get_char_data(metadata, character) or {}}
 
         for char_name, char_data in characters_data.items():
             skins = char_data.get('skins', [])
@@ -156,7 +160,9 @@ def list_storage_costumes():
                         'character': char_name,
                         'name': f"{char_name} - {skin.get('color', 'Custom')}",
                         'folder': skin['id'],
-                        'costumeCode': skin['costume_code'],
+                        # custom-character skins have no costume_code; fall back
+                        # to the DAT stem so the UI still shows something useful
+                        'costumeCode': skin.get('costume_code') or Path(skin.get('dat_name', '')).stem,
                         'zipPath': str(zip_path.relative_to(PROJECT_ROOT)),
                         'cspUrl': f"/storage/{char_name}/{skin['id']}_csp.png" if skin.get('has_csp') else None,
                         'stockUrl': f"/storage/{char_name}/{skin['id']}_stc.png" if skin.get('has_stock') else None,

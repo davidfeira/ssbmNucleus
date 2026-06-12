@@ -851,7 +851,7 @@ def _body_band(region_map):
     live hint when present; maps that OPT OUT of live hints (single-purpose
     textures, e.g. Pikachu) still get a band computed ad hoc here — the
     opt-out is about op masks, but pad masks always need the body color."""
-    if _meta is None:
+    if _meta is None or region_map is None:
         return None, None
     if 'bodyBand' not in _meta:
         result = (None, None)

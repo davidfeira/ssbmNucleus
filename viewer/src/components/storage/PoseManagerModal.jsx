@@ -27,6 +27,12 @@ import { playSound } from '../../utils/sounds'
 export default function PoseManagerModal({
   show,
   character,
+  // Custom characters: `character` is a pseudo key
+  // ('custom_characters/<slug>/costumes'); pass their display name and the
+  // base costume id so the create-view viewer can load the model from the
+  // vault instead of a vanilla costume code.
+  displayName,
+  baseSkinId,
   onClose,
   onRefresh,
   onCostumesUpdated,
@@ -80,7 +86,7 @@ export default function PoseManagerModal({
               </button>
             )}
             <span className="pm-title-label">{isCreating ? 'Create Pose' : 'Poses'}</span>
-            <span className="pm-title-char">{character}</span>
+            <span className="pm-title-char">{displayName || character}</span>
           </div>
           <button className="pm-close-btn" onClick={onClose}>
             <CloseIcon />
@@ -96,7 +102,8 @@ export default function PoseManagerModal({
                   <EmbeddedModelViewer
                     ref={viewerRef}
                     character={character}
-                    costumeCode={getDefaultCostumeCode(character)}
+                    skinId={baseSkinId || undefined}
+                    costumeCode={baseSkinId ? undefined : getDefaultCostumeCode(character)}
                     onClose={onClose}
                     inline={true}
                     cspMode={true}
