@@ -561,7 +561,9 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     # the box width comes from the HEAD rows only -- broad shoulders/capes
     # below the bone otherwise dominate the square and shrink the head to a
     # sliver at icon size (they may hang off the box sides instead)
-    head_row_lim = head_y + 0.30 * max(1.0, head_y - y_top)
+    # absolute floor on the window: a crown bone AT the silhouette top makes
+    # the relative term ~0 and the "head" degenerates to the dome's tip
+    head_row_lim = head_y + max(0.30 * (head_y - y_top), 0.07 * bbox_h)
     head_rows = [r for y, r in rows.items() if y <= head_row_lim]
     if len(head_rows) >= 3:
         x_left = min(r[0] for r in head_rows)
@@ -569,6 +571,19 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     else:
         x_left = min(r[0] for r in rows.values())
         x_right = max(r[1] for r in rows.values())
+
+    # heads are roughly as tall as they are wide: when no neck pinch exists
+    # (hunched skeletons like Bowser walk straight into the body) cap the
+    # crop height at ~1.3x the head width. Wide-headed blob characters
+    # (Pikachu, Hello Kitty) have head_w ~ body width, so they keep their
+    # full figure; narrow heads on big bodies get clipped to the head.
+    head_w = x_right - x_left + 1
+    cap = int(y_top + 1.3 * head_w)
+    if y_end > cap:
+        y_end = cap
+        rows = {y: r for y, r in rows.items() if y <= y_end}
+        if not rows:
+            return None
 
     # mask everything outside the per-row head runs (arms, other islands)
     mask = np.zeros_like(op)
