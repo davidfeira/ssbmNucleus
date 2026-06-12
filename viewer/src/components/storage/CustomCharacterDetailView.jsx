@@ -825,6 +825,15 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                 </button>
               </div>
             )}
+
+            {character.has_fsm && (
+              <div
+                className="custom-char-fsm-badge"
+                title="This character ships Frame Speed Modifier data (fsm.txt) — custom move speeds are baked into the game when you build an ISO"
+              >
+                ⚡ FSM move speeds
+              </div>
+            )}
           </div>
 
           {bigBanner && (

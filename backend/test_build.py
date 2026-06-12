@@ -176,6 +176,15 @@ def _das_install_framework(files_dir, log=lambda m: None):
 
 def _export(mex, out_iso, progress_cb, log):
     Path(out_iso).parent.mkdir(parents=True, exist_ok=True)
+    # Bake Frame Speed Modifier data (fsm.txt) for installed custom
+    # characters into the project's main.dol before the ISO is assembled.
+    try:
+        from fsm_patcher import apply_project_fsm
+        fsm_count = apply_project_fsm(mex.project_path, CUSTOM_CHARACTERS_PATH)
+        if fsm_count:
+            log(f"FSM: baked {fsm_count} frame-speed entries into main.dol")
+    except Exception as e:
+        log(f"FSM patching skipped: {e}")
     log("Exporting the test ISO…")
     mex.export_iso(str(out_iso), progress_cb, 1.0, False, False)
     if not Path(out_iso).exists():

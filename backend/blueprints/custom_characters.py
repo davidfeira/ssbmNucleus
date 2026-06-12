@@ -587,6 +587,7 @@ def list_custom_characters():
         characters = metadata.get('custom_characters', [])
         for char in characters:
             char['icon_url'] = f"/api/mex/custom-characters/{char['slug']}/icon"
+            char['has_fsm'] = (CUSTOM_CHARACTERS_PATH / char['slug'] / 'fsm.txt').exists()
         return jsonify({'success': True, 'characters': characters})
     except Exception as e:
         logger.error(f"List custom characters error: {e}", exc_info=True)
@@ -603,6 +604,7 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
 
         fighter_json_path = None
         icon_path = None
+        fsm_path = None
 
         for name in names:
             basename = name.split('/')[-1].lower()
@@ -610,6 +612,8 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
                 fighter_json_path = name
             elif basename == 'icon.png':
                 icon_path = name
+            elif basename == 'fsm.txt':
+                fsm_path = name
 
         if not fighter_json_path:
             raise ValueError('ZIP must contain a fighter.json file')
@@ -630,6 +634,11 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
         if icon_path:
             (char_dir / 'css_icon.png').write_bytes(zf.read(icon_path))
             has_css_icon = True
+
+        # Frame Speed Modifier data (Crazy Hand fsm.txt format) — extracted
+        # to the vault folder so the export pipeline can bake it into the DOL.
+        if fsm_path:
+            (char_dir / 'fsm.txt').write_bytes(zf.read(fsm_path))
 
         costume_count = len(fighter_meta.get('costumes', []))
 

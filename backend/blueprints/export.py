@@ -183,6 +183,18 @@ def start_export():
 
                 # Note: Extras are patched immediately on import, not at export time
 
+                # Bake Frame Speed Modifier data (fsm.txt) for installed
+                # custom characters into the project's main.dol
+                try:
+                    from fsm_patcher import apply_project_fsm
+                    from blueprints.custom_characters import CUSTOM_CHARACTERS_PATH
+                    fsm_count = apply_project_fsm(current_project_path, CUSTOM_CHARACTERS_PATH)
+                    if fsm_count:
+                        logger.info(f"FSM: baked {fsm_count} frame-speed entries into main.dol")
+                        progress_callback(2, f"Baked {fsm_count} frame-speed (FSM) entries into the game")
+                except Exception as e:
+                    logger.warning(f"FSM patching skipped: {e}")
+
                 # Run the actual export
                 # When using texture pack mode, skip compression entirely
                 # because placeholders must stay at fixed 16x16 size
