@@ -105,11 +105,22 @@ namespace HSDRawViewer.Converters
             }
 
             IOManager.ExportScene(exp.Scene, filePath, exportsettings);
+
+            // sidecar so texture links survive formats that drop them (SMD)
+            if (exp.MaterialTextureMap.Count > 0)
+            {
+                System.IO.File.WriteAllText(filePath + ".textures.json",
+                    System.Text.Json.JsonSerializer.Serialize(exp.MaterialTextureMap,
+                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
         }
 
         // parameters
 
         public IOScene Scene { get; internal set; } = new IOScene();
+
+        // material name -> exported texture file (for sidecar emission)
+        public Dictionary<string, string> MaterialTextureMap { get; } = new();
         private readonly IOModel _model = new();
         private readonly ModelExportSettings _settings;
         private readonly Dictionary<HSD_JOBJ, IOBone> jobjToBone = new();
@@ -330,6 +341,16 @@ namespace HSDRawViewer.Converters
                                     }
                                 }
 
+                                // record material->texture pairing for formats that
+                                // can't carry it themselves (SMD); consumed by the
+                                // headless --model import sidecar
+                                if (dobj.Mobj.Textures.ImageData != null &&
+                                    dobj.Mobj.Textures.ImageData.ImageData != null &&
+                                    imageToName.ContainsKey(dobj.Mobj.Textures.ImageData.ImageData) &&
+                                    !MaterialTextureMap.ContainsKey(matName))
+                                {
+                                    MaterialTextureMap.Add(matName, imageToName[dobj.Mobj.Textures.ImageData.ImageData] + ".png");
+                                }
                             }
                             Scene.Materials.Add(m);
                         }

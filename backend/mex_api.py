@@ -69,6 +69,7 @@ from blueprints import (
 )
 from blueprints.skin_lab import skin_lab_bp
 from blueprints.skin_lab_ai import skin_lab_ai_bp
+from blueprints.model_lab import model_lab_bp
 from blueprints.stage_lab_ai import stage_lab_ai_bp
 from blueprints.ai_engine import ai_engine_bp
 
@@ -141,6 +142,7 @@ app.register_blueprint(skin_lab_bp)
 app.register_blueprint(skin_lab_ai_bp)
 app.register_blueprint(stage_lab_ai_bp)
 app.register_blueprint(ai_engine_bp)
+app.register_blueprint(model_lab_bp)
 
 # Warm the Ollama probe in the background: starting the bundled server +
 # reachability timeouts can take seconds, and without this the FIRST open of

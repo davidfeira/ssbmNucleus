@@ -163,6 +163,15 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Dump per-bone world transforms for an animation frame (the
+            // character's true in-game rest pose lives in Wait1 frame 0, NOT
+            // the bind pose — the model-lab rigger needs the difference)
+            if (args.Length >= 1 && args[0] == "--dump-pose")
+            {
+                RunDumpPose(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -1291,6 +1300,105 @@ namespace HSDRawViewer
         }
 
         /// <summary>
+        /// Dump per-bone world transforms (and positions) for an animation
+        /// frame as JSON. Usage:
+        ///   --dump-pose <costume.dat> <PlXxAJ.dat> <animSubstring> <out.json> [frame]
+        /// </summary>
+        static void RunDumpPose(string[] args)
+        {
+            if (args.Length < 5)
+            {
+                Console.WriteLine("Usage: --dump-pose <costume.dat> <aj.dat> <animSubstring> <out.json> [frame]");
+                Environment.Exit(1);
+                return;
+            }
+
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            string datFile = args[1];
+            string ajFile = args[2];
+            string animSub = args[3];
+            string outFile = args[4];
+            float frame = args.Length > 5 ? float.Parse(args[5]) : 0f;
+
+            var rawFile = new HSDRawFile(datFile);
+            HSD_JOBJ jobj = null;
+            foreach (var r in rawFile.Roots)
+            {
+                if (r.Name != null && r.Name.EndsWith("_joint") &&
+                    !r.Name.Contains("matanim") && r.Data is HSD_JOBJ j)
+                {
+                    jobj = j;
+                    break;
+                }
+            }
+            if (jobj == null)
+            {
+                Console.WriteLine("ERROR: no joint root found");
+                Environment.Exit(1);
+                return;
+            }
+
+            var root = new HSDRawViewer.Rendering.Models.LiveJObj(jobj);
+            string symbol = "(bind pose)";
+
+            // animSubstring "bind" = dump the bind pose itself (no animation).
+            // LiveJObj world transforms include bone scale + classical-scaling
+            // semantics that text formats (SMD) cannot carry.
+            if (animSub != "bind")
+            {
+                var aj = new HSDRaw.Tools.Melee.FighterAJManager(System.IO.File.ReadAllBytes(ajFile));
+                symbol = null;
+                foreach (var s in aj.GetAnimationSymbols())
+                {
+                    if (s != null && s.Contains(animSub))
+                    {
+                        symbol = s;
+                        break;
+                    }
+                }
+                if (symbol == null)
+                {
+                    Console.WriteLine($"ERROR: no animation symbol containing '{animSub}'");
+                    Environment.Exit(1);
+                    return;
+                }
+                Console.WriteLine($"Using animation: {symbol}");
+
+                var animFile = new HSDRawFile(aj.GetAnimationData(symbol));
+                var tree = animFile.Roots[0].Data as HSDRaw.Common.Animation.HSD_FigaTree;
+                if (tree == null)
+                {
+                    Console.WriteLine("ERROR: animation is not a FigaTree");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var jam = new HSDRawViewer.Rendering.JointAnimManager(tree);
+                jam.ApplyAnimation(root, frame);
+            }
+            root.RecalculateTransforms(null, true);
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"symbol\":\"" + symbol + "\",\"frame\":" + frame + ",\"bones\":[");
+            bool first = true;
+            for (int i = 0; i < root.JointCount; i++)
+            {
+                var j = root.GetJObjAtIndex(i);
+                var m = j.WorldTransform;
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append($"{{\"index\":{i},\"pos\":[{m.M41},{m.M42},{m.M43}],");
+                sb.Append($"\"matrix\":[{m.M11},{m.M12},{m.M13},{m.M14},");
+                sb.Append($"{m.M21},{m.M22},{m.M23},{m.M24},");
+                sb.Append($"{m.M31},{m.M32},{m.M33},{m.M34},");
+                sb.Append($"{m.M41},{m.M42},{m.M43},{m.M44}]}}");
+            }
+            sb.Append("]}");
+            System.IO.File.WriteAllText(outFile, sb.ToString());
+            Console.WriteLine($"SUCCESS: wrote {root.JointCount} bone transforms to {outFile}");
+        }
+
+        /// <summary>
         /// Run model export/import operations in headless mode.
         /// Usage:
         ///   Export: HSDRawViewer.exe --model export [dat_file] [jobj_path] [output.dae]
@@ -1397,6 +1505,32 @@ namespace HSDRawViewer
 
                     // Replace the JOBJ structure
                     navResult.jobj._s.SetFromStruct(newJobj._s);
+
+                    // Optional: neutralize the matanim root. The vanilla matanim
+                    // tree binds texture-swap anims against the vanilla DObj
+                    // layout; bound against a generated model's layout it crashes
+                    // the game at match load. The rename must mutate the PREFIX
+                    // while KEEPING the "_matanim_joint" suffix: m-ex's costume
+                    // table needs a symbol ending in the suffix (empty -> frame-1
+                    // hang) but the game's own lookup derives the name from the
+                    // joint symbol's prefix (miss -> no matanim -> healthy).
+                    // Removing the root entirely also hangs. All verified in-game.
+                    if (args.Length > 6 && args[6] == "--strip-matanim")
+                    {
+                        const string suffix = "_matanim_joint";
+                        foreach (var r in rawFile.Roots)
+                        {
+                            if (r.Name != null && r.Name.EndsWith(suffix) &&
+                                r.Name.Length > suffix.Length)
+                            {
+                                char[] chars = r.Name.ToCharArray();
+                                int i = r.Name.Length - suffix.Length - 1;
+                                chars[i] = chars[i] == 'X' ? 'Y' : 'X';
+                                r.Name = new string(chars);
+                                Console.WriteLine($"Neutralized matanim root -> {r.Name}");
+                            }
+                        }
+                    }
 
                     // Save modified DAT
                     rawFile.Save(outputDat);

@@ -24,6 +24,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import ContextMenu from './ContextMenu'
 import SkinCreator from '../SkinCreator'
 import AIStudioModal from './AIStudioModal'
+import AIModelStudioModal from './AIModelStudioModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseManagerModal from './PoseManagerModal'
 import ExtrasPageView from './ExtrasPageView'
@@ -56,6 +57,9 @@ export default function CharacterDetailView({
   const [aiStudioEnabled, setAiStudioEnabled] = useState(false)
   const [aiReady, setAiReady] = useState(true)
   const [showAiStudio, setShowAiStudio] = useState(false)
+  // AI Model Studio (prompt/mesh -> rigged costume) — gated by its own probe
+  const [modelStudioEnabled, setModelStudioEnabled] = useState(false)
+  const [showModelStudio, setShowModelStudio] = useState(false)
   useEffect(() => {
     fetch(`${API_URL}/skin-lab/ai-status`)
       .then((r) => r.json())
@@ -65,6 +69,10 @@ export default function CharacterDetailView({
           || localStorage.getItem('openrouter_api_key')))
       })
       .catch(() => setAiStudioEnabled(false))
+    fetch(`${API_URL}/model-lab/status`)
+      .then((r) => r.json())
+      .then((d) => setModelStudioEnabled(Boolean(d.enabled)))
+      .catch(() => setModelStudioEnabled(false))
   }, [API_URL])
 
   // Drag and drop (shared useDragAndDrop instance)
@@ -469,11 +477,19 @@ export default function CharacterDetailView({
         aiStudioEnabled={aiStudioEnabled}
         aiReady={aiReady}
         onOpenAiStudio={() => { closeSkinCreator(); setShowAiStudio(true) }}
+        modelStudioEnabled={modelStudioEnabled}
+        onOpenModelStudio={() => { closeSkinCreator(); setShowModelStudio(true) }}
       />
       <AIStudioModal
         show={showAiStudio}
         character={selectedCharacter}
         onClose={() => setShowAiStudio(false)}
+        onSaved={onRefresh}
+      />
+      <AIModelStudioModal
+        show={showModelStudio}
+        character={selectedCharacter}
+        onClose={() => setShowModelStudio(false)}
         onSaved={onRefresh}
       />
       <PoseManagerModal

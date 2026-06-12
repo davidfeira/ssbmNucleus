@@ -28,7 +28,10 @@ export default function SkinCreator({
   // AI Skin Studio option on the base-costume step (gated by /ai-status)
   aiStudioEnabled,
   aiReady,
-  onOpenAiStudio
+  onOpenAiStudio,
+  // AI Model Studio option (gated by /model-lab/status)
+  modelStudioEnabled,
+  onOpenModelStudio
 }) {
   // State
   const [skinCreatorStep, setSkinCreatorStep] = useState('select') // 'select' or 'edit'
@@ -719,6 +722,8 @@ export default function SkinCreator({
               aiStudioEnabled={aiStudioEnabled}
               aiReady={aiReady}
               onOpenAiStudio={onOpenAiStudio}
+              modelStudioEnabled={modelStudioEnabled}
+              onOpenModelStudio={onOpenModelStudio}
             />
           )}
 

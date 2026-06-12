@@ -236,7 +236,7 @@ namespace HSDRawViewer.Converters
         /// <param name="j1"></param>
         /// <param name="j2"></param>
         /// <returns></returns>
-        private static void ReplaceWithBonesFromFile(HSD_JOBJ j1, IOBone j2)
+        public static void ReplaceWithBonesFromFile(HSD_JOBJ j1, IOBone j2)
         {
             j2.Translation = new System.Numerics.Vector3(j1.TX, j1.TY, j1.TZ);
             j2.RotationEuler = new System.Numerics.Vector3(j1.RX, j1.RY, j1.RZ);
