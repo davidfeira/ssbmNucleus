@@ -1032,13 +1032,17 @@ def part_deform(foreign: ForeignMesh, vert_parts, src_bone_parts, src_bone_pos,
         return {p: np.array(v) for p, v in per.items()}
 
     def rms_spread(arr):
+        # trimmed: drop the farthest 15% so swords/sleeves/props don't
+        # inflate a part's apparent size
         c = arr.mean(axis=0)
-        return float(np.sqrt(((arr - c) ** 2).sum(axis=1).mean()))
+        d2 = ((arr - c) ** 2).sum(axis=1)
+        keep = d2 <= np.percentile(d2, 85)
+        return float(np.sqrt(d2[keep].mean()))
 
     src_a = anchors(src_bone_parts, src_bone_pos)
     tgt_a = anchors(tgt_bone_parts, tgt_bone_pos)
 
-    transforms: dict = {}
+    scales: dict = {}
     for part, sp in src_a.items():
         # cloth has no stable target home (dynamics are forbidden): ride torso
         tgt_part = part if part in tgt_a else None
@@ -1046,8 +1050,6 @@ def part_deform(foreign: ForeignMesh, vert_parts, src_bone_parts, src_bone_pos,
             tgt_part = "torso" if "cloth" not in tgt_a else "cloth"
         if tgt_part is None or tgt_part not in tgt_a:
             continue
-        tp = tgt_a[tgt_part]
-        sc, tc = sp.mean(axis=0), tp.mean(axis=0)
         # scale from MESH geometry spread (bone-chain lengths misjudge parts
         # whose skeletons differ structurally: fox's torso is 3 short bones
         # under a fat body, his head part includes long ear/antenna chains)
@@ -1058,24 +1060,120 @@ def part_deform(foreign: ForeignMesh, vert_parts, src_bone_parts, src_bone_pos,
             s_sp, t_sp = rms_spread(np.asarray(sg)), rms_spread(np.asarray(tg))
             if s_sp > 1e-6 and t_sp > 1e-6:
                 s = t_sp / s_sp
-        s = float(np.clip(s, 0.5, 2.0))
-        transforms[part] = (s, tc - s * sc)
+        if part == "head":
+            # keep the source's head size — a fox-proportioned (chibi) head
+            # reads as wrong on humanoid ports
+            s = float(np.clip(s, 0.95, 1.1))
+        scales[part] = float(np.clip(s, 0.5, 2.0))
+
+    # symmetrize limbs: l/r spreads differ by pose and held props, anatomy
+    # doesn't
+    for a, b in (("l_arm", "r_arm"), ("l_leg", "r_leg")):
+        if a in scales and b in scales:
+            m = (scales[a] + scales[b]) / 2
+            scales[a] = scales[b] = m
+
+    def rot_between(u, v):
+        """Minimal rotation matrix taking direction u to direction v."""
+        u = u / max(np.linalg.norm(u), 1e-9)
+        v = v / max(np.linalg.norm(v), 1e-9)
+        c = float(np.dot(u, v))
+        ax = np.cross(u, v)
+        s = float(np.linalg.norm(ax))
+        if s < 1e-8:
+            return np.eye(3) if c > 0 else -np.eye(3)
+        ax = ax / s
+        K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
+        return np.eye(3) + s * K + (1 - c) * (K @ K)
+
+    def root_tip(pts_arr, body_center):
+        d = np.linalg.norm(pts_arr - body_center, axis=1)
+        root = pts_arr[int(d.argmin())]
+        tip = pts_arr[int(np.linalg.norm(pts_arr - root, axis=1).argmax())]
+        return root, tip
+
+    src_center = (src_a["torso"].mean(axis=0) if "torso" in src_a
+                  else np.mean([a.mean(axis=0) for a in src_a.values()], axis=0))
+    tgt_center = (tgt_a["torso"].mean(axis=0) if "torso" in tgt_a
+                  else np.mean([a.mean(axis=0) for a in tgt_a.values()], axis=0))
+
+    # full per-part affine: p' = s·R·p + T. Limbs additionally ROTATE about
+    # their root so the geometry lies along the TARGET's limb axis — without
+    # this, a source whose wait pose holds the arms differently keeps its own
+    # arm direction and renders sticking out of the target's shoulders
+    LIMBS = {"l_arm", "r_arm", "l_leg", "r_leg"}
+    transforms: dict = {}
+    for part, s in scales.items():
+        tgt_part = part if part in tgt_a else ("torso" if part == "cloth" else part)
+        if part == "cloth" and "cloth" in tgt_a:
+            tgt_part = "cloth"
+        R = np.eye(3)
+        if part in LIMBS:
+            s_root, s_tip = root_tip(src_a[part], src_center)
+            t_root, t_tip = root_tip(tgt_a[tgt_part], tgt_center)
+            R = rot_between(s_tip - s_root, t_tip - t_root)
+            pivot_s, pivot_t = s_root, t_root
+        else:
+            pivot_s = src_a[part].mean(axis=0)
+            pivot_t = tgt_a[tgt_part].mean(axis=0)
+        T = pivot_t - s * (R @ pivot_s)
+        transforms[part] = (s, R, T)
 
     if not transforms:
         return False
     fallback = transforms.get("torso") or next(iter(transforms.values()))
 
+    def quat(R):
+        # rotation matrix -> quaternion (w, x, y, z)
+        tr = R[0, 0] + R[1, 1] + R[2, 2]
+        if tr > 0:
+            S = math.sqrt(tr + 1.0) * 2
+            return np.array([0.25 * S, (R[2, 1] - R[1, 2]) / S,
+                             (R[0, 2] - R[2, 0]) / S, (R[1, 0] - R[0, 1]) / S])
+        i = int(np.argmax([R[0, 0], R[1, 1], R[2, 2]]))
+        j, k = (i + 1) % 3, (i + 2) % 3
+        S = math.sqrt(max(1.0 + R[i, i] - R[j, j] - R[k, k], 1e-12)) * 2
+        q = np.zeros(4)
+        q[0] = (R[k, j] - R[j, k]) / S
+        q[1 + i] = 0.25 * S
+        q[1 + j] = (R[j, i] + R[i, j]) / S
+        q[1 + k] = (R[k, i] + R[i, k]) / S
+        return q
+
+    def quat_mat(q):
+        w, x, y, z = q
+        return np.array([
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ])
+
+    base_q = None
     pts = foreign.tri_pos.reshape(-1, 3)
-    field = np.zeros((len(pts), 4))
+    field = np.zeros((len(pts), 8))      # s, quat(4), T(3)
     for k in range(len(pts)):
-        s, t = transforms.get(vert_parts[k], fallback)
+        s, R, T = transforms.get(vert_parts[k], fallback)
+        q = quat(R)
+        if base_q is None:
+            base_q = q
+        if np.dot(q, base_q) < 0:        # hemisphere-align for blending
+            q = -q
         field[k, 0] = s
-        field[k, 1:] = t
-    field = _smooth_field(pts, field, iterations=5)
-    pts = pts * field[:, :1] + field[:, 1:]
-    foreign.tri_pos = pts.reshape(foreign.tri_pos.shape)
+        field[k, 1:5] = q
+        field[k, 5:] = T
+    # wide blend: shoulders/hips sit at part boundaries — a sharp jump
+    # between torso and a rotated/compressed limb pinches them
+    field = _smooth_field(pts, field, iterations=10)
+    out_pts = np.empty_like(pts)
+    for k in range(len(pts)):
+        q = field[k, 1:5]
+        n = np.linalg.norm(q)
+        R = quat_mat(q / n) if n > 1e-9 else np.eye(3)
+        out_pts[k] = field[k, 0] * (R @ pts[k]) + field[k, 5:]
+    foreign.tri_pos = out_pts.reshape(foreign.tri_pos.shape)
     log("part deform: " + "  ".join(
-        f"{p}×{s:.2f}" for p, (s, _) in sorted(transforms.items())))
+        f"{p}x{s:.2f}{'+rot' if not np.allclose(R_, np.eye(3)) else ''}"
+        for p, (s, R_, _) in sorted(transforms.items())))
     return True
 
 
