@@ -80,6 +80,12 @@ namespace MexCLI
                         return Commands.AudioCommands.SsmInfo(args);
                     case "ssm-to-wav":
                         return Commands.AudioCommands.SsmToWav(args);
+                    case "ssm-replace":
+                        return Commands.AudioCommands.SsmReplace(args);
+                    case "ssm-copy":
+                        return Commands.AudioCommands.SsmCopy(args);
+                    case "audio-to-hps":
+                        return Commands.AudioCommands.AudioToHps(args);
                     case "sem-resolve":
                         return Commands.AudioCommands.SemResolve(args);
                     case "remove-fighter":

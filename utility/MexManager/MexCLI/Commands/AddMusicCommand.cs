@@ -49,20 +49,33 @@ namespace MexCLI.Commands
                     return 1;
                 }
 
-                // reuse an existing track with the same name
+                // reuse an existing track only when BOTH the name and the
+                // audio content match — different songs that happen to share
+                // a name (e.g. two stages with a "Battle Theme") must not
+                // collide into one entry
+                byte[] newBytes = File.ReadAllBytes(hpsPath);
                 for (int i = 0; i < workspace.Project.Music.Count; i++)
                 {
-                    if (string.Equals(workspace.Project.Music[i].Name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(workspace.Project.Music[i].Name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string existingPath = workspace.GetFilePath("audio/" + workspace.Project.Music[i].FileName);
+                    if (!File.Exists(existingPath))
+                        continue;
+                    FileInfo info = new(existingPath);
+                    if (info.Length != newBytes.Length)
+                        continue;
+                    if (!File.ReadAllBytes(existingPath).AsSpan().SequenceEqual(newBytes))
+                        continue;
+
+                    Console.WriteLine(JsonSerializer.Serialize(new
                     {
-                        Console.WriteLine(JsonSerializer.Serialize(new
-                        {
-                            success = true,
-                            musicId = i,
-                            name = workspace.Project.Music[i].Name,
-                            existed = true,
-                        }, new JsonSerializerOptions { WriteIndented = true }));
-                        return 0;
-                    }
+                        success = true,
+                        musicId = i,
+                        name = workspace.Project.Music[i].Name,
+                        existed = true,
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                    return 0;
                 }
 
                 // unique file name within audio/

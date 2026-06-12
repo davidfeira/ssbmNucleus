@@ -94,7 +94,7 @@ def _dedupe_slug(slug):
 def _read_metadata():
     if not METADATA_FILE.exists():
         return {'characters': {}, 'stages': {}, 'custom_stages': [], 'custom_characters': []}
-    with open(METADATA_FILE, 'r') as f:
+    with open(METADATA_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
     if 'custom_characters' not in data:
         data['custom_characters'] = []
@@ -102,7 +102,7 @@ def _read_metadata():
 
 
 def _write_metadata(data):
-    with open(METADATA_FILE, 'w') as f:
+    with open(METADATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 
 
@@ -202,10 +202,10 @@ def _update_fighter_json_everywhere(char_dir, mutate):
     """Apply `mutate(fighter_dict)` to BOTH the storage fighter.json and the
     one embedded in fighter.zip."""
     fighter_json_path = char_dir / 'fighter.json'
-    with open(fighter_json_path, 'r') as f:
+    with open(fighter_json_path, 'r', encoding='utf-8') as f:
         fighter_data = json.load(f)
     mutate(fighter_data)
-    with open(fighter_json_path, 'w') as f:
+    with open(fighter_json_path, 'w', encoding='utf-8') as f:
         json.dump(fighter_data, f, indent=2)
     _rewrite_fighter_zip(char_dir, mutate_json=lambda m: (mutate(m), m)[1])
     return fighter_data
@@ -421,6 +421,78 @@ def _extract_fighter_ssm(char_dir):
         return None
 
 
+def _replace_zip_entry(zip_path, entry_name, new_bytes):
+    """Rewrite a zip in place with one entry's bytes replaced; every other
+    entry (and all entry names) is preserved verbatim."""
+    tmp = zip_path.with_suffix('.tmp')
+    with zipfile.ZipFile(zip_path) as zin, \
+            zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = new_bytes if item.filename == entry_name else zin.read(item.filename)
+            zout.writestr(item, data)
+    tmp.replace(zip_path)
+
+
+def _write_fighter_ssm(char_dir, new_ssm_bytes):
+    """Push modified sound bank bytes back into fighter.zip -> sound.zip.
+    Entry names are preserved — mexLib's FromPackage looks the .ssm up by
+    the FileName recorded in group.json, so renaming it would break install.
+    Returns True on success."""
+    import io
+    fighter_zip = char_dir / 'fighter.zip'
+    if not fighter_zip.exists():
+        return False
+    with zipfile.ZipFile(fighter_zip) as zf:
+        sound_entry = next((n for n in zf.namelist()
+                            if n.split('/')[-1].lower() == 'sound.zip'), None)
+        if sound_entry is None:
+            return False
+        sound_bytes = zf.read(sound_entry)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(sound_bytes)) as sin, \
+            zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as sout:
+        ssm_entry = next((n for n in sin.namelist()
+                          if n.lower().endswith('.ssm')), None)
+        if ssm_entry is None:
+            return False
+        for item in sin.infolist():
+            data = new_ssm_bytes if item.filename == ssm_entry else sin.read(item.filename)
+            sout.writestr(item, data)
+
+    _replace_zip_entry(fighter_zip, sound_entry, buf.getvalue())
+    return True
+
+
+def _sound_mods(char_dir):
+    """Per-sound modification manifest: {"<index>": {"source": ..., "date": ...}}."""
+    p = char_dir / 'sound_mods.json'
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_sound_mods(char_dir, mods):
+    p = char_dir / 'sound_mods.json'
+    if mods:
+        p.write_text(json.dumps(mods, indent=2), encoding='utf-8')
+    elif p.exists():
+        p.unlink()
+
+
+def _invalidate_sound_cache(char_dir, index=None):
+    """Drop decoded wav(s) so the next GET re-decodes from the new bank."""
+    cache_dir = char_dir / 'audio_cache'
+    if not cache_dir.exists():
+        return
+    pattern = f'sound_{index}.wav' if index is not None else 'sound_*.wav'
+    for f in cache_dir.glob(pattern):
+        f.unlink(missing_ok=True)
+
+
 def _based_on_from_joint(fighter_data):
     """Derive the donor skeleton from a costume joint symbol, e.g.
     'PlyZelda5K_Share_joint' -> 'Zelda'."""
@@ -551,7 +623,7 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
 
         (char_dir / 'fighter.zip').write_bytes(zip_data)
 
-        with open(char_dir / 'fighter.json', 'w') as f:
+        with open(char_dir / 'fighter.json', 'w', encoding='utf-8') as f:
             json.dump(fighter_meta, f, indent=2)
 
         has_css_icon = False
@@ -611,7 +683,7 @@ def _extract_custom_characters_from_project(project_dir, source_label):
     if not fighters_dir.exists():
         raise FileNotFoundError('Project data/fighters/ directory not found')
 
-    with open(project_path, 'r') as f:
+    with open(project_path, 'r', encoding='utf-8') as f:
         proj_data = json.load(f)
 
     fighter_files = proj_data.get('fighterSaveMap', {}).get('filePaths', [])
@@ -635,7 +707,7 @@ def _extract_custom_characters_from_project(project_dir, source_label):
             continue
 
         try:
-            with open(fighter_json_path, 'r') as f:
+            with open(fighter_json_path, 'r', encoding='utf-8') as f:
                 fighter_data = json.load(f)
 
             fighter_name = fighter_data.get('name', '')
@@ -697,7 +769,7 @@ def _extract_custom_characters_from_project(project_dir, source_label):
                 if export_result.returncode != 0:
                     logger.warning(f"Failed to export fighter ZIP for '{fighter_name}': {export_result.stderr or export_result.stdout}")
 
-            with open(char_dir / 'fighter.json', 'w') as f:
+            with open(char_dir / 'fighter.json', 'w', encoding='utf-8') as f:
                 json.dump(fighter_data, f, indent=2)
 
             assets_obj = fighter_data.get('assets', {})
@@ -821,7 +893,7 @@ def get_custom_character_detail(slug):
         if not fighter_json_path.exists():
             return jsonify({'success': False, 'error': 'Character not found'}), 404
 
-        with open(fighter_json_path, 'r') as f:
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
 
         metadata = _read_metadata()
@@ -909,6 +981,11 @@ def get_custom_character_detail(slug):
                                 if isinstance(series_id, int) and _series_icon_path(series_id) else None),
             'custom_series': custom_series,
             'can_wall_jump': fighter_data.get('canWallJump', False),
+            'team_colors': {
+                'red': fighter_data.get('redCostumeIndex', 0),
+                'blue': fighter_data.get('blueCostumeIndex', 0),
+                'green': fighter_data.get('greenCostumeIndex', 0),
+            },
             'sound_bank': fighter_data.get('soundBank'),
             'victory_theme': fighter_data.get('victoryTheme'),
             'victory_theme_info': ({
@@ -999,10 +1076,10 @@ def rename_custom_character(slug):
 
         fighter_json_path = CUSTOM_CHARACTERS_PATH / slug / 'fighter.json'
         if fighter_json_path.exists():
-            with open(fighter_json_path, 'r') as f:
+            with open(fighter_json_path, 'r', encoding='utf-8') as f:
                 fighter_data = json.load(f)
             fighter_data['name'] = new_name
-            with open(fighter_json_path, 'w') as f:
+            with open(fighter_json_path, 'w', encoding='utf-8') as f:
                 json.dump(fighter_data, f, indent=2)
 
         # add-fighter reads the zip's own fighter.json — keep it in sync so
@@ -1425,7 +1502,7 @@ def _drop_bundled_costume(char_dir, fighter_data, index):
     dat_name = (removed.get('file') or {}).get('fileName', '')
     inner_zip = f"{Path(dat_name).stem}.zip" if dat_name else None
 
-    with open(char_dir / 'fighter.json', 'w') as f:
+    with open(char_dir / 'fighter.json', 'w', encoding='utf-8') as f:
         json.dump(fighter_data, f, indent=2)
 
     def _drop_costume(meta):
@@ -1457,7 +1534,7 @@ def remove_bundled_costume(slug, index):
         if not fighter_json_path.exists():
             return jsonify({'success': False, 'error': 'Character not found'}), 404
 
-        with open(fighter_json_path, 'r') as f:
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
 
         costumes = fighter_data.get('costumes', [])
@@ -1498,7 +1575,7 @@ def bundled_costume_to_skin(slug, index):
         if entry is None:
             return jsonify({'success': False, 'error': 'Character not found in metadata'}), 404
 
-        with open(fighter_json_path, 'r') as f:
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
 
         costumes = fighter_data.get('costumes', [])
@@ -1625,16 +1702,31 @@ def list_fighter_sounds(slug):
     except (zipfile.BadZipFile, json.JSONDecodeError, KeyError):
         pass
 
+    # placeholder names ("New_Script", "Untitled", blank — what MexManager
+    # and ISO scans leave behind) carry no information; index-name those
+    placeholders = {'', 'untitled', 'new_script'}
+    names = [n if n and n.strip().lower() not in placeholders else None
+             for n in names]
+
+    mods = _sound_mods(char_dir)
     sounds = []
     for s in info.get('sounds', []):
         i = s['index']
         sounds.append({
             'index': i,
-            'name': names[i] if i < len(names) else f'sound_{i}',
+            'name': (names[i] if i < len(names) and names[i] else f'sound_{i}'),
             'durationMs': s.get('durationMs'),
+            'frequency': s.get('frequency'),
+            'modified': str(i) in mods,
+            'source': (mods.get(str(i)) or {}).get('source'),
             'url': f"/api/mex/custom-characters/{slug}/audio/sound/{i}",
         })
-    return jsonify({'success': True, 'count': len(sounds), 'sounds': sounds})
+    return jsonify({
+        'success': True,
+        'count': len(sounds),
+        'sounds': sounds,
+        'has_original_backup': (char_dir / 'sound_original.ssm').exists(),
+    })
 
 
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/audio/sound/<int:index>', methods=['GET'])
@@ -1649,6 +1741,114 @@ def get_fighter_sound(slug, index):
         if not out.get('success') or not cache.exists():
             return jsonify({'success': False, 'error': out.get('error', 'SSM decode failed')}), 500
     return send_file(cache, mimetype='audio/wav')
+
+
+# formats MeleeMedia's DSP.FromFile actually reads — the viewer converts
+# everything else (mp3, ogg, flac...) to WAV client-side before uploading
+SOUND_IMPORT_EXTS = {'.wav', '.brstm', '.dsp', '.hps'}
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/audio/sound/<int:index>/replace', methods=['POST'])
+def replace_fighter_sound(slug, index):
+    """Replace one sound in the fighter's bank with an uploaded audio file.
+    The bank is patched via MexCLI and folded back into fighter.zip, so the
+    edit survives export and installs into future builds. The pristine bank
+    is kept as sound_original.ssm for per-sound revert."""
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    if not (char_dir / 'fighter.zip').exists():
+        return jsonify({'success': False, 'error': 'Character not found'}), 404
+
+    file = request.files.get('file')
+    if file is None or not file.filename:
+        return jsonify({'success': False, 'error': 'No audio file uploaded'}), 400
+    ext = Path(file.filename).suffix.lower()
+    if ext not in SOUND_IMPORT_EXTS:
+        return jsonify({'success': False,
+                        'error': f"Unsupported format '{ext}' — use one of: "
+                                 + ', '.join(sorted(SOUND_IMPORT_EXTS))}), 400
+
+    bank = _extract_fighter_ssm(char_dir)
+    if bank is None:
+        return jsonify({'success': False, 'error': 'No sound bank in fighter.zip'}), 404
+
+    # first edit: stash the pristine bank for lossless revert
+    original = char_dir / 'sound_original.ssm'
+    if not original.exists():
+        shutil.copy2(bank, original)
+
+    with tempfile.TemporaryDirectory() as td:
+        upload = Path(td) / f'upload{ext}'
+        file.save(upload)
+        new_bank = Path(td) / 'bank_new.ssm'
+        out = _run_mexcli('ssm-replace', bank, index, upload, new_bank)
+        if not out.get('success') or not new_bank.exists():
+            return jsonify({'success': False, 'error': out.get('error', 'SSM replace failed')}), 500
+        new_bytes = new_bank.read_bytes()
+
+    if not _write_fighter_ssm(char_dir, new_bytes):
+        return jsonify({'success': False, 'error': 'Failed to repack fighter.zip'}), 500
+    bank.write_bytes(new_bytes)
+    _invalidate_sound_cache(char_dir, index)
+
+    mods = _sound_mods(char_dir)
+    mods[str(index)] = {'source': file.filename, 'date': datetime.now().isoformat()}
+    _save_sound_mods(char_dir, mods)
+
+    return jsonify({'success': True, 'index': index,
+                    'durationMs': out.get('durationMs'),
+                    'frequency': out.get('frequency')})
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/audio/sound/<int:index>/revert', methods=['POST'])
+def revert_fighter_sound(slug, index):
+    """Restore one sound from the pristine bank backup (lossless copy)."""
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    original = char_dir / 'sound_original.ssm'
+    if not original.exists():
+        return jsonify({'success': False, 'error': 'No original backup — nothing to revert'}), 404
+    bank = _extract_fighter_ssm(char_dir)
+    if bank is None:
+        return jsonify({'success': False, 'error': 'No sound bank in fighter.zip'}), 404
+
+    with tempfile.TemporaryDirectory() as td:
+        new_bank = Path(td) / 'bank_new.ssm'
+        out = _run_mexcli('ssm-copy', original, index, bank, index, new_bank)
+        if not out.get('success') or not new_bank.exists():
+            return jsonify({'success': False, 'error': out.get('error', 'SSM copy failed')}), 500
+        new_bytes = new_bank.read_bytes()
+
+    if not _write_fighter_ssm(char_dir, new_bytes):
+        return jsonify({'success': False, 'error': 'Failed to repack fighter.zip'}), 500
+    bank.write_bytes(new_bytes)
+    _invalidate_sound_cache(char_dir, index)
+
+    mods = _sound_mods(char_dir)
+    mods.pop(str(index), None)
+    _save_sound_mods(char_dir, mods)
+
+    return jsonify({'success': True, 'index': index,
+                    'durationMs': out.get('durationMs'),
+                    'frequency': out.get('frequency')})
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/audio/sounds/revert-all', methods=['POST'])
+def revert_all_fighter_sounds(slug):
+    """Restore the entire pristine sound bank."""
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    original = char_dir / 'sound_original.ssm'
+    if not original.exists():
+        return jsonify({'success': False, 'error': 'No original backup — nothing to revert'}), 404
+
+    new_bytes = original.read_bytes()
+    if not _write_fighter_ssm(char_dir, new_bytes):
+        return jsonify({'success': False, 'error': 'Failed to repack fighter.zip'}), 500
+    bank = char_dir / 'audio_cache' / 'bank.ssm'
+    bank.parent.mkdir(exist_ok=True)
+    bank.write_bytes(new_bytes)
+    _invalidate_sound_cache(char_dir)
+    _save_sound_mods(char_dir, {})
+
+    return jsonify({'success': True})
 
 
 # ============= Franchise / series =============
@@ -1687,10 +1887,10 @@ def set_custom_character_series(slug):
         if not fighter_json_path.exists():
             return jsonify({'success': False, 'error': 'Character not found'}), 404
 
-        with open(fighter_json_path, 'r') as f:
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
         fighter_data['seriesID'] = series_id
-        with open(fighter_json_path, 'w') as f:
+        with open(fighter_json_path, 'w', encoding='utf-8') as f:
             json.dump(fighter_data, f, indent=2)
 
         def _set_series(meta):
@@ -1800,6 +2000,47 @@ def set_wall_jump(slug):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/set-team-colors', methods=['POST'])
+def set_team_colors(slug):
+    """Assign which bundled costume each team color uses in team battles.
+    Body: {red, blue, green} — bundled costume indexes."""
+    try:
+        char_dir = CUSTOM_CHARACTERS_PATH / slug
+        fighter_json = char_dir / 'fighter.json'
+        if not fighter_json.exists():
+            return jsonify({'success': False, 'error': 'Character not found'}), 404
+        data = request.get_json(silent=True) or {}
+
+        with open(fighter_json, 'r', encoding='utf-8') as f:
+            costume_count = len(json.load(f).get('costumes', []))
+
+        indexes = {}
+        for team in ('red', 'blue', 'green'):
+            if team not in data:
+                continue
+            try:
+                idx = int(data[team])
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': f'{team} must be a costume index'}), 400
+            if not (0 <= idx < costume_count):
+                return jsonify({'success': False,
+                                'error': f'{team} index {idx} out of range (0..{costume_count - 1})'}), 400
+            indexes[team] = idx
+        if not indexes:
+            return jsonify({'success': False, 'error': 'Provide red, blue and/or green'}), 400
+
+        def _set(meta):
+            for team, idx in indexes.items():
+                meta[f'{team}CostumeIndex'] = idx
+        _update_fighter_json_everywhere(char_dir, _set)
+
+        logger.info(f"[OK] Set {slug} team colors = {indexes}")
+        return jsonify({'success': True, 'team_colors': indexes})
+    except Exception as e:
+        logger.error(f"Set team colors error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/costumes/<int:index>/rename', methods=['POST'])
 def rename_bundled_costume(slug, index):
     try:
@@ -1811,7 +2052,7 @@ def rename_bundled_costume(slug, index):
         if not name:
             return jsonify({'success': False, 'error': 'Name is required'}), 400
 
-        with open(char_dir / 'fighter.json', 'r') as f:
+        with open(char_dir / 'fighter.json', 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
         costumes = fighter_data.get('costumes', [])
         if index < 0 or index >= len(costumes):

@@ -565,6 +565,227 @@ def get_stage_track_audio(slug, index):
     return send_file(cache, mimetype='audio/wav')
 
 
+# ============= Playlist editing (vault-level; ported on install) =============
+
+# formats MeleeMedia's DSP.FromFile actually reads — the viewer converts
+# everything else (mp3 etc.) to WAV client-side before uploading
+MUSIC_IMPORT_EXTS = {'.wav', '.hps', '.brstm', '.dsp'}
+
+
+def _find_stage_entry(metadata, slug):
+    return next((s for s in metadata.get('custom_stages', [])
+                 if not _is_folder(s) and s.get('slug') == slug), None)
+
+
+def _invalidate_track_cache(stage_dir):
+    cache_dir = stage_dir / 'audio_cache'
+    if cache_dir.exists():
+        for f in cache_dir.glob('track_*.wav'):
+            f.unlink(missing_ok=True)
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/playlist', methods=['GET'])
+def get_stage_playlist(slug):
+    """List the stage's vault playlist (what install ports into a build)."""
+    metadata = _read_metadata()
+    entry = _find_stage_entry(metadata, slug)
+    if entry is None:
+        return jsonify({'success': False, 'error': 'Stage not found'}), 404
+    stage_dir = CUSTOM_STAGES_PATH / slug
+    tracks = []
+    for i, t in enumerate(entry.get('playlist') or []):
+        tracks.append({
+            'index': i,
+            'name': t.get('name') or f'track_{i}',
+            'chance': t.get('chance', 50),
+            'has_file': (stage_dir / f'music_{i}.hps').exists(),
+            'url': f"/api/mex/custom-stages/{slug}/audio/track/{i}",
+        })
+    return jsonify({'success': True, 'tracks': tracks})
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/playlist/add', methods=['POST'])
+def add_stage_track(slug):
+    """Add a song to the stage's playlist. Non-HPS uploads are converted to
+    HPS via MexCLI (mono sources are mirrored to stereo)."""
+    try:
+        metadata = _read_metadata()
+        entry = _find_stage_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Stage not found'}), 404
+        stage_dir = CUSTOM_STAGES_PATH / slug
+        stage_dir.mkdir(parents=True, exist_ok=True)
+
+        file = request.files.get('file')
+        if file is None or not file.filename:
+            return jsonify({'success': False, 'error': 'No audio file uploaded'}), 400
+        ext = Path(file.filename).suffix.lower()
+        if ext not in MUSIC_IMPORT_EXTS:
+            return jsonify({'success': False,
+                            'error': f"Unsupported format '{ext}' — use one of: "
+                                     + ', '.join(sorted(MUSIC_IMPORT_EXTS))}), 400
+
+        name = (request.form.get('name') or '').strip() or Path(file.filename).stem
+        try:
+            chance = max(0, min(100, int(request.form.get('chance', 50))))
+        except ValueError:
+            chance = 50
+
+        playlist = entry.setdefault('playlist', [])
+        index = len(playlist)
+        hps_path = stage_dir / f'music_{index}.hps'
+
+        if ext == '.hps':
+            file.save(hps_path)
+        else:
+            from blueprints.custom_characters import _run_mexcli
+            with tempfile.TemporaryDirectory() as td:
+                upload = Path(td) / f'upload{ext}'
+                file.save(upload)
+                out = _run_mexcli('audio-to-hps', upload, hps_path)
+            if not out.get('success') or not hps_path.exists():
+                return jsonify({'success': False, 'error': out.get('error', 'HPS conversion failed')}), 500
+
+        playlist.append({'name': name, 'chance': chance})
+        _write_metadata(metadata)
+
+        logger.info(f"[OK] Added track '{name}' to custom stage '{slug}'")
+        return jsonify({'success': True, 'track': {
+            'index': index, 'name': name, 'chance': chance, 'has_file': True,
+            'url': f"/api/mex/custom-stages/{slug}/audio/track/{index}",
+        }})
+    except Exception as e:
+        logger.error(f"Add stage track error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/playlist/<int:index>/update', methods=['POST'])
+def update_stage_track(slug, index):
+    """Update a track's name and/or play chance (%)."""
+    try:
+        metadata = _read_metadata()
+        entry = _find_stage_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Stage not found'}), 404
+        playlist = entry.get('playlist') or []
+        if not (0 <= index < len(playlist)):
+            return jsonify({'success': False, 'error': f'Track {index} out of range'}), 404
+
+        data = request.get_json(silent=True) or {}
+        if 'chance' in data:
+            try:
+                playlist[index]['chance'] = max(0, min(100, int(data['chance'])))
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'chance must be a number 0..100'}), 400
+        if isinstance(data.get('name'), str) and data['name'].strip():
+            playlist[index]['name'] = data['name'].strip()
+
+        _write_metadata(metadata)
+        return jsonify({'success': True, 'track': {'index': index, **playlist[index]}})
+    except Exception as e:
+        logger.error(f"Update stage track error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/playlist/<int:index>/remove', methods=['POST'])
+def remove_stage_track(slug, index):
+    """Remove a track and renumber the music_N.hps files after it."""
+    try:
+        metadata = _read_metadata()
+        entry = _find_stage_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Stage not found'}), 404
+        playlist = entry.get('playlist') or []
+        if not (0 <= index < len(playlist)):
+            return jsonify({'success': False, 'error': f'Track {index} out of range'}), 404
+
+        stage_dir = CUSTOM_STAGES_PATH / slug
+        (stage_dir / f'music_{index}.hps').unlink(missing_ok=True)
+        for j in range(index + 1, len(playlist)):
+            src = stage_dir / f'music_{j}.hps'
+            if src.exists():
+                src.rename(stage_dir / f'music_{j - 1}.hps')
+
+        playlist.pop(index)
+        _write_metadata(metadata)
+        _invalidate_track_cache(stage_dir)
+
+        logger.info(f"[OK] Removed track {index} from custom stage '{slug}'")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Remove stage track error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============= Stage assets (vault editing) =============
+
+# fixed entry names + canonical sizes from MexStageAssets
+STAGE_ASSET_SPECS = {
+    'icon': ('icon.png', (64, 56)),
+    'banner': ('banner.png', (224, 56)),
+}
+
+
+def _set_stage_zip_entry(zip_path, entry_name, new_bytes):
+    """Replace the stage.zip entry whose basename matches, or add it at the
+    root if absent. add-stage (MexStage.FromPackage) reads assets by these
+    fixed names, so vault-side asset edits must land here to survive install."""
+    tmp = zip_path.with_suffix('.tmp')
+    matched = False
+    with zipfile.ZipFile(zip_path) as zin, \
+            zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            if item.filename.split('/')[-1].lower() == entry_name:
+                zout.writestr(item, new_bytes)
+                matched = True
+            else:
+                zout.writestr(item, zin.read(item.filename))
+        if not matched:
+            zout.writestr(entry_name, new_bytes)
+    tmp.replace(zip_path)
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/<slug>/replace-asset/<which>', methods=['POST'])
+def replace_stage_asset(slug, which):
+    """Replace the SSS icon or banner with an uploaded image. Writes both the
+    vault display copy and the stage.zip entry (what installs read)."""
+    try:
+        spec = STAGE_ASSET_SPECS.get(which)
+        if spec is None:
+            return jsonify({'success': False, 'error': f'Unknown asset {which}'}), 400
+        entry_name, size = spec
+
+        metadata = _read_metadata()
+        entry = _find_stage_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Stage not found'}), 404
+        stage_dir = CUSTOM_STAGES_PATH / slug
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+        raw = request.files['file'].read()
+        from blueprints.custom_characters import _normalized_png
+        try:
+            png = _normalized_png(raw, size)
+        except Exception:
+            return jsonify({'success': False, 'error': 'File is not a valid image'}), 400
+
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        (stage_dir / entry_name).write_bytes(png)
+        zip_path = stage_dir / 'stage.zip'
+        if zip_path.exists():
+            _set_stage_zip_entry(zip_path, entry_name, png)
+
+        entry[f'has_{which}'] = True
+        _write_metadata(metadata)
+
+        logger.info(f"[OK] Replaced {which} asset for custom stage '{slug}'")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Replace stage asset error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @custom_stages_bp.route('/api/mex/custom-stages/<slug>/delete', methods=['POST'])
 def delete_custom_stage(slug):
     try:

@@ -7,6 +7,8 @@ import { useEditModal } from '../../hooks/useEditModal'
 import { useCspManager } from '../../hooks/useCspManager'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
+import PoseManagerModal from './PoseManagerModal'
+import SoundBankModal from './SoundBankModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import SkinCreator from '../SkinCreator'
 
@@ -28,6 +30,9 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
   const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
   const [skinCreatorCostume, setSkinCreatorCostume] = useState(null) // opens SkinCreator on this skin
+  const [showPoseManager, setShowPoseManager] = useState(false)
+  const [showSoundBank, setShowSoundBank] = useState(false)
+  const [selectedTeamColor, setSelectedTeamColor] = useState(null)   // armed team token ('red'|'blue'|'green')
   const audioRef = useRef(null)
   const skinFileRef = useRef(null)
   const seriesFileRef = useRef(null)
@@ -444,6 +449,40 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     }
   }
 
+  // Team color tokens: click a token to arm it, then click a costume card to
+  // assign — same interaction as the install page's vanilla character panel.
+  const handleTeamColorClick = (team) => {
+    playSound('boop')
+    setSelectedTeamColor(selectedTeamColor === team ? null : team)
+  }
+
+  const handleCostumeTeamAssign = async (index) => {
+    if (!selectedTeamColor || !detail) return
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-team-colors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [selectedTeamColor]: index })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        setSelectedTeamColor(null)
+        await fetchDetail()
+      } else {
+        alert(data.error || 'Set team color failed')
+      }
+    } catch (err) {
+      alert(`Set team color error: ${err.message}`)
+    }
+  }
+
+  const getCostumeTeamColors = (index) => {
+    const tc = detail?.team_colors
+    if (!tc) return []
+    return ['red', 'blue', 'green'].filter(team => tc[team] === index)
+  }
+
   const saveCostumeRename = async () => {
     const target = renamingCostume
     setRenamingCostume(null)
@@ -601,6 +640,19 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         </span>
       )
     },
+    detail.has_sound_pack && {
+      label: 'Sound Bank',
+      content: (
+        <button
+          className="char-info-toggle"
+          onMouseEnter={playHoverSound}
+          onClick={() => { playSound('boop'); setShowSoundBank(true) }}
+          title="Browse, preview and replace this character's sounds"
+        >
+          🔊 Browse
+        </button>
+      )
+    },
     smallBanner && {
       label: 'Small Banner',
       content: (
@@ -634,15 +686,42 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     detail.files?.fighterDataPath && ['Fighter File', detail.files.fighterDataPath],
   ].filter(Boolean) : []
 
+  const testActive = inGameTest.testingInGame || inGameTest.testResult || inGameTest.testError
+
   return (
     <div className="storage-viewer">
       <div className="character-detail">
-        <button
-          onClick={() => { playSound('back'); onBack(); }}
-          className="back-button"
-        >
-          ← Back to Custom Characters
-        </button>
+        {/* ── Top bar: back + test CTA ── */}
+        <div className="detail-top-bar">
+          <button
+            onClick={() => { playSound('back'); onBack(); }}
+            className="back-button"
+          >
+            ← Back to Custom Characters
+          </button>
+          {!testActive && (
+            <button
+              className="ingame-test-cta"
+              onMouseEnter={playHoverSound}
+              onClick={() => {
+                playSound('start')
+                inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })
+              }}
+              title="Build a one-mod test ISO and play a short match to verify it loads"
+            >
+              🎮 Test in Game
+            </button>
+          )}
+        </div>
+
+        {testActive && (
+          <div className="ingame-test-stage">
+            <InGameTestPanel
+              test={inGameTest}
+              onStart={() => inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })}
+            />
+          </div>
+        )}
 
         {/* ── Header: editable icon + name + franchise + result banner ── */}
         <div className="custom-char-header">
@@ -858,19 +937,44 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         {/* ── Costumes ── */}
         {costumes.length > 0 && (
           <div className="custom-char-costumes">
-            <h3 className="custom-char-section-title">Costumes</h3>
+            <div className="custom-char-section-header">
+              <h3 className="custom-char-section-title">Costumes</h3>
+              {detail?.team_colors && costumes.length > 1 && (
+                <div className="team-color-tokens">
+                  {[
+                    { id: 'red', label: 'R', color: '#ff4757' },
+                    { id: 'blue', label: 'B', color: '#3742fa' },
+                    { id: 'green', label: 'G', color: '#2ed573' }
+                  ].map(c => (
+                    <div
+                      key={c.id}
+                      className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''}`}
+                      style={{ '--token-color': c.color }}
+                      onClick={() => handleTeamColorClick(c.id)}
+                      onMouseEnter={playHoverSound}
+                      title={`${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click to assign`}
+                    >
+                      {c.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="custom-char-costume-grid">
               {costumes.map((costume) => (
                 <div
                   key={costume.index}
-                  className={`custom-char-costume-card${draggingCostume === costume.index ? ' dragging' : ''}`}
-                  draggable={costumes.length > 1 && renamingCostume?.index !== costume.index}
+                  className={`custom-char-costume-card${draggingCostume === costume.index ? ' dragging' : ''}${selectedTeamColor ? ' team-assignable' : ''}`}
+                  draggable={costumes.length > 1 && renamingCostume?.index !== costume.index && !selectedTeamColor}
+                  onClick={selectedTeamColor ? () => handleCostumeTeamAssign(costume.index) : undefined}
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move'
                     setDraggingCostume(costume.index)
                   }}
                   onDragEnd={() => { setDraggingCostume(null); setSkinDropActive(false) }}
-                  title={costumes.length > 1 ? 'Drag down into Custom Skins to make this a removable skin' : undefined}
+                  title={selectedTeamColor
+                    ? `Set as the ${selectedTeamColor} team costume`
+                    : costumes.length > 1 ? 'Drag down into Custom Skins to make this a removable skin' : undefined}
                 >
                   {costume.csp_url ? (
                     <img
@@ -892,6 +996,19 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                     >
                       ✎
                     </button>
+                  )}
+                  {costumes.length > 1 && getCostumeTeamColors(costume.index).length > 0 && (
+                    <div className="team-color-badges">
+                      {getCostumeTeamColors(costume.index).map(team => (
+                        <div
+                          key={team}
+                          className={`team-color-badge team-${team}`}
+                          title={`${team.charAt(0).toUpperCase() + team.slice(1)} Team`}
+                        >
+                          {team[0].toUpperCase()}
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <div className="custom-char-costume-info">
                     {costume.stock_url && (
@@ -918,7 +1035,10 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                       <span
                         className="custom-char-costume-name editable"
                         title={`${costume.dat || ''} — click to rename`}
-                        onClick={() => { playSound('boop'); setRenamingCostume({ index: costume.index, value: costume.name }) }}
+                        onClick={() => {
+                          if (selectedTeamColor) return  // card click assigns the team instead
+                          playSound('boop'); setRenamingCostume({ index: costume.index, value: costume.name })
+                        }}
                       >
                         {costume.name}
                       </span>
@@ -1035,14 +1155,6 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
-
-        {/* Test In Game */}
-        <div className="custom-stage-test" style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-          <InGameTestPanel
-            test={inGameTest}
-            onStart={() => inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })}
-          />
-        </div>
       </div>
 
       <ConfirmDialog
@@ -1081,6 +1193,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}
         onOpenCspManager={cspManager.openCspManager}
+        onOpenPoseManager={() => { playSound('boop'); setShowPoseManager(true); }}
         onStartSkinCreator={handleStartSkinCreator}
         onView3D={() => editModal.setShow3DViewer(true)}
         onTestInGame={handleTestInGame}
@@ -1124,10 +1237,26 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         onCaptureHdCsp={cspManager.handleCaptureHdCsp}
         onRegenerateAltHd={cspManager.handleRegenerateAltHd}
         onResetToOriginal={cspManager.handleResetToOriginal}
-        onOpenPoseManager={() => alert('The pose manager is not available for custom characters yet.')}
+        onOpenPoseManager={() => { playSound('boop'); setShowPoseManager(true); }}
         onSave={cspManager.handleSaveCspManager}
         onUploadMainCsp={cspManager.handleUploadMainCsp}
         onUploadAltCsp={cspManager.handleUploadAltCsp}
+        API_URL={API_URL}
+      />
+      <PoseManagerModal
+        show={showPoseManager}
+        character={pseudoCostumes}
+        displayName={character.name}
+        baseSkinId={detail?.costumes?.[0]?.id}
+        onClose={() => setShowPoseManager(false)}
+        onRefresh={fetchDetail}
+        API_URL={API_URL}
+      />
+      <SoundBankModal
+        show={showSoundBank}
+        slug={character.slug}
+        displayName={character.name}
+        onClose={() => { playSound('back'); setShowSoundBank(false) }}
         API_URL={API_URL}
       />
       <ConfirmDialog

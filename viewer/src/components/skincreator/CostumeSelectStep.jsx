@@ -16,7 +16,9 @@ export default function CostumeSelectStep({
   onSelectCostume,
   aiStudioEnabled,
   aiReady,
-  onOpenAiStudio
+  onOpenAiStudio,
+  modelStudioEnabled,
+  onOpenModelStudio
 }) {
   return (
     <div className="skin-creator-select">
@@ -36,7 +38,7 @@ export default function CostumeSelectStep({
           </button>
         </div>
         <h2>Select a base costume</h2>
-        <p>Choose a vanilla costume to use as your starting point</p>
+        <p>Choose a starting point</p>
 
       {loading && (
         <div className="skin-creator-loading">Loading costumes...</div>
@@ -53,20 +55,6 @@ export default function CostumeSelectStep({
       )}
 
       <div className="skin-creator-costume-grid">
-        {aiStudioEnabled && (
-          <div
-            className={`skin-creator-costume-card skin-creator-ai-card${aiReady ? '' : ' gated'}`}
-            title={aiReady ? 'Describe a theme and let the AI Studio build the skin'
-              : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('start'); onOpenAiStudio(); }}
-          >
-            <div className="costume-preview">
-              <div className="costume-placeholder">{aiReady ? '✨' : '🔒'}</div>
-            </div>
-            <div className="costume-name">AI Skin Studio</div>
-          </div>
-        )}
         {vanillaCostumes.map(costume => (
           <div
             key={costume.code}
@@ -87,6 +75,33 @@ export default function CostumeSelectStep({
             <div className="costume-name">{costume.colorName}</div>
           </div>
         ))}
+        {aiStudioEnabled && (
+          <div
+            className={`skin-creator-costume-card skin-creator-ai-card${aiReady ? '' : ' gated'}`}
+            title={aiReady ? 'Describe a theme and let the AI Studio build the skin'
+              : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onOpenAiStudio(); }}
+          >
+            <div className="costume-preview">
+              <div className="costume-placeholder">{aiReady ? '✨' : '🔒'}</div>
+            </div>
+            <div className="costume-name">AI Skin Studio</div>
+          </div>
+        )}
+        {modelStudioEnabled && (
+          <div
+            className="skin-creator-costume-card skin-creator-ai-card"
+            title="Generate or upload a 3D model and rig it onto this character's skeleton"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onOpenModelStudio(); }}
+          >
+            <div className="costume-preview">
+              <div className="costume-placeholder">🧊</div>
+            </div>
+            <div className="costume-name">AI Model Studio</div>
+          </div>
+        )}
       </div>
       </div>
       )}
