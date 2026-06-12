@@ -122,6 +122,39 @@ CHARACTER_HEAD_BONES = {
     'Dr. Mario': 24,
 }
 
+# RightArm/LeftArm (shoulder) JOBJ indexes per character, from the vanilla
+# PlXx.dat FighterBoneTable (ftData +0x54, offsets 0x04/0x10). Head shots
+# zero-scale these subtrees so T-pose arms can't pollute the head silhouette.
+CHARACTER_ARM_BONES = {
+    'Captain Falcon': (46, 24),
+    'Donkey Kong': (52, 30),
+    'Fox': (56, 26),
+    'Mr. Game & Watch': (27, 12),
+    'Kirby': (43, 38),
+    'Bowser': (61, 34),
+    'Link': (54, 22),
+    'Luigi': (32, 9),
+    'Mario': (32, 9),
+    'Marth': (71, 29),
+    'Mewtwo': (55, 32),
+    'Ness': (32, 10),
+    'Peach': (98, 72),
+    'Pichu': (26, 10),
+    'Pikachu': (25, 9),
+    'Jigglypuff': (34, 30),
+    'Samus': (49, 27),
+    'Sheik': (42, 22),
+    'Yoshi': (57, 27),
+    'Zelda': (101, 73),
+    'Ice Climbers': (25, 10),
+    'Ice Climbers (Nana)': (25, 10),
+    'Young Link': (56, 22),
+    'Ganondorf': (67, 23),
+    'Roy': (73, 31),
+    'Falco': (50, 24),
+    'Dr. Mario': (32, 9),
+}
+
 # Characters that use scene mode (only YML, no .anim file)
 SCENE_MODE_CHARACTERS = [
     'Ganondorf',
@@ -677,6 +710,9 @@ def generate_head_shot(dat_filepath):
 
     cmd = [HSDRAW_EXE, "--csp", os.path.abspath(dat_filepath), output,
            "--head-shot", "--no-shadow", "--head-bone", str(head_bone)]
+    arm_bones = CHARACTER_ARM_BONES.get(character)
+    if arm_bones:
+        cmd.extend(["--collapse-bones", f"{arm_bones[0]},{arm_bones[1]}"])
     if os.name != 'nt':
         cmd.insert(0, "wine")
 

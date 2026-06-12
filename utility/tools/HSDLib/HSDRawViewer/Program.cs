@@ -335,6 +335,23 @@ namespace HSDRawViewer
                     Console.WriteLine("Head-shot mode: bind pose + auto-framed camera");
                 }
 
+                // --collapse-bones a,b: zero-scale these JOBJ subtrees before
+                // rendering (head shots collapse the ARMS so a T-pose can't
+                // overlap or widen the head silhouette; works for one-piece
+                // skinned custom models where DOBJ hiding cannot)
+                var collapseBones = new List<int>();
+                int collapseArg = argsList.IndexOf("--collapse-bones");
+                if (collapseArg >= 0 && collapseArg + 1 < argsList.Count)
+                {
+                    foreach (var part in argsList[collapseArg + 1].Split(','))
+                        if (int.TryParse(part.Trim(), out int b))
+                            collapseBones.Add(b);
+                    argsList.RemoveAt(collapseArg + 1);
+                    argsList.RemoveAt(collapseArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Collapsing bone subtrees: {string.Join(",", collapseBones)}");
+                }
+
                 // Apply scale to CSP dimensions
                 if (cspScale > 1)
                 {
@@ -1063,6 +1080,24 @@ namespace HSDRawViewer
                             // debug skeleton overlay explicitly
                             renderJObj._settings.RenderBones = false;
                             renderJObj._settings.RenderObjects = HSDRawViewer.Rendering.Models.ObjectRenderMode.Visible;
+
+                            // collapse requested subtrees (arms) to a point;
+                            // tiny non-zero scale avoids divide-by-zero in
+                            // scale-compensated children
+                            foreach (int boneIdx in collapseBones)
+                            {
+                                var bone = renderJObj.RootJObj.GetJObjAtIndex(boneIdx);
+                                if (bone != null)
+                                    bone.Scale = new OpenTK.Mathematics.Vector3(0.0001f);
+                                else
+                                    Console.WriteLine($"Collapse bone {boneIdx} not found");
+                            }
+                            if (collapseBones.Count > 0)
+                            {
+                                renderJObj.RootJObj.RecalculateTransforms(null, true);
+                                viewport.Render();
+                            }
+
                             var positions = new List<OpenTK.Mathematics.Vector3>();
                             foreach (var j in renderJObj.RootJObj.Enumerate)
                                 positions.Add(j.WorldTransform.ExtractTranslation());

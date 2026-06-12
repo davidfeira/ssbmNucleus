@@ -411,63 +411,104 @@ def _pixelize_icon(crop_img, out_size=24):
 
 def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
     """Stock icon for a MODEL IMPORT from a HEAD-SHOT render (bind pose,
-    auto-framed, shadowless) + the projected head-bone position. The head
-    bone is the skull-base joint, so the head is the silhouette region
-    ABOVE it: find its connected horizontal extent and crop that square."""
+    auto-framed, shadowless) + the projected head-bone position.
+
+    The bone only anchors WHICH silhouette column is the head -- its height
+    within the head varies by model (it is the vanilla skeleton's crown, and
+    swapped meshes extend above or below it). The head region itself is found
+    by silhouette profile: walk down the opaque run containing the head
+    column (arms are separate runs in a T-pose, so they never pollute the
+    width) and cut at the NECK = first sharp width minimum below the head's
+    widest row. Models with no pinch (Kirby-likes) keep the whole silhouette,
+    which is exactly right for them."""
     op = csp_rgba[..., 3] > 40
     if not op.any():
         return None
     H, W = op.shape
-    head_x = float(np.clip(head_x, 0, W - 1))
-    head_y = float(np.clip(head_y, 0, H - 1))
+    hx = int(np.clip(head_x, 0, W - 1))
 
-    y_lim = int(min(H, head_y + H * 0.03))
-    band = op[:y_lim]
-
-    # the head is the connected component of the band that contains the head
-    # bone column -- T-pose arm tips can poke into these rows but are
-    # separate islands, so a 2D flood keeps them (and anything else) out
-    seed = None
-    cx = int(head_x)
-    for y in range(y_lim - 1, -1, -1):
-        x_lo = max(0, cx - 3)
-        xs = np.where(band[y, x_lo:cx + 4])[0]
-        if len(xs):
-            seed = (y, x_lo + int(xs[0]))
-            break
-    if seed is None:
+    def run_at(y, anchor, tol=3):
+        """The opaque [x0, x1] run of row y containing anchor (+- tol)."""
+        xs = np.where(op[y])[0]
+        if len(xs) == 0:
+            return None
+        breaks = np.where(np.diff(xs) > 1)[0]
+        starts = np.concatenate([[0], breaks + 1])
+        ends = np.concatenate([breaks, [len(xs) - 1]])
+        for s, e in zip(starts, ends):
+            if xs[s] - tol <= anchor <= xs[e] + tol:
+                return int(xs[s]), int(xs[e])
         return None
-    comp = np.zeros_like(band)
-    stack = [seed]
-    comp[seed] = True
-    while stack:
-        y, x = stack.pop()
-        if y > 0 and band[y - 1, x] and not comp[y - 1, x]:
-            comp[y - 1, x] = True
-            stack.append((y - 1, x))
-        if y + 1 < y_lim and band[y + 1, x] and not comp[y + 1, x]:
-            comp[y + 1, x] = True
-            stack.append((y + 1, x))
-        if x > 0 and band[y, x - 1] and not comp[y, x - 1]:
-            comp[y, x - 1] = True
-            stack.append((y, x - 1))
-        if x + 1 < W and band[y, x + 1] and not comp[y, x + 1]:
-            comp[y, x + 1] = True
-            stack.append((y, x + 1))
 
-    ys_, xs_ = np.where(comp)
-    y_top, x_left, x_right = float(ys_.min()), int(xs_.min()), int(xs_.max())
+    # top of the head: first row whose central run contains the head column
+    y_top = None
+    for y in range(H):
+        if run_at(y, hx) is not None:
+            y_top = y
+            break
+    if y_top is None:
+        return None
+
+    # walk down collecting the head run (arms are collapsed in the head-shot
+    # render, so the run is head -> neck -> torso)
+    profile = []   # (y, x0, x1)
+    anchor = hx
+    misses = 0
+    for y in range(y_top, H):
+        r = run_at(y, anchor)
+        if r is None:
+            misses += 1
+            if misses > 2:
+                break
+            continue
+        misses = 0
+        profile.append((y, r[0], r[1]))
+        anchor = (r[0] + r[1]) // 2
+
+    # cut at the neck: either a hard width pinch below the head's widest row,
+    # or the dip-then-regrowth where the torso/shoulders widen again
+    widths = [x1 - x0 + 1 for _y, x0, x1 in profile]
+    peak = 0
+    dip = None
+    cut = len(profile)
+    for i in range(1, len(profile)):
+        below_bone = profile[i][0] > head_y
+        if dip is not None and below_bone and widths[i] > 1.35 * widths[dip]:
+            cut = dip + 1
+            break
+        if below_bone and widths[i] < 0.5 * widths[peak]:
+            cut = i + 1
+            break
+        if widths[i] >= widths[peak]:
+            peak = i
+            dip = None
+        elif dip is None or widths[i] <= widths[dip]:
+            dip = i
+    profile = profile[:cut]
+    if not profile:
+        return None
+    rows = {y: (x0, x1) for y, x0, x1 in profile}
+    y_end = profile[-1][0]
+    x_left = min(r[0] for r in rows.values())
+    x_right = max(r[1] for r in rows.values())
+
+    # mask everything outside the per-row head runs (arms, other islands)
+    mask = np.zeros_like(op)
+    for y, (x0, x1) in rows.items():
+        mask[y, x0:x1 + 1] = True
 
     width = x_right - x_left + 1
-    height = y_lim - y_top
-    side = max(width, height) * 1.12
+    height = y_end - y_top + 1
+    side = max(width, height) * 1.08
     ctr_x = (x_left + x_right) / 2.0
-    ctr_y = (y_top + y_lim) / 2.0
+    ctr_y = (y_top + y_end) / 2.0
     half = side / 2.0
     box = (int(max(0, ctr_x - half)), int(max(0, ctr_y - half)),
            int(min(W, ctr_x + half)), int(min(H, ctr_y + half)))
 
-    crop = Image.fromarray(csp_rgba.astype(np.uint8)).crop(box)
+    masked = csp_rgba.astype(np.uint8).copy()
+    masked[..., 3] = np.where(mask, masked[..., 3], 0)
+    crop = Image.fromarray(masked).crop(box)
     return _pixelize_icon(crop, out_size)
 
 
