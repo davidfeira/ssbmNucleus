@@ -4,12 +4,7 @@
 import { playSound, playHoverSound } from '../../utils/sounds'
 
 const SSS_MOD_TYPES = [
-  {
-    key: 'background',
-    name: 'Background',
-    short: 'BG',
-    description: 'SSS background model and animations'
-  }
+  { key: 'background', name: 'Background', short: 'BG' }
 ]
 
 export default function SssMenuTypesGrid({ onSelectModType }) {
@@ -24,7 +19,6 @@ export default function SssMenuTypesGrid({ onSelectModType }) {
         >
           <div className="stage-info menu-type-info">
             <h3 className="stage-name">{modType.name}</h3>
-            <p className="menu-type-desc">{modType.description}</p>
           </div>
         </div>
       ))}

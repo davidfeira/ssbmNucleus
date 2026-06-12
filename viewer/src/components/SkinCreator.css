@@ -702,6 +702,19 @@ button.canvas-float-btn svg {
   text-align: center;
 }
 
+/* AI Skin Studio as one more base option in the costume grid */
+.skin-creator-ai-card .costume-placeholder {
+  font-size: 2rem;
+}
+
+.skin-creator-ai-card:hover {
+  border-color: var(--color-gold);
+}
+
+.skin-creator-ai-card.gated {
+  opacity: 0.65;
+}
+
 .skin-creator-costume {
   color: var(--color-text-secondary);
   font-size: 0.875rem;

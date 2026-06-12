@@ -7429,18 +7429,11 @@
 }
 
 /* Category cards (Menus root + CSS/SSS type pickers): same stage-card shell,
-   roomier body with a description line instead of a variant count. */
+   roomier centered body — title only. */
 .menu-type-info {
   padding: var(--space-6) var(--space-4);
   text-align: center;
   width: 100%;
-}
-
-.menu-type-desc {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-  line-height: 1.4;
 }
 
 /* Loading / empty state shared by the menu mod lists */

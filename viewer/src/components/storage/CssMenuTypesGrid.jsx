@@ -7,24 +7,9 @@
 import { playSound, playHoverSound } from '../../utils/sounds'
 
 const CSS_MOD_TYPES = [
-  {
-    key: 'icon_grid',
-    name: 'Icon Grid',
-    short: 'IG',
-    description: 'Custom character portraits used on the CSS banner'
-  },
-  {
-    key: 'background',
-    name: 'Background',
-    short: 'BG',
-    description: 'CSS background and stage art'
-  },
-  {
-    key: 'doors',
-    name: 'Doors',
-    short: 'DR',
-    description: 'Character port door textures'
-  }
+  { key: 'icon_grid', name: 'Icon Grid', short: 'IG' },
+  { key: 'background', name: 'Background', short: 'BG' },
+  { key: 'doors', name: 'Doors', short: 'DR' }
 ]
 
 export default function CssMenuTypesGrid({ onSelectModType }) {
@@ -39,7 +24,6 @@ export default function CssMenuTypesGrid({ onSelectModType }) {
         >
           <div className="stage-info menu-type-info">
             <h3 className="stage-name">{modType.name}</h3>
-            <p className="menu-type-desc">{modType.description}</p>
           </div>
         </div>
       ))}

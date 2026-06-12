@@ -354,22 +354,6 @@ export default function CharacterDetailView({
               <span className="create-mod-label">Create New Mod</span>
             </div>
           </div>
-          {aiStudioEnabled && (
-            <div
-              className={`create-mod-card ai${aiReady ? '' : ' gated'}`}
-              title={aiReady ? undefined
-                : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('start'); setShowAiStudio(true); }}
-            >
-              <div className="create-mod-image-area">
-                <span className="create-mod-icon">{aiReady ? '✨' : '🔒'}</span>
-              </div>
-              <div className="create-mod-info">
-                <span className="create-mod-label">AI Skin Studio</span>
-              </div>
-            </div>
-          )}
         </div>
 
       </div>
@@ -472,6 +456,9 @@ export default function CharacterDetailView({
         onSkinCreatorChange={onSkinCreatorChange}
         onRefresh={onRefresh}
         initialCostume={skinCreatorInitialCostume}
+        aiStudioEnabled={aiStudioEnabled}
+        aiReady={aiReady}
+        onOpenAiStudio={() => { closeSkinCreator(); setShowAiStudio(true) }}
       />
       <AIStudioModal
         show={showAiStudio}

@@ -1,7 +1,8 @@
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { BACKEND_URL } from '../../config'
 
-// Costume selection step: pick a vanilla costume as the starting point.
+// Costume selection step: pick a vanilla costume as the starting point —
+// or hand the whole job to the AI Skin Studio (rendered as one more option).
 export default function CostumeSelectStep({
   initialCostume,
   onBack,
@@ -12,7 +13,10 @@ export default function CostumeSelectStep({
   reconnecting,
   reconnectAttempts,
   maxReconnectAttempts,
-  onSelectCostume
+  onSelectCostume,
+  aiStudioEnabled,
+  aiReady,
+  onOpenAiStudio
 }) {
   return (
     <div className="skin-creator-select">
@@ -49,6 +53,20 @@ export default function CostumeSelectStep({
       )}
 
       <div className="skin-creator-costume-grid">
+        {aiStudioEnabled && (
+          <div
+            className={`skin-creator-costume-card skin-creator-ai-card${aiReady ? '' : ' gated'}`}
+            title={aiReady ? 'Describe a theme and let the AI Studio build the skin'
+              : 'Set up AI Studio in Settings (OpenRouter key or a local model)'}
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onOpenAiStudio(); }}
+          >
+            <div className="costume-preview">
+              <div className="costume-placeholder">{aiReady ? '✨' : '🔒'}</div>
+            </div>
+            <div className="costume-name">AI Skin Studio</div>
+          </div>
+        )}
         {vanillaCostumes.map(costume => (
           <div
             key={costume.code}

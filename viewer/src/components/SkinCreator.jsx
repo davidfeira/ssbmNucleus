@@ -24,7 +24,11 @@ export default function SkinCreator({
   selectedCharacter,
   onSkinCreatorChange,
   onRefresh,
-  initialCostume
+  initialCostume,
+  // AI Skin Studio option on the base-costume step (gated by /ai-status)
+  aiStudioEnabled,
+  aiReady,
+  onOpenAiStudio
 }) {
   // State
   const [skinCreatorStep, setSkinCreatorStep] = useState('select') // 'select' or 'edit'
@@ -712,6 +716,9 @@ export default function SkinCreator({
               reconnectAttempts={skinCreatorReconnectAttempts}
               maxReconnectAttempts={skinCreatorMaxReconnectAttempts}
               onSelectCostume={startSkinCreatorViewer}
+              aiStudioEnabled={aiStudioEnabled}
+              aiReady={aiReady}
+              onOpenAiStudio={onOpenAiStudio}
             />
           )}
 
