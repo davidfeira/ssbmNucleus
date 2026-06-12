@@ -388,10 +388,11 @@ def recolor_stock(stock_rgba, src_px, dst_px):
 # head crop (model imports)                                                    #
 # --------------------------------------------------------------------------- #
 def _pixelize_icon(crop_img, out_size=24):
-    """Crop -> 24x24 stock icon: BOX downscale (crisp), quantize to a <=15
-    color pixel-art palette, 1px melee-style dark outline."""
+    """Crop -> 24x24 stock icon: NEAREST downscale (hard pixel edges -- BOX
+    area-averaging looked fuzzy, not pixel art), quantize to a <=15 color
+    palette, 1px melee-style dark outline."""
     inner = out_size - 2
-    small = crop_img.resize((inner, inner), Image.BOX)
+    small = crop_img.resize((inner, inner), Image.NEAREST)
     alpha = np.asarray(small)[..., 3]
     quant = small.convert('RGB').quantize(colors=15, method=Image.MEDIANCUT)
     sq = np.asarray(quant.convert('RGBA')).copy()
