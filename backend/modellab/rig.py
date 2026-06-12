@@ -676,6 +676,37 @@ def transfer_weights(
         total = sum(w for _, w in top) or 1.0
         out.append([(b, w / total) for b, w in top])
 
+    # cloth keeps an anchor: capes may FOLD with the legs but not ride them —
+    # a cape vert majority-bound to one thigh swings between the legs. Cap
+    # the leg share at half and give the rest to the nearest torso bone.
+    if part_of and vert_parts is not None:
+        torso_ids = [b for b in stable_ids if part_of.get(b) == "torso"]
+        torso_pos = (np.array([world[b] for b in torso_ids])
+                     if torso_ids else None)
+        leg_parts = {"l_leg", "r_leg"}
+        for k in range(len(pts)):
+            vp = vert_parts[k]
+            labels = vp if isinstance(vp, (set, frozenset)) else ({vp} if vp else set())
+            if "cloth" not in labels or torso_pos is None:
+                continue
+            leg_share = sum(w for b, w in out[k]
+                            if part_of.get(b) in leg_parts)
+            if leg_share <= 0.5:
+                continue
+            scale_down = 0.5 / leg_share
+            kept = [(b, w * scale_down) if part_of.get(b) in leg_parts
+                    else (b, w) for b, w in out[k]]
+            spill = 1.0 - sum(w for _, w in kept)
+            anchor = torso_ids[int(np.linalg.norm(
+                torso_pos - pts[k], axis=1).argmin())]
+            merged: dict = {}
+            for b, w in kept:
+                merged[b] = merged.get(b, 0.0) + w
+            merged[anchor] = merged.get(anchor, 0.0) + spill
+            top = sorted(merged.items(), key=lambda kv: -kv[1])[:max_weights]
+            total = sum(w for _, w in top) or 1.0
+            out[k] = [(b, w / total) for b, w in top]
+
     # neighborhood consensus: a vert whose primary bone is (nearly) unused by
     # every nearby vert is a transfer outlier — the moment that bone moves
     # away from the region, the lone vert stretches into a spike. Snap such
@@ -1399,8 +1430,25 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
             dx = float((Mt @ (s_anchor[0] - st) + tt)[0] - t_anchor[0][0])
             t_anchor = [a + np.array([dx, 0, 0]) for a in t_anchor]
 
+        def seg_frame(d_cur, d_next):
+            # full orthonormal frame: x along the segment, z = bend-plane
+            # normal (next segment defines the elbow/knee plane). Aligning
+            # FRAMES instead of axes controls the roll about the limb —
+            # minimal axis rotations left it arbitrary and twisted the
+            # shoulder/trap geometry ~90 degrees.
+            x = d_cur / max(np.linalg.norm(d_cur), 1e-9)
+            n = np.cross(d_cur, d_next)
+            if np.linalg.norm(n) < 1e-6:
+                n = np.cross(x, [0.0, 1.0, 0.0])
+            if np.linalg.norm(n) < 1e-6:
+                n = np.cross(x, [0.0, 0.0, 1.0])
+            z = n / max(np.linalg.norm(n), 1e-9)
+            y = np.cross(z, x)
+            return np.column_stack([x, y, z])
+
         seg_affs = []
-        for i in range(len(fracs) - 1):
+        n_seg = len(fracs) - 1
+        for i in range(n_seg):
             v_s = s_anchor[i + 1] - s_anchor[i]
             v_t = t_anchor[i + 1] - t_anchor[i]
             ls, lt = np.linalg.norm(v_s), np.linalg.norm(v_t)
@@ -1408,7 +1456,10 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
                 seg_affs.append((np.eye(3), s_anchor[i], t_anchor[i]))
                 continue
             s = float(np.clip(lt / ls, 0.45, 1.8))
-            R = _rot_between_vec(v_s, v_t)
+            j = i + 1 if i + 1 < n_seg else i - 1
+            d_s_next = (s_anchor[j + 1] - s_anchor[j]) if 0 <= j < n_seg else v_s
+            d_t_next = (t_anchor[j + 1] - t_anchor[j]) if 0 <= j < n_seg else v_t
+            R = seg_frame(v_t, d_t_next) @ seg_frame(v_s, d_s_next).T
             seg_affs.append((s * R, s_anchor[i], t_anchor[i]))
         info.append(f"{part}:{len(seg_affs)}seg")
 
