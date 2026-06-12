@@ -159,8 +159,11 @@ You can emit three kinds of steps:
 Rules:
 - 3 to 6 steps total. At most 3 composite steps.
 - Cover the whole costume: EVERY region listed above should get a step unless
-  the theme truly calls for leaving it stock (small detail regions are fine to
-  skip or just tint).
+  the theme truly calls for leaving it stock.
+- Face features (face_detail: cheeks/mouth/nose) are small but read STRONGLY
+  against a recolored body -- give them a tint or hue-shift that fits the
+  theme. Only leave them stock when the theme keeps the character's natural
+  face colors.
 - The "eyes" region may be hue-shifted or tinted but NEVER composited.
 
 Reply with ONLY JSON: {{"skin_name": "<short name>", "steps": [...]}}"""
@@ -170,8 +173,9 @@ REVIEW_PROMPT = """You previously designed a Melee costume for the theme
 rendered on the 3D model (front, back, and the character-select framing).
 
 Critique it against the theme. Look specifically for: parts that still look
-STOCK/untouched (original colors: {color_facts}), regions whose color clashes
-with the theme, and anything too subtle to read. Check ALL three views.
+STOCK/untouched (original colors: {color_facts}) -- INCLUDING small face
+features like cheeks and mouth -- regions whose color clashes with the theme,
+and anything too subtle to read. Check ALL three views.
 
 Valid regions (use these EXACT names): {region_names}
 
@@ -208,13 +212,27 @@ def _hue_name(h):
 def _color_facts(hints):
     facts = []
     for region, hint in (hints or {}).items():
-        if hint.get('hueMin') is not None and hint.get('hueMax') is not None:
+        kind = hint.get('kind')
+        if kind == 'dark':
+            facts.append(f'- {region}: black / very dark')
+        elif kind == 'graywhite':
+            facts.append(f'- {region}: white/gray surfaces')
+        elif hint.get('hueMin') is not None and hint.get('hueMax') is not None:
             lo, hi = hint['hueMin'], hint['hueMax']
             mid = (lo + hi) / 2 if lo <= hi else ((lo + hi + 360) / 2) % 360
             facts.append(f'- {region}: {_hue_name(mid)} (hue ~{lo}-{hi})')
         elif hint.get('satMax') is not None:
             facts.append(f'- {region}: white/gray surfaces')
     return '\n'.join(facts) or '- (no color data)'
+
+
+def _facts_source(region_map):
+    """Best color readout for the prompt: measured colorFacts (covers every
+    region, pads excluded), falling back to mask hints for older payloads.
+    Regions the colorFacts pass missed still get their mask-hint band."""
+    merged = dict(region_map.get('liveMaskHints') or {})
+    merged.update(region_map.get('colorFacts') or {})
+    return merged
 
 
 def _extract_json(text):
@@ -489,7 +507,7 @@ def ai_create():
                                        for name, idxs in rm['regions'].items())
             prompt = PLAN_PROMPT.format(
                 character=character, theme=theme, region_summary=region_summary,
-                color_facts=_color_facts(rm.get('liveMaskHints')))
+                color_facts=_color_facts(_facts_source(rm)))
 
             plan_msg = planner_call_message(model, 'for a plan')
             emit('planning', 25, plan_msg)
@@ -574,7 +592,7 @@ def ai_create():
                             REVIEW_PROMPT.format(
                                 theme=theme,
                                 region_names=', '.join(rm['regions']),
-                                color_facts=_color_facts(rm.get('liveMaskHints'))),
+                                color_facts=_color_facts(_facts_source(rm))),
                             key, image_jpeg=sheet1, cost_log=planner_log))
                     review = _extract_json(reply) or {}
                     assessment = _trim_assessment(review.get('assessment'))

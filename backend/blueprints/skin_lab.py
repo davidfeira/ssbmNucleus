@@ -887,24 +887,81 @@ def _feature_pad_masks():
                     arr = np.array(Image.open(io.BytesIO(png)).convert('RGBA'))
                     m = compose_mod.build_mask(arr, **_mask_kwargs(band))
                     if m.any():
-                        masks[index] = _dilate(m) & (arr[..., 3] >= 128)
+                        alpha = arr[..., 3] >= 128
+                        # core = padding proper (band match); ext = +2px dilated
+                        # into the feature's anti-aliased fringe. Spillover
+                        # recolors EXT (no stock ring when the body changes);
+                        # feature ops subtract only CORE, so a cheek/eye tint
+                        # reaches its own fringe instead of leaving a stock-
+                        # colored ring around the feature.
+                        masks[index] = {'core': m & alpha,
+                                        'ext': _dilate(m) & alpha}
                 except Exception:
                     continue
         _meta['featurePadMasks'] = masks
     return _meta['featurePadMasks']
 
 
-def _pad_mask_for(index, shape):
+def _pad_mask_for(index, shape, kind='ext'):
     """The padding mask for a texture, resized (nearest) when the working
-    array's resolution differs (composite upscales tiny canvases)."""
-    m = _feature_pad_masks().get(index)
-    if m is None:
+    array's resolution differs (composite upscales tiny canvases).
+    kind: 'ext' (dilated — for spillover) or 'core' (band match only — for
+    feature-op confinement, so the fringe stays editable)."""
+    entry = _feature_pad_masks().get(index)
+    if entry is None:
         return None
+    m = entry[kind]
     if m.shape != tuple(shape[:2]):
         img = Image.fromarray(m.astype(np.uint8) * 255, 'L')
         img = img.resize((shape[1], shape[0]), Image.NEAREST)
         m = np.asarray(img) >= 128
     return m
+
+
+def _region_color_facts(region_map):
+    """Prompt-only color readout per region, measured from the PRISTINE
+    textures with feature padding excluded. Independent of liveHints — that
+    key gates MASK recomputation, but the planner still needs to know that
+    e.g. Pikachu's cheeks are red and its eyes are black, or it will leave
+    them stock. {region: {'kind': 'color'|'dark'|'graywhite', hue fields…}}"""
+    facts = {}
+    pads = _feature_pad_masks()
+    for region, idxs in (region_map.get('regions') or {}).items():
+        hue_bins = np.zeros(360, dtype=np.int64)
+        lums, sats, total = [], [], 0
+        for index in idxs:
+            try:
+                png = _session.get_full_texture(index)
+                arr = np.array(Image.open(io.BytesIO(png)).convert('RGBA'))
+            except Exception:
+                continue
+            h, s, l = palette_mod.rgb_to_hsl(arr[..., :3].astype(np.float64))
+            keep = arr[..., 3] >= 128
+            pad = pads.get(index)
+            if pad is not None and pad['ext'].shape == keep.shape:
+                keep &= ~pad['ext']
+            if not keep.any():
+                continue
+            total += int(keep.sum())
+            sat_px = keep & (s >= 25) & (l >= 15) & (l <= 90)
+            if sat_px.any():
+                hue_bins += np.bincount(
+                    np.floor(h[sat_px]).astype(np.int64) % 360, minlength=360)
+            lums.append(l[keep])
+            sats.append(s[keep])
+        if not total:
+            continue
+        med_l = float(np.median(np.concatenate(lums)))
+        med_s = float(np.median(np.concatenate(sats)))
+        if hue_bins.sum() >= max(50, total * 0.05):
+            band = _band_from_bins(hue_bins)
+            facts[region] = {'kind': 'color', 'hueMin': band['hueMin'],
+                             'hueMax': band['hueMax']}
+        elif med_l <= 25:
+            facts[region] = {'kind': 'dark'}
+        elif med_s < 18:
+            facts[region] = {'kind': 'graywhite'}
+    return facts
 
 
 def _resolve_targets(data, region_map):
@@ -993,6 +1050,15 @@ def get_regions():
                             'error': 'No texture-region map for this character'}), 404
         # hints recomputed from the OPEN costume's pixels (colors vary per costume)
         region_map['liveMaskHints'] = _region_hints()
+        # measured colors for the planner prompt — covers regions that opt
+        # out of live MASK hints too (cached: pristine pixels never change)
+        if 'colorFacts' not in _meta:
+            try:
+                _meta['colorFacts'] = _region_color_facts(region_map)
+            except Exception:
+                logger.warning('color fact computation failed', exc_info=True)
+                _meta['colorFacts'] = {}
+        region_map['colorFacts'] = _meta['colorFacts']
         return jsonify({'success': True, 'regionMap': region_map})
 
 
@@ -1061,7 +1127,8 @@ def composite_textures():
             try:
                 arr = _upscale_for_composite(_texture_png_array(session, index))
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
-                pad = None if force else _pad_mask_for(index, arr.shape)
+                pad = None if force else _pad_mask_for(index, arr.shape,
+                                                       kind='core')
                 if pad is not None:
                     mask &= ~pad   # never flood a feature texture's padding
                 result = compose_mod.composite(arr, mat_arr, mask,
@@ -1140,8 +1207,10 @@ def tint_textures():
                 arr = _texture_png_array(session, index)
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
                 # an eye/cheek tint must hit the FEATURE, not the texture's
-                # body-colored padding (Pikachu's green-box-eyes bug)
-                pad = None if data.get('force') else _pad_mask_for(index, arr.shape)
+                # body-colored padding (Pikachu's green-box-eyes bug). core
+                # (not ext) so the feature's own anti-aliased fringe tints too.
+                pad = None if data.get('force') else _pad_mask_for(
+                    index, arr.shape, kind='core')
                 if pad is not None:
                     mask &= ~pad
                 result = compose_mod.tint(arr, mask, hue, saturation)
@@ -1212,7 +1281,8 @@ def hue_shift_textures():
             try:
                 arr = _texture_png_array(session, index)
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
-                pad = None if data.get('force') else _pad_mask_for(index, arr.shape)
+                pad = None if data.get('force') else _pad_mask_for(
+                    index, arr.shape, kind='core')
                 if pad is not None:
                     mask &= ~pad   # feature ops stay off the body padding
                 result = compose_mod.hue_shift(arr, mask, hue_delta, sat_delta)
