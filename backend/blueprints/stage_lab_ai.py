@@ -30,7 +30,8 @@ from flask import Blueprint, jsonify, request
 
 from blueprints.skin_lab_ai import (AI_LAB_ENABLED, DEFAULT_PLANNER,
                                     _call_planner, _clean_step, _extract_json,
-                                    _trim_assessment, is_local_planner)
+                                    _trim_assessment, call_with_pulse,
+                                    is_local_planner, planner_call_message)
 from core.config import STORAGE_PATH
 
 logger = logging.getLogger(__name__)
@@ -240,7 +241,8 @@ def stage_ai_create():
                         f'[stage-studio] {m}')):
                     raise StageOpsError(DOLPHIN_OPEN_MSG)
 
-            emit('planning', 10, f'Asking {model.split("/")[-1]} for a plan…')
+            plan_msg = planner_call_message(model, 'for a plan')
+            emit('planning', 10, plan_msg)
             notes = rm.get('notes') or {}
             region_summary = '\n'.join(
                 f"- {name}: {len(idxs)} textures"
@@ -253,7 +255,10 @@ def stage_ai_create():
                 extra_notes=(f'- NOTE: {extra}\n' if extra else ''))
             planner_log = []
             try:
-                reply = _call_planner(model, prompt, key, cost_log=planner_log)
+                reply = call_with_pulse(
+                    emit, 'planning', 10, plan_msg,
+                    lambda: _call_planner(model, prompt, key,
+                                          cost_log=planner_log))
             except RuntimeError as e:
                 raise StageOpsError(str(e))
             plan = _extract_json(reply)
@@ -275,6 +280,9 @@ def stage_ai_create():
                 # decides (escalating past tile-only locals for scenes)
                 params = {'prompt': prompt_text, 'kind': 'stage',
                           'tier': 'strong' if quality else 'standard',
+                          # forward local-engine worker progress (model load,
+                          # denoise steps) to the studio's bar
+                          'progressEvent': 'stagelab_progress',
                           'openrouterKey': key}
                 if quality:
                     params['style'] = 'scene'
@@ -340,13 +348,17 @@ def stage_ai_create():
             fixes, fix_tints = [], []
             review_info = {'ran': bool(review_pass)}
             if review_pass:
-                emit('reviewing', 75, f'{model.split("/")[-1]} is reviewing the screenshot…')
+                review_msg = planner_call_message(model, 'to review the screenshot')
+                emit('reviewing', 75, review_msg)
                 try:
-                    reply = _call_planner(
-                        model,
-                        STAGE_REVIEW_PROMPT.format(theme=theme,
-                                                   region_summary=region_summary),
-                        key, image_jpeg=res['png'], cost_log=planner_log)
+                    reply = call_with_pulse(
+                        emit, 'reviewing', 75, review_msg,
+                        lambda: _call_planner(
+                            model,
+                            STAGE_REVIEW_PROMPT.format(
+                                theme=theme,
+                                region_summary=region_summary),
+                            key, image_jpeg=res['png'], cost_log=planner_log))
                     review = _extract_json(reply) or {}
                     assessment = _trim_assessment(review.get('assessment'))
                     fixes, fix_tints, dropped = _validate_stage_review(

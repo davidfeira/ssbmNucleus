@@ -87,12 +87,20 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
     playSound('start')
     setPhase('running')
     setError(null)
-    setStatus({ percentage: 0, message: 'Starting…' })
+    // null percentage = indeterminate hexagon (animates immediately, so the
+    // first seconds before backend progress arrives don't look frozen)
+    setStatus({ percentage: null, message: 'Starting…' })
 
     cleanupSocket()
     const socket = io(BACKEND_URL)
     socketRef.current = socket
-    socket.on('ailab_progress', (d) => setStatus(d))
+    // Merge instead of replace: worker-forwarded events (model load, denoise
+    // steps) carry only a message and must not wipe the last percentage.
+    socket.on('ailab_progress', (d) => setStatus(prev => ({
+      ...prev,
+      ...d,
+      percentage: Number.isFinite(d.percentage) ? d.percentage : prev?.percentage
+    })))
     socket.on('ailab_complete', (d) => {
       setSheet(d.sheet)
       setSkinName(d.skinName || theme)

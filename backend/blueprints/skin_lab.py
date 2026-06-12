@@ -591,13 +591,30 @@ def _generate_material(params):
     from aiengine import runner as _runner
     cache.parent.mkdir(parents=True, exist_ok=True)
     style = 'scene' if (params.get('style') or '') == 'scene' else 'tile'
+
+    # The local worker reports model load + denoise progress ("loading X…",
+    # "step 3/4 | …"); with a progressEvent the caller (AI studio run thread)
+    # gets those on its socket channel instead of silence. Message-only —
+    # the orchestrator owns the overall percentage.
+    on_progress = None
+    progress_event = (params.get('progressEvent') or '').strip()
+    if progress_event:
+        from core.state import get_socketio
+        _socketio = get_socketio()
+        _label = resolved['label'] or resolved['model']
+
+        def on_progress(_pct, desc):
+            if desc:
+                _socketio.emit(progress_event, {'message': f'{_label}: {desc}'})
+
     t0 = _time.time()
     try:
         _, seconds = _runner.generate(
             prompt, resolved['model'], cache, style=style,
             seed=params.get('seed'),
             width=int(params['width']) if params.get('width') else None,
-            height=int(params['height']) if params.get('height') else None)
+            height=int(params['height']) if params.get('height') else None,
+            on_progress=on_progress)
     except EngineError as e:
         telemetry.record_run('local', resolved['model'], tier, kind,
                              _time.time() - t0, False)

@@ -78,6 +78,49 @@ def _call_ollama_planner(model, prompt, image_jpeg=None):
     return body['message']['content']
 
 
+def _ollama_model_loaded(model):
+    """True when the local planner's weights are already resident in Ollama
+    (GET /api/ps). keep_alive=0 unloads after every call, so this is usually
+    False — and the reload takes long enough that the UI should say so."""
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    if not base:
+        return False
+    try:
+        ps = requests.get(f'{base}/api/ps', timeout=3).json()
+        name = model.split(':', 1)[1]
+        return any(m.get('name') == name or m.get('model') == name
+                   for m in ps.get('models') or [])
+    except Exception:
+        return False
+
+
+def planner_call_message(model, doing):
+    """Progress message for a planner call. A local model that isn't resident
+    yet spends most of the call loading into memory — say that instead of
+    pretending the model is already thinking."""
+    if is_local_planner(model) and not _ollama_model_loaded(model):
+        return f'Loading {model.split(":", 1)[1]} planner into memory…'
+    return f'Asking {model.split("/")[-1]} {doing}…'
+
+
+def call_with_pulse(emit, stage, percentage, message, fn, interval=3):
+    """Run fn() while re-emitting `message (Ns)` every few seconds so a long
+    silent call (model load, slow API) never reads as a hang."""
+    done = threading.Event()
+    t0 = time.time()
+
+    def pulse():
+        while not done.wait(interval):
+            emit(stage, percentage, f'{message} ({int(time.time() - t0)}s)')
+
+    threading.Thread(target=pulse, daemon=True).start()
+    try:
+        return fn()
+    finally:
+        done.set()
+
+
 def list_local_planners():
     """Installed Ollama models as planner options, [] when Ollama is absent."""
     from aiengine import ollama_runtime
@@ -448,9 +491,12 @@ def ai_create():
                 character=character, theme=theme, region_summary=region_summary,
                 color_facts=_color_facts(rm.get('liveMaskHints')))
 
-            emit('planning', 25, f'Asking {model.split("/")[-1]} for a plan…')
+            plan_msg = planner_call_message(model, 'for a plan')
+            emit('planning', 25, plan_msg)
             planner_log = []
-            reply = _call_planner(model, prompt, key, cost_log=planner_log)
+            reply = call_with_pulse(
+                emit, 'planning', 25, plan_msg,
+                lambda: _call_planner(model, prompt, key, cost_log=planner_log))
             plan = _extract_json(reply)
             steps, err = _validate(plan or {}, set(rm['regions']))
             if err:
@@ -469,6 +515,9 @@ def ai_create():
                         # costume materials are 'standard' tier tile swatches
                         gen = {'prompt': s['material_prompt'],
                                'kind': 'ailab', 'tier': 'standard',
+                               # forward local-engine worker progress (model
+                               # load, denoise steps) to the studio's bar
+                               'progressEvent': 'ailab_progress',
                                'openrouterKey': key}
                         if image_model:
                             gen['model'] = image_model
@@ -515,15 +564,18 @@ def ai_create():
             if review_pass:
                 emit('reviewing', 70, 'Rendering for self-review…')
                 sheet1 = _sheet_from_session(base_url)
-                emit('reviewing', 75, f'{model.split("/")[-1]} is reviewing the result…')
+                review_msg = planner_call_message(model, 'to review the result')
+                emit('reviewing', 75, review_msg)
                 try:
-                    reply = _call_planner(
-                        model,
-                        REVIEW_PROMPT.format(
-                            theme=theme,
-                            region_names=', '.join(rm['regions']),
-                            color_facts=_color_facts(rm.get('liveMaskHints'))),
-                        key, image_jpeg=sheet1, cost_log=planner_log)
+                    reply = call_with_pulse(
+                        emit, 'reviewing', 75, review_msg,
+                        lambda: _call_planner(
+                            model,
+                            REVIEW_PROMPT.format(
+                                theme=theme,
+                                region_names=', '.join(rm['regions']),
+                                color_facts=_color_facts(rm.get('liveMaskHints'))),
+                            key, image_jpeg=sheet1, cost_log=planner_log))
                     review = _extract_json(reply) or {}
                     assessment = _trim_assessment(review.get('assessment'))
                     fixes, dropped = _validate_review(review, set(rm['regions']))
