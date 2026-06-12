@@ -596,10 +596,24 @@ def transfer_weights(
                     mass[p] = mass.get(p, 0.0) + w
             sample_part.append(max(mass, key=mass.get) if mass else None)
         sample_part = np.asarray(sample_part, dtype=object)
+
+        def allowed_of(vp):
+            # vp may be a single label or a SET of labels (mixed-weight verts
+            # like skirts keep every >=15% part); None = unconstrained
+            if vp is None:
+                return None
+            labels = vp if isinstance(vp, (set, frozenset)) else {vp}
+            out = set()
+            for p in labels:
+                a = ALLOWED.get(p)
+                if a is None:
+                    return None
+                out |= a
+            return out
+
         penalty = np.zeros_like(score)
         for k in range(len(pts)):
-            vp = vert_parts[k]
-            allowed = ALLOWED.get(vp)
+            allowed = allowed_of(vert_parts[k])
             if allowed is None:
                 continue
             cand = sample_part[idx[k]]
@@ -640,8 +654,16 @@ def transfer_weights(
             # single nearest STABLE bone instead of a far-flung mixture —
             # restricted to the vert's allowed body parts when labeled
             cand_ids, cand_pos = stable_ids, stable_pos
-            if part_of and vert_parts is not None:
-                allowed = _ALLOWED.get(vert_parts[k])
+            if part_of and vert_parts is not None and vert_parts[k]:
+                vp = vert_parts[k]
+                labels = vp if isinstance(vp, (set, frozenset)) else {vp}
+                allowed = set()
+                for p in labels:
+                    a = _ALLOWED.get(p)
+                    if a is None:
+                        allowed = None
+                        break
+                    allowed |= a
                 if allowed:
                     sel = [i for i, b in enumerate(stable_ids)
                            if part_of.get(b) in allowed]
@@ -1561,14 +1583,24 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
             foreign.src_smd,
             dynamic_roots=load_dynamics(src_char_code) if src_char_code else None)
         vert_parts = []
+        vert_part_sets = []
         for tw in foreign.tri_src_w:
             for wlist in tw:
                 mass: dict = {}
+                tot = 0.0
                 for bone, w in wlist:
                     p = src_parts.get(bone)
                     if p and p != "util":
                         mass[p] = mass.get(p, 0.0) + w
+                        tot += w
                 vert_parts.append(max(mass, key=mass.get) if mass else None)
+                # EVERY part carrying >=15% of the vert's source weight stays
+                # allowed — vanilla skirts/coats are waist+thigh blends, and
+                # collapsing them to the dominant part forbade leg sampling
+                # (the crouch "pillar": cloth that can never follow the legs)
+                vert_part_sets.append(
+                    {p for p, m in mass.items() if tot and m / tot >= 0.15}
+                    or None)
         from collections import Counter
         log(f"source part labels: {dict(Counter(p for p in vert_parts if p))}")
 
@@ -1626,7 +1658,9 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
         weights = transfer_weights(rigkit, foreign, max_weights, surface=surface,
                                    surface_pts=surf_pts, bone_world=pose_world,
                                    forbidden=forbidden, part_of=tgt_parts,
-                                   vert_parts=vert_parts)
+                                   vert_parts=(vert_part_sets
+                                               if vert_parts is not None
+                                               else None))
 
     if tgt_skin is not None:
         # un-pose: store verts so target LBS at rest pose lands them exactly

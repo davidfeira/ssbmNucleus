@@ -30,7 +30,11 @@ ALLOWED = {
     "l_leg": {"l_leg", "torso"},
     "r_leg": {"r_leg", "torso"},
     "torso": {"torso"},
-    "cloth": {"torso"},
+    # cloth may also ride the LEGS: a floor-length cape rigidly spine-bound
+    # stands like a pillar through every crouch (vanilla capes fold via
+    # physics chains we can't carry) — thigh weights make it fold with the
+    # body the way skirts do
+    "cloth": {"torso", "l_leg", "r_leg"},
     "util":  None,           # unconstrained
     None:    None,
 }
