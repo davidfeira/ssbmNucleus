@@ -83,9 +83,14 @@ POST /close
   toggle`, `install` (managed Python+torch runtime), `routing` (tier→model),
   `resolve` (preflight escalation notices), `stats`.
 - FULLY-LOCAL mode: planner ids prefixed `ollama:` (e.g. `ollama:qwen3:8b`)
-  run the planning LLM through a local Ollama server (`NUCLEUS_OLLAMA_URL`,
-  default localhost:11434) with `format:json` + `keep_alive:0` — the LLM
-  unloads immediately after each call so the diffusion model gets the GPU.
+  run the planning LLM through Ollama with `format:json` + `keep_alive:0` —
+  the LLM unloads immediately after each call so the diffusion model gets
+  the GPU. The server is resolved by `aiengine/ollama_runtime.py`: the
+  user's own install first (`NUCLEUS_OLLAMA_URL`, default localhost:11434),
+  else a BUNDLED portable Ollama under `aiengine/ollama/` (installed via
+  `POST /ai-engine/planners/install-runtime`, served on port 11435, spawned
+  on demand and stopped with the backend) — so no external install is
+  required for any AI feature.
   No OpenRouter key needed when both planner and image models are local.
   `GET /api/mex/ai-engine/planners` lists installed Ollama models; the
   studio planner pickers append them automatically. Benchmarked with

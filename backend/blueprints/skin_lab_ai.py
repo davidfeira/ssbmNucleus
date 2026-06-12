@@ -40,8 +40,9 @@ OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 # Local planner LLMs run through Ollama: planner model ids prefixed
 # 'ollama:' (e.g. 'ollama:qwen3:8b') need no API key — combined with local
-# image models the studios are fully offline.
-OLLAMA_URL = os.environ.get('NUCLEUS_OLLAMA_URL', 'http://127.0.0.1:11434')
+# image models the studios are fully offline. The server is resolved by
+# aiengine.ollama_runtime: the user's own install first, else the BUNDLED
+# portable Ollama (spawned on demand) — see that module.
 
 
 def is_local_planner(model):
@@ -52,11 +53,16 @@ def _call_ollama_planner(model, prompt, image_jpeg=None):
     """Planner call against a local Ollama model. format=json forces valid
     JSON framing; keep_alive=0 unloads the LLM IMMEDIATELY after the reply so
     the diffusion model gets the GPU to itself (16GB can't hold both)."""
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    if not base:
+        raise RuntimeError('no local Ollama available — install it in '
+                           'Settings → AI Studio, or pick an API planner')
     name = model.split(':', 1)[1]
     message = {'role': 'user', 'content': prompt}
     if image_jpeg is not None:
         message['images'] = [base64.b64encode(image_jpeg).decode('ascii')]
-    r = requests.post(f'{OLLAMA_URL}/api/chat', timeout=600, json={
+    r = requests.post(f'{base}/api/chat', timeout=600, json={
         'model': name,
         'messages': [message],
         'format': 'json',
@@ -74,8 +80,12 @@ def _call_ollama_planner(model, prompt, image_jpeg=None):
 
 def list_local_planners():
     """Installed Ollama models as planner options, [] when Ollama is absent."""
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    if not base:
+        return []
     try:
-        tags = requests.get(f'{OLLAMA_URL}/api/tags', timeout=3).json()
+        tags = requests.get(f'{base}/api/tags', timeout=3).json()
         return sorted(m['name'] for m in tags.get('models', []))
     except Exception:
         return []

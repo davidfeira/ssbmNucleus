@@ -288,25 +288,47 @@ _planner_pulls = {}     # model name -> True while a pull thread runs
 
 @ai_engine_bp.route('/api/mex/ai-engine/planners', methods=['GET'])
 def local_planners():
-    """Local planner LLMs via Ollama: server reachability, installed models
-    (with sizes), and the recommended model to pull. Planner ids are
+    """Local planner LLMs via Ollama: server reachability (user install OR
+    the bundled portable runtime, auto-started when installed), installed
+    models (with sizes), and the recommended model to pull. Planner ids are
     'ollama:<name>'."""
     import requests as _rq
-    from blueprints.skin_lab_ai import OLLAMA_URL
-    reachable, models = False, []
-    try:
-        tags = _rq.get(f'{OLLAMA_URL}/api/tags', timeout=3).json()
-        reachable = True
-        models = sorted(({'name': m['name'], 'sizeBytes': m.get('size', 0),
-                          'pulling': bool(_planner_pulls.get(m['name']))}
-                         for m in tags.get('models', [])),
-                        key=lambda m: m['name'])
-    except Exception:
-        pass
-    return jsonify({'success': True, 'ollamaAvailable': reachable,
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    models = []
+    if base:
+        try:
+            tags = _rq.get(f'{base}/api/tags', timeout=3).json()
+            models = sorted(({'name': m['name'], 'sizeBytes': m.get('size', 0),
+                              'pulling': bool(_planner_pulls.get(m['name']))}
+                             for m in tags.get('models', [])),
+                            key=lambda m: m['name'])
+        except Exception:
+            base = None
+    return jsonify({'success': True, 'ollamaAvailable': bool(base),
                     'local': models,
                     'pulling': sorted(k for k, v in _planner_pulls.items() if v),
-                    'recommended': RECOMMENDED_PLANNER})
+                    'recommended': RECOMMENDED_PLANNER,
+                    'bundled': {
+                        'supported': ollama_runtime.is_supported(),
+                        'installed': ollama_runtime.bundled_installed(),
+                        'installing': ollama_runtime.is_installing(),
+                        'active': base == ollama_runtime.BUNDLED_URL,
+                    }})
+
+
+@ai_engine_bp.route('/api/mex/ai-engine/planners/install-runtime',
+                    methods=['POST'])
+def install_ollama_runtime():
+    """Download the PORTABLE Ollama into aiengine/ollama (~1.2GB) and start
+    it — makes the local-LLM path fully self-contained. Events:
+    aiengine_ollama_progress / _complete / _error."""
+    from core.state import get_socketio
+    from aiengine import ollama_runtime
+    started, err = ollama_runtime.install_bundled(get_socketio())
+    if not started:
+        return jsonify({'success': False, 'error': err}), 409
+    return jsonify({'success': True, 'started': True})
 
 
 @ai_engine_bp.route('/api/mex/ai-engine/planners/pull', methods=['POST'])
@@ -315,9 +337,13 @@ def pull_planner():
     (aiengine_planner_pull {model, status, completed, total} events)."""
     import requests as _rq
     from core.state import get_socketio
-    from blueprints.skin_lab_ai import OLLAMA_URL
+    from aiengine import ollama_runtime
     socketio = get_socketio()
 
+    base = ollama_runtime.effective_url()
+    if not base:
+        return jsonify({'success': False,
+                        'error': 'no Ollama server available'}), 503
     name = ((request.get_json(silent=True) or {}).get('model') or '').strip()
     if not name:
         return jsonify({'success': False, 'error': 'model is required'}), 400
@@ -328,7 +354,7 @@ def pull_planner():
 
     def run():
         try:
-            with _rq.post(f'{OLLAMA_URL}/api/pull', stream=True, timeout=3600,
+            with _rq.post(f'{base}/api/pull', stream=True, timeout=3600,
                           json={'model': name, 'stream': True}) as r:
                 for line in r.iter_lines():
                     if not line:
@@ -357,12 +383,16 @@ def pull_planner():
 @ai_engine_bp.route('/api/mex/ai-engine/planners/delete', methods=['POST'])
 def delete_planner():
     import requests as _rq
-    from blueprints.skin_lab_ai import OLLAMA_URL
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    if not base:
+        return jsonify({'success': False,
+                        'error': 'no Ollama server available'}), 503
     name = ((request.get_json(silent=True) or {}).get('model') or '').strip()
     if not name:
         return jsonify({'success': False, 'error': 'model is required'}), 400
     try:
-        r = _rq.delete(f'{OLLAMA_URL}/api/delete', timeout=30,
+        r = _rq.delete(f'{base}/api/delete', timeout=30,
                        json={'model': name})
         if r.status_code >= 400:
             return jsonify({'success': False, 'error': r.text[:200]}), 500

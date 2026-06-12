@@ -11,6 +11,7 @@ import { fmtBytes } from './useAiEngine'
 export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
   const [info, setInfo] = useState(null)
   const [pull, setPull] = useState(null)   // {model, completed, total, status}
+  const [rtInstall, setRtInstall] = useState(null)   // {message, percentage}
   const [error, setError] = useState(null)
 
   const load = useCallback(() => {
@@ -36,15 +37,51 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
       setError(d.error || 'pull failed')
       playSound('error')
     }
+    const onRtTick = (d) => setRtInstall(d)
+    const onRtDone = () => {
+      setRtInstall(null)
+      playSound('achievement')
+      load()
+      onChanged?.()
+    }
+    const onRtErr = (d) => {
+      setRtInstall(null)
+      setError(d.error || 'Ollama install failed')
+      playSound('error')
+    }
     socket.on('aiengine_planner_pull', onTick)
     socket.on('aiengine_planner_pull_complete', onDone)
     socket.on('aiengine_planner_pull_error', onErr)
+    socket.on('aiengine_ollama_progress', onRtTick)
+    socket.on('aiengine_ollama_complete', onRtDone)
+    socket.on('aiengine_ollama_error', onRtErr)
     return () => {
       socket.off('aiengine_planner_pull', onTick)
       socket.off('aiengine_planner_pull_complete', onDone)
       socket.off('aiengine_planner_pull_error', onErr)
+      socket.off('aiengine_ollama_progress', onRtTick)
+      socket.off('aiengine_ollama_complete', onRtDone)
+      socket.off('aiengine_ollama_error', onRtErr)
     }
   }, [socket, load, onChanged])
+
+  const installRuntime = async () => {
+    setError(null)
+    playSound('start')
+    setRtInstall({ message: 'starting…' })
+    try {
+      const res = await fetch(`${API_URL}/ai-engine/planners/install-runtime`,
+                              { method: 'POST' })
+      const d = await res.json()
+      if (!d.success) {
+        setRtInstall(null)
+        setError(d.error || 'could not start the install')
+      }
+    } catch (err) {
+      setRtInstall(null)
+      setError(err.message)
+    }
+  }
 
   const startPull = async (name) => {
     setError(null)
@@ -106,10 +143,41 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
       </p>
 
       {!info.ollamaAvailable ? (
-        <div className="aistudio-callout warning">
-          Ollama isn't running. Install it from ollama.com, then{' '}
-          <button className="aistudio-linkbtn" onClick={load}>re-check</button>.
-        </div>
+        rtInstall || info.bundled?.installing ? (
+          <div className="aistudio-progress">
+            <div className="ai-studio-progress-bar">
+              <div
+                className={`ai-studio-progress-fill${rtInstall?.percentage == null ? ' indeterminate' : ''}`}
+                style={{ width: `${rtInstall?.percentage ?? 100}%` }}
+              />
+            </div>
+            <div className="ai-studio-progress-message">
+              {rtInstall?.message || 'installing Ollama…'}
+            </div>
+          </div>
+        ) : (
+          <>
+            {info.bundled?.supported && (
+              <div className="aistudio-model-actions">
+                <button className="iso-browse-button" onMouseEnter={playHoverSound}
+                        onClick={installRuntime}>
+                  Install bundled Ollama (~1.2 GB)
+                </button>
+                <span className="aistudio-row-hint">
+                  self-contained — managed by the app
+                </span>
+              </div>
+            )}
+            <div className="aistudio-callout warning">
+              No Ollama server found.
+              {info.bundled?.supported
+                ? ' Use the one-click install above, or '
+                : ' '}
+              install it yourself from ollama.com, then{' '}
+              <button className="aistudio-linkbtn" onClick={load}>re-check</button>.
+            </div>
+          </>
+        )
       ) : (
         <>
           {(info.local || []).map((m) => (
