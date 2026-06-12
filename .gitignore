@@ -96,3 +96,11 @@ pytest-cache-files-*/
 
 # local release staging (release_to_r2.py)
 releases/
+
+# model-lab artifacts (regenerable; NEVER commit ISOs)
+/modellab/*.iso
+/modellab/rigkits/
+/modellab/out/
+/modellab/shots/
+/modellab/__pycache__/
+/modellab/roundtrip/

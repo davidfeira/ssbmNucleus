@@ -4,7 +4,7 @@ vanilla costume's group count (BM didn't restructure that character's model)."""
 import json
 from pathlib import Path
 
-ML = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab")
+ML = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab")
 BK = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\backend")
 
 vis = json.load(open(BK / "modellab" / "visibility_tables.json"))

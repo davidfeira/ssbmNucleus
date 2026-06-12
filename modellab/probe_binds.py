@@ -10,12 +10,12 @@ from modellab.rig import joint_world_positions, load_pose  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_vanilla.smd")
+m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_vanilla.smd")
 a = joint_world_positions(m)
 b = {j: mm[:3, 3] for j, mm in load_pose(
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_bind.json").items()}
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_bind.json").items()}
 c = {j: mm[:3, 3] for j, mm in load_pose(
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_wait1.json").items()}
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_wait1.json").items()}
 
 print(f"{'bone':>8} {'smd-fk bind':>22} {'trs bind':>22} {'wait1':>22}")
 for j in (0, 1, 2, 4, 19, 21, 38, 39, 41, 44, 45, 46, 47, 48):

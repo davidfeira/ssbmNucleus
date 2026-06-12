@@ -9,9 +9,9 @@ from modellab.rig import (joint_world_matrices, load_pose, skin_matrices,  # noq
 
 import numpy as np  # noqa: E402
 
-m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_vanilla.smd")
+m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_vanilla.smd")
 bind = joint_world_matrices(m)
-pose = load_pose(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_wait1.json")
+pose = load_pose(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_wait1.json")
 skin = skin_matrices(bind, pose)
 names = {b.id: b.name for b in m.bones}
 

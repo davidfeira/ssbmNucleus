@@ -32,8 +32,8 @@ def audit(path, label):
     return set(usage)
 
 
-van = audit(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\fox\fox_vanilla.smd",
+van = audit(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\fox\fox_vanilla.smd",
             "vanilla fox mesh")
-out = audit(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\hunyuan_on_fox\hunyuan_on_fox.smd",
+out = audit(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\hunyuan_on_fox\hunyuan_on_fox.smd",
             "rigged hunyuan output")
 print("\nbones in output but NOT in vanilla usage:", sorted(out - van))

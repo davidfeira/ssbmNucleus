@@ -16,7 +16,7 @@ import numpy as np  # noqa: E402
 
 EXE = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\utility\tools\HSDLib\HSDRawViewer\bin\Release\net6.0-windows\HSDRawViewer.exe")
 FILES = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\storage\test-base\files")
-OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits")
+OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits")
 
 CODES = {
     'PlCa': 'Captain Falcon', 'PlCl': 'Young Link', 'PlDk': 'Donkey Kong',
@@ -97,7 +97,7 @@ for code, name in sorted(CODES.items()):
         results.append({"code": code, "name": name, "status": f"audit failed: {e}"})
         print(f"{name:>18}: AUDIT FAILED {e}")
 
-out_json = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\character_map.json")
+out_json = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\character_map.json")
 out_json.write_text(json.dumps(results, indent=2))
 ok = sum(1 for r in results if r.get("status") == "ok")
 print(f"\n{ok}/{len(results)} characters mapped -> {out_json}")

@@ -9,7 +9,7 @@ from modellab.rig import joint_world_positions  # noqa: E402
 import numpy as np  # noqa: E402
 
 m = smd.load(sys.argv[1] if len(sys.argv) > 1 else
-             r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\falco_on_fox\falco_on_fox.smd")
+             r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\falco_on_fox\falco_on_fox.smd")
 world = joint_world_positions(m)
 names = {b.id: b.name for b in m.bones}
 

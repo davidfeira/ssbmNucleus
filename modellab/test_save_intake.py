@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 from urllib import request
 
-DAT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\falco_on_fox\PlFxFalcoV8.dat")
+DAT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\falco_on_fox\PlFxFalcoV8.dat")
 NAME = "Falco (AI Model Lab)"
 
 buf = io.BytesIO()

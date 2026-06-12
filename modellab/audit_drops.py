@@ -8,7 +8,7 @@ from modellab.rig import load_visibility  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\falco\falco_vanilla.smd")
+m = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\falco\falco_vanilla.smd")
 names = {b.id: b.name for b in m.bones}
 
 groups: dict = {}

@@ -55,7 +55,7 @@ shot = result.get("screenshot")
 if shot and shot.startswith("data:image"):
     import base64
     b64 = shot.split(",", 1)[1]
-    out_png = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\falco_on_fox\ingame.png")
+    out_png = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\falco_on_fox\ingame.png")
     out_png.write_bytes(base64.b64decode(b64))
     print("screenshot ->", out_png)
 for c in result.get("checks", []):
@@ -63,7 +63,7 @@ for c in result.get("checks", []):
     s = c.get("screenshot")
     if s and s.startswith("data:image"):
         import base64
-        p = Path(rf"C:\Users\david\projects\ssbmNucleus-master\modellab\out\falco_on_fox\ingame_{c.get('label', 'check').replace(' ', '_')}.png")
+        p = Path(rf"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\falco_on_fox\ingame_{c.get('label', 'check').replace(' ', '_')}.png")
         p.write_bytes(base64.b64decode(s.split(",", 1)[1]))
         print("  ->", p)
 

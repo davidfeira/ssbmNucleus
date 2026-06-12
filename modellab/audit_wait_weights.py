@@ -9,8 +9,8 @@ from modellab.rig import (joint_world_matrices, load_pose, skin_matrices,  # noq
 
 import numpy as np  # noqa: E402
 
-RK = r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits"
-out = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\falco_on_fox\falco_v8.smd")
+RK = r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits"
+out = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\falco_on_fox\falco_v8.smd")
 
 # stored verts are target-bind space; play them forward to fox WAIT
 tgt_skin = skin_matrices(joint_world_matrices(out), load_pose(RK + r"\fox\fox_wait1.json"))

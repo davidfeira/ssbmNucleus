@@ -18,7 +18,7 @@ sys.path.insert(0, str(BACKEND))
 
 EXE = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\utility\tools\HSDLib\HSDRawViewer\bin\Release\net6.0-windows\HSDRawViewer.exe")
 FILES = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\storage\test-base\files")
-ML = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab")
+ML = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab")
 RK = ML / "rigkits"
 VANILLA_ISO = r"C:\Users\david\projects\melee\working\melee-vanilla-v1.02-working.iso"
 

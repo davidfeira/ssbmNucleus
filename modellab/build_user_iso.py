@@ -9,7 +9,7 @@ os.chdir(BACKEND)
 from test_build import build_single_costume_iso  # noqa: E402
 
 out = sys.argv[1] if len(sys.argv) > 1 else \
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\modellab-bottle-v2.iso"
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\modellab-bottle-v2.iso"
 index = build_single_costume_iso(
     vanilla_iso=r"C:\Users\david\projects\melee\working\melee-vanilla-v1.02-working.iso",
     character="Fox",

@@ -11,8 +11,8 @@ sys.path.insert(0, r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\back
 from modellab import smd  # noqa: E402
 from modellab.rig import joint_world_positions, load_visibility  # noqa: E402
 
-KIT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\fox\fox_vanilla.smd")
-OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\bonemap")
+KIT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\fox\fox_vanilla.smd")
+OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\bonemap")
 OUT.mkdir(parents=True, exist_ok=True)
 
 kit = smd.load(KIT)
@@ -66,7 +66,7 @@ left = list(marker_iter)
 print(f"markers placed: {len(used) - len(left)}/{len(used)} (left over: {left})")
 smd.save(out, OUT / "bonemap.smd")
 shutil.copyfile(
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\hunyuan_on_fox\mat0.png",
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\hunyuan_on_fox\mat0.png",
     OUT / "mat0.png")
 (OUT / "bonemap.smd.textures.json").write_text(json.dumps({"mat0": "mat0.png"}))
 print("bonemap SMD written")

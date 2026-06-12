@@ -9,8 +9,8 @@ from modellab.rig import joint_world_positions  # noqa: E402
 import numpy as np  # noqa: E402
 
 pose = json.loads(open(
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\fox\fox_wait1.json").read())
-kit = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\fox\fox_vanilla.smd")
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\fox\fox_wait1.json").read())
+kit = smd.load(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\fox\fox_vanilla.smd")
 bind = joint_world_positions(kit)
 
 print("bones displaced >1.5 units between bind and Wait1 frame 0:")

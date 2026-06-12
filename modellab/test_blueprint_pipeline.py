@@ -24,7 +24,7 @@ print("dat bytes:", len(session["datBytes"]))
 print("dat name:", session["datName"])
 print("preview:", "yes" if session["preview"] else "none")
 
-out = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\blueprint_test")
+out = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\blueprint_test")
 out.mkdir(parents=True, exist_ok=True)
 (out / session["datName"]).write_bytes(session["datBytes"])
 if session["preview"]:

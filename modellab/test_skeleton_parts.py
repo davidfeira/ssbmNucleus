@@ -10,8 +10,8 @@ from modellab import smd  # noqa: E402
 from modellab.rig import load_dynamics  # noqa: E402
 from modellab.skeleton_parts import label_parts  # noqa: E402
 
-RK = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits")
-REF = json.load(open(r"C:\Users\david\projects\ssbmNucleus-master\modellab\bone_names_reference.json"))
+RK = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits")
+REF = json.load(open(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\bone_names_reference.json"))
 
 
 def expected_part(name):

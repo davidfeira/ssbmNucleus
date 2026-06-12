@@ -9,8 +9,8 @@ from pathlib import Path
 sys.path.insert(0, r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\backend")
 from modellab import smd  # noqa: E402
 
-KIT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\rigkits\fox\fox_vanilla.smd")
-OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\staircase")
+KIT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\rigkits\fox\fox_vanilla.smd")
+OUT = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\staircase")
 OUT.mkdir(parents=True, exist_ok=True)
 
 kit = smd.load(KIT)
@@ -56,7 +56,7 @@ for i in range(N):
 
 smd.save(out, OUT / "staircase.smd")
 shutil.copyfile(
-    r"C:\Users\david\projects\ssbmNucleus-master\modellab\out\hunyuan_on_fox\mat0.png",
+    r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab\out\hunyuan_on_fox\mat0.png",
     OUT / "mat0.png")
 (OUT / "staircase.smd.textures.json").write_text(json.dumps({"mat0": "mat0.png"}))
 print("staircase SMD written:", OUT / "staircase.smd")
