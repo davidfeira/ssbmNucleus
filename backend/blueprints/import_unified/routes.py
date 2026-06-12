@@ -24,6 +24,7 @@ from blueprints.menus import (install_icon_grid_mod, looks_like_icon_grid_zip,
 from extra_types import get_storage_character
 
 from . import import_bp
+from .detection import detect_content_type
 from .helpers import (
     sanitize_filename,
     compute_dat_hash,
@@ -69,12 +70,37 @@ def import_file():
         is_7z = fname_lower.endswith('.7z')
         is_dat = fname_lower.endswith('.dat')
         is_usd = fname_lower.endswith('.usd')
+        is_xdelta = fname_lower.endswith('.xdelta')
+        is_ssbm = fname_lower.endswith('.ssbm')
 
-        if not (is_zip or is_7z or is_dat or is_usd):
+        if not (is_zip or is_7z or is_dat or is_usd or is_xdelta or is_ssbm):
             return jsonify({
                 'success': False,
-                'error': 'Only ZIP, 7z, DAT, and USD files are supported'
+                'error': 'Only ZIP, 7z, DAT, USD, XDELTA, and SSBM files are supported'
             }), 400
+
+        # Bare .ssbm bundle — store it directly, nothing to detect
+        if is_ssbm:
+            from blueprints.bundles import import_bundle_file
+            with tempfile.NamedTemporaryFile(suffix='.ssbm', delete=False) as tmp:
+                file.save(tmp.name)
+                ssbm_tmp = tmp.name
+            try:
+                result = import_bundle_file(ssbm_tmp, Path(file.filename).stem)
+                return jsonify({
+                    'success': True,
+                    'type': 'bundle',
+                    'bundle_id': result['bundle_id'],
+                    'name': result['name'],
+                    'message': f"Imported bundle: {result['name']}"
+                })
+            except ValueError as e:
+                return jsonify({'success': False, 'error': str(e)}), 400
+            finally:
+                try:
+                    os.unlink(ssbm_tmp)
+                except OSError:
+                    pass
 
         # Get slippi_action parameter (can be "fix", "import_as_is", or None)
         slippi_action = request.form.get('slippi_action')
@@ -91,8 +117,9 @@ def import_file():
         effect_type = request.form.get('effect_type')  # e.g. 'gun', 'laser', 'sword'
         logger.info(f"[DEBUG] mod_type: {mod_type}, effect_type: {effect_type}")
 
-        if is_dat or is_usd:
-            # Wrap raw costume archives in a temp zip so the rest of the pipeline runs unchanged.
+        if is_dat or is_usd or is_xdelta:
+            # Wrap raw costume archives (and bare .xdelta patches) in a temp
+            # zip so the rest of the pipeline runs unchanged.
             dat_bytes = file.read()
             with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
                 temp_zip_path = tmp.name
@@ -172,6 +199,89 @@ def import_file():
                     })
                 except zipfile.BadZipFile:
                     return jsonify({'success': False, 'error': 'Invalid or corrupt zip file'}), 400
+
+            # PHASE 0: package/bundle markers. A custom-character fighter.zip
+            # or custom-stage package is full of Pl*/Gr* dats that the
+            # character/stage detectors would happily misclassify as loose
+            # costumes, so the marker check must dispatch BEFORE them.
+            shallow = detect_content_type(temp_zip_path, file.filename, deep=False)
+
+            if shallow['type'] == 'custom_character' and is_zip:
+                from blueprints.custom_characters import import_custom_character_zip_bytes
+                logger.info('[OK] Detected custom character package (fighter.json)')
+                try:
+                    entry = import_custom_character_zip_bytes(
+                        Path(temp_zip_path).read_bytes(), Path(file.filename).stem)
+                except ValueError as e:
+                    return jsonify({'success': False, 'error': str(e)}), 400
+                return jsonify({
+                    'success': True,
+                    'type': 'custom_character',
+                    'character': entry,
+                    'message': f"Imported custom character: {entry['name']}"
+                })
+
+            if shallow['type'] == 'custom_stage' and is_zip:
+                from blueprints.custom_stages import import_custom_stage_zip_bytes
+                logger.info('[OK] Detected custom stage package (stage.json)')
+                try:
+                    entry = import_custom_stage_zip_bytes(
+                        Path(temp_zip_path).read_bytes(), Path(file.filename).stem)
+                except ValueError as e:
+                    return jsonify({'success': False, 'error': str(e)}), 400
+                return jsonify({
+                    'success': True,
+                    'type': 'custom_stage',
+                    'stage': entry,
+                    'message': f"Imported custom stage: {entry['name']}"
+                })
+
+            if shallow['type'] == 'bundle' and is_zip:
+                from blueprints.bundles import import_bundle_file
+                logger.info('[OK] Detected texture bundle (manifest.json + textures/)')
+                try:
+                    result = import_bundle_file(temp_zip_path, Path(file.filename).stem)
+                except ValueError as e:
+                    return jsonify({'success': False, 'error': str(e)}), 400
+                return jsonify({
+                    'success': True,
+                    'type': 'bundle',
+                    'bundle_id': result['bundle_id'],
+                    'name': result['name'],
+                    'message': f"Imported bundle: {result['name']}"
+                })
+
+            if shallow['type'] == 'mex_stage_yml' and is_zip:
+                # Classic MexTK package: convert stage.yml -> stage.json
+                # (incl. the embedded map-GOBJ / moving-collision tables that
+                # the extended mexLib now carries into MxDt) and import it as
+                # a regular custom stage.
+                from stage_yml_converter import convert_stage_yml_zip
+                from blueprints.custom_stages import import_custom_stage_zip_bytes
+                logger.info('[OK] Detected classic m-ex stage package (stage.yml), converting...')
+                try:
+                    converted, conv_info = convert_stage_yml_zip(
+                        Path(temp_zip_path).read_bytes(),
+                        custom_title or Path(file.filename).stem)
+                    entry = import_custom_stage_zip_bytes(
+                        converted, Path(file.filename).stem)
+                except ValueError as e:
+                    return jsonify({
+                        'success': False,
+                        'type': 'mex_stage_yml',
+                        'error': f'Classic stage package could not be converted: {e}'
+                    }), 400
+                message = f"Imported custom stage: {entry['name']} (converted from classic m-ex format)"
+                if conv_info.get('skipped_sound'):
+                    message += ' — custom sound effects not carried over (.spk unsupported)'
+                return jsonify({
+                    'success': True,
+                    'type': 'custom_stage',
+                    'stage': entry,
+                    'converted_from': 'stage_yml',
+                    'conversion': conv_info,
+                    'message': message
+                })
 
             # PHASE 1: Try character detection first
             logger.info("Phase 1: Attempting character detection...")
@@ -335,7 +445,12 @@ def import_file():
                         }), 200
 
                 # Import each detected stage
+                from .screenshot_backfill import enqueue_stage_screenshot
+                vanilla_iso_path = request.form.get('vanillaIsoPath')
+                slippi_dolphin_path = request.form.get('slippiDolphinPath')
+
                 results = []
+                backfill_queued = []
                 for stage_info in stage_infos:
                     logger.info(f"  - Importing {stage_info['stage_name']}")
                     result = import_stage_mod(temp_zip_path, stage_info, file.filename, custom_name=custom_title)
@@ -344,13 +459,27 @@ def import_file():
                             'stage': stage_info['stage_name'],
                             'variant': result.get('variant_id')
                         })
+                        # No screenshot in the zip → capture one in-game in the
+                        # background (clean solo-stage shot via the test harness).
+                        if not stage_info.get('screenshot'):
+                            if enqueue_stage_screenshot(
+                                    stage_info.get('stage_code'),
+                                    stage_info['folder'],
+                                    result.get('variant_id'),
+                                    vanilla_iso_path, slippi_dolphin_path):
+                                backfill_queued.append(result.get('variant_id'))
+
+                message = f"Imported {len(results)} stage variant(s)"
+                if backfill_queued:
+                    message += ' — capturing screenshot in the background'
 
                 return jsonify({
                     'success': True,
                     'type': 'stage',
                     'imported_count': len(results),
                     'stages': results,
-                    'message': f"Imported {len(results)} stage variant(s)"
+                    'screenshot_backfill': backfill_queued,
+                    'message': message
                 })
 
             # PHASE 3: Try patch (xdelta) detection
@@ -474,7 +603,77 @@ def import_file():
                 except (zipfile.BadZipFile, RuntimeError):
                     pass
 
-            # PHASE 5: Detection failed
+            # PHASE 5: nothing matched the import pipelines. Run the full
+            # classifier once more for an actionable answer — either a
+            # late-dispatchable type (SSS background) or a specific
+            # explanation instead of a generic "could not detect".
+            logger.info('Phase 5: Running full classification for diagnosis...')
+            verdict = detect_content_type(temp_zip_path, file.filename, deep=True)
+            vtype = verdict['type']
+            detail = verdict['detail']
+
+            if vtype == 'css_background':
+                from blueprints.menus.backgrounds import import_bg_archive
+                logger.info('[OK] Detected menu background source (MnSlMap/MnSlChr)')
+                try:
+                    mod = import_bg_archive(temp_zip_path, file.filename,
+                                            name=custom_title)
+                    return jsonify({
+                        'success': True,
+                        'type': 'menu_mod',
+                        'menu_mod_type': 'css_background',
+                        'mod': mod,
+                        'message': f"Imported menu background: {mod['name']}"
+                    })
+                except (ValueError, RuntimeError) as e:
+                    return jsonify({'success': False, 'error': str(e)}), 400
+
+            explanations = {
+                'character_renamed': lambda d: (
+                    'This contains costume file(s) with non-standard names — detected '
+                    + ', '.join(f"{c['character']} ({c['costume_code']}) in {c['dat']}"
+                                for c in d.get('costumes', []))
+                    + '. Rename each file to its costume code (e.g. '
+                    + (d.get('costumes') or [{}])[0].get('costume_code', 'PlFxNr')
+                    + '.dat) and import again.'),
+                'custom_fighter_costume': lambda d: (
+                    'This looks like a costume for a custom fighter (not a vanilla '
+                    'character): ' + ', '.join(d.get('dats', []))
+                    + '. Add it to a custom character via Custom Characters → Add Skin.'),
+                'ic_half': lambda d: (
+                    f"This zip only contains {d.get('half', 'one')}-half Ice Climbers "
+                    'costumes. Popo and Nana must be imported together — select both '
+                    'zips at once, or use a zip that contains the matching '
+                    f"{'Nana' if d.get('half') == 'popo' else 'Popo'} file."),
+                'music': lambda d: (
+                    'This contains .hps music track(s). Music import from the vault '
+                    'is not supported yet — add tracks to a build via stage playlists.'),
+                'dolphin_textures': lambda d: (
+                    'This is a Dolphin texture pack (tex1_*.png). It belongs in '
+                    "Slippi Dolphin's Load/Textures folder, not the vault."),
+                'sound_bank': lambda d: (
+                    'This contains sound bank files (.spk/.ssm), which are not yet '
+                    'importable on their own.'),
+                'unsupported_audio': lambda d: (
+                    'This contains regular audio files ('
+                    + ', '.join(d.get('extensions', [])) +
+                    '). Melee needs .hps audio — convert tracks first.'),
+                'nested_archive': lambda d: (
+                    'This archive only contains other archives ('
+                    + ', '.join(d.get('archives', [])[:5]) +
+                    '). Extract it and import the inner files.'),
+            }
+
+            if vtype in explanations:
+                logger.info(f'Classified as {vtype} (no import pipeline)')
+                return jsonify({
+                    'success': False,
+                    'type': vtype,
+                    'detail': {k: v for k, v in detail.items()
+                               if k not in ('char_infos', 'stage_infos')},
+                    'error': explanations[vtype](detail)
+                }), 400
+
             logger.warning("Could not detect mod type")
             return jsonify({
                 'success': False,

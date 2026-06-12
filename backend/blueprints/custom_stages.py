@@ -122,6 +122,77 @@ def list_custom_stages():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def import_custom_stage_zip_bytes(zip_data, fallback_name):
+    """Import a custom stage package (zip bytes) into the vault.
+    Returns the metadata entry. Raises ValueError on an invalid package.
+    Shared by the dedicated route and the unified /import/file dispatcher."""
+    import io
+    with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+        names = zf.namelist()
+
+        stage_json_path = None
+        dat_files = []
+        icon_path = None
+        banner_path = None
+
+        for name in names:
+            basename = name.split('/')[-1].lower()
+            if basename == 'stage.json':
+                stage_json_path = name
+            elif basename.endswith('.dat'):
+                dat_files.append(name)
+            elif basename == 'icon.png':
+                icon_path = name
+            elif basename == 'banner.png':
+                banner_path = name
+
+        if not stage_json_path:
+            raise ValueError('ZIP must contain a stage.json file')
+        if not dat_files:
+            raise ValueError('ZIP must contain at least one .dat file')
+
+        stage_meta = json.loads(zf.read(stage_json_path))
+        stage_name = stage_meta.get('name', fallback_name)
+
+        slug = _dedupe_slug(_make_slug(stage_name))
+        stage_dir = CUSTOM_STAGES_PATH / slug
+        stage_dir.mkdir(parents=True, exist_ok=True)
+
+        (stage_dir / 'stage.zip').write_bytes(zip_data)
+
+        with open(stage_dir / 'stage.json', 'w') as f:
+            json.dump(stage_meta, f, indent=2)
+
+        has_icon = False
+        if icon_path:
+            (stage_dir / 'icon.png').write_bytes(zf.read(icon_path))
+            has_icon = True
+
+        has_banner = False
+        if banner_path:
+            (stage_dir / 'banner.png').write_bytes(zf.read(banner_path))
+            has_banner = True
+
+    entry = {
+        'slug': slug,
+        'name': stage_name,
+        'source': 'zip',
+        'date_added': datetime.now().isoformat(),
+        'series_id': stage_meta.get('seriesID', 0),
+        'sound_bank': stage_meta.get('soundBank', None),
+        'dat_files': [n.split('/')[-1] for n in dat_files],
+        'has_banner': has_banner,
+        'has_icon': has_icon
+    }
+
+    metadata = _read_metadata()
+    metadata['custom_stages'].append(entry)
+    _write_metadata(metadata)
+
+    logger.info(f"[OK] Imported custom stage '{stage_name}' as {slug}")
+    return entry
+
+
 @custom_stages_bp.route('/api/mex/custom-stages/import-zip', methods=['POST'])
 def import_custom_stage_zip():
     try:
@@ -132,74 +203,11 @@ def import_custom_stage_zip():
         if not uploaded.filename or not uploaded.filename.lower().endswith('.zip'):
             return jsonify({'success': False, 'error': 'File must be a .zip'}), 400
 
-        zip_data = uploaded.read()
-
-        import io
-        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            names = zf.namelist()
-
-            stage_json_path = None
-            dat_files = []
-            icon_path = None
-            banner_path = None
-
-            for name in names:
-                lower = name.lower()
-                basename = name.split('/')[-1].lower()
-                if basename == 'stage.json':
-                    stage_json_path = name
-                elif basename.endswith('.dat'):
-                    dat_files.append(name)
-                elif basename == 'icon.png':
-                    icon_path = name
-                elif basename == 'banner.png':
-                    banner_path = name
-
-            if not stage_json_path:
-                return jsonify({'success': False, 'error': 'ZIP must contain a stage.json file'}), 400
-            if not dat_files:
-                return jsonify({'success': False, 'error': 'ZIP must contain at least one .dat file'}), 400
-
-            stage_meta = json.loads(zf.read(stage_json_path))
-            stage_name = stage_meta.get('name', uploaded.filename.rsplit('.', 1)[0])
-
-            slug = _dedupe_slug(_make_slug(stage_name))
-            stage_dir = CUSTOM_STAGES_PATH / slug
-            stage_dir.mkdir(parents=True, exist_ok=True)
-
-            (stage_dir / 'stage.zip').write_bytes(zip_data)
-
-            with open(stage_dir / 'stage.json', 'w') as f:
-                json.dump(stage_meta, f, indent=2)
-
-            has_icon = False
-            if icon_path:
-                (stage_dir / 'icon.png').write_bytes(zf.read(icon_path))
-                has_icon = True
-
-            has_banner = False
-            if banner_path:
-                (stage_dir / 'banner.png').write_bytes(zf.read(banner_path))
-                has_banner = True
-
-        entry = {
-            'slug': slug,
-            'name': stage_name,
-            'source': 'zip',
-            'date_added': datetime.now().isoformat(),
-            'series_id': stage_meta.get('seriesID', 0),
-            'sound_bank': stage_meta.get('soundBank', None),
-            'dat_files': [n.split('/')[-1] for n in dat_files],
-            'has_banner': has_banner,
-            'has_icon': has_icon
-        }
-
-        metadata = _read_metadata()
-        metadata['custom_stages'].append(entry)
-        _write_metadata(metadata)
-
-        logger.info(f"[OK] Imported custom stage '{stage_name}' as {slug}")
+        entry = import_custom_stage_zip_bytes(
+            uploaded.read(), uploaded.filename.rsplit('.', 1)[0])
         return jsonify({'success': True, 'stage': entry})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     except zipfile.BadZipFile:
         return jsonify({'success': False, 'error': 'Invalid or corrupted ZIP file'}), 400
     except Exception as e:

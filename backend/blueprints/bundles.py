@@ -952,6 +952,62 @@ def install_bundle_from_storage(bundle_id):
         }), 500
 
 
+def import_bundle_file(src_path, fallback_name):
+    """Copy a .ssbm bundle into storage and register it (does NOT install).
+    Returns {'bundle_id', 'name'}. Raises ValueError on an invalid bundle.
+    Shared by the dedicated route and the unified /import/file dispatcher."""
+    bundle_id = str(uuid.uuid4())[:8]
+    bundle_path = BUNDLE_PATH / f"{bundle_id}.ssbm"
+    shutil.copyfile(str(src_path), str(bundle_path))
+
+    # Extract manifest info from the bundle
+    try:
+        with zipfile.ZipFile(bundle_path, 'r') as zf:
+            manifest = json.loads(zf.read('manifest.json'))
+    except Exception as e:
+        if bundle_path.exists():
+            os.remove(bundle_path)
+        raise ValueError(f'Invalid bundle: {e}')
+
+    file_size = bundle_path.stat().st_size
+
+    # Count textures in bundle
+    texture_count = 0
+    try:
+        with zipfile.ZipFile(bundle_path, 'r') as zf:
+            texture_count = len([n for n in zf.namelist() if n.startswith('textures/') and n.endswith('.png')])
+    except:
+        pass
+
+    # Extract image if present in bundle
+    try:
+        with zipfile.ZipFile(bundle_path, 'r') as zf:
+            if 'image.png' in zf.namelist():
+                image_data = zf.read('image.png')
+                image_dest = BUNDLE_PATH / f"{bundle_id}.png"
+                with open(image_dest, 'wb') as f:
+                    f.write(image_data)
+                logger.info(f"Extracted image from bundle: {image_dest}")
+    except Exception as e:
+        logger.warning(f"Failed to extract image from bundle: {e}")
+
+    name = manifest.get('name', fallback_name)
+    bundles = load_bundle_metadata()
+    bundles.append({
+        'id': bundle_id,
+        'name': name,
+        'description': manifest.get('description', ''),
+        'size': file_size,
+        'size_mb': round(file_size / (1024 * 1024), 2),
+        'texture_count': texture_count,
+        'created': datetime.now().isoformat()
+    })
+    save_bundle_metadata(bundles)
+
+    logger.info(f"[OK] Imported bundle to storage: {bundle_id} - {name}")
+    return {'bundle_id': bundle_id, 'name': name}
+
+
 @bundles_bp.route('/api/mex/bundle/import', methods=['POST'])
 def import_bundle():
     """Import a .ssbm bundle to storage (saves file + metadata, does NOT install)"""
@@ -977,71 +1033,25 @@ def import_bundle():
                 'error': 'File must be a .ssbm bundle'
             }), 400
 
-        # Generate unique ID for storage
-        bundle_id = str(uuid.uuid4())[:8]
-
-        # Save bundle file to storage
-        bundle_path = BUNDLE_PATH / f"{bundle_id}.ssbm"
-        file.save(str(bundle_path))
-
-        # Extract manifest info from the bundle
+        with tempfile.NamedTemporaryFile(suffix='.ssbm', delete=False) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
         try:
-            with zipfile.ZipFile(bundle_path, 'r') as zf:
-                manifest_data = zf.read('manifest.json')
-                manifest = json.loads(manifest_data)
-        except Exception as e:
-            # If we can't read manifest, delete the file and fail
-            if bundle_path.exists():
-                os.remove(bundle_path)
-            return jsonify({
-                'success': False,
-                'error': f'Invalid bundle: {str(e)}'
-            }), 400
-
-        # Get file size
-        file_size = bundle_path.stat().st_size
-
-        # Count textures in bundle
-        texture_count = 0
-        try:
-            with zipfile.ZipFile(bundle_path, 'r') as zf:
-                texture_count = len([n for n in zf.namelist() if n.startswith('textures/') and n.endswith('.png')])
-        except:
-            pass
-
-        # Extract image if present in bundle
-        try:
-            with zipfile.ZipFile(bundle_path, 'r') as zf:
-                if 'image.png' in zf.namelist():
-                    image_data = zf.read('image.png')
-                    image_dest = BUNDLE_PATH / f"{bundle_id}.png"
-                    with open(image_dest, 'wb') as f:
-                        f.write(image_data)
-                    logger.info(f"Extracted image from bundle: {image_dest}")
-        except Exception as e:
-            logger.warning(f"Failed to extract image from bundle: {e}")
-
-        # Save to metadata
-        bundles = load_bundle_metadata()
-        bundles.append({
-            'id': bundle_id,
-            'name': manifest.get('name', file.filename.replace('.ssbm', '')),
-            'description': manifest.get('description', ''),
-            'size': file_size,
-            'size_mb': round(file_size / (1024 * 1024), 2),
-            'texture_count': texture_count,
-            'created': datetime.now().isoformat()
-        })
-        save_bundle_metadata(bundles)
-
-        logger.info(f"[OK] Imported bundle to storage: {bundle_id} - {manifest.get('name', 'Unknown')}")
+            result = import_bundle_file(tmp_path, file.filename.replace('.ssbm', ''))
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
         return jsonify({
             'success': True,
-            'bundle_id': bundle_id,
-            'name': manifest.get('name', file.filename.replace('.ssbm', '')),
+            'bundle_id': result['bundle_id'],
+            'name': result['name'],
             'message': 'Bundle saved to storage'
         })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     except Exception as e:
         logger.error(f"Import bundle error: {str(e)}", exc_info=True)
         return jsonify({

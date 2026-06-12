@@ -15,6 +15,7 @@ The same pool installs into either the CSS (MnSlChr.usd) or the SSS
 (MnSlMap.usd) of the currently loaded MEX project.
 """
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -118,15 +119,106 @@ def list_bg_mods():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def import_bg_archive(src_path, original_filename, name=None, description=''):
+    """Import a menu background mod (shared CSS/SSS pool) from a file on disk.
+
+    Accepts .zip (containing MnSlChr.dat/.usd or MnSlMap.dat/.usd) or a raw
+    .dat/.usd file. Auto-detects CSS vs SSS source and extracts the background
+    model/animation bundle via HSDRawViewer.
+
+    Returns the mod dict (without URLs). Raises ValueError for bad input,
+    RuntimeError for extraction failures. Shared by the dedicated route and
+    the unified /import/file dispatcher.
+    """
+    fname_lower = original_filename.lower()
+    is_zip = fname_lower.endswith('.zip')
+    name = (name or '').strip() or Path(original_filename).stem
+    description = (description or '').strip()
+
+    with tempfile.TemporaryDirectory(prefix='menubg_') as tmp:
+        temp_root = Path(tmp)
+
+        if is_zip:
+            extract_dir = temp_root / 'extracted'
+            extract_dir.mkdir()
+            try:
+                _safe_extract_zip(Path(src_path), extract_dir)
+            except zipfile.BadZipFile:
+                raise ValueError('Invalid or corrupt zip file')
+            source_dat = _find_mnslchr_dat(extract_dir)
+            hsd_cmd = '--css-bg'
+            if source_dat is None:
+                source_dat = _find_mnslmap_dat(extract_dir)
+                hsd_cmd = '--sss-bg'
+            screenshot_src = _find_screenshot(extract_dir)
+        else:
+            source_dat = temp_root / Path(original_filename).name
+            shutil.copyfile(str(src_path), str(source_dat))
+            screenshot_src = None
+            # Detect by filename; default to CSS, fall back to SSS
+            if 'mnslmap' in fname_lower:
+                hsd_cmd = '--sss-bg'
+            else:
+                hsd_cmd = '--css-bg'
+
+        if source_dat is None or not source_dat.exists():
+            raise ValueError('No MnSlChr or MnSlMap .dat/.usd found in upload')
+
+        export_dir = temp_root / 'bg_export'
+        export_dir.mkdir()
+        result = _run_hsd_cli([hsd_cmd, 'export', str(source_dat), str(export_dir)])
+        if result is None:
+            # Try the other command in case detection was wrong
+            alt_cmd = '--sss-bg' if hsd_cmd == '--css-bg' else '--css-bg'
+            result = _run_hsd_cli([alt_cmd, 'export', str(source_dat), str(export_dir)])
+        if result is None:
+            raise RuntimeError('Failed to extract background from DAT')
+
+        bg_dat = export_dir / 'background.dat'
+        if not bg_dat.exists():
+            raise RuntimeError('HSDRawViewer did not produce background.dat')
+
+        # Create mod entry
+        mod_id = str(uuid.uuid4())[:8]
+        mod_dir = BG_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy background.dat
+        shutil.copy(str(bg_dat), str(mod_dir / 'background.dat'))
+
+        # Copy screenshot if available
+        screenshot_filename = None
+        if screenshot_src is not None and screenshot_src.exists():
+            screenshot_filename = f'screenshot{screenshot_src.suffix.lower()}'
+            shutil.copy(str(screenshot_src), str(mod_dir / screenshot_filename))
+
+        mod = {
+            'id': mod_id,
+            'name': name,
+            'description': description,
+            'screenshot': screenshot_filename,
+            'created': datetime.now().isoformat(),
+        }
+        _save_bg_mod_json(mod_id, mod)
+
+        catalog = _load_bg_catalog()
+        catalog.setdefault('mods', []).append({
+            'id': mod_id,
+            'name': name,
+            'description': description,
+            'screenshot': screenshot_filename,
+            'created': mod['created'],
+        })
+        _save_bg_catalog(catalog)
+
+        logger.info(f'[OK] Imported CSS background mod: {name} ({mod_id})')
+        return mod
+
+
 @menus_bp.route('/api/mex/menus/css/background/import', methods=['POST'])
 @menus_bp.route('/api/mex/menus/background/import', methods=['POST'])
 def import_bg_mod():
-    """Import a menu background mod (shared CSS/SSS pool).
-
-    Accepts .zip (containing MnSlChr.dat/.usd or MnSlMap.dat/.usd) or a raw
-    .dat/.usd file.  Auto-detects CSS vs SSS source and extracts the background
-    model/animation bundle via HSDRawViewer.
-    """
+    """Import a menu background mod (shared CSS/SSS pool)."""
     try:
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': 'No file uploaded'}), 400
@@ -135,96 +227,29 @@ def import_bg_mod():
             return jsonify({'success': False, 'error': 'No file selected'}), 400
 
         fname_lower = file.filename.lower()
-        is_zip = fname_lower.endswith('.zip')
-        is_dat = fname_lower.endswith('.dat')
-        is_usd = fname_lower.endswith('.usd')
-        if not (is_zip or is_dat or is_usd):
+        if not fname_lower.endswith(('.zip', '.dat', '.usd')):
             return jsonify({'success': False, 'error': 'File must be .zip, .dat, or .usd'}), 400
 
-        name = (request.form.get('name') or '').strip() or Path(file.filename).stem
-        description = (request.form.get('description') or '').strip()
+        suffix = Path(file.filename).suffix.lower()
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+        try:
+            mod = import_bg_archive(tmp_path, file.filename,
+                                    name=request.form.get('name'),
+                                    description=request.form.get('description'))
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
-        with tempfile.TemporaryDirectory(prefix='menubg_') as tmp:
-            temp_root = Path(tmp)
+        return jsonify({'success': True, 'mod': _attach_bg_urls(mod)})
 
-            if is_zip:
-                zip_path = temp_root / 'upload.zip'
-                file.save(str(zip_path))
-                extract_dir = temp_root / 'extracted'
-                extract_dir.mkdir()
-                try:
-                    _safe_extract_zip(zip_path, extract_dir)
-                except zipfile.BadZipFile:
-                    return jsonify({'success': False, 'error': 'Invalid or corrupt zip file'}), 400
-                source_dat = _find_mnslchr_dat(extract_dir)
-                hsd_cmd = '--css-bg'
-                if source_dat is None:
-                    source_dat = _find_mnslmap_dat(extract_dir)
-                    hsd_cmd = '--sss-bg'
-                screenshot_src = _find_screenshot(extract_dir)
-            else:
-                source_dat = temp_root / file.filename
-                file.save(str(source_dat))
-                screenshot_src = None
-                # Detect by filename; default to CSS, fall back to SSS
-                if 'mnslmap' in fname_lower:
-                    hsd_cmd = '--sss-bg'
-                else:
-                    hsd_cmd = '--css-bg'
-
-            if source_dat is None or not source_dat.exists():
-                return jsonify({'success': False, 'error': 'No MnSlChr or MnSlMap .dat/.usd found in upload'}), 400
-
-            export_dir = temp_root / 'bg_export'
-            export_dir.mkdir()
-            result = _run_hsd_cli([hsd_cmd, 'export', str(source_dat), str(export_dir)])
-            if result is None:
-                # Try the other command in case detection was wrong
-                alt_cmd = '--sss-bg' if hsd_cmd == '--css-bg' else '--css-bg'
-                result = _run_hsd_cli([alt_cmd, 'export', str(source_dat), str(export_dir)])
-            if result is None:
-                return jsonify({'success': False, 'error': 'Failed to extract background from DAT'}), 500
-
-            bg_dat = export_dir / 'background.dat'
-            if not bg_dat.exists():
-                return jsonify({'success': False, 'error': 'HSDRawViewer did not produce background.dat'}), 500
-
-            # Create mod entry
-            mod_id = str(uuid.uuid4())[:8]
-            mod_dir = BG_PATH / mod_id
-            mod_dir.mkdir(parents=True, exist_ok=True)
-
-            # Copy background.dat
-            shutil.copy(str(bg_dat), str(mod_dir / 'background.dat'))
-
-            # Copy screenshot if available
-            screenshot_filename = None
-            if screenshot_src is not None and screenshot_src.exists():
-                screenshot_filename = f'screenshot{screenshot_src.suffix.lower()}'
-                shutil.copy(str(screenshot_src), str(mod_dir / screenshot_filename))
-
-            mod = {
-                'id': mod_id,
-                'name': name,
-                'description': description,
-                'screenshot': screenshot_filename,
-                'created': datetime.now().isoformat(),
-            }
-            _save_bg_mod_json(mod_id, mod)
-
-            catalog = _load_bg_catalog()
-            catalog.setdefault('mods', []).append({
-                'id': mod_id,
-                'name': name,
-                'description': description,
-                'screenshot': screenshot_filename,
-                'created': mod['created'],
-            })
-            _save_bg_catalog(catalog)
-
-            logger.info(f'[OK] Imported CSS background mod: {name} ({mod_id})')
-            return jsonify({'success': True, 'mod': _attach_bg_urls(mod)})
-
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
     except Exception as e:
         logger.error(f'Import bg mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

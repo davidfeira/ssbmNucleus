@@ -24,6 +24,30 @@ def is_costume_archive_filename(filename: str) -> bool:
     )
 
 
+# Vanilla non-costume file prefixes — cheap skip before content parsing.
+_NON_COSTUME_PREFIXES = ('gr', 'mn', 'gm', 'ef', 'if', 'ty', 'lb', 'sd', 'nt', 'vi')
+
+
+def is_renamed_dat_candidate(filename: str) -> bool:
+    """Dat-like files that don't follow the Pl* naming convention but might
+    still be costume archives. Renamed uploads are very common in the wild
+    ('lucinablack.dat', 'Ghost Ganon PlGnLa.dat', 'PlCaBu.rat' variant
+    renames) — content parsing (DATParser + Ply symbol check) makes the
+    final call; this filter just nominates candidates cheaply."""
+    if not filename or filename.endswith('/') or filename.startswith('__MACOSX'):
+        return False
+
+    path = Path(filename)
+    suffix = path.suffix.lower()
+    dat_like = suffix in COSTUME_ARCHIVE_EXTENSIONS or (
+        # the old website's alternate-variant renames: .rat, .lat, .0at…
+        len(suffix) == 4 and suffix.endswith('at') and suffix[1].isalnum())
+    if not dat_like:
+        return False
+
+    return not path.stem.lower().startswith(_NON_COSTUME_PREFIXES)
+
+
 def get_costume_archive_extension(filename: str, default: str = '.dat') -> str:
     """Return the costume archive extension for a filename, defaulting to .dat."""
     suffix = Path(filename).suffix.lower()

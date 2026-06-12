@@ -58,6 +58,10 @@ def check_duplicate_skin(character: str, dat_hash: str, metadata: dict) -> dict:
     """
     char_data = metadata.get('characters', {}).get(character, {})
     for skin in char_data.get('skins', []):
+        # Skins lists also hold folder rows ({"type": "folder", ...}) used for
+        # vault organization — nothing to hash there.
+        if skin.get('type') == 'folder' or 'filename' not in skin:
+            continue
         existing_hash = skin.get('dat_hash')
 
         # If skin doesn't have hash, compute it from stored zip (backfill)

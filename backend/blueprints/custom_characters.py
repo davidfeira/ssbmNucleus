@@ -521,6 +521,64 @@ def list_custom_characters():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def import_custom_character_zip_bytes(zip_data, fallback_name):
+    """Import a custom character fighter package (zip bytes) into the vault.
+    Returns the metadata entry. Raises ValueError on an invalid package.
+    Shared by the dedicated route and the unified /import/file dispatcher."""
+    import io
+    with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+        names = zf.namelist()
+
+        fighter_json_path = None
+        icon_path = None
+
+        for name in names:
+            basename = name.split('/')[-1].lower()
+            if basename == 'fighter.json':
+                fighter_json_path = name
+            elif basename == 'icon.png':
+                icon_path = name
+
+        if not fighter_json_path:
+            raise ValueError('ZIP must contain a fighter.json file')
+
+        fighter_meta = json.loads(zf.read(fighter_json_path))
+        fighter_name = fighter_meta.get('name', fallback_name)
+
+        slug = _dedupe_slug(_make_slug(fighter_name))
+        char_dir = CUSTOM_CHARACTERS_PATH / slug
+        char_dir.mkdir(parents=True, exist_ok=True)
+
+        (char_dir / 'fighter.zip').write_bytes(zip_data)
+
+        with open(char_dir / 'fighter.json', 'w') as f:
+            json.dump(fighter_meta, f, indent=2)
+
+        has_css_icon = False
+        if icon_path:
+            (char_dir / 'css_icon.png').write_bytes(zf.read(icon_path))
+            has_css_icon = True
+
+        costume_count = len(fighter_meta.get('costumes', []))
+
+    entry = {
+        'slug': slug,
+        'name': fighter_name,
+        'source': 'zip',
+        'date_added': datetime.now().isoformat(),
+        'series_id': fighter_meta.get('seriesID', 0),
+        'costume_count': costume_count,
+        'has_css_icon': has_css_icon
+    }
+
+    metadata = _read_metadata()
+    metadata['custom_characters'].append(entry)
+    _write_metadata(metadata)
+
+    logger.info(f"[OK] Imported custom character '{fighter_name}' as {slug}")
+    return entry
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/import-zip', methods=['POST'])
 def import_custom_character_zip():
     try:
@@ -531,60 +589,11 @@ def import_custom_character_zip():
         if not uploaded.filename or not uploaded.filename.lower().endswith('.zip'):
             return jsonify({'success': False, 'error': 'File must be a .zip'}), 400
 
-        zip_data = uploaded.read()
-
-        import io
-        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            names = zf.namelist()
-
-            fighter_json_path = None
-            icon_path = None
-
-            for name in names:
-                basename = name.split('/')[-1].lower()
-                if basename == 'fighter.json':
-                    fighter_json_path = name
-                elif basename == 'icon.png':
-                    icon_path = name
-
-            if not fighter_json_path:
-                return jsonify({'success': False, 'error': 'ZIP must contain a fighter.json file'}), 400
-
-            fighter_meta = json.loads(zf.read(fighter_json_path))
-            fighter_name = fighter_meta.get('name', uploaded.filename.rsplit('.', 1)[0])
-
-            slug = _dedupe_slug(_make_slug(fighter_name))
-            char_dir = CUSTOM_CHARACTERS_PATH / slug
-            char_dir.mkdir(parents=True, exist_ok=True)
-
-            (char_dir / 'fighter.zip').write_bytes(zip_data)
-
-            with open(char_dir / 'fighter.json', 'w') as f:
-                json.dump(fighter_meta, f, indent=2)
-
-            has_css_icon = False
-            if icon_path:
-                (char_dir / 'css_icon.png').write_bytes(zf.read(icon_path))
-                has_css_icon = True
-
-            costume_count = len(fighter_meta.get('costumes', []))
-
-        entry = {
-            'slug': slug,
-            'name': fighter_name,
-            'source': 'zip',
-            'date_added': datetime.now().isoformat(),
-            'series_id': fighter_meta.get('seriesID', 0),
-            'costume_count': costume_count,
-            'has_css_icon': has_css_icon
-        }
-
-        metadata = _read_metadata()
-        metadata['custom_characters'].append(entry)
-        _write_metadata(metadata)
-
-        logger.info(f"[OK] Imported custom character '{fighter_name}' as {slug}")
+        entry = import_custom_character_zip_bytes(
+            uploaded.read(), uploaded.filename.rsplit('.', 1)[0])
         return jsonify({'success': True, 'character': entry})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     except zipfile.BadZipFile:
         return jsonify({'success': False, 'error': 'Invalid or corrupted ZIP file'}), 400
     except Exception as e:

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 import zipfile
 
-from core.costume_files import list_costume_archive_names
+from core.costume_files import list_costume_archive_names, is_renamed_dat_candidate
 
 # Try to import py7zr for 7z support
 try:
@@ -209,6 +209,22 @@ def _extract_character_color_from_filename(filename):
     return None, None
 
 
+# ── 7z member reading ─────────────────────────────────────────────────────────
+
+def read_7z_member(archive, member):
+    """Read one member's bytes from an open py7zr handle.
+
+    py7zr 1.0 removed SevenZipFile.read(); extract to a temp dir instead.
+    reset() rewinds the handle so repeated extracts on one archive work.
+    """
+    import tempfile
+    archive.reset()
+    with tempfile.TemporaryDirectory(prefix='7z_member_') as tmp:
+        archive.extract(path=tmp, targets=[member])
+        p = Path(tmp) / member
+        return p.read_bytes() if p.exists() else None
+
+
 # ── Image dimension reading ───────────────────────────────────────────────────
 
 def get_image_dimensions(archive, filename, is_7z=False):
@@ -222,8 +238,7 @@ def get_image_dimensions(archive, filename, is_7z=False):
         import io
 
         if is_7z:
-            file_data = archive.read([filename])
-            image_bytes = file_data[filename].read()
+            image_bytes = read_7z_member(archive, filename)
         else:
             image_bytes = archive.read(filename)
 
@@ -836,6 +851,16 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
             filenames = archive.namelist()
 
         dat_files = list_costume_archive_names(filenames)
+
+        # Content fallback: also nominate dat-like files that don't follow the
+        # Pl* naming convention (renamed costume dats are very common in the
+        # wild). Pass 1 below validates by content — DATParser must identify a
+        # character AND find Ply joint symbols — so misnamed non-costume files
+        # still fall out naturally.
+        seen = set(dat_files)
+        dat_files += [n for n in filenames
+                      if n not in seen and is_renamed_dat_candidate(n)]
+
         if not dat_files:
             if not is_7z:
                 archive.close()
@@ -848,8 +873,7 @@ def detect_character_from_zip(zip_path: str) -> List[Dict]:
         for dat_filename in dat_files:
             with tempfile.NamedTemporaryFile(suffix=os.path.splitext(dat_filename)[1] or '.dat', delete=False) as tmp:
                 if is_7z:
-                    file_data = archive.read([dat_filename])
-                    dat_bytes = file_data[dat_filename].read()
+                    dat_bytes = read_7z_member(archive, dat_filename)
                 else:
                     dat_bytes = archive.read(dat_filename)
                 tmp.write(dat_bytes)
