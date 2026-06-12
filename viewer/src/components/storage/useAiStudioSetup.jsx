@@ -61,9 +61,9 @@ export default function useAiStudioSetup(show, taskKinds) {
         }))
       }
       // installed Ollama models double as free offline planner LLMs
-      setLocalPlanners((p.local || []).map((name) => ({
-        id: `ollama:${name}`,
-        label: `${name} — local LLM (free, offline)`,
+      setLocalPlanners((p.local || []).map((m) => ({
+        id: `ollama:${m.name}`,
+        label: `${m.name} — local LLM (free, offline)`,
       })))
     }).catch(() => { if (!cancelled) setReady(false) })
     return () => { cancelled = true }
@@ -147,6 +147,70 @@ export function ResolutionNotice({ resolution }) {
         </div>
       ))}
     </>
+  )
+}
+
+/** Telemetry-based runtime prediction shown before Generate. Character runs
+ * are ~2-4 materials + planning; stage runs add the ISO build + Dolphin boot
+ * (~2.5-3.5 min). Returns null until the resolved model has measured runs. */
+export function TimeEstimate({ resolution, stage = false }) {
+  if (!resolution) return null
+  const material = resolution.find((t) => t.kind === 'material')
+  const backdrop = resolution.find((t) => t.kind === 'backdrop')
+  const a = material?.avgSeconds
+  if (a == null) return null
+  const b = backdrop?.avgSeconds ?? a
+  const lo = stage ? Math.round(2 * a + b + 150) : Math.round(2 * a + 15)
+  const hi = stage ? Math.round(3 * a + b + 220) : Math.round(4 * a + 35)
+  const fmt = (s) => (s >= 90 ? `${Math.round(s / 60)} min` : `${s}s`)
+  return (
+    <div className="ai-studio-estimate">
+      ⏱ estimated ~{fmt(lo)}–{fmt(hi)} (from your past runs)
+    </div>
+  )
+}
+
+const plannerName = (m) => (m || '').replace(/^ollama:/, '').split('/').pop()
+const money = (v) => (v >= 0.01 ? `$${v.toFixed(2)}` : `${(v * 100).toFixed(1)}¢`)
+
+/** Full cost & time breakdown for the preview phase — INCLUDING the planner
+ * calls (an OpenRouter planner bills even when image models are local). */
+export function CostBreakdown({ costInfo }) {
+  if (!costInfo) return null
+  const planning = costInfo.planning || []
+  const gen = costInfo.generation || []
+  if (!planning.length && !gen.length) return null
+  const planCost = planning.reduce((s, p) => s + (p.costUsd || 0), 0)
+  const totalSecs = gen.reduce((s, g) => s + (g.seconds || 0), 0)
+  return (
+    <div className="ai-studio-genlog">
+      {planning.length > 0 && (
+        <div className="ai-studio-cost-row">
+          <span>
+            planning — {plannerName(planning[0].model)}
+            {planning.length > 1 ? ` ×${planning.length}` : ''}
+          </span>
+          <span>{planCost > 0 ? `~${money(planCost)}` : 'free (local)'}</span>
+        </div>
+      )}
+      {gen.map((g, i) => (
+        <div key={i} className="ai-studio-cost-row">
+          <span>
+            material {i + 1} — {plannerName(g.model)}
+            {g.seconds != null ? ` — ${g.seconds}s` : ''}
+            {g.escalated ? ' — escalated' : ''}
+          </span>
+          <span>
+            {g.cached ? 'cached (free)'
+              : g.estCostUsd > 0 ? `~${money(g.estCostUsd)}` : 'free (local)'}
+          </span>
+        </div>
+      ))}
+      <div className="ai-studio-cost-row total">
+        <span>total · {totalSecs.toFixed(0)}s generating</span>
+        <span>{costInfo.cost > 0 ? `~${money(costInfo.cost)}` : 'free'}</span>
+      </div>
+    </div>
   )
 }
 

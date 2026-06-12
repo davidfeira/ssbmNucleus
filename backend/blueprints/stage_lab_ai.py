@@ -203,8 +203,9 @@ def stage_ai_create():
                 stage_name=rm.get('stage', code), theme=theme,
                 region_summary=region_summary,
                 extra_notes=(f'- NOTE: {extra}\n' if extra else ''))
+            planner_log = []
             try:
-                reply = _call_planner(model, prompt, key)
+                reply = _call_planner(model, prompt, key, cost_log=planner_log)
             except RuntimeError as e:
                 raise StageOpsError(str(e))
             plan = _extract_json(reply)
@@ -294,7 +295,7 @@ def stage_ai_create():
                         model,
                         STAGE_REVIEW_PROMPT.format(theme=theme,
                                                    region_summary=region_summary),
-                        key, image_jpeg=res['png'])
+                        key, image_jpeg=res['png'], cost_log=planner_log)
                     review = _extract_json(reply) or {}
                     assessment = (review.get('assessment') or '')[:200] or None
                     fixes, fix_tints, _err = _validate_stage(review, set(rm['regions']))
@@ -327,7 +328,9 @@ def stage_ai_create():
                 'steps': steps + ([{'op': 'material-tint', **t} for t in tints]),
                 'assessment': assessment,
                 'generation': gen_log,
-                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
+                'planning': planner_log,
+                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log)
+                                    + sum(p['costUsd'] for p in planner_log), 4),
             })
         except Exception as e:
             logger.error(f'[stage-studio] failed: {e}', exc_info=True)

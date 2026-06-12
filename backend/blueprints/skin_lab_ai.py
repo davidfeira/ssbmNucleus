@@ -219,11 +219,17 @@ def _vanilla_nr_code(character):
     return None
 
 
-def _call_planner(model, prompt, key, image_jpeg=None):
+def _call_planner(model, prompt, key, image_jpeg=None, cost_log=None):
     """Text call, or vision call when image_jpeg bytes are provided.
-    'ollama:<model>' routes to the local Ollama server (no key needed)."""
+    'ollama:<model>' routes to the local Ollama server (no key needed).
+    When cost_log (a list) is given, the call's ACTUAL cost is appended as
+    {'model', 'costUsd'} — OpenRouter reports it via usage accounting;
+    local calls log 0 so the breakdown shows them as free."""
     if is_local_planner(model):
-        return _call_ollama_planner(model, prompt, image_jpeg=image_jpeg)
+        reply = _call_ollama_planner(model, prompt, image_jpeg=image_jpeg)
+        if cost_log is not None:
+            cost_log.append({'model': model, 'costUsd': 0.0})
+        return reply
     if image_jpeg is not None:
         content = [
             {'type': 'text', 'text': prompt},
@@ -237,10 +243,14 @@ def _call_planner(model, prompt, key, image_jpeg=None):
         'model': model,
         'messages': [{'role': 'user', 'content': content}],
         'max_tokens': 2000,
+        'usage': {'include': True},
     }, headers={'Authorization': f'Bearer {key}'})
     body = r.json()
     if 'error' in body:
         raise RuntimeError(f"planner failed: {body['error'].get('message', body['error'])}")
+    if cost_log is not None:
+        cost_log.append({'model': model,
+                         'costUsd': float((body.get('usage') or {}).get('cost') or 0)})
     return body['choices'][0]['message']['content']
 
 
@@ -355,7 +365,8 @@ def ai_create():
                 color_facts=_color_facts(rm.get('liveMaskHints')))
 
             emit('planning', 25, f'Asking {model.split("/")[-1]} for a plan…')
-            reply = _call_planner(model, prompt, key)
+            planner_log = []
+            reply = _call_planner(model, prompt, key, cost_log=planner_log)
             plan = _extract_json(reply)
             steps, err = _validate(plan or {}, set(rm['regions']))
             if err:
@@ -425,7 +436,7 @@ def ai_create():
                         REVIEW_PROMPT.format(
                             theme=theme,
                             color_facts=_color_facts(rm.get('liveMaskHints'))),
-                        key, image_jpeg=sheet1)
+                        key, image_jpeg=sheet1, cost_log=planner_log)
                     review = _extract_json(reply) or {}
                     assessment = (review.get('assessment') or '')[:200] or None
                     fixes, _err = _validate(review, set(rm['regions']))
@@ -444,7 +455,9 @@ def ai_create():
                 'steps': steps + fixes,
                 'assessment': assessment,
                 'generation': gen_log,
-                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log), 3),
+                'planning': planner_log,
+                'estCostUsd': round(sum(g['estCostUsd'] for g in gen_log)
+                                    + sum(p['costUsd'] for p in planner_log), 4),
             })
         except Exception as e:
             logger.error(f'[ai-studio] failed: {e}', exc_info=True)

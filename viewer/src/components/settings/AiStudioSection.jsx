@@ -14,6 +14,7 @@ import { playHoverSound, playSound } from '../../utils/sounds'
 import './aistudio/AiStudio.css'
 import EngineInstallCard from './aistudio/EngineInstallCard'
 import HardwareCard from './aistudio/HardwareCard'
+import LocalPlannerCard from './aistudio/LocalPlannerCard'
 import ModelCatalog from './aistudio/ModelCatalog'
 import OpenRouterKeyCard from './aistudio/OpenRouterKeyCard'
 import TierRoutingCard from './aistudio/TierRoutingCard'
@@ -147,6 +148,8 @@ export default function AiStudioSection({ API_URL }) {
                   <ModelCatalog API_URL={API_URL} models={models} socket={socket}
                                 onChanged={onChanged} localOnly hasKey={hasKey}
                                 engineOk={Boolean(status?.engine?.installed && status?.engine?.ok)} />
+                  <LocalPlannerCard API_URL={API_URL} socket={socket}
+                                    onChanged={onChanged} />
                 </>
               ) : (
                 <>
@@ -158,6 +161,8 @@ export default function AiStudioSection({ API_URL }) {
                   <ModelCatalog API_URL={API_URL} models={models} socket={socket}
                                 onChanged={onChanged} hasKey={hasKey}
                                 engineOk={Boolean(status?.engine?.installed && status?.engine?.ok)} />
+                  <LocalPlannerCard API_URL={API_URL} socket={socket}
+                                    onChanged={onChanged} />
                   <TierRoutingCard API_URL={API_URL} status={status} models={models}
                                    hasKey={hasKey} onChanged={onChanged} />
                   <UsageStatsCard API_URL={API_URL} refreshKey={refreshKey} />

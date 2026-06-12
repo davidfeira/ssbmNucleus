@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
-import useAiStudioSetup, { ResolutionNotice, SetupGate, autoOptionLabel } from './useAiStudioSetup'
+import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
+                           TimeEstimate, autoOptionLabel } from './useAiStudioSetup'
 
 const PLANNERS = [
   { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
@@ -87,7 +88,8 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
       setSheet(d.sheet)
       setSkinName(d.skinName || theme)
       setSteps(d.steps || [])
-      setCostInfo({ cost: d.estCostUsd, generation: d.generation || [] })
+      setCostInfo({ cost: d.estCostUsd, generation: d.generation || [],
+                    planning: d.planning || [] })
       setAssessment(d.assessment || null)
       setPhase('preview')
       playSound('achievement')
@@ -205,6 +207,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
               ))}
             </select>
             <ResolutionNotice resolution={resolution} />
+            <TimeEstimate resolution={resolution} />
             {error && <div className="ai-studio-error">{error}</div>}
             <div className="ai-studio-actions">
               <button className="ai-studio-btn primary"
@@ -239,27 +242,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
               </div>
             )}
             {assessment && (
-              <div className="ai-studio-progress-message">“{assessment}”</div>
+              <div className="ai-studio-assessment">“{assessment}”</div>
             )}
-            {costInfo && costInfo.generation.length > 0 && (
-              <div className="ai-studio-genlog">
-                {costInfo.generation.map((g, i) => (
-                  <div key={i} className="ai-studio-progress-message">
-                    material {i + 1}: {g.model}
-                    {g.seconds != null ? ` — ${g.seconds}s` : ''}
-                    {g.cached ? ' — cached (free)'
-                      : g.estCostUsd > 0 ? ` — ~${Math.round(g.estCostUsd * 100)}¢`
-                        : ' — free (local)'}
-                    {g.escalated ? ' — escalated for scene quality' : ''}
-                  </div>
-                ))}
-                <div className="ai-studio-progress-message">
-                  total: {costInfo.cost > 0 ? `~$${costInfo.cost.toFixed(2)}` : 'free'}
-                  {' · '}
-                  {costInfo.generation.reduce((s, g) => s + (g.seconds || 0), 0).toFixed(0)}s generating
-                </div>
-              </div>
-            )}
+            <CostBreakdown costInfo={costInfo} />
             <input
               className="ai-studio-name"
               value={skinName}
