@@ -450,10 +450,14 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
         return None
 
     # walk down collecting the head run (arms are collapsed in the head-shot
-    # render, so the run is head -> neck -> torso)
+    # render, so the run is head -> neck -> torso). Heads widen GRADUALLY;
+    # a sudden width jump means another part merged into the row (a tail or
+    # prop behind the model at the 3/4 angle) -- clip such rows to a window
+    # around the tracked anchor so the merge can't hijack the profile.
     profile = []   # (y, x0, x1)
     anchor = hx
     misses = 0
+    prev_w = None
     for y in range(y_top, H):
         r = run_at(y, anchor)
         if r is None:
@@ -462,8 +466,14 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
                 break
             continue
         misses = 0
+        w = r[1] - r[0] + 1
+        if prev_w is not None and prev_w >= 6 and w > max(prev_w * 1.5, prev_w + 8):
+            half = int(prev_w * 1.3 / 2) + 1
+            r = (max(r[0], anchor - half), min(r[1], anchor + half))
+            w = r[1] - r[0] + 1
         profile.append((y, r[0], r[1]))
         anchor = (r[0] + r[1]) // 2
+        prev_w = w
 
     # cut at the neck: either a hard width pinch below the head's widest row,
     # or the dip-then-regrowth where the torso/shoulders widen again

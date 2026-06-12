@@ -335,6 +335,20 @@ namespace HSDRawViewer
                     Console.WriteLine("Head-shot mode: bind pose + auto-framed camera");
                 }
 
+                // --head-shot-yaw N: 3/4-view angle in degrees for head shots
+                float headShotYaw = 30f;
+                int yawArg = argsList.IndexOf("--head-shot-yaw");
+                if (yawArg >= 0 && yawArg + 1 < argsList.Count)
+                {
+                    if (float.TryParse(argsList[yawArg + 1],
+                            System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float parsedYaw))
+                        headShotYaw = parsedYaw;
+                    argsList.RemoveAt(yawArg + 1);
+                    argsList.RemoveAt(yawArg);
+                    args = argsList.ToArray();
+                }
+
                 // --collapse-bones a,b: zero-scale these JOBJ subtrees before
                 // rendering (head shots collapse the ARMS so a T-pose can't
                 // overlap or widen the head silhouette; works for one-piece
@@ -1116,8 +1130,11 @@ namespace HSDRawViewer
                                 // pad: meshes extend beyond bones (big-head swaps)
                                 radius = Math.Max(radius * 1.45f, 8f);
                                 viewport.Camera.FrameBoundingSphere(center, radius * 2f, 0);
+                                // 3/4 view like the vanilla stock art -- a
+                                // dead-on front view flattens snouts/faces
+                                viewport.Camera.RotationYRadians = headShotYaw * (float)Math.PI / 180f;
                                 viewport.Render();
-                                Console.WriteLine($"Head-shot framing: center={center}, radius={radius:F1}, bones={positions.Count}");
+                                Console.WriteLine($"Head-shot framing: center={center}, radius={radius:F1}, yaw={headShotYaw}, bones={positions.Count}");
                             }
                         }
                         catch (Exception ex)
@@ -2947,6 +2964,21 @@ namespace HSDRawViewer
                                 imgFormat = tobj.ImageData.Format;
                                 palFormat = tobj.TlutData?.Format ?? HSDRaw.GX.GXTlutFmt.IA8;
                             }
+
+                            // Vanilla GmPause aliases identical textures (the two
+                            // 88x72 main graphics) to a single pixel buffer, so an
+                            // in-place inject would silently rewrite the sibling
+                            // slot too. Give this TOBJ its own image struct first.
+                            var oldImage = tobj.ImageData;
+                            tobj.ImageData = new HSDRaw.Common.HSD_Image()
+                            {
+                                Width = oldImage.Width,
+                                Height = oldImage.Height,
+                                Format = oldImage.Format,
+                                MipMap = oldImage.MipMap,
+                                MinLOD = oldImage.MinLOD,
+                                MaxLOD = oldImage.MaxLOD,
+                            };
 
                             tobj.InjectBitmap(resized, imgFormat, palFormat);
                             Console.WriteLine($"  Replaced {w}x{h} texture as {imgFormat}");
