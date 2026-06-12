@@ -50,7 +50,7 @@ export default function UsageStatsCard({ API_URL, refreshKey }) {
         <thead>
           <tr>
             <th>model</th><th>runs</th><th>avg</th><th>median</th>
-            <th>cached</th><th>last used</th><th>cost</th>
+            <th>last used</th><th>cost</th>
           </tr>
         </thead>
         <tbody>
@@ -60,7 +60,6 @@ export default function UsageStatsCard({ API_URL, refreshKey }) {
               <td>{m.runs}</td>
               <td>{m.avgSeconds != null ? `${m.avgSeconds}s` : '—'}</td>
               <td>{m.medianSeconds != null ? `${m.medianSeconds}s` : '—'}</td>
-              <td>{m.cachedHits || 0}</td>
               <td>{fmtAgo(m.lastTs)}</td>
               <td>{m.totalCostUsd > 0 ? `$${m.totalCostUsd.toFixed(2)}` : 'free'}</td>
             </tr>
