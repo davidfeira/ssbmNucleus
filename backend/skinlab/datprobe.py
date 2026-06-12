@@ -67,8 +67,13 @@ class DatFile:
         return struct.unpack_from('>H', self.raw, HEADER_SIZE + off)[0]
 
     def ptr(self, off):
+        # a 0 word is a NULL pointer only when the field is absent from the
+        # reloc table; relocated 0 is a real pointer to data offset 0 (vanilla
+        # Pl*.dat stores the model lookup tables there, as the first struct)
         v = self.u32(off)
-        return v if v != 0 else None
+        if v == 0 and off not in self.relocs:
+            return None
+        return v
 
     # -- structs ------------------------------------------------------------ #
     def image_at(self, off, data_size=None):
