@@ -685,6 +685,36 @@ def _load_region_map():
     return region_map
 
 
+def _hue_histogram(session, idxs):
+    """360-bin hue histogram over the saturated, mid-lightness pixels of a
+    set of textures."""
+    bins = np.zeros(360, dtype=np.int64)
+    for index in idxs:
+        try:
+            arr = _texture_png_array(session, index)
+        except Exception:
+            continue
+        h, s, l = palette_mod.rgb_to_hsl(arr[..., :3].astype(np.float64))
+        mask = (arr[..., 3] >= 128) & (s >= 25) & (l >= 15) & (l <= 90)
+        if mask.any():
+            bins += np.bincount(np.floor(h[mask]).astype(np.int64) % 360,
+                                minlength=360)
+    return bins
+
+
+def _band_from_bins(bins):
+    """Dominant hue band: walk out from the peak until bins drop below 3%."""
+    peak = int(bins.argmax())
+    floor = max(1, bins[peak] * 0.03)
+    lo = peak
+    while bins[(lo - 1) % 360] >= floor and (peak - lo) % 360 < 100:
+        lo = (lo - 1) % 360
+    hi = peak
+    while bins[(hi + 1) % 360] >= floor and (hi - peak) % 360 < 100:
+        hi = (hi + 1) % 360
+    return {'hueMin': int(lo), 'hueMax': int(hi), 'satMin': 18}
+
+
 def _compute_live_hints(session, region_map):
     """Per-COSTUME mask hints, computed from the open DAT's actual pixels.
     Shipped hints describe the basis costume's colors (e.g. a blue jacket),
@@ -700,17 +730,7 @@ def _compute_live_hints(session, region_map):
         live_regions = ('fur', 'cloth', 'eyes')
     for region in live_regions:
         idxs = (region_map.get('regions') or {}).get(region) or []
-        bins = np.zeros(360, dtype=np.int64)
-        for index in idxs:
-            try:
-                arr = _texture_png_array(session, index)
-            except Exception:
-                continue
-            h, s, l = palette_mod.rgb_to_hsl(arr[..., :3].astype(np.float64))
-            mask = (arr[..., 3] >= 128) & (s >= 25) & (l >= 15) & (l <= 90)
-            if mask.any():
-                bins += np.bincount(np.floor(h[mask]).astype(np.int64) % 360,
-                                    minlength=360)
+        bins = _hue_histogram(session, idxs)
         if bins.sum() < 200:
             continue
         if region == 'eyes':
@@ -729,16 +749,7 @@ def _compute_live_hints(session, region_map):
                         bins[hdeg] = 0
             if bins.sum() < 50:
                 continue
-        # dominant band: walk out from the peak until bins drop below 3% of it
-        peak = int(bins.argmax())
-        floor = max(1, bins[peak] * 0.03)
-        lo = peak
-        while bins[(lo - 1) % 360] >= floor and (peak - lo) % 360 < 100:
-            lo = (lo - 1) % 360
-        hi = peak
-        while bins[(hi + 1) % 360] >= floor and (hi - peak) % 360 < 100:
-            hi = (hi + 1) % 360
-        hints[region] = {'hueMin': int(lo), 'hueMax': int(hi), 'satMin': 18}
+        hints[region] = _band_from_bins(bins)
     return hints
 
 
@@ -757,6 +768,103 @@ def _region_hints():
                 logger.warning('live hint computation failed', exc_info=True)
                 _meta['liveHints'] = dict(region_map.get('maskHints') or {})
     return _meta['liveHints']
+
+
+# Regions whose color defines the character's BODY — feature textures
+# (eyes/cheeks/mouth) carry padding pixels in this color around the feature.
+BODY_REGIONS = ('fur', 'cloth')
+
+
+def _body_band(region_map):
+    """(region, hue band) for the BODY region, cached per session. Uses the
+    live hint when present; maps that OPT OUT of live hints (single-purpose
+    textures, e.g. Pikachu) still get a band computed ad hoc here — the
+    opt-out is about op masks, but pad masks always need the body color."""
+    if _meta is None:
+        return None, None
+    if 'bodyBand' not in _meta:
+        result = (None, None)
+        hints = _region_hints()
+        for region in BODY_REGIONS:
+            idxs = (region_map.get('regions') or {}).get(region)
+            if not idxs:
+                continue
+            band = hints.get(region)
+            if not band:
+                bins = _hue_histogram(_session, idxs)
+                band = _band_from_bins(bins) if bins.sum() >= 200 else None
+            if band:
+                result = (region, band)
+                break
+        _meta['bodyBand'] = result
+    return _meta['bodyBand']
+
+
+def _body_region(region_map):
+    """The region whose color band represents the body, or None."""
+    return _body_band(region_map)[0]
+
+
+def _dilate(mask, iters=2):
+    """Grow a boolean mask by `iters` pixels (4-neighborhood) — swallows the
+    anti-aliased fringe between a feature and its padding."""
+    for _ in range(iters):
+        grown = mask.copy()
+        grown[1:, :] |= mask[:-1, :]
+        grown[:-1, :] |= mask[1:, :]
+        grown[:, 1:] |= mask[:, :-1]
+        grown[:, :-1] |= mask[:, 1:]
+        mask = grown
+    return mask
+
+
+def _feature_pad_masks():
+    """{index: bool mask} of BODY-COLORED PADDING inside each protected
+    feature texture (eye/cheek/mouth textures carry fur-colored pixels
+    around the feature). Computed ONCE from the pristine DAT pixels — later
+    recolors can't shift it. Powers two fixes for the face-square problem:
+    spillover (body ops also treat this padding, so features don't sit on
+    stock-colored squares) and feature confinement (eye/face ops subtract
+    the padding, so a tint can't flood the whole texture)."""
+    if _meta is None:
+        return {}
+    if 'featurePadMasks' not in _meta:
+        masks = {}
+        region_map = _load_region_map()
+        _, band = _body_band(region_map) if region_map else (None, None)
+        if band:
+            # widen the band: feature borders anti-alias toward neighboring
+            # hues (yellow fur -> orange ring around a red cheek) and at
+            # lower saturation than the body proper
+            band = {'hueMin': (band['hueMin'] - 10) % 360,
+                    'hueMax': (band['hueMax'] + 10) % 360,
+                    'satMin': max(10, band.get('satMin', 18) - 8)}
+            for index in (region_map.get('protected') or []):
+                try:
+                    # get_full_texture is always the ORIGINAL (edits live in
+                    # the _edited overlay), so this is pristine by definition
+                    png = _session.get_full_texture(index)
+                    arr = np.array(Image.open(io.BytesIO(png)).convert('RGBA'))
+                    m = compose_mod.build_mask(arr, **_mask_kwargs(band))
+                    if m.any():
+                        masks[index] = _dilate(m) & (arr[..., 3] >= 128)
+                except Exception:
+                    continue
+        _meta['featurePadMasks'] = masks
+    return _meta['featurePadMasks']
+
+
+def _pad_mask_for(index, shape):
+    """The padding mask for a texture, resized (nearest) when the working
+    array's resolution differs (composite upscales tiny canvases)."""
+    m = _feature_pad_masks().get(index)
+    if m is None:
+        return None
+    if m.shape != tuple(shape[:2]):
+        img = Image.fromarray(m.astype(np.uint8) * 255, 'L')
+        img = img.resize((shape[1], shape[0]), Image.NEAREST)
+        m = np.asarray(img) >= 128
+    return m
 
 
 def _resolve_targets(data, region_map):
@@ -913,6 +1021,9 @@ def composite_textures():
             try:
                 arr = _upscale_for_composite(_texture_png_array(session, index))
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                pad = None if force else _pad_mask_for(index, arr.shape)
+                if pad is not None:
+                    mask &= ~pad   # never flood a feature texture's padding
                 result = compose_mod.composite(arr, mat_arr, mask,
                                                lum_lo=lum_lo, lum_hi=lum_hi)
                 if result is None:
@@ -923,6 +1034,29 @@ def composite_textures():
             except ViewerSessionError as e:
                 return jsonify({'success': False, 'error': str(e),
                                 'changed': changed, 'skipped': skipped}), 500
+
+        # SPILLOVER: a body-region op also treats the body-colored padding
+        # INSIDE the protected feature textures (eye/cheek/mouth canvases),
+        # so the new look runs right up to the feature instead of leaving
+        # stock-colored squares around it.
+        if (data.get('region') or '').strip() == _body_region(region_map) \
+                and data.get('spillover', True):
+            for index in sorted(set(protected) - set(indexes)):
+                if index not in valid:
+                    continue
+                try:
+                    arr = _upscale_for_composite(_texture_png_array(session, index))
+                    pad = _pad_mask_for(index, arr.shape)
+                    if pad is None or not pad.any():
+                        continue
+                    result = compose_mod.composite(arr, mat_arr, pad,
+                                                   lum_lo=lum_lo, lum_hi=lum_hi)
+                    if result is not None:
+                        _push_array(session, index, result)
+                        changed.append(index)
+                except Exception:
+                    logger.warning(f'[skin-lab] composite spillover failed on '
+                                   f'{index}', exc_info=True)
         return jsonify({'success': True, 'changed': changed,
                         'skipped': skipped, 'generated': generated})
 
@@ -965,6 +1099,11 @@ def tint_textures():
             try:
                 arr = _texture_png_array(session, index)
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                # an eye/cheek tint must hit the FEATURE, not the texture's
+                # body-colored padding (Pikachu's green-box-eyes bug)
+                pad = None if data.get('force') else _pad_mask_for(index, arr.shape)
+                if pad is not None:
+                    mask &= ~pad
                 result = compose_mod.tint(arr, mask, hue, saturation)
                 if result is None:
                     skipped.append({'index': index, 'reason': 'mask matched nothing'})
@@ -974,6 +1113,25 @@ def tint_textures():
             except ViewerSessionError as e:
                 return jsonify({'success': False, 'error': str(e),
                                 'changed': changed, 'skipped': skipped}), 500
+
+        # spillover: body-region tints recolor the feature textures' padding
+        if (data.get('region') or '').strip() == _body_region(region_map) \
+                and data.get('spillover', True):
+            for index in sorted(set(protected) - set(indexes)):
+                if index not in valid:
+                    continue
+                try:
+                    arr = _texture_png_array(session, index)
+                    pad = _pad_mask_for(index, arr.shape)
+                    if pad is None or not pad.any():
+                        continue
+                    result = compose_mod.tint(arr, pad, hue, saturation)
+                    if result is not None:
+                        _push_array(session, index, result)
+                        changed.append(index)
+                except Exception:
+                    logger.warning(f'[skin-lab] tint spillover failed on '
+                                   f'{index}', exc_info=True)
         return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
 
 
@@ -1014,6 +1172,9 @@ def hue_shift_textures():
             try:
                 arr = _texture_png_array(session, index)
                 mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+                pad = None if data.get('force') else _pad_mask_for(index, arr.shape)
+                if pad is not None:
+                    mask &= ~pad   # feature ops stay off the body padding
                 result = compose_mod.hue_shift(arr, mask, hue_delta, sat_delta)
                 if result is None:
                     skipped.append({'index': index, 'reason': 'mask matched nothing'})
@@ -1023,6 +1184,25 @@ def hue_shift_textures():
             except ViewerSessionError as e:
                 return jsonify({'success': False, 'error': str(e),
                                 'changed': changed, 'skipped': skipped}), 500
+
+        # spillover: body-region hue-shifts rotate the feature padding too
+        if (data.get('region') or '').strip() == _body_region(region_map) \
+                and data.get('spillover', True):
+            for index in sorted(set(protected) - set(indexes)):
+                if index not in valid:
+                    continue
+                try:
+                    arr = _texture_png_array(session, index)
+                    pad = _pad_mask_for(index, arr.shape)
+                    if pad is None or not pad.any():
+                        continue
+                    result = compose_mod.hue_shift(arr, pad, hue_delta, sat_delta)
+                    if result is not None:
+                        _push_array(session, index, result)
+                        changed.append(index)
+                except Exception:
+                    logger.warning(f'[skin-lab] hue-shift spillover failed on '
+                                   f'{index}', exc_info=True)
         return jsonify({'success': True, 'changed': changed, 'skipped': skipped})
 
 
