@@ -11,23 +11,32 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
 
-// Slot geometry on a 720x540 reference canvas (eyeballed from an in-game
-// pause capture; textures render ~1.3-1.4x their native size on screen).
+// Slot geometry on a 720x540 reference canvas (measured from a vanilla
+// in-game pause capture). The two 88x72 main-graphic textures (t4 + t10)
+// render LAYERED at the same bottom-left position — the editor shows them
+// as a single slot and the backend edits them as a pair. The camera swirl
+// (t0) draws on top of the main graphic.
 const SLOT_LAYOUT = {
-  0:  { name: 'Camera Swirl',      x: 320, y: 408, w: 42,  h: 42 },
-  1:  { name: 'Trim (left)',       x: 424, y: 55,  w: 22,  h: 27 },
-  2:  { name: 'Trim (right)',      x: 667, y: 55,  w: 22,  h: 27 },
-  3:  { name: 'Edge Bar',          x: 686, y: 372, w: 25,  h: 90 },
-  4:  { name: 'Main Graphic',      x: 30,  y: 396, w: 114, h: 94 },
-  5:  { name: 'Corner Bracket',    x: 30,  y: 42,  w: 67,  h: 67 },
-  6:  { name: '"Pause" Text',      x: 515, y: 55,  w: 146, h: 27 },
-  7:  { name: '"P1" Text',         x: 452, y: 55,  w: 57,  h: 27 },
-  8:  { name: 'L+R+A+Start Hint',  x: 150, y: 398, w: 161, h: 47 },
-  9:  { name: 'Z Retry Hint',      x: 150, y: 452, w: 104, h: 47 },
-  10: { name: 'Main Graphic (alt)', x: 560, y: 396, w: 114, h: 94 },
+  0:  { name: 'Camera Swirl',     x: 63,  y: 423, w: 54,  h: 54 },
+  1:  { name: 'Trim (left)',      x: 424, y: 55,  w: 22,  h: 27 },
+  2:  { name: 'Trim (right)',     x: 667, y: 55,  w: 22,  h: 27 },
+  3:  { name: 'Edge Bar',         x: 686, y: 372, w: 25,  h: 90 },
+  4:  { name: 'Main Graphic',     x: 14,  y: 400, w: 136, h: 108 },
+  5:  { name: 'Corner Bracket',   x: 30,  y: 42,  w: 67,  h: 67 },
+  6:  { name: '"Pause" Text',     x: 515, y: 55,  w: 146, h: 27 },
+  7:  { name: '"P1" Text',        x: 452, y: 55,  w: 57,  h: 27 },
+  8:  { name: 'L+R+A+Start Hint', x: 513, y: 438, w: 147, h: 43 },
+  9:  { name: 'Z Retry Hint',     x: 513, y: 486, w: 104, h: 47 },
 }
 const REF_W = 720
 const REF_H = 540
+
+// Secondary 88x72 main-graphic slots (everything after the first) are hidden:
+// the backend replaces/reverts the whole pair through the visible one.
+const hiddenMainSlots = (textures) => {
+  const mains = textures.filter(t => t.width === 88 && t.height === 72)
+  return new Set(mains.slice(1).map(t => t.index))
+}
 
 const pct = (v, ref) => `${(v / ref) * 100}%`
 
@@ -147,7 +156,7 @@ export default function PauseTextureEditor({ mod, onBack }) {
       <div className="pause-editor-canvas">
         {textures.map((t) => {
           const slot = SLOT_LAYOUT[t.index]
-          if (!slot) return null
+          if (!slot || hiddenMainSlots(textures).has(t.index)) return null
           return (
             <button
               key={t.index}
@@ -157,6 +166,9 @@ export default function PauseTextureEditor({ mod, onBack }) {
                 top: pct(slot.y, REF_H),
                 width: pct(slot.w, REF_W),
                 height: pct(slot.h, REF_H),
+                // smaller slots stack above bigger ones so overlapped
+                // elements (the swirl on the main graphic) stay clickable
+                zIndex: Math.max(1, 200 - Math.round((slot.w * slot.h) / 100)),
               }}
               title={`${slot.name} — ${t.width}x${t.height} ${t.format}${t.replaced ? ' (edited)' : ''}`}
               onMouseEnter={playHoverSound}
@@ -170,6 +182,7 @@ export default function PauseTextureEditor({ mod, onBack }) {
 
       <div className="pause-editor-strip">
         {textures.map((t) => {
+          if (hiddenMainSlots(textures).has(t.index)) return null
           const slot = SLOT_LAYOUT[t.index] || { name: `Texture ${t.index}` }
           return (
             <div key={t.index} className={`pause-editor-chip ${t.replaced ? 'replaced' : ''}`}>

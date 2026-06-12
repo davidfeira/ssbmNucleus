@@ -426,18 +426,27 @@ def replace_pause_texture(mod_id):
         if entry is None:
             return jsonify({'success': False, 'error': f'No texture slot {index}'}), 404
 
-        tex_dir = PAUSE_PATH / mod_id / 'textures'
-        tex_path = tex_dir / entry['file']
-        orig_path = tex_dir / f't{index}.orig.png'
-        if tex_path.exists() and not orig_path.exists():
-            shutil.copy(str(tex_path), str(orig_path))
-            entry['orig_replaced'] = bool(entry.get('replaced'))
+        # The game draws the two 88x72 main-graphic slots layered at the same
+        # position; replacing only one leaves the vanilla icon on top of the
+        # new image, so a main-slot edit applies to the whole pair.
+        main_pair = _main_pair_indices(mod)
+        indices = main_pair if index in main_pair else [index]
 
-        request.files['file'].save(str(tex_path))
-        entry['replaced'] = True
+        tex_dir = PAUSE_PATH / mod_id / 'textures'
+        upload = request.files['file'].read()
+        for idx in indices:
+            pair_entry = next(t for t in mod['textures'] if t['index'] == idx)
+            tex_path = tex_dir / pair_entry['file']
+            orig_path = tex_dir / f't{idx}.orig.png'
+            if tex_path.exists() and not orig_path.exists():
+                shutil.copy(str(tex_path), str(orig_path))
+                pair_entry['orig_replaced'] = bool(pair_entry.get('replaced'))
+            tex_path.write_bytes(upload)
+            pair_entry['replaced'] = True
         save_mod_json(PAUSE_PATH, mod_id, mod)
 
-        logger.info(f'[OK] Replaced pause texture t{index} on mod {mod_id}')
+        logger.info(f'[OK] Replaced pause texture t{index} on mod {mod_id}'
+                    + (f' (paired: {indices})' if len(indices) > 1 else ''))
         return jsonify({'success': True, 'index': index,
                         'url': f'/api/mex/menus/pause/texture/{mod_id}/{index}'})
     except Exception as e:
@@ -464,20 +473,26 @@ def revert_pause_texture(mod_id):
         if entry is None:
             return jsonify({'success': False, 'error': f'No texture slot {index}'}), 404
 
-        tex_dir = PAUSE_PATH / mod_id / 'textures'
-        tex_path = tex_dir / entry['file']
-        orig_path = tex_dir / f't{index}.orig.png'
+        # Main-graphic slots are edited as a pair (see replace_pause_texture).
+        main_pair = _main_pair_indices(mod)
+        indices = main_pair if index in main_pair else [index]
 
-        if orig_path.exists():
-            shutil.move(str(orig_path), str(tex_path))
-            entry['replaced'] = entry.pop('orig_replaced', False)
-        else:
-            vanilla_tex = VANILLA_TEX_DIR / f't{index}.png'
-            if not vanilla_tex.exists():
-                return jsonify({'success': False, 'error': 'Nothing to revert to'}), 400
-            shutil.copy(str(vanilla_tex), str(tex_path))
-            entry['replaced'] = False
-            entry.pop('orig_replaced', None)
+        tex_dir = PAUSE_PATH / mod_id / 'textures'
+        for idx in indices:
+            pair_entry = next(t for t in mod['textures'] if t['index'] == idx)
+            tex_path = tex_dir / pair_entry['file']
+            orig_path = tex_dir / f't{idx}.orig.png'
+
+            if orig_path.exists():
+                shutil.move(str(orig_path), str(tex_path))
+                pair_entry['replaced'] = pair_entry.pop('orig_replaced', False)
+            else:
+                vanilla_tex = VANILLA_TEX_DIR / f't{idx}.png'
+                if not vanilla_tex.exists():
+                    return jsonify({'success': False, 'error': 'Nothing to revert to'}), 400
+                shutil.copy(str(vanilla_tex), str(tex_path))
+                pair_entry['replaced'] = False
+                pair_entry.pop('orig_replaced', None)
         save_mod_json(PAUSE_PATH, mod_id, mod)
 
         logger.info(f'[OK] Reverted pause texture t{index} on mod {mod_id}')
@@ -533,6 +548,14 @@ def _build_replacement_spec(mod, mod_dir):
     else:
         raise RuntimeError('No textures stored for this mod')
     return replacements
+
+
+def _main_pair_indices(mod):
+    """Indices of the 88x72 'main graphic' slots (vanilla t4 + t10). The game
+    layers both at the same screen position, so the editor treats them as one
+    slot — replacing or reverting one must do both."""
+    return [t['index'] for t in mod.get('textures', [])
+            if t.get('width') == 88 and t.get('height') == 72]
 
 
 def _ensure_textures(mod):
