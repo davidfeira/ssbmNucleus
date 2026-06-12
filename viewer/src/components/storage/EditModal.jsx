@@ -43,6 +43,11 @@ export default function EditModal({
   onExport,
   onCspChange,
   onStockChange,
+  onGenerateStock,
+  onConfirmGeneratedStock,
+  onDiscardGeneratedStock,
+  pendingGeneratedStock,
+  generatingStock,
   onScreenshotChange,
   onSlippiRetest,
   onSlippiOverride,
@@ -198,7 +203,13 @@ export default function EditModal({
 
                 {/* Stock Icon under the CSP */}
                 <div className="edit-modal-stock-container edit-modal-stock-container--under-csp">
-                  {stockPreview ? (
+                  {pendingGeneratedStock ? (
+                    <img
+                      src={pendingGeneratedStock.dataUri}
+                      alt="Generated stock preview"
+                      className="edit-modal-stock-image"
+                    />
+                  ) : stockPreview ? (
                     <img
                       src={stockPreview}
                       alt="New stock preview"
@@ -233,8 +244,64 @@ export default function EditModal({
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                   </button>
+                  {onGenerateStock && !pendingGeneratedStock && (
+                    <button
+                      className="edit-modal-image-edit-btn edit-modal-image-edit-btn--small edit-modal-stock-generate-btn"
+                      onClick={onGenerateStock}
+                      disabled={generatingStock}
+                      title="Generate a stock icon from this skin's colors"
+                    >
+                      {generatingStock ? (
+                        <span className="edit-modal-stock-generate-spinner">⟳</span>
+                      ) : (
+                        <span>✨</span>
+                      )}
+                    </button>
+                  )}
                 </div>
                 <div className="edit-modal-stock-label">Stock Icon</div>
+
+                {/* Generated icon: compare with the current one and confirm
+                    before anything is replaced */}
+                {pendingGeneratedStock && (
+                  <div className="edit-modal-stock-confirm">
+                    <div className="edit-modal-stock-confirm-compare">
+                      {editingItem.data.has_stock ? (
+                        <img
+                          src={`${editingItem.data.stockUrl}?t=${lastImageUpdate}`}
+                          alt="Current stock"
+                          className="edit-modal-stock-confirm-thumb"
+                        />
+                      ) : (
+                        <div className="edit-modal-stock-confirm-thumb edit-modal-stock-confirm-thumb--empty">—</div>
+                      )}
+                      <span className="edit-modal-stock-confirm-arrow">→</span>
+                      <img
+                        src={pendingGeneratedStock.dataUri}
+                        alt="Generated stock"
+                        className="edit-modal-stock-confirm-thumb"
+                      />
+                    </div>
+                    <div className="edit-modal-stock-confirm-actions">
+                      <button
+                        className="edit-modal-stock-confirm-btn edit-modal-stock-confirm-btn--yes"
+                        onClick={onConfirmGeneratedStock}
+                        disabled={generatingStock}
+                        title="Replace the stock icon with the generated one"
+                      >
+                        ✓ Use it
+                      </button>
+                      <button
+                        className="edit-modal-stock-confirm-btn"
+                        onClick={onDiscardGeneratedStock}
+                        disabled={generatingStock}
+                        title="Keep the current stock icon"
+                      >
+                        ✗ Discard
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* MIDDLE: Action Buttons */}

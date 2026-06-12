@@ -88,6 +88,40 @@ COLOR_CODES = {
     'Grey': 'Gy',
 }
 
+# TopOfHeadBone JOBJ index per character, extracted from the vanilla PlXx.dat
+# fighter data (ModelLookupTables +0x12). Model imports keep the skeleton, so
+# projecting this bone during the CSP render locates the head of ANY model --
+# the .head.json sidecar drives stock-icon head cropping for model imports.
+CHARACTER_HEAD_BONES = {
+    'Captain Falcon': 39,
+    'Donkey Kong': 44,
+    'Fox': 41,
+    'Mr. Game & Watch': 20,
+    'Kirby': 11,
+    'Bowser': 51,
+    'Link': 40,
+    'Luigi': 24,
+    'Mario': 24,
+    'Marth': 60,
+    'Mewtwo': 44,
+    'Ness': 25,
+    'Peach': 87,
+    'Pichu': 16,
+    'Pikachu': 15,
+    'Jigglypuff': 11,
+    'Samus': 42,
+    'Sheik': 36,
+    'Yoshi': 43,
+    'Zelda': 89,
+    'Ice Climbers': 19,
+    'Ice Climbers (Nana)': 19,
+    'Young Link': 42,
+    'Ganondorf': 54,
+    'Roy': 62,
+    'Falco': 39,
+    'Dr. Mario': 24,
+}
+
 # Characters that use scene mode (only YML, no .anim file)
 SCENE_MODE_CHARACTERS = [
     'Ganondorf',
@@ -179,7 +213,19 @@ def apply_character_specific_layers(csp_path, character_name, scale=1):
                     flipped = img.transpose(Image.FLIP_LEFT_RIGHT)
                     flipped.save(csp_path)
                     logger.info(f"Flipped Ness CSP horizontally")
-                    return True
+                # Mirror the head sidecar's x to match the flipped image
+                head_json = csp_path + '.head.json'
+                if os.path.exists(head_json):
+                    try:
+                        import json
+                        with open(head_json) as f:
+                            head = json.load(f)
+                        head['x'] = head.get('width', 136) - head.get('x', 0)
+                        with open(head_json, 'w') as f:
+                            json.dump(head, f)
+                    except Exception as e:
+                        logger.warning(f"Failed to mirror Ness head sidecar: {e}")
+                return True
             except Exception as e:
                 logger.error(f"Failed to flip Ness CSP: {e}")
                 return False
@@ -500,6 +546,12 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     if no_shadow:
         cmd.append("--no-shadow")
 
+    # Project the head bone so stock generation can crop swapped-in models.
+    # The renderer writes <output>.head.json next to the CSP.
+    head_bone = CHARACTER_HEAD_BONES.get(character)
+    if head_bone is not None:
+        cmd.extend(["--head-bone", str(head_bone)])
+
     if anim_file:
         cmd.append(to_windows_path(anim_file))
 
@@ -598,6 +650,62 @@ def generate_ice_climbers_composite_csp(popo_dat, nana_dat):
         logger.warning(f"Failed to clean up temp CSPs: {e}")
 
     return result
+
+def generate_head_shot(dat_filepath):
+    """Render a bind-pose, auto-framed, shadowless 'head shot' of a costume
+    DAT plus the projected head-bone sidecar. Stock-icon generation crops the
+    head of MODEL IMPORTS from this render: unlike the CSP action poses, the
+    bind pose is consistent and can never put the head out of frame.
+
+    Returns (png_path, head_info_dict) or (None, None).
+    """
+    parser = DATParser(dat_filepath)
+    try:
+        parser.read_dat()
+        character, _symbol = parser.detect_character()
+    except Exception as e:
+        logger.error(f"Head shot: failed to parse DAT: {e}")
+        return None, None
+    head_bone = CHARACTER_HEAD_BONES.get(character)
+    if head_bone is None:
+        logger.warning(f"Head shot: no head bone known for {character}")
+        return None, None
+
+    dat_dir = os.path.dirname(os.path.abspath(dat_filepath))
+    dat_name = os.path.splitext(os.path.basename(dat_filepath))[0]
+    output = os.path.join(dat_dir, f"{dat_name}_headshot.png")
+
+    cmd = [HSDRAW_EXE, "--csp", os.path.abspath(dat_filepath), output,
+           "--head-shot", "--no-shadow", "--head-bone", str(head_bone)]
+    if os.name != 'nt':
+        cmd.insert(0, "wine")
+
+    logger.info(f"Rendering head shot for {Path(dat_filepath).name} ({character})")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                cwd=dat_dir, **get_windows_subprocess_args())
+    except Exception as e:
+        logger.error(f"Head shot render error: {e}")
+        return None, None
+    if result.returncode != 0 or not os.path.exists(output):
+        logger.error(f"Head shot render failed (rc={result.returncode})")
+        return None, None
+
+    head_info = None
+    head_json = output + '.head.json'
+    if os.path.exists(head_json):
+        try:
+            import json
+            with open(head_json) as f:
+                head_info = json.load(f)
+        except Exception:
+            head_info = None
+        try:
+            os.unlink(head_json)
+        except:
+            pass
+    return output, head_info
+
 
 def generate_csp(dat_filepath, scale=1):
     """

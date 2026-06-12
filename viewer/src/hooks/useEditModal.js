@@ -20,6 +20,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [generatingStock, setGeneratingStock] = useState(false)
+  const [pendingGeneratedStock, setPendingGeneratedStock] = useState(null) // { dataUri, method }
 
   // Confirm dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -54,6 +56,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     setCspPreview(null)
     setNewStock(null)
     setStockPreview(null)
+    setPendingGeneratedStock(null)
     setEditSlippiSafe(type === 'stage' ? data.slippi_safe : null)
     setShowEditModal(true)
   }
@@ -315,6 +318,83 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     }
   }
 
+  // Derive a stock icon from the costume's DAT colors (vs vanilla) on the
+  // backend. Nothing is written yet: the preview is held in
+  // pendingGeneratedStock until the user confirms or discards it.
+  const handleGenerateStock = async () => {
+    if (!editingItem || editingItem.type !== 'costume') return
+    setGeneratingStock(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/generate-stock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id
+        })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        playSound('error')
+        alert(`Stock generation failed: ${data.error}`)
+        return
+      }
+
+      // Clear any pending manual upload; the compare bar takes over
+      setNewStock(null)
+      setStockPreview(null)
+      setPendingGeneratedStock({ dataUri: data.dataUri, method: data.method })
+      playSound('boop')
+    } catch (err) {
+      playSound('error')
+      alert(`Stock generation error: ${err.message}`)
+    } finally {
+      setGeneratingStock(false)
+    }
+  }
+
+  // Write the previewed icon for real
+  const confirmGeneratedStock = async () => {
+    if (!editingItem || !pendingGeneratedStock) return
+    setGeneratingStock(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/generate-stock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id,
+          apply: true,
+          imageData: pendingGeneratedStock.dataUri
+        })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        playSound('error')
+        alert(`Stock save failed: ${data.error}`)
+        return
+      }
+      setPendingGeneratedStock(null)
+      setEditingItem(prev => prev ? {
+        ...prev,
+        data: { ...prev.data, has_stock: true, stockUrl: data.stockUrl, stock_source: 'generated' }
+      } : prev)
+      await onRefresh()
+      setLastImageUpdate(Date.now())
+      playSound('camera')
+    } catch (err) {
+      playSound('error')
+      alert(`Stock save error: ${err.message}`)
+    } finally {
+      setGeneratingStock(false)
+    }
+  }
+
+  const discardGeneratedStock = () => {
+    setPendingGeneratedStock(null)
+    playSound('back')
+  }
+
   // Delete item - shows confirmation dialog
   const handleDelete = () => {
     const itemName = editingItem.type === 'costume'
@@ -457,6 +537,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     setCspPreview(null)
     setNewStock(null)
     setStockPreview(null)
+    setPendingGeneratedStock(null)
     setEditSlippiSafe(null)
   }
 
@@ -471,6 +552,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     saving,
     deleting,
     exporting,
+    generatingStock,
+    pendingGeneratedStock,
     newScreenshot,
     screenshotPreview,
     newCsp,
@@ -494,6 +577,9 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     replaceStageScreenshotWithCapture,
     handleCspChange,
     handleStockChange,
+    handleGenerateStock,
+    confirmGeneratedStock,
+    discardGeneratedStock,
     handleSave,
     handleDelete,
     handleExport,

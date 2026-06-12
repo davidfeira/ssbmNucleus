@@ -817,6 +817,123 @@ def update_costume_stock():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@storage_costumes_bp.route('/api/mex/storage/costumes/generate-stock', methods=['POST'])
+def generate_costume_stock():
+    """Derive a stock icon for a vault costume from its DAT's color movement
+    vs the vanilla costume (skinlab.stock_gen).
+
+    Two-step flow so nothing is replaced without the user's say-so:
+      {character, skinId}                      -> preview: {dataUri, method},
+                                                  nothing written
+      {character, skinId, apply, imageData}    -> writes the previewed icon to
+                                                  the zip/standalone/metadata
+    """
+    try:
+        import base64
+
+        data = request.json
+        character = data.get('character')
+        skin_id = data.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
+
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Costume zip not found: {skin_id}'}), 404
+
+        metadata = load_metadata()
+        skin_meta = None
+        if metadata is not None:
+            char_data = get_char_data(metadata, character)
+            if char_data is not None:
+                skin_meta = next((s for s in char_data.get('skins', [])
+                                  if s['id'] == skin_id), None)
+
+        if data.get('apply'):
+            image_data = data.get('imageData') or ''
+            if ',' in image_data:
+                image_data = image_data.split(',', 1)[1]
+            try:
+                stock_data = base64.b64decode(image_data)
+            except Exception:
+                stock_data = b''
+            if not stock_data:
+                return jsonify({'success': False, 'error': 'No previewed icon to apply'}), 400
+
+            (char_folder / f"{skin_id}_stc.png").write_bytes(stock_data)
+            temp_zip = char_folder / f"{skin_id}_temp.zip"
+            with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                    for item in source_zip.infolist():
+                        if item.filename.lower() not in ['stc.png', 'stock.png', 'stock']:
+                            dest_zip.writestr(item, source_zip.read(item.filename))
+                    dest_zip.writestr('stc.png', stock_data)
+            zip_path.unlink()
+            temp_zip.rename(zip_path)
+
+            if metadata is not None and skin_meta is not None:
+                skin_meta['has_stock'] = True
+                skin_meta['stock_source'] = 'generated'
+                save_metadata(metadata)
+
+            logger.info(f"[OK] Applied generated stock icon for {character} - {skin_id}")
+            return jsonify({'success': True,
+                            'stockUrl': f"/storage/{character}/{skin_id}_stc.png"})
+
+        # preview: generate and return without writing
+        from skinlab.stock_gen import generate_stock
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            dat_filename = find_costume_archive_name(zip_ref.namelist())
+            if not dat_filename:
+                return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 400
+            dat_data = zip_ref.read(dat_filename)
+
+        # Import names the archive '<costume_code>Mod.<ext>'
+        stem = Path(dat_filename).stem
+        costume_code = stem[:-3] if stem.endswith('Mod') else stem
+
+        # texture-diff straight off the DAT (recolors); model imports fall
+        # through to a lazy bind-pose head-shot render + head crop, then
+        # csp-diff off our own stored render as the last resort
+        from generate_csp import generate_head_shot
+
+        csp_bytes = None
+        if skin_meta and skin_meta.get('csp_source') == 'generated':
+            csp_path = char_folder / f"{skin_id}_csp.png"
+            if csp_path.exists():
+                csp_bytes = csp_path.read_bytes()
+
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tmp_dat_path = os.path.join(tmp_dir, f"{costume_code or 'costume'}.dat")
+            with open(tmp_dat_path, 'wb') as f:
+                f.write(dat_data)
+            result = generate_stock(VANILLA_ASSETS_DIR, character, costume_code,
+                                    modded_dat_path=tmp_dat_path,
+                                    modded_csp=csp_bytes,
+                                    head_shot_provider=lambda: generate_head_shot(tmp_dat_path))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        if result is None:
+            return jsonify({
+                'success': False,
+                'error': 'Could not derive a stock icon for this skin (no vanilla '
+                         'reference lines up with its DAT or CSP)'}), 422
+        stock_data, method = result
+
+        logger.info(f"[OK] Previewed generated stock for {character} - {skin_id} via {method}")
+        return jsonify({'success': True, 'method': method,
+                        'dataUri': 'data:image/png;base64,'
+                                   + base64.b64encode(stock_data).decode('ascii')})
+    except Exception as e:
+        logger.error(f"Generate stock error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @storage_costumes_bp.route('/api/mex/storage/costumes/retest-slippi', methods=['POST'])
 def retest_costume_slippi():
     """Retest a character costume for slippi safety and optionally apply fix"""

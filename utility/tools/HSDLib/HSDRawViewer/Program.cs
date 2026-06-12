@@ -303,6 +303,38 @@ namespace HSDRawViewer
                     args = argsList.ToArray();
                 }
 
+                // Parse --head-bone argument if present: project this JOBJ's
+                // posed position into CSP pixel coordinates and write a
+                // <output>.head.json sidecar (used by stock icon generation
+                // to crop the head of arbitrary imported models).
+                int headBoneIndex = -1;
+                int headBoneArg = argsList.IndexOf("--head-bone");
+                if (headBoneArg >= 0 && headBoneArg + 1 < argsList.Count)
+                {
+                    if (int.TryParse(argsList[headBoneArg + 1], out int parsedHead))
+                    {
+                        headBoneIndex = parsedHead;
+                        Console.WriteLine($"Head bone index: {headBoneIndex}");
+                    }
+                    argsList.RemoveAt(headBoneArg + 1);
+                    argsList.RemoveAt(headBoneArg);
+                    args = argsList.ToArray();
+                }
+
+                // --head-shot: render the BIND POSE with an auto-framed camera
+                // (no animation/scene args should be passed). Gives stock-icon
+                // generation a consistent front-facing render where the head
+                // can never be posed out of frame.
+                bool headShot = false;
+                int headShotArg = argsList.IndexOf("--head-shot");
+                if (headShotArg >= 0)
+                {
+                    headShot = true;
+                    argsList.RemoveAt(headShotArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine("Head-shot mode: bind pose + auto-framed camera");
+                }
+
                 // Apply scale to CSP dimensions
                 if (cspScale > 1)
                 {
@@ -1015,6 +1047,98 @@ namespace HSDRawViewer
                             // Force another render to apply the visibility changes
                             Console.WriteLine("Forcing second render to apply visibility changes...");
                             viewport.Render();
+                        }
+                    }
+
+                    // Head-shot mode: frame the bind-pose model from its bone
+                    // positions so the whole character (and therefore the
+                    // head) is inside the CSP crop region regardless of the
+                    // model's proportions. The visible CSP area is the center
+                    // half of the canvas, hence the x2 on the radius.
+                    if (headShot && renderJObj != null && renderJObj.RootJObj != null)
+                    {
+                        try
+                        {
+                            // no scene yml in head-shot mode, so disable the
+                            // debug skeleton overlay explicitly
+                            renderJObj._settings.RenderBones = false;
+                            renderJObj._settings.RenderObjects = HSDRawViewer.Rendering.Models.ObjectRenderMode.Visible;
+                            var positions = new List<OpenTK.Mathematics.Vector3>();
+                            foreach (var j in renderJObj.RootJObj.Enumerate)
+                                positions.Add(j.WorldTransform.ExtractTranslation());
+                            if (positions.Count > 0)
+                            {
+                                OpenTK.Mathematics.Vector3 min = positions[0], max = positions[0];
+                                foreach (var p in positions)
+                                {
+                                    min = OpenTK.Mathematics.Vector3.ComponentMin(min, p);
+                                    max = OpenTK.Mathematics.Vector3.ComponentMax(max, p);
+                                }
+                                var center = (min + max) / 2f;
+                                float radius = 0f;
+                                foreach (var p in positions)
+                                    radius = Math.Max(radius, (p - center).Length);
+                                // pad: meshes extend beyond bones (big-head swaps)
+                                radius = Math.Max(radius * 1.45f, 8f);
+                                viewport.Camera.FrameBoundingSphere(center, radius * 2f, 0);
+                                viewport.Render();
+                                Console.WriteLine($"Head-shot framing: center={center}, radius={radius:F1}, bones={positions.Count}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Head-shot framing failed: {ex.Message}");
+                        }
+                    }
+
+                    // Project the head bone into CSP pixel coordinates and write
+                    // the sidecar. Mirrors TakeGLScreenShot's mapping exactly:
+                    // framebuffer -> half-size resize -> center crop of
+                    // CSPWidth/2 x CSPHeight/2 (with optional horizontal mirror
+                    // applied before the crop).
+                    if (headBoneIndex >= 0 && renderJObj != null)
+                    {
+                        try
+                        {
+                            var headJobj = renderJObj.RootJObj?.GetJObjAtIndex(headBoneIndex);
+                            if (headJobj == null)
+                            {
+                                Console.WriteLine($"Head bone {headBoneIndex} not found in JOBJ tree");
+                            }
+                            else
+                            {
+                                OpenTK.Mathematics.Vector3 world = headJobj.WorldTransform.ExtractTranslation();
+                                OpenTK.Mathematics.Matrix4 m = viewport.Camera.MvpMatrix;
+                                // row-vector convention (matches GL.LoadMatrix usage)
+                                float cx = world.X * m.M11 + world.Y * m.M21 + world.Z * m.M31 + m.M41;
+                                float cy = world.X * m.M12 + world.Y * m.M22 + world.Z * m.M32 + m.M42;
+                                float cw = world.X * m.M14 + world.Y * m.M24 + world.Z * m.M34 + m.M44;
+                                float renderW = viewport.Camera.RenderWidth;
+                                float renderH = viewport.Camera.RenderHeight;
+                                float ndcX = cx / cw;
+                                float ndcY = cy / cw;
+                                float fbX = (ndcX * 0.5f + 0.5f) * renderW;
+                                float fbYImg = (1f - (ndcY * 0.5f + 0.5f)) * renderH;
+                                float hx = fbX / 2f;
+                                float hy = fbYImg / 2f;
+                                if (viewport.Camera.MirrorScreenshot)
+                                    hx = renderW / 2f - hx;
+                                float cspX = hx - (renderW - GUI.ViewportControl.CSPWidth) / 4f;
+                                float cspY = hy - (renderH - GUI.ViewportControl.CSPHeight) / 4f;
+                                int outW = GUI.ViewportControl.CSPWidth / 2;
+                                int outH = GUI.ViewportControl.CSPHeight / 2;
+                                string headJson = string.Format(
+                                    System.Globalization.CultureInfo.InvariantCulture,
+                                    "{{\"x\": {0:F2}, \"y\": {1:F2}, \"width\": {2}, \"height\": {3}, \"behindCamera\": {4}}}",
+                                    cspX, cspY, outW, outH, cw <= 0 ? "true" : "false");
+                                string headJsonPath = System.IO.Path.GetFullPath(outputFile) + ".head.json";
+                                System.IO.File.WriteAllText(headJsonPath, headJson);
+                                Console.WriteLine($"Head bone projected to CSP ({cspX:F1}, {cspY:F1}) -> {headJsonPath}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Head bone projection failed: {ex.Message}");
                         }
                     }
 

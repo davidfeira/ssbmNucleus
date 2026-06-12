@@ -462,6 +462,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     replaceStageScreenshotWithCapture,
     handleCspChange,
     handleStockChange,
+    handleGenerateStock,
+    confirmGeneratedStock,
+    discardGeneratedStock,
+    pendingGeneratedStock,
+    generatingStock,
     handleSave,
     handleDelete,
     handleExport,
@@ -1198,6 +1203,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         handleExport={handleExport}
         handleCspChange={handleCspChange}
         handleStockChange={handleStockChange}
+        handleGenerateStock={handleGenerateStock}
+        generatingStock={generatingStock}
         handleScreenshotChange={handleScreenshotChange}
         handleSlippiRetest={handleSlippiRetest}
         handleSlippiOverride={handleSlippiOverride}
@@ -1298,6 +1305,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           handleScreenshotChange,
           handleCspChange,
           handleStockChange,
+          handleGenerateStock,
+          confirmGeneratedStock,
+          discardGeneratedStock,
+          pendingGeneratedStock,
+          generatingStock,
           handleSave,
           handleDelete,
           handleExport,
@@ -1588,6 +1600,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         onExport={handleExport}
         onCspChange={handleCspChange}
         onStockChange={handleStockChange}
+        onGenerateStock={handleGenerateStock}
+        onConfirmGeneratedStock={confirmGeneratedStock}
+        onDiscardGeneratedStock={discardGeneratedStock}
+        pendingGeneratedStock={pendingGeneratedStock}
+        generatingStock={generatingStock}
         onScreenshotChange={handleScreenshotChange}
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}

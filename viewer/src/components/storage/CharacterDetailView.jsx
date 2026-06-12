@@ -108,6 +108,11 @@ export default function CharacterDetailView({
     handleScreenshotChange,
     handleCspChange,
     handleStockChange,
+    handleGenerateStock,
+    confirmGeneratedStock,
+    discardGeneratedStock,
+    pendingGeneratedStock,
+    generatingStock,
     handleSave,
     handleDelete,
     handleExport,
@@ -379,6 +384,11 @@ export default function CharacterDetailView({
         onExport={handleExport}
         onCspChange={handleCspChange}
         onStockChange={handleStockChange}
+        onGenerateStock={handleGenerateStock}
+        onConfirmGeneratedStock={confirmGeneratedStock}
+        onDiscardGeneratedStock={discardGeneratedStock}
+        pendingGeneratedStock={pendingGeneratedStock}
+        generatingStock={generatingStock}
         onScreenshotChange={handleScreenshotChange}
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}

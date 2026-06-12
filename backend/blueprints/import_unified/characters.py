@@ -243,6 +243,13 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                                     csp_data = f.read()
                                 logger.info("Successfully generated CSP")
                                 csp_source = 'generated'
+                                # Drop the head sidecar the renderer writes
+                                # alongside (stock crops use a dedicated
+                                # head-shot render, not the action-pose CSP)
+                                try:
+                                    os.unlink(generated_csp_path + '.head.json')
+                                except OSError:
+                                    pass
                                 # Clean up generated CSP
                                 try:
                                     os.unlink(generated_csp_path)
@@ -290,8 +297,41 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                 if char_info['stock_file']:
                     # Stock found in ZIP (using improved matching from character detector)
                     stock_data = source_zip.read(char_info['stock_file'])
-                else:
-                    # No stock in ZIP - try vanilla matching costume
+                elif not char_info.get('is_nana'):
+                    # No stock in ZIP - derive one by recoloring the vanilla
+                    # icon with the costume's measured color movement (Nana
+                    # keeps copying Popo's so the pair shares one icon set)
+                    try:
+                        from skinlab.stock_gen import generate_stock
+                        from generate_csp import generate_head_shot
+                        tmp_stock_dir = tempfile.mkdtemp()
+                        tmp_dat_path = os.path.join(tmp_stock_dir, 'costume.dat')
+                        with open(tmp_dat_path, 'wb') as tmp_dat:
+                            tmp_dat.write(dat_data)
+                        try:
+                            # community CSPs use custom poses, so only our own
+                            # renders (vanilla pose => pixel-aligned) may feed
+                            # the csp-diff fallback; model imports get a lazy
+                            # bind-pose head-shot render for the crop
+                            aligned_csp = csp_data if csp_source == 'generated' else None
+                            generated = generate_stock(
+                                VANILLA_ASSETS_DIR, character,
+                                char_info.get('costume_code') or '',
+                                modded_dat_path=tmp_dat_path,
+                                modded_csp=aligned_csp,
+                                head_shot_provider=lambda: generate_head_shot(tmp_dat_path))
+                        finally:
+                            import shutil as _shutil
+                            _shutil.rmtree(tmp_stock_dir, ignore_errors=True)
+                        if generated:
+                            stock_data, gen_method = generated
+                            stock_source = 'generated'
+                            logger.info(f"Generated stock icon via {gen_method}")
+                    except Exception as e:
+                        logger.warning(f"Stock generation failed, falling back to vanilla: {e}")
+
+                if stock_data is None and not char_info['stock_file']:
+                    # Generation unavailable - try vanilla matching costume
                     vanilla_stock_path = VANILLA_ASSETS_DIR / character / char_info['costume_code'] / "stock.png"
                     if vanilla_stock_path.exists():
                         with open(vanilla_stock_path, 'rb') as f:

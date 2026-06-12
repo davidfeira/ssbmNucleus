@@ -961,6 +961,101 @@
   display: none;
 }
 
+/* Generate-stock button: bottom-left of the stock tile, ✨ stays visible */
+.edit-modal-stock-generate-btn {
+  right: auto;
+  left: var(--space-3);
+}
+
+.edit-modal-image-edit-btn--small.edit-modal-stock-generate-btn span {
+  display: inline;
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.edit-modal-stock-generate-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.edit-modal-stock-generate-spinner {
+  display: inline-block;
+  animation: stock-generate-spin 1s linear infinite;
+}
+
+@keyframes stock-generate-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Generated-stock compare + confirm bar */
+.edit-modal-stock-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.edit-modal-stock-confirm-compare {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.edit-modal-stock-confirm-thumb {
+  width: 2rem;
+  height: 2rem;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.edit-modal-stock-confirm-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.edit-modal-stock-confirm-arrow {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.edit-modal-stock-confirm-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.edit-modal-stock-confirm-btn {
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.edit-modal-stock-confirm-btn:hover:not(:disabled) {
+  border-color: var(--color-cyan);
+  color: var(--color-cyan);
+}
+
+.edit-modal-stock-confirm-btn--yes:hover:not(:disabled) {
+  border-color: var(--color-green, #4ade80);
+  color: var(--color-green, #4ade80);
+}
+
+.edit-modal-stock-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* Action Buttons - Middle Column */
 .edit-modal-stock-section {
   flex: 0 0 auto;
