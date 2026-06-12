@@ -558,8 +558,17 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     rows = {y: (x0, x1) for y, x0, x1 in profile}
     y_top = profile[0][0]
     y_end = profile[-1][0]
-    x_left = min(r[0] for r in rows.values())
-    x_right = max(r[1] for r in rows.values())
+    # the box width comes from the HEAD rows only -- broad shoulders/capes
+    # below the bone otherwise dominate the square and shrink the head to a
+    # sliver at icon size (they may hang off the box sides instead)
+    head_row_lim = head_y + 0.30 * max(1.0, head_y - y_top)
+    head_rows = [r for y, r in rows.items() if y <= head_row_lim]
+    if len(head_rows) >= 3:
+        x_left = min(r[0] for r in head_rows)
+        x_right = max(r[1] for r in head_rows)
+    else:
+        x_left = min(r[0] for r in rows.values())
+        x_right = max(r[1] for r in rows.values())
 
     # mask everything outside the per-row head runs (arms, other islands)
     mask = np.zeros_like(op)
