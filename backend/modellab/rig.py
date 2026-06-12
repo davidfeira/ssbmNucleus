@@ -976,6 +976,109 @@ def load_dynamics(char_code):
     return [c["bone"] for c in data.get(char_code, [])]
 
 
+def _smooth_field(pts: np.ndarray, vals: np.ndarray, iterations: int = 5):
+    """Laplacian-smooth a per-corner float field over the welded mesh (same
+    weld/adjacency treatment as smooth_weights, but for plain vectors)."""
+    key = np.round(pts / 1e-4).astype(np.int64)
+    welded: dict = {}
+    corner_to_v = np.empty(len(pts), dtype=np.int64)
+    for i, k in enumerate(map(tuple, key)):
+        corner_to_v[i] = welded.setdefault(k, len(welded))
+    n_v = len(welded)
+
+    vv = np.zeros((n_v, vals.shape[1]))
+    counts = np.zeros(n_v)
+    np.add.at(vv, corner_to_v, vals)
+    np.add.at(counts, corner_to_v, 1)
+    vv /= np.maximum(counts, 1)[:, None]
+
+    neighbors: list[set] = [set() for _ in range(n_v)]
+    for t in range(len(pts) // 3):
+        a, b, c = corner_to_v[t * 3:t * 3 + 3]
+        neighbors[a].update((b, c))
+        neighbors[b].update((a, c))
+        neighbors[c].update((a, b))
+
+    for _ in range(iterations):
+        nxt = vv.copy()
+        for v in range(n_v):
+            if neighbors[v]:
+                nb = np.array([vv[n] for n in neighbors[v]])
+                nxt[v] = 0.5 * vv[v] + 0.5 * nb.mean(axis=0)
+        vv = nxt
+    return vv[corner_to_v]
+
+
+def part_deform(foreign: ForeignMesh, vert_parts, src_bone_parts, src_bone_pos,
+                tgt_bone_parts, tgt_bone_pos, src_geom=None, tgt_geom=None,
+                log=print):
+    """Per-part proportion retarget: similarity-transform each labeled body
+    part of the source onto the TARGET's bone anchors (both in wait space).
+
+    A tall human's legs land on a short digitigrade fox's leg bones instead of
+    hovering where the human legs used to be — proportion mismatch was the
+    'floating limbs' artifact on cross-character rigs. Part SCALE comes from
+    per-part MESH spread (src_geom/tgt_geom: {part: (N,3) points}) — the
+    actual body size; bone-derived measures misjudge structurally different
+    skeletons. Translation matches bone-anchor centroids. The per-corner
+    (scale, translation) field is Laplacian-smoothed so part boundaries
+    deform continuously."""
+    def anchors(bone_parts, bone_pos):
+        per: dict = {}
+        for b, p in bone_parts.items():
+            if p in (None, "util") or b not in bone_pos:
+                continue
+            per.setdefault(p, []).append(np.asarray(bone_pos[b]))
+        return {p: np.array(v) for p, v in per.items()}
+
+    def rms_spread(arr):
+        c = arr.mean(axis=0)
+        return float(np.sqrt(((arr - c) ** 2).sum(axis=1).mean()))
+
+    src_a = anchors(src_bone_parts, src_bone_pos)
+    tgt_a = anchors(tgt_bone_parts, tgt_bone_pos)
+
+    transforms: dict = {}
+    for part, sp in src_a.items():
+        # cloth has no stable target home (dynamics are forbidden): ride torso
+        tgt_part = part if part in tgt_a else None
+        if part == "cloth":
+            tgt_part = "torso" if "cloth" not in tgt_a else "cloth"
+        if tgt_part is None or tgt_part not in tgt_a:
+            continue
+        tp = tgt_a[tgt_part]
+        sc, tc = sp.mean(axis=0), tp.mean(axis=0)
+        # scale from MESH geometry spread (bone-chain lengths misjudge parts
+        # whose skeletons differ structurally: fox's torso is 3 short bones
+        # under a fat body, his head part includes long ear/antenna chains)
+        s = 1.0
+        sg = (src_geom or {}).get(part)
+        tg = (tgt_geom or {}).get(tgt_part)
+        if sg is not None and tg is not None and len(sg) > 8 and len(tg) > 8:
+            s_sp, t_sp = rms_spread(np.asarray(sg)), rms_spread(np.asarray(tg))
+            if s_sp > 1e-6 and t_sp > 1e-6:
+                s = t_sp / s_sp
+        s = float(np.clip(s, 0.5, 2.0))
+        transforms[part] = (s, tc - s * sc)
+
+    if not transforms:
+        return False
+    fallback = transforms.get("torso") or next(iter(transforms.values()))
+
+    pts = foreign.tri_pos.reshape(-1, 3)
+    field = np.zeros((len(pts), 4))
+    for k in range(len(pts)):
+        s, t = transforms.get(vert_parts[k], fallback)
+        field[k, 0] = s
+        field[k, 1:] = t
+    field = _smooth_field(pts, field, iterations=5)
+    pts = pts * field[:, :1] + field[:, 1:]
+    foreign.tri_pos = pts.reshape(foreign.tri_pos.shape)
+    log("part deform: " + "  ".join(
+        f"{p}×{s:.2f}" for p, (s, _) in sorted(transforms.items())))
+    return True
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
@@ -1059,10 +1162,6 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
         pose_world = {j: m[:3, 3] for j, m in tgt_pose_mats.items()}
         log("pose-space retargeting: source + target surface reposed to Wait1")
 
-    target_pts = (np.asarray(surf_pts) if surf_pts is not None
-                  else np.array([v.pos for t in surface for v in t.verts]))
-    scale, offset = align(foreign, target_pts, rot_y)
-
     # physics chains (target's cape/tail dynamics) are forbidden weight
     # targets for foreign verts: expand each chain root to its joint subtree
     forbidden = set()
@@ -1090,6 +1189,7 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     from modellab.skeleton_parts import label_parts
     tgt_parts = label_parts(rigkit, dynamic_roots=chain_roots)
     vert_parts = None
+    src_parts = None
     if hasattr(foreign, "src_smd") and hasattr(foreign, "tri_src_w"):
         src_parts = label_parts(
             foreign.src_smd,
@@ -1105,6 +1205,47 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                 vert_parts.append(max(mass, key=mass.get) if mass else None)
         from collections import Counter
         log(f"source part labels: {dict(Counter(p for p in vert_parts if p))}")
+
+    # alignment: cross-character sources with poses get the PER-PART
+    # proportion retarget (each body part lands on the target's bone anchors —
+    # a global scale leaves long-limbed sources' geometry floating off the
+    # target's bones); everything else gets the global height/feet align.
+    target_pts = (np.asarray(surf_pts) if surf_pts is not None
+                  else np.array([v.pos for t in surface for v in t.verts]))
+    scale = 1.0
+    deformed = False
+    if vert_parts is not None and pose_world is not None and src_pose:
+        src_pose_mats = load_pose(src_pose)
+        src_bone_pos = {j: m[:3, 3] for j, m in src_pose_mats.items()}
+        # per-part geometry: foreign verts by their source part; target
+        # surface corners (wait-posed) by their dominant bone's part
+        pts_flat = foreign.tri_pos.reshape(-1, 3)
+        src_geom: dict = {}
+        for k, vp in enumerate(vert_parts):
+            if vp:
+                src_geom.setdefault(vp, []).append(pts_flat[k])
+        tgt_geom: dict = {}
+        s_corner = 0
+        for t in surface:
+            for v in t.verts:
+                dom = max(v.weights, key=lambda bw: bw[1])[0] if v.weights else None
+                p = tgt_parts.get(dom)
+                if p and p != "util":
+                    tgt_geom.setdefault(p, []).append(target_pts[s_corner])
+                s_corner += 1
+        deformed = part_deform(foreign, vert_parts, src_parts, src_bone_pos,
+                               tgt_parts, pose_world,
+                               src_geom=src_geom, tgt_geom=tgt_geom, log=log)
+        if deformed:
+            # residual floor snap (legs already land on the target's leg
+            # anchors; this only closes small global error)
+            pts = foreign.tri_pos.reshape(-1, 3)
+            dy = float(target_pts[:, 1].min() - pts[:, 1].min())
+            if abs(dy) < 2.5:
+                pts[:, 1] += dy
+                foreign.tri_pos = pts.reshape(foreign.tri_pos.shape)
+    if not deformed:
+        scale, offset = align(foreign, target_pts, rot_y)
 
     if rigid_bone is not None:
         # debug/prop mode: the whole mesh rides one bone
