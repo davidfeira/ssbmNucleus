@@ -229,14 +229,31 @@ def _vanilla_nr_code(character):
     return None
 
 
+def _record_planner_run(provider, model, t0, success, cost):
+    """Planner calls go in the telemetry ledger too — they feed the stats
+    table and the measured s/plan hints in the planner picker."""
+    try:
+        from aiengine import telemetry
+        telemetry.record_run(provider, model, 'planner', 'planner',
+                             time.time() - t0, success, est_cost_usd=cost)
+    except Exception:
+        logger.warning('planner telemetry failed', exc_info=True)
+
+
 def _call_planner(model, prompt, key, image_jpeg=None, cost_log=None):
     """Text call, or vision call when image_jpeg bytes are provided.
     'ollama:<model>' routes to the local Ollama server (no key needed).
     When cost_log (a list) is given, the call's ACTUAL cost is appended as
     {'model', 'costUsd'} — OpenRouter reports it via usage accounting;
     local calls log 0 so the breakdown shows them as free."""
+    t0 = time.time()
     if is_local_planner(model):
-        reply = _call_ollama_planner(model, prompt, image_jpeg=image_jpeg)
+        try:
+            reply = _call_ollama_planner(model, prompt, image_jpeg=image_jpeg)
+        except Exception:
+            _record_planner_run('ollama', model, t0, False, 0.0)
+            raise
+        _record_planner_run('ollama', model, t0, True, 0.0)
         if cost_log is not None:
             cost_log.append({'model': model, 'costUsd': 0.0})
         return reply
@@ -249,18 +266,24 @@ def _call_planner(model, prompt, key, image_jpeg=None, cost_log=None):
         ]
     else:
         content = prompt
-    r = requests.post(OPENROUTER_URL, timeout=180, json={
-        'model': model,
-        'messages': [{'role': 'user', 'content': content}],
-        'max_tokens': 2000,
-        'usage': {'include': True},
-    }, headers={'Authorization': f'Bearer {key}'})
-    body = r.json()
-    if 'error' in body:
-        raise RuntimeError(f"planner failed: {body['error'].get('message', body['error'])}")
+    try:
+        r = requests.post(OPENROUTER_URL, timeout=180, json={
+            'model': model,
+            'messages': [{'role': 'user', 'content': content}],
+            'max_tokens': 2000,
+            'usage': {'include': True},
+        }, headers={'Authorization': f'Bearer {key}'})
+        body = r.json()
+        if 'error' in body:
+            raise RuntimeError(
+                f"planner failed: {body['error'].get('message', body['error'])}")
+    except Exception:
+        _record_planner_run('openrouter', model, t0, False, 0.0)
+        raise
+    cost = float((body.get('usage') or {}).get('cost') or 0)
+    _record_planner_run('openrouter', model, t0, True, cost)
     if cost_log is not None:
-        cost_log.append({'model': model,
-                         'costUsd': float((body.get('usage') or {}).get('cost') or 0)})
+        cost_log.append({'model': model, 'costUsd': cost})
     return body['choices'][0]['message']['content']
 
 

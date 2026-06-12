@@ -69,11 +69,16 @@ export default function useAiStudioSetup(show, taskKinds) {
       }
       // planner list with locked/unlocked state, mirroring the image-model
       // picker: API planners need a key; installed Ollama models are free;
-      // the recommended local LLM shows LOCKED until it's pulled
+      // the recommended local LLM shows LOCKED until it's pulled. Measured
+      // s/plan from telemetry replaces guesswork once runs exist.
       const keyOk2 = Boolean(st.hasKey || hasLocalKey)
+      const speed = (id) => {
+        const s = p.stats?.[id]
+        return s?.avgSeconds != null ? ` — ~${Math.round(s.avgSeconds)}s/plan` : ''
+      }
       const localList = (p.local || []).map((m) => ({
         id: `ollama:${m.name}`,
-        label: `${m.name} — local LLM (free, offline)`,
+        label: `${m.name} — local LLM (free, offline)${speed(`ollama:${m.name}`)}`,
         locked: false,
       }))
       if (p.recommended
@@ -90,6 +95,7 @@ export default function useAiStudioSetup(show, taskKinds) {
       setPlanners([
         ...API_PLANNERS.map((pl) => ({
           ...pl,
+          label: `${pl.label}${speed(pl.id)}`,
           locked: !keyOk2,
           reason: 'needs an OpenRouter key',
         })),

@@ -17,7 +17,6 @@ import HardwareCard from './aistudio/HardwareCard'
 import LocalPlannerCard from './aistudio/LocalPlannerCard'
 import ModelCatalog from './aistudio/ModelCatalog'
 import OpenRouterKeyCard from './aistudio/OpenRouterKeyCard'
-import TierRoutingCard from './aistudio/TierRoutingCard'
 import UsageStatsCard from './aistudio/UsageStatsCard'
 import useAiEngine, { fmtBytes } from './aistudio/useAiEngine'
 
@@ -163,8 +162,9 @@ export default function AiStudioSection({ API_URL }) {
                                 engineOk={Boolean(status?.engine?.installed && status?.engine?.ok)} />
                   <LocalPlannerCard API_URL={API_URL} socket={socket}
                                     onChanged={onChanged} />
-                  <TierRoutingCard API_URL={API_URL} status={status} models={models}
-                                   hasKey={hasKey} onChanged={onChanged} />
+                  {/* tier→model routing config was removed from the UI: the
+                      studios ask per run (Auto + escalation notices); the
+                      backend resolver keeps sensible defaults */}
                   <UsageStatsCard API_URL={API_URL} refreshKey={refreshKey} />
                 </>
               )}

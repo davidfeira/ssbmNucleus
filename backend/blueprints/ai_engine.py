@@ -305,8 +305,13 @@ def local_planners():
                             key=lambda m: m['name'])
         except Exception:
             base = None
+    # measured planner speeds/usage from the telemetry ledger — keys are the
+    # planner ids ('ollama:gemma3:4b', 'openai/gpt-5-mini')
+    stats = {m: s for m, s in telemetry.model_stats().items()
+             if m.startswith('ollama:') or '/' in m}
     return jsonify({'success': True, 'ollamaAvailable': bool(base),
                     'local': models,
+                    'stats': stats,
                     'pulling': sorted(k for k, v in _planner_pulls.items() if v),
                     'recommended': RECOMMENDED_PLANNER,
                     'bundled': {
