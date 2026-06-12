@@ -1,0 +1,202 @@
+{
+ "PlCa": [],
+ "PlCl": [
+  {
+   "bone": 43,
+   "chain_len": 4
+  }
+ ],
+ "PlDk": [
+  {
+   "bone": 66,
+   "chain_len": 6
+  }
+ ],
+ "PlDr": [
+  {
+   "bone": 79,
+   "chain_len": 2
+  },
+  {
+   "bone": 76,
+   "chain_len": 2
+  },
+  {
+   "bone": 82,
+   "chain_len": 2
+  },
+  {
+   "bone": 63,
+   "chain_len": 2
+  },
+  {
+   "bone": 60,
+   "chain_len": 2
+  },
+  {
+   "bone": 66,
+   "chain_len": 2
+  }
+ ],
+ "PlFc": [],
+ "PlFe": [
+  {
+   "bone": 57,
+   "chain_len": 4
+  },
+  {
+   "bone": 47,
+   "chain_len": 4
+  },
+  {
+   "bone": 52,
+   "chain_len": 4
+  }
+ ],
+ "PlFx": [
+  {
+   "bone": 17,
+   "chain_len": 4
+  }
+ ],
+ "PlGn": [
+  {
+   "bone": 48,
+   "chain_len": 4
+  },
+  {
+   "bone": 38,
+   "chain_len": 4
+  },
+  {
+   "bone": 43,
+   "chain_len": 4
+  }
+ ],
+ "PlGw": [],
+ "PlKb": [],
+ "PlKp": [
+  {
+   "bone": 49,
+   "chain_len": 2
+  }
+ ],
+ "PlLg": [],
+ "PlLk": [
+  {
+   "bone": 41,
+   "chain_len": 4
+  }
+ ],
+ "PlMr": [],
+ "PlMs": [
+  {
+   "bone": 55,
+   "chain_len": 4
+  },
+  {
+   "bone": 45,
+   "chain_len": 4
+  },
+  {
+   "bone": 50,
+   "chain_len": 4
+  }
+ ],
+ "PlMt": [
+  {
+   "bone": 19,
+   "chain_len": 8
+  }
+ ],
+ "PlNn": [],
+ "PlNs": [],
+ "PlPc": [],
+ "PlPe": [
+  {
+   "bone": 19,
+   "chain_len": 5
+  },
+  {
+   "bone": 31,
+   "chain_len": 5
+  },
+  {
+   "bone": 61,
+   "chain_len": 5
+  },
+  {
+   "bone": 49,
+   "chain_len": 5
+  },
+  {
+   "bone": 37,
+   "chain_len": 5
+  },
+  {
+   "bone": 43,
+   "chain_len": 5
+  },
+  {
+   "bone": 55,
+   "chain_len": 5
+  },
+  {
+   "bone": 25,
+   "chain_len": 5
+  },
+  {
+   "bone": 88,
+   "chain_len": 5
+  }
+ ],
+ "PlPk": [],
+ "PlPp": [],
+ "PlPr": [
+  {
+   "bone": 7,
+   "chain_len": 3
+  }
+ ],
+ "PlSk": [],
+ "PlSs": [],
+ "PlYs": [],
+ "PlZd": [
+  {
+   "bone": 19,
+   "chain_len": 5
+  },
+  {
+   "bone": 31,
+   "chain_len": 5
+  },
+  {
+   "bone": 61,
+   "chain_len": 5
+  },
+  {
+   "bone": 49,
+   "chain_len": 5
+  },
+  {
+   "bone": 37,
+   "chain_len": 5
+  },
+  {
+   "bone": 43,
+   "chain_len": 5
+  },
+  {
+   "bone": 55,
+   "chain_len": 5
+  },
+  {
+   "bone": 25,
+   "chain_len": 5
+  },
+  {
+   "bone": 90,
+   "chain_len": 4
+  }
+ ]
+}

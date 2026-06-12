@@ -424,7 +424,7 @@ def sane_surface(rigkit: smd.SMD):
 
 def transfer_weights(
     rigkit: smd.SMD, foreign: ForeignMesh, max_weights: int = MAX_WEIGHTS_DEFAULT,
-    surface=None, surface_pts=None, bone_world=None,
+    surface=None, surface_pts=None, bone_world=None, forbidden=None,
 ) -> list[list[tuple[int, float]]]:
     """Per-corner weights for the foreign mesh, sampled from the rig-kit mesh.
 
@@ -451,6 +451,10 @@ def transfer_weights(
                 mass[bone] = mass.get(bone, 0.0) + w
     total_mass = sum(mass.values()) or 1.0
     stable = {b for b, m in mass.items() if m / total_mass >= 0.02}
+    if forbidden:
+        # physics-driven chains: even though the vanilla surface weights them
+        # (fox's own tail fur), foreign verts must remap PAST the whole chain
+        stable -= set(forbidden)
     parents = {b.id: b.parent for b in rigkit.bones if b.name.startswith("JOBJ_")}
 
     def stabilize(bone):
@@ -836,6 +840,19 @@ def load_visibility(char_code):
     return high, max(high | low) + 1
 
 
+def load_dynamics(char_code):
+    """Dynamic (cloth/tail physics) chain ROOT bone indices for a character
+    (ftData+0x2C SBM_PhysicsGroup). Foreign geometry must never be weighted
+    into these chains: their motion is physics tuned for the VANILLA part
+    (fox's tail), so transplanted verts flail (capes grabbing the tail chain
+    was the cross-rig 'glitchy cape/tail' artifact)."""
+    path = Path(__file__).parent / "dynamic_bones.json"
+    if not path.exists() or not char_code:
+        return []
+    data = json.loads(path.read_text())
+    return [c["bone"] for c in data.get(char_code, [])]
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
@@ -878,6 +895,10 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     # Without a table, fall back to the vanilla mesh-node count.
     visible, total = load_visibility(char_code)
     vanilla_groups = sum(1 for b in rigkit.bones if not b.name.startswith("JOBJ_"))
+    if total is not None and total < vanilla_groups:
+        # weapon/effect DObjs sit beyond the table's coverage (Link's sword
+        # parts): the table under-counts, the costume still owns them all
+        total = vanilla_groups
     target = len(visible) if visible else vanilla_groups
     if target > len(set(foreign.tri_group)):
         split_groups(foreign, target)
@@ -918,13 +939,36 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     target_pts = (np.asarray(surf_pts) if surf_pts is not None
                   else np.array([v.pos for t in surface for v in t.verts]))
     scale, offset = align(foreign, target_pts, rot_y)
+
+    # physics chains (target's cape/tail dynamics) are forbidden weight
+    # targets for foreign verts: expand each chain root to its joint subtree
+    forbidden = set()
+    chain_roots = load_dynamics(char_code)
+    if chain_roots:
+        by_name = {b.name: b.id for b in rigkit.bones if b.name.startswith("JOBJ_")}
+        kids: dict = {}
+        for b in rigkit.bones:
+            if b.name.startswith("JOBJ_"):
+                kids.setdefault(b.parent, []).append(b.id)
+        for root in chain_roots:
+            rid = by_name.get(f"JOBJ_{root}")
+            if rid is None:
+                continue
+            stack = [rid]
+            while stack:
+                cur = stack.pop()
+                forbidden.add(cur)
+                stack.extend(kids.get(cur, []))
+        log(f"forbidden dynamic-chain bones: {sorted(forbidden)}")
+
     if rigid_bone is not None:
         # debug/prop mode: the whole mesh rides one bone
         weights = [[(int(rigid_bone), 1.0)]] * (len(foreign.tri_pos) * 3)
         log(f"rigid-bound everything to JOBJ_{rigid_bone}")
     else:
         weights = transfer_weights(rigkit, foreign, max_weights, surface=surface,
-                                   surface_pts=surf_pts, bone_world=pose_world)
+                                   surface_pts=surf_pts, bone_world=pose_world,
+                                   forbidden=forbidden)
 
     if tgt_skin is not None:
         # un-pose: store verts so target LBS at rest pose lands them exactly
