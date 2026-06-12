@@ -501,6 +501,7 @@ def sane_surface(rigkit: smd.SMD):
 def transfer_weights(
     rigkit: smd.SMD, foreign: ForeignMesh, max_weights: int = MAX_WEIGHTS_DEFAULT,
     surface=None, surface_pts=None, bone_world=None, forbidden=None,
+    part_of=None, vert_parts=None,
 ) -> list[list[tuple[int, float]]]:
     """Per-corner weights for the foreign mesh, sampled from the rig-kit mesh.
 
@@ -579,6 +580,33 @@ def transfer_weights(
     d_geo, idx = tree.query(pts, k=K)
     anchor_d = np.linalg.norm(pts[:, None, :] - anchors[idx], axis=2)
     score = d_geo + 1.2 * anchor_d
+
+    # semantic part constraint: a vert labeled with a body part may only
+    # sample vanilla corners whose dominant bone belongs to an ALLOWED part
+    # (head verts never ride arm bones — cross-part sampling was the source
+    # of every shard/melt artifact on cross-character rigs)
+    if part_of and vert_parts is not None:
+        from modellab.skeleton_parts import ALLOWED
+        sample_part = []
+        for wlist in van_corner_w:
+            mass: dict = {}
+            for bone, w in wlist:
+                p = part_of.get(stabilize(bone))
+                if p:
+                    mass[p] = mass.get(p, 0.0) + w
+            sample_part.append(max(mass, key=mass.get) if mass else None)
+        sample_part = np.asarray(sample_part, dtype=object)
+        penalty = np.zeros_like(score)
+        for k in range(len(pts)):
+            vp = vert_parts[k]
+            allowed = ALLOWED.get(vp)
+            if allowed is None:
+                continue
+            cand = sample_part[idx[k]]
+            penalty[k] = [0.0 if (cp is None or cp in allowed) else 1e4
+                          for cp in cand]
+        score = score + penalty
+
     best = idx[np.arange(len(pts)), score.argmin(axis=1)]
 
     raw = []
@@ -600,6 +628,8 @@ def transfer_weights(
     stable_ids = [b for b in world if b in stable]
     stable_pos = np.array([world[b] for b in stable_ids])
 
+    if part_of and vert_parts is not None:
+        from modellab.skeleton_parts import ALLOWED as _ALLOWED
     out = []
     for k, acc in enumerate(smoothed):
         gated = {b: w for b, w in acc.items()
@@ -607,8 +637,18 @@ def transfer_weights(
                  float(np.linalg.norm(pts[k] - world[b])) <= max_reach}
         if not gated:
             # no held bone is near (crest tips, prop extremities): ride the
-            # single nearest STABLE bone instead of a far-flung mixture
-            nearest = stable_ids[int(np.linalg.norm(stable_pos - pts[k], axis=1).argmin())]
+            # single nearest STABLE bone instead of a far-flung mixture —
+            # restricted to the vert's allowed body parts when labeled
+            cand_ids, cand_pos = stable_ids, stable_pos
+            if part_of and vert_parts is not None:
+                allowed = _ALLOWED.get(vert_parts[k])
+                if allowed:
+                    sel = [i for i, b in enumerate(stable_ids)
+                           if part_of.get(b) in allowed]
+                    if sel:
+                        cand_ids = [stable_ids[i] for i in sel]
+                        cand_pos = stable_pos[sel]
+            nearest = cand_ids[int(np.linalg.norm(cand_pos - pts[k], axis=1).argmin())]
             gated = {nearest: 1.0}
         top = sorted(gated.items(), key=lambda kv: -kv[1])[:max_weights]
         total = sum(w for _, w in top) or 1.0
@@ -661,76 +701,12 @@ def transfer_weights(
         print(f"  consensus pass: snapped {snapped} outlier corners "
               f"({len(consensus)} unique verts)")
 
-    # triangle coherence: vanilla triangles only ever span ADJACENT bones
-    # (elbow, knee). A triangle whose corners ride skeleton-DISTANT bones
-    # (hip vs head) stretches into a giant shard the moment the pose spreads
-    # them — the dominant close-up artifact on cross-rigged capes/feathers.
-    # Enforce: each triangle's welded verts must share a bone or sit within
-    # tree distance 3; snap the lone offender to its mates' blend.
-    _dist_memo: dict = {}
-
-    def tree_dist(a, b, cap=6):
-        if a == b:
-            return 0
-        key = (a, b) if a < b else (b, a)
-        hit = _dist_memo.get(key)
-        if hit is not None:
-            return hit
-        seen_a, seen_b = {a: 0}, {b: 0}
-        ca, cb = a, b
-        result = cap + 1
-        for step in range(1, cap + 1):
-            if ca in parents and parents[ca] >= 0:
-                ca = parents[ca]
-                if ca in seen_b:
-                    result = step + seen_b[ca]
-                    break
-                seen_a[ca] = step
-            if cb in parents and parents[cb] >= 0:
-                cb = parents[cb]
-                if cb in seen_a:
-                    result = step + seen_a[cb]
-                    break
-                seen_b[cb] = step
-        _dist_memo[key] = result
-        return result
-
-    vert_of = {}
-    corner_vert = [vert_of.setdefault(key, len(vert_of)) for key in pos_key]
-    n_tri = len(pts) // 3
-    for _ in range(3):
-        fixes: dict = {}
-        for t in range(n_tri):
-            cs = [t * 3, t * 3 + 1, t * 3 + 2]
-            sets = [dict(out[c]) for c in cs]
-            if set(sets[0]) & set(sets[1]) & set(sets[2]):
-                continue
-            prims = [out[c][0][0] for c in cs]
-            d01 = tree_dist(prims[0], prims[1])
-            d02 = tree_dist(prims[0], prims[2])
-            d12 = tree_dist(prims[1], prims[2])
-            if max(d01, d02, d12) <= 3:
-                continue
-            # offender = the corner farthest from BOTH its mates
-            far = [d01 + d02, d01 + d12, d02 + d12]
-            o = int(np.argmax(far))
-            mates = [i for i in range(3) if i != o]
-            blend: dict = {}
-            for i in mates:
-                for b, w in sets[i].items():
-                    blend[b] = blend.get(b, 0.0) + w
-            top = sorted(blend.items(), key=lambda kv: -kv[1])[:max_weights]
-            total = sum(w for _, w in top) or 1.0
-            fixes[corner_vert[cs[o]]] = [(b, w / total) for b, w in top]
-        if not fixes:
-            break
-        n_fixed = 0
-        for k in range(len(pts)):
-            if corner_vert[k] in fixes:
-                out[k] = fixes[corner_vert[k]]
-                n_fixed += 1
-        print(f"  triangle coherence: re-bound {len(fixes)} verts "
-              f"({n_fixed} corners)")
+    # (a triangle-coherence snap pass lived here briefly: it re-bound any
+    # triangle spanning skeleton-distant bones to its mates' blend. REVERTED —
+    # the snapping was a positive-feedback loop (each fix created new
+    # incoherent boundary triangles; iteration counts GREW) and produced
+    # region-scale melting in-game. Cross-part contamination must be
+    # prevented at SAMPLING time via skeleton part labels, not patched after.)
     return out
 
 
@@ -1108,6 +1084,28 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                 stack.extend(kids.get(cur, []))
         log(f"forbidden dynamic-chain bones: {sorted(forbidden)}")
 
+    # semantic body parts: label the TARGET skeleton; for melee sources also
+    # label the SOURCE skeleton and tag every foreign corner with the part its
+    # source weights belong to — the transfer then forbids cross-part sampling
+    from modellab.skeleton_parts import label_parts
+    tgt_parts = label_parts(rigkit, dynamic_roots=chain_roots)
+    vert_parts = None
+    if hasattr(foreign, "src_smd") and hasattr(foreign, "tri_src_w"):
+        src_parts = label_parts(
+            foreign.src_smd,
+            dynamic_roots=load_dynamics(src_char_code) if src_char_code else None)
+        vert_parts = []
+        for tw in foreign.tri_src_w:
+            for wlist in tw:
+                mass: dict = {}
+                for bone, w in wlist:
+                    p = src_parts.get(bone)
+                    if p and p != "util":
+                        mass[p] = mass.get(p, 0.0) + w
+                vert_parts.append(max(mass, key=mass.get) if mass else None)
+        from collections import Counter
+        log(f"source part labels: {dict(Counter(p for p in vert_parts if p))}")
+
     if rigid_bone is not None:
         # debug/prop mode: the whole mesh rides one bone
         weights = [[(int(rigid_bone), 1.0)]] * (len(foreign.tri_pos) * 3)
@@ -1115,7 +1113,8 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     else:
         weights = transfer_weights(rigkit, foreign, max_weights, surface=surface,
                                    surface_pts=surf_pts, bone_world=pose_world,
-                                   forbidden=forbidden)
+                                   forbidden=forbidden, part_of=tgt_parts,
+                                   vert_parts=vert_parts)
 
     if tgt_skin is not None:
         # un-pose: store verts so target LBS at rest pose lands them exactly

@@ -1,0 +1,40 @@
+{
+  "_source": "zankyou, Smashboards 'Melee bone names' thread (user-provided). Indices are jobj DFS order == our rig-kit JOBJ_n == HSDRaw/BIZZ jobj ids (cross-check: Mario 23=HeadN matches BIZZ video).",
+  "_conventions": "TopN/TransN/XRotN/YRotN = util (NEVER weighted). *N = positioning null, *J = weighted joint, *JA = joint assist. ThrowN = throw anchor (never weighted).",
+  "Mario": {
+    "0": "TopN", "1": "TransN", "2": "XRotN", "3": "YRotN", "4": "HipN",
+    "5": "WaistN", "6": "LShoulderN", "7": "LShoulderJA", "8": "LShoulderJ",
+    "9": "LArmJ", "10": "LHandN", "11": "L1stNa", "12": "L1stNb",
+    "13": "L2ndNa", "14": "L2ndNb", "15": "L3rdNa", "16": "L3rdNb",
+    "17": "L4thNa", "18": "L4thNb", "19": "LThumbNa", "20": "LThumbNb",
+    "21": "LHandNb", "22": "NeckN", "23": "HeadN", "24": "HatN",
+    "25": "LHigeN", "26": "MouthN", "27": "NoseN", "28": "RHigeN",
+    "29": "RShoulderN", "30": "RShoulderJA", "31": "RShoulderJ",
+    "32": "RArmJ", "33": "RHandN", "34": "R1stNa", "35": "R1stNb",
+    "36": "R2ndNa", "37": "R2ndNb", "38": "R3rdNa", "39": "R3rdNb",
+    "40": "R4thNa", "41": "R4thNb", "42": "RHaveN", "43": "RThumbNa",
+    "44": "RThumbNb", "45": "RHandNb", "46": "WaistNb", "47": "LLegJA",
+    "48": "LLegJ", "49": "LKneeJ", "50": "LFootJA", "51": "LFootJ",
+    "52": "LToeN", "53": "RLegJA", "54": "RLegJ", "55": "RKneeJ",
+    "56": "RFootJA", "57": "RFootJ", "58": "RToeN", "59": "ThrowN",
+    "60": "EyeYellowM"
+  },
+  "Captain Falcon": {
+    "0": "TopN", "1": "TransN", "2": "XRotN", "3": "YRotN", "4": "HipN",
+    "5": "HolsterN", "6": "LLegA", "7": "LLegJ", "8": "LKneeJ",
+    "9": "LFootJA", "10": "LFootJ", "11": "LToeN", "12": "RLegA",
+    "13": "RLegJ", "14": "RKneeJ", "15": "RFootJA", "16": "RToeN",
+    "17": "RFootJ", "18": "WaistN", "19": "BustN", "20": "CollarN",
+    "21": "LShoulderN", "22": "LShoulderJA", "23": "LShoulderJ",
+    "24": "LArmJ", "25": "LHandN", "26": "L1stNa", "27": "L1stNb",
+    "28": "L2ndNa", "29": "L2ndNb", "30": "L3rdNa", "31": "L3rdNb",
+    "32": "L4thNa", "33": "L4thNb", "34": "LHandBN", "35": "LThumbNa",
+    "36": "LThumbNb", "37": "LSideN", "38": "NeckN", "39": "HeadN",
+    "40": "MouthBN", "41": "MouthN", "42": "RShoulderN", "43": "PadN",
+    "44": "RShoulderJA", "45": "RShoulderJ", "46": "RArmJ", "47": "RHandN",
+    "48": "R1stNa", "49": "R1stNb", "50": "R2ndNa", "51": "R2ndNb",
+    "52": "R3rdNa", "53": "R3rdNb", "54": "R4thNa", "55": "R4thNb",
+    "56": "RHandBN", "57": "RHaveN", "58": "RThumbNa", "59": "RThumbNb",
+    "60": "RSideN", "61": "ThrowN", "62": "ToothClose"
+  }
+}
