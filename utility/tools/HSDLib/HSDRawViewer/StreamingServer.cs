@@ -789,6 +789,55 @@ namespace HSDRawViewer
                         }
                         break;
 
+                    case "getUVLayout":
+                        // Per-texture UV triangles + posed world positions, for
+                        // UV-aware (projection) compositing in the skin lab.
+                        try
+                        {
+                            if (_renderJObj == null || _cachedTextureList == null)
+                            {
+                                await SendJsonAsync(webSocket, new { type = "uvLayout", error = "no model loaded" });
+                                break;
+                            }
+                            List<object> layout = null;
+                            Exception layoutError = null;
+                            var done = new TaskCompletionSource<object>();
+                            // run on the UI thread: reads LiveJObj transforms the
+                            // render loop owns
+                            _hostForm.BeginInvoke((Action)(() =>
+                            {
+                                try
+                                {
+                                    layout = _renderJObj.GetUVLayout(_cachedTextureList);
+                                }
+                                catch (Exception ex)
+                                {
+                                    layoutError = ex;
+                                }
+                                finally
+                                {
+                                    done.TrySetResult(null);
+                                }
+                            }));
+                            await done.Task;
+                            if (layoutError != null)
+                            {
+                                LogError("Error in getUVLayout", layoutError);
+                                await SendJsonAsync(webSocket, new { type = "uvLayout", error = layoutError.Message });
+                            }
+                            else
+                            {
+                                Log($"getUVLayout: {layout.Count} textures with geometry");
+                                await SendJsonAsync(webSocket, new { type = "uvLayout", textures = layout });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogError("Error in getUVLayout", ex);
+                            await SendJsonAsync(webSocket, new { type = "uvLayout", error = ex.Message });
+                        }
+                        break;
+
                     case "updateTexture":
                         // Update a texture with new image data
                         try

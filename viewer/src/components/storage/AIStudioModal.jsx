@@ -3,8 +3,9 @@ import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
 import ProgressPanel from '../export/ProgressPanel'
-import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
-                           TimeEstimate, autoOptionLabel } from './useAiStudioSetup'
+import useAiStudioSetup, { CostBreakdown, InspirationPicker, ResolutionNotice,
+                           SetupGate, TimeEstimate,
+                           autoOptionLabel } from './useAiStudioSetup'
 
 const TASK_KINDS = ['material']
 const DEFAULT_PLANNER = 'openai/gpt-5-mini'
@@ -15,10 +16,17 @@ const DEFAULT_PLANNER = 'openai/gpt-5-mini'
  */
 export default function AIStudioModal({ show, character, onClose, onSaved }) {
   const [theme, setTheme] = useState('')
+  // optional inspiration image: data URL (JPEG, downscaled client-side)
+  const [inspiration, setInspiration] = useState(null)
+  const [inspirationName, setInspirationName] = useState('')
   const [planner, setPlanner] = useState(DEFAULT_PLANNER)
   // '' = Auto: the backend's tier resolver picks per task
   const [imageModel, setImageModel] = useState(
     localStorage.getItem('ai_studio_image_model') || '')
+  // review pass is cheap for characters (a vision call + re-render), so it
+  // defaults ON — '0' in localStorage opts out
+  const [reviewPass, setReviewPass] = useState(
+    localStorage.getItem('ai_studio_review_pass') !== '0')
   const { ready, options, planners, resolution, autoResolution, resolveFor } =
     useAiStudioSetup(show, TASK_KINDS)
   const [phase, setPhase] = useState('form')        // form | running | preview | saving
@@ -83,7 +91,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
   if (!show) return null
 
   const run = async () => {
-    if (!theme.trim()) return
+    if (!theme.trim() && !inspiration) return
     playSound('start')
     setPhase('running')
     setError(null)
@@ -128,11 +136,13 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
         body: JSON.stringify({
           character,
           theme: theme.trim(),
+          inspirationImage: inspiration || undefined,
           plannerModel: planner,
           // Auto ('') sends neither — the backend's tier resolver picks
           imageProvider: options.find((o) => o.value === imageModel)?.provider,
           imageModel: imageModel || undefined,
           openrouterKey: localStorage.getItem('openrouter_api_key') || undefined,
+          reviewPass,
         }),
       })
       const data = await res.json()
@@ -198,10 +208,17 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
               className="ai-studio-theme"
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
-              placeholder={'e.g. "royal crusader: polished steel plate armor, deep crimson cloth, gold trim"'}
+              placeholder={inspiration
+                ? 'optional with an image — add notes to steer it'
+                : 'e.g. "royal crusader: polished steel plate armor, deep crimson cloth, gold trim"'}
               rows={3}
               autoFocus
             />
+            <InspirationPicker value={inspiration} name={inspirationName}
+                               onChange={(url, fname) => {
+                                 setInspiration(url)
+                                 setInspirationName(fname)
+                               }} />
             <label className="ai-studio-label">Planner model</label>
             <select className="ai-studio-planner" value={planner}
                     onChange={(e) => setPlanner(e.target.value)}>
@@ -226,10 +243,19 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
             </select>
             <ResolutionNotice resolution={resolution} />
             <TimeEstimate resolution={resolution} />
+            <label className="ai-studio-label" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={reviewPass}
+                     onChange={(e) => {
+                       setReviewPass(e.target.checked)
+                       localStorage.setItem('ai_studio_review_pass', e.target.checked ? '1' : '0')
+                     }} />
+              Review pass — the AI critiques its render and fixes it (adds seconds + ~1¢)
+            </label>
             {error && <div className="ai-studio-error">{error}</div>}
             <div className="ai-studio-actions">
               <button className="ai-studio-btn primary"
-                      disabled={!theme.trim() || ready === null} onClick={run}>
+                      disabled={(!theme.trim() && !inspiration) || ready === null}
+                      onClick={run}>
                 Generate
               </button>
               <button className="ai-studio-btn" onClick={handleClose}>Cancel</button>

@@ -7829,6 +7829,30 @@
   padding: 10px 12px; font-size: 14px; font-family: inherit;
 }
 .ai-studio-theme { resize: vertical; }
+.ai-studio-drop {
+  display: block; padding: 14px 12px; text-align: center; cursor: pointer;
+  background: var(--color-bg-primary, #0e1117);
+  border: 1px dashed var(--color-border, #2a3245); border-radius: 8px;
+  color: var(--color-text-secondary, #8b93a7); font-size: 13px;
+}
+.ai-studio-drop:hover { border-color: var(--color-accent, #4a7dff); }
+.ai-studio-insp {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+  background: var(--color-bg-primary, #0e1117);
+  border: 1px solid var(--color-border, #2a3245); border-radius: 8px;
+}
+.ai-studio-insp img {
+  width: 56px; height: 56px; object-fit: cover; border-radius: 6px;
+}
+.ai-studio-insp-name {
+  flex: 1; font-size: 13px; color: var(--color-text-secondary, #8b93a7);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ai-studio-insp-clear {
+  background: none; border: none; cursor: pointer; padding: 0 4px;
+  color: var(--color-text-secondary, #8b93a7); font-size: 18px;
+}
+.ai-studio-insp-clear:hover { color: #f87171; }
 .ai-studio-error { color: #f87171; font-size: 13px; }
 .ai-studio-actions { display: flex; gap: 10px; margin-top: 6px; }
 .ai-studio-btn {

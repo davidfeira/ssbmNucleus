@@ -457,13 +457,25 @@ class GenerationError(RuntimeError):
     pass
 
 
+def _material_stem(params):
+    """Cache stem for a generated material. A reference image changes what
+    comes back for the SAME prompt, so its hash must be part of the key —
+    otherwise a cached refless 'red scales' shadows the inspired one."""
+    import hashlib
+    prompt = (params.get('prompt') or '').strip()
+    stem = (params.get('name')
+            or hashlib.sha1(prompt.encode()).hexdigest()[:10])
+    ref = (params.get('referenceImage') or '').strip()
+    if ref:
+        stem += '-' + hashlib.sha1(ref.encode()).hexdigest()[:8]
+    return stem
+
+
 def _openrouter_generate(params, model=None, key=None):
     """Generate a texture image via an OpenRouter image-output model (e.g.
     google/gemini-2.5-flash-image). Key: explicit arg (threaded from the
     request) or OPENROUTER_API_KEY. Returns (absolute_image_path, result_info)."""
     import base64 as _b64
-    import hashlib
-    import os
 
     import requests as _rq
 
@@ -479,17 +491,30 @@ def _openrouter_generate(params, model=None, key=None):
 
     if (params.get('style') or '') == 'scene':
         # backdrop/panorama use -- one coherent image, stretched (not tiled)
-        full_prompt = ('Generate a wide painted GAME BACKGROUND scene, no '
+        base_prompt = ('Generate a wide painted GAME BACKGROUND scene, no '
                        'text, no borders, cohesive single image filling the '
-                       f'frame: {prompt}')
+                       'frame')
     else:
-        full_prompt = ('Generate a seamless tileable TEXTURE swatch, square, '
+        base_prompt = ('Generate a seamless tileable TEXTURE swatch, square, '
                        'repeating pattern, no borders, no text, fills the whole '
-                       f'image edge to edge: {prompt}')
-    logger.info(f'[skin-lab] openrouter generate ({model}): {prompt!r}')
+                       'image edge to edge')
+    reference = (params.get('referenceImage') or '').strip()
+    if reference:
+        base_prompt += (', drawing its palette, materials and motifs from '
+                        'the attached reference image')
+    full_prompt = f'{base_prompt}: {prompt}'
+    if reference:
+        content = [
+            {'type': 'text', 'text': full_prompt},
+            {'type': 'image_url', 'image_url': {'url': reference}},
+        ]
+    else:
+        content = full_prompt
+    logger.info(f'[skin-lab] openrouter generate ({model}'
+                f'{", with reference" if reference else ""}): {prompt!r}')
     res = _rq.post('https://openrouter.ai/api/v1/chat/completions', timeout=180, json={
         'model': model,
-        'messages': [{'role': 'user', 'content': full_prompt}],
+        'messages': [{'role': 'user', 'content': content}],
         'modalities': ['image', 'text'],
     }, headers={'Authorization': f'Bearer {key}'})
     body = res.json()
@@ -507,8 +532,7 @@ def _openrouter_generate(params, model=None, key=None):
 
     out_dir = STORAGE_PATH / 'skinlab_materials'
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = (params.get('name') or hashlib.sha1(prompt.encode()).hexdigest()[:10])
-    path = out_dir / f'{stem}.png'
+    path = out_dir / f'{_material_stem(params)}.png'
     path.write_bytes(raw)
     return path, {'model': model}
 
@@ -518,11 +542,12 @@ def _generate_material(params):
 
     params: {prompt, name?, seed?, width?, height?, style?: 'scene',
              tier?: 'standard'|'strong', kind?: 'material'|'ailab'|'stage',
-             provider?, model?, openrouterKey?}
-    Material cache first (keyed by name/prompt hash); then the resolved
-    provider — OpenRouter falls back to a local model on failure (e.g. key
-    out of credits). Every attempt lands in the telemetry ledger."""
-    import hashlib
+             provider?, model?, openrouterKey?, referenceImage?: data URI}
+    Material cache first (keyed by name/prompt hash + reference-image hash);
+    then the resolved provider — OpenRouter falls back to a local model on
+    failure (e.g. key out of credits). Local models are text-to-image only:
+    a referenceImage is dropped there (the planner-written prompt still
+    carries the style). Every attempt lands in the telemetry ledger."""
     import time as _time
 
     from aiengine import routing, telemetry
@@ -530,8 +555,7 @@ def _generate_material(params):
     from aiengine.runner import EngineError
 
     prompt = (params.get('prompt') or '').strip()
-    stem = (params.get('name') or hashlib.sha1(prompt.encode()).hexdigest()[:10])
-    cache = STORAGE_PATH / 'skinlab_materials' / f'{stem}.png'
+    cache = STORAGE_PATH / 'skinlab_materials' / f'{_material_stem(params)}.png'
 
     tier = params.get('tier') or \
         ('strong' if (params.get('style') or '') == 'scene' else 'standard')
@@ -591,6 +615,9 @@ def _generate_material(params):
     from aiengine import runner as _runner
     cache.parent.mkdir(parents=True, exist_ok=True)
     style = 'scene' if (params.get('style') or '') == 'scene' else 'tile'
+    if (params.get('referenceImage') or '').strip():
+        logger.info('[skin-lab] local generation ignores the reference image '
+                    '(text-to-image only) — prompt alone carries the style')
 
     # The local worker reports model load + denoise progress ("loading X…",
     # "step 3/4 | …"); with a progressEvent the caller (AI studio run thread)
@@ -1027,6 +1054,28 @@ def _upscale_for_composite(arr):
     return np.array(img)
 
 
+def _uv_layouts(session):
+    """Per-texture UV layout from the viewer (getUVLayout), cached for the
+    session -- the geometry never changes, only textures do. Returns
+    {texture index -> {triangles, wrapS, wrapT, ...}}; MatAnim swap frames
+    (blink etc.) resolve to their base texture's geometry, since they swap
+    onto the same polygons."""
+    if 'uvLayouts' not in _meta:
+        try:
+            entries = {e['index']: e for e in _session.get_uv_layout()}
+        except Exception:
+            logger.warning('[skin-lab] getUVLayout failed; projection mode '
+                           'falls back to tiling', exc_info=True)
+            entries = {}
+        for t in session.textures:
+            if t.get('matAnim') and t['index'] not in entries:
+                base = entries.get(t.get('animates'))
+                if base is not None:
+                    entries[t['index']] = base
+        _meta['uvLayouts'] = entries
+    return _meta['uvLayouts']
+
+
 def _push_array(session, index, arr):
     buf = io.BytesIO()
     Image.fromarray(arr, 'RGBA').save(buf, format='PNG')
@@ -1071,6 +1120,11 @@ def composite_textures():
      mask?: {hueMin,hueMax,satMin,satMax,lumMin,lumMax}   (default: the
             region's mask hint; REQUIRED with explicit textures),
      modulate?: {lo: 0.3, hi: 1.6},
+     mode?: "tile" (default) | "project"   -- project samples the material in
+            shared 3D model space via the DAT's UVs, so the pattern continues
+            seamlessly across texture boundaries (eye decals, ears, etc.),
+     worldScale?: world units one material tile covers in project mode
+            (default: ~35% of the model's bounding-box diagonal),
      force?: false}   -- protected textures (eyes/mouth) are skipped unless forced."""
     data = request.get_json(silent=True) or {}
 
@@ -1115,8 +1169,45 @@ def composite_textures():
         lum_hi = float(modulate.get('hi', 1.6))
         force = bool(data.get('force'))
 
+        # projection mode: sample the material in shared model space via the
+        # DAT's UV layout (seamless across texture boundaries)
+        mode = (data.get('mode') or '').strip() or 'tile'
+        layouts = {}
+        world_scale = None
+        if mode == 'project':
+            layouts = _uv_layouts(session)
+            if layouts:
+                ws = data.get('worldScale')
+                if ws:
+                    world_scale = float(ws)
+                else:
+                    # whole-model bbox, NOT the targeted subset: separate ops
+                    # (fur now, eyes later) must agree on the pattern scale
+                    world_scale = compose_mod.layout_world_scale(
+                        list(layouts.values()))
+            else:
+                mode = 'tile'   # no geometry info; behave like before
+
+        shade_ref = None
+
+        def _composite_one(arr, mask, index):
+            lay = layouts.get(index)
+            if mode == 'project' and lay is not None:
+                out = compose_mod.composite_project(
+                    arr, mat_arr, mask, lay, world_scale,
+                    lum_lo=lum_lo, lum_hi=lum_hi, shade_ref=shade_ref)
+                if out is not None:
+                    return out, True
+            return compose_mod.composite(arr, mat_arr, mask,
+                                         lum_lo=lum_lo, lum_hi=lum_hi), False
+
         valid = {t['index'] for t in session.textures}
-        changed, skipped = [], []
+        changed, skipped, projected = [], [], []
+
+        # prepare targets first: project mode shades every texture against ONE
+        # lightness reference, or the shared pattern still shows a brightness
+        # step where two textures meet on the model
+        work = []
         for index in indexes:
             if index not in valid:
                 skipped.append({'index': index, 'reason': 'no such texture'})
@@ -1126,16 +1217,31 @@ def composite_textures():
                 continue
             try:
                 arr = _upscale_for_composite(_texture_png_array(session, index))
-                mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
-                pad = None if force else _pad_mask_for(index, arr.shape,
-                                                       kind='core')
-                if pad is not None:
-                    mask &= ~pad   # never flood a feature texture's padding
-                result = compose_mod.composite(arr, mat_arr, mask,
-                                               lum_lo=lum_lo, lum_hi=lum_hi)
+            except ViewerSessionError as e:
+                return jsonify({'success': False, 'error': str(e),
+                                'changed': changed, 'skipped': skipped}), 500
+            mask = compose_mod.build_mask(arr, **_mask_kwargs(mask_spec))
+            pad = None if force else _pad_mask_for(index, arr.shape,
+                                                   kind='core')
+            if pad is not None:
+                mask &= ~pad   # never flood a feature texture's padding
+            work.append((index, arr, mask))
+        if mode == 'project' and work:
+            lums = [compose_mod.masked_lightness(arr, mask)
+                    for _, arr, mask in work]
+            counts = [int(mask.sum()) for _, _, mask in work]
+            total = sum(counts)
+            if total:
+                shade_ref = sum(l * c for l, c in zip(lums, counts)) / total
+
+        for index, arr, mask in work:
+            try:
+                result, did_project = _composite_one(arr, mask, index)
                 if result is None:
                     skipped.append({'index': index, 'reason': 'mask matched nothing'})
                     continue
+                if did_project:
+                    projected.append(index)
                 _push_array(session, index, result)
                 changed.append(index)
             except ViewerSessionError as e:
@@ -1156,16 +1262,18 @@ def composite_textures():
                     pad = _pad_mask_for(index, arr.shape)
                     if pad is None or not pad.any():
                         continue
-                    result = compose_mod.composite(arr, mat_arr, pad,
-                                                   lum_lo=lum_lo, lum_hi=lum_hi)
+                    result, did_project = _composite_one(arr, pad, index)
                     if result is not None:
+                        if did_project:
+                            projected.append(index)
                         _push_array(session, index, result)
                         changed.append(index)
                 except Exception:
                     logger.warning(f'[skin-lab] composite spillover failed on '
                                    f'{index}', exc_info=True)
         return jsonify({'success': True, 'changed': changed,
-                        'skipped': skipped, 'generated': generated})
+                        'skipped': skipped, 'projected': projected,
+                        'worldScale': world_scale, 'generated': generated})
 
 
 @skin_lab_bp.route('/api/mex/skin-lab/tint', methods=['POST'])

@@ -123,8 +123,21 @@ directly. No agent or code required.
   each texture's ORIGINAL lightness so folds/seams survive.
   `{region:"fur" | textures:[i...], material: {path}|{data:b64}|{generate:
   {prompt,...}}, mask?: {hueMin,hueMax,satMin,satMax,lumMin,lumMax},
-  modulate?: {lo:0.3, hi:1.6}, force?}`. Mask defaults to the region's hint;
-  hueMin>hueMax wraps through 0 (reds). Returns `{changed, skipped}`.
+  modulate?: {lo:0.3, hi:1.6}, mode?: "tile"|"project", worldScale?, force?}`.
+  Mask defaults to the region's hint; hueMin>hueMax wraps through 0 (reds).
+  Returns `{changed, skipped, projected, worldScale}`.
+  - `mode:"project"` (recommended for body coverage): samples the material in
+    shared 3D model space via the DAT's UV layout (triplanar projection over
+    a `getUVLayout` bake from the viewer), so the pattern continues
+    SEAMLESSLY across texture boundaries — eye/cheek decal quads, ears, the
+    works. All textures in one call share a pattern scale, a lightness
+    reference, and the model-space pattern itself; separate calls also agree
+    because the default `worldScale` (≈55% of the model's bounding-box
+    diagonal) comes from the whole model. Pass `worldScale` (world units one
+    material tile covers) to taste — smaller = finer pattern. Falls back to
+    tiling per texture when the viewer has no geometry for a texture.
+  - `mode:"tile"` (default) repeats the swatch in texture-pixel space —
+    fine for a single texture, shows scale/orientation seams across decals.
 - `POST /hue-shift` — rotate hue / push saturation on masked pixels
   (lightness untouched): `{region|textures, mask?, hueShift?,
   saturationShift?, force?}`. Same targeting semantics as /composite.

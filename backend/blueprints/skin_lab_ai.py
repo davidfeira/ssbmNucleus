@@ -1,7 +1,10 @@
 """AI Skin Studio orchestration -- the one-call flow behind the viewer UI.
 
 POST /api/mex/skin-lab/ai-create {character, costumeCode, theme,
-    plannerModel?, openrouterKey?}
+    plannerModel?, openrouterKey?, inspirationImage?: data URI}
+  inspirationImage makes the plan call a VISION call (palette/motifs come
+  from the image) and threads the image into every composite's material
+  generation as an image-to-image reference. theme may be empty then.
   -> background thread: open session -> plan (OpenRouter text model) ->
      execute steps (self-HTTP against the existing skin-lab endpoints) ->
      render a front/back/CSP review sheet -> emit it as a data URI.
@@ -78,6 +81,29 @@ def _call_ollama_planner(model, prompt, image_jpeg=None):
     return body['message']['content']
 
 
+def ollama_supports_vision(model):
+    """True when the local planner can take images (POST /api/show lists a
+    'vision' capability). Text-only Ollama models hard-400 on multimodal
+    input ("Multimodal data provided..."), so the studios must withhold the
+    inspiration image from them. Conservative False on any probe failure."""
+    from aiengine import ollama_runtime
+    base = ollama_runtime.effective_url()
+    if not base:
+        return False
+    try:
+        info = requests.post(f'{base}/api/show', timeout=5,
+                             json={'model': model.split(':', 1)[1]}).json()
+        return 'vision' in (info.get('capabilities') or [])
+    except Exception:
+        return False
+
+
+def planner_can_see(model):
+    """Can this planner take an image at all? API planners in the picker are
+    all vision models; local ones depend on the Ollama model."""
+    return not is_local_planner(model) or ollama_supports_vision(model)
+
+
 def _ollama_model_loaded(model):
     """True when the local planner's weights are already resident in Ollama
     (GET /api/ps). keep_alive=0 unloads after every call, so this is usually
@@ -137,7 +163,7 @@ PLAN_PROMPT = """You are designing a Super Smash Bros. Melee costume transformat
 for {character} using a texture-compositing API. The theme is:
 
   "{theme}"
-
+{inspiration}
 The costume's textures are grouped into named regions:
 {region_summary}
 
@@ -167,6 +193,26 @@ Rules:
 - The "eyes" region may be hue-shifted or tinted but NEVER composited.
 
 Reply with ONLY JSON: {{"skin_name": "<short name>", "steps": [...]}}"""
+
+# Extra plan-prompt block when the user attached an inspiration image. The
+# texture generator ALSO receives the image, but the material prompts must
+# still name the style in words — they are the only signal local (text-only)
+# image models and tint/hue-shift steps get.
+INSPIRATION_NOTE = """
+An INSPIRATION IMAGE is attached. Treat it as the primary design reference:
+pick each region's colors from the image's dominant palette, and write
+material prompts that name its textures, materials and motifs in words.
+"""
+
+# ...and the variant for a planner that CANNOT see the image (text-only local
+# model): never claim an attachment the model can't see — it would invent one.
+INSPIRATION_BLIND_NOTE = """
+The user provided an inspiration image that you cannot see (your model is
+text-only). The image IS given to the texture generator alongside your
+material prompts, so design from the theme text and keep material prompts
+about texture and structure rather than exact colors -- the reference image
+will supply the palette.
+"""
 
 REVIEW_PROMPT = """You previously designed a Melee costume for the theme
 "{theme}" and your plan was executed. The attached image is the ACTUAL result
@@ -326,6 +372,34 @@ def _trim_assessment(text, limit=280):
     return text[:limit].rsplit(' ', 1)[0].rstrip(',;:. ') + '…'
 
 
+def parse_inspiration(data):
+    """Optional 'inspirationImage' data URI from a studio request ->
+    (jpeg_bytes, data_uri), normalized to a bounded white-matte JPEG so
+    planner vision calls and the texture generator both get a sane payload
+    (vision endpoints 400 on wrong mime; uploads can be huge PNGs).
+    (None, None) when absent; ValueError when unreadable."""
+    raw = (data.get('inspirationImage') or '').strip()
+    if not raw:
+        return None, None
+    try:
+        img = Image.open(io.BytesIO(
+            base64.b64decode(raw.split('base64,', 1)[-1])))
+        if img.mode in ('RGBA', 'LA', 'P'):
+            rgba = img.convert('RGBA')
+            img = Image.new('RGB', rgba.size, (255, 255, 255))
+            img.paste(rgba, mask=rgba.split()[-1])
+        else:
+            img = img.convert('RGB')
+        img.thumbnail((1024, 1024))
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=88)
+    except Exception:
+        raise ValueError('inspirationImage is not a readable image')
+    jpeg = buf.getvalue()
+    return jpeg, ('data:image/jpeg;base64,'
+                  + base64.b64encode(jpeg).decode('ascii'))
+
+
 def _vanilla_nr_code(character):
     """The character's neutral vanilla costume code (PlXxNr), discovered from
     the vanilla assets folder. None if the character has no vanilla assets
@@ -466,6 +540,17 @@ def ai_create():
     review_pass = data.get('reviewPass', True)   # cheap for characters: default ON
     from aiengine import keystore
     key = (data.get('openrouterKey') or keystore.get_openrouter_key() or '').strip()
+
+    try:
+        insp_jpeg, insp_uri = parse_inspiration(data)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    if not theme and insp_jpeg is not None:
+        theme = 'a costume inspired by the attached image'
+    # a text-only local planner hard-400s on images: plan from text, keep the
+    # image for the texture generator (and skip the vision review pass)
+    vision_planner = planner_can_see(model)
+
     if not character or not theme:
         return jsonify({'success': False, 'error': 'character and theme are required'}), 400
     # a local (ollama:) planner needs no key; image models resolve to local
@@ -505,8 +590,16 @@ def ai_create():
                 raise RuntimeError(f'No texture-region map for {character} yet')
             region_summary = '\n'.join(f'- {name}: {len(idxs)} textures'
                                        for name, idxs in rm['regions'].items())
+            inspiration_note = ''
+            if insp_jpeg is not None:
+                inspiration_note = INSPIRATION_NOTE if vision_planner \
+                    else INSPIRATION_BLIND_NOTE
+                if not vision_planner:
+                    emit('planning', 20, 'Planner is text-only — the image '
+                         'will steer the textures, not the plan')
             prompt = PLAN_PROMPT.format(
                 character=character, theme=theme, region_summary=region_summary,
+                inspiration=inspiration_note,
                 color_facts=_color_facts(_facts_source(rm)))
 
             plan_msg = planner_call_message(model, 'for a plan')
@@ -514,7 +607,10 @@ def ai_create():
             planner_log = []
             reply = call_with_pulse(
                 emit, 'planning', 25, plan_msg,
-                lambda: _call_planner(model, prompt, key, cost_log=planner_log))
+                lambda: _call_planner(model, prompt, key,
+                                      image_jpeg=insp_jpeg if vision_planner
+                                      else None,
+                                      cost_log=planner_log))
             plan = _extract_json(reply)
             steps, err = _validate(plan or {}, set(rm['regions']))
             if err:
@@ -537,6 +633,10 @@ def ai_create():
                                # load, denoise steps) to the studio's bar
                                'progressEvent': 'ailab_progress',
                                'openrouterKey': key}
+                        if insp_uri:
+                            # image-to-image: the material model sees the
+                            # inspiration too (local models drop it)
+                            gen['referenceImage'] = insp_uri
                         if image_model:
                             gen['model'] = image_model
                         elif image_provider:
@@ -578,8 +678,13 @@ def ai_create():
             # for characters (sheet renders in seconds).
             assessment = None
             fixes = []
-            review_info = {'ran': bool(review_pass)}
-            if review_pass:
+            review_info = {'ran': bool(review_pass and vision_planner)}
+            if review_pass and not vision_planner:
+                # the review is a vision call on the render — impossible for
+                # a text-only local planner (Ollama 400s on the image)
+                review_info['error'] = 'planner is text-only (cannot see the render)'
+                emit('reviewing', 70, 'Skipping self-review — planner is text-only')
+            if review_pass and vision_planner:
                 emit('reviewing', 70, 'Rendering for self-review…')
                 sheet1 = _sheet_from_session(base_url)
                 review_msg = planner_call_message(model, 'to review the result')

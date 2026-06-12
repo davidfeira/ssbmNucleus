@@ -25,6 +25,38 @@ def get_char_prefix(character):
     return f"Pl{code}" if code else None
 
 
+# Vanilla SSBM CSS costume slot order per character (slot 0 = default, left to right on CSS).
+# Derived from actual DOL data via MexManager CostumesFromDOL at 0x803C2360.
+VANILLA_CSS_COLOR_ORDER = {
+    'Bowser':           ['Nr', 'Re', 'Bu', 'Bk'],
+    'C. Falcon':        ['Nr', 'Gy', 'Re', 'Wh', 'Gr', 'Bu'],
+    'DK':               ['Nr', 'Bk', 'Re', 'Bu', 'Gr'],
+    'Dr. Mario':        ['Nr', 'Re', 'Bu', 'Gr', 'Bk'],
+    'Falco':            ['Nr', 'Re', 'Bu', 'Gr'],
+    'Fox':              ['Nr', 'Or', 'La', 'Gr'],
+    'Ganondorf':        ['Nr', 'Re', 'Bu', 'Gr', 'La'],
+    'Ice Climbers':     ['Nr', 'Gr', 'Or', 'Re'],
+    'Jigglypuff':       ['Nr', 'Re', 'Bu', 'Gr', 'Ye'],
+    'Kirby':            ['Nr', 'Ye', 'Bu', 'Re', 'Gr', 'Wh'],
+    'Link':             ['Nr', 'Re', 'Bu', 'Bk', 'Wh'],
+    'Luigi':            ['Nr', 'Wh', 'Aq', 'Pi'],
+    'Mario':            ['Nr', 'Ye', 'Bk', 'Bu', 'Gr'],
+    'Marth':            ['Nr', 'Re', 'Gr', 'Bk', 'Wh'],
+    'Mewtwo':           ['Nr', 'Re', 'Bu', 'Gr'],
+    'Mr. Game & Watch': ['Nr'],
+    'Nana':             ['Nr', 'Ye', 'Aq', 'Wh'],
+    'Ness':             ['Nr', 'Ye', 'Bu', 'Gr'],
+    'Peach':            ['Nr', 'Ye', 'Wh', 'Bu', 'Gr'],
+    'Pichu':            ['Nr', 'Re', 'Bu', 'Gr'],
+    'Pikachu':          ['Nr', 'Re', 'Bu', 'Gr'],
+    'Roy':              ['Nr', 'Re', 'Bu', 'Gr', 'Ye'],
+    'Samus':            ['Nr', 'Pi', 'Bk', 'Gr', 'La'],
+    'Sheik':            ['Nr', 'Re', 'Bu', 'Gr', 'Wh'],
+    'Yoshi':            ['Nr', 'Re', 'Bu', 'Ye', 'Pi', 'Aq'],
+    'Young Link':       ['Nr', 'Re', 'Bu', 'Wh', 'Bk'],
+    'Zelda':            ['Nr', 'Re', 'Bu', 'Gr', 'Wh'],
+}
+
 # Vanilla Melee has 128 total costumes across all fighters
 # (26 playable + Nana + Master Hand)
 VANILLA_COSTUME_COUNT = 128

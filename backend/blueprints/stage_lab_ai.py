@@ -1,7 +1,11 @@
 """AI Stage Studio -- themed DAS-alt generation behind the viewer UI.
 
 POST /api/mex/stage-lab/ai-create {stageCode, theme, plannerModel?,
-    openrouterKey?, vanillaIsoPath, slippiDolphinPath}
+    openrouterKey?, vanillaIsoPath, slippiDolphinPath,
+    inspirationImage?: data URI}
+  inspirationImage makes the plan call a VISION call and threads the image
+  into material AND backdrop generation as an image-to-image reference.
+  theme may be empty then.
   -> background thread: plan (OpenRouter text model over the stage's region
      map) -> offline texture ops -> variant dat -> one-skin test ISO ->
      in-game capture (calibrated framing) -> emit the screenshot. The built
@@ -29,9 +33,11 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from blueprints.skin_lab_ai import (AI_LAB_ENABLED, DEFAULT_PLANNER,
+                                    INSPIRATION_BLIND_NOTE, INSPIRATION_NOTE,
                                     _call_planner, _clean_step, _extract_json,
                                     _trim_assessment, call_with_pulse,
-                                    is_local_planner, planner_call_message)
+                                    is_local_planner, parse_inspiration,
+                                    planner_can_see, planner_call_message)
 from core.config import STORAGE_PATH
 
 logger = logging.getLogger(__name__)
@@ -45,7 +51,7 @@ STAGE_PLAN_PROMPT = """You are designing a Super Smash Bros. Melee STAGE reskin 
 "DAS alternate") for {stage_name} using a texture-compositing API. The theme:
 
   "{theme}"
-
+{inspiration}
 The stage's textures are grouped into named regions:
 {region_summary}
 
@@ -198,6 +204,15 @@ def stage_ai_create():
     key = (data.get('openrouterKey') or keystore.get_openrouter_key() or '').strip()
     vanilla = (data.get('vanillaIsoPath') or '').strip()
     slippi = (data.get('slippiDolphinPath') or '').strip()
+    try:
+        insp_jpeg, insp_uri = parse_inspiration(data)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    if not theme and insp_jpeg is not None:
+        theme = 'a stage inspired by the attached image'
+    # a text-only local planner hard-400s on images: plan from text, keep the
+    # image for the texture generator (and skip the vision review pass)
+    vision_planner = planner_can_see(model)
     if not code or not theme:
         return jsonify({'success': False, 'error': 'stageCode and theme are required'}), 400
     # a local (ollama:) planner needs no key (fully-local runs allowed)
@@ -249,15 +264,25 @@ def stage_ai_create():
                 + (f" ({notes[name]})" if name in notes else '')
                 for name, idxs in rm['regions'].items())
             extra = notes.get('limitations')
+            inspiration_note = ''
+            if insp_jpeg is not None:
+                inspiration_note = INSPIRATION_NOTE if vision_planner \
+                    else INSPIRATION_BLIND_NOTE
+                if not vision_planner:
+                    emit('planning', 8, 'Planner is text-only — the image '
+                         'will steer the textures, not the plan')
             prompt = STAGE_PLAN_PROMPT.format(
                 stage_name=rm.get('stage', code), theme=theme,
                 region_summary=region_summary,
+                inspiration=inspiration_note,
                 extra_notes=(f'- NOTE: {extra}\n' if extra else ''))
             planner_log = []
             try:
                 reply = call_with_pulse(
                     emit, 'planning', 10, plan_msg,
                     lambda: _call_planner(model, prompt, key,
+                                          image_jpeg=insp_jpeg if vision_planner
+                                          else None,
                                           cost_log=planner_log))
             except RuntimeError as e:
                 raise StageOpsError(str(e))
@@ -284,6 +309,10 @@ def stage_ai_create():
                           # denoise steps) to the studio's bar
                           'progressEvent': 'stagelab_progress',
                           'openrouterKey': key}
+                if insp_uri:
+                    # image-to-image: materials AND backdrops draw from the
+                    # inspiration (local models drop it)
+                    params['referenceImage'] = insp_uri
                 if quality:
                     params['style'] = 'scene'
                 sel_model = backdrop_model if quality else image_model
@@ -346,8 +375,13 @@ def stage_ai_create():
             # second ISO/capture verifies (costs another ~2-3 minutes).
             assessment = None
             fixes, fix_tints = [], []
-            review_info = {'ran': bool(review_pass)}
-            if review_pass:
+            review_info = {'ran': bool(review_pass and vision_planner)}
+            if review_pass and not vision_planner:
+                # the review is a vision call on the screenshot — impossible
+                # for a text-only local planner (Ollama 400s on the image)
+                review_info['error'] = 'planner is text-only (cannot see the screenshot)'
+                emit('reviewing', 75, 'Skipping self-review — planner is text-only')
+            if review_pass and vision_planner:
                 review_msg = planner_call_message(model, 'to review the screenshot')
                 emit('reviewing', 75, review_msg)
                 try:

@@ -37,7 +37,7 @@ class ViewerManager {
       // Development: use the built version in the tools directory
       return path.join(
         __dirname, '..',
-        'utility', 'website', 'backend', 'tools',
+        'utility', 'tools',
         'HSDLib', 'HSDRawViewer', 'bin', 'Release', 'net6.0-windows',
         'HSDRawViewer.exe'
       );

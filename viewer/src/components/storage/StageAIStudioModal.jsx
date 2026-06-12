@@ -4,8 +4,9 @@ import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
 import ProgressPanel from '../export/ProgressPanel'
 import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
-import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
-                           TimeEstimate, autoOptionLabelFor } from './useAiStudioSetup'
+import useAiStudioSetup, { CostBreakdown, InspirationPicker, ResolutionNotice,
+                           SetupGate, TimeEstimate,
+                           autoOptionLabelFor } from './useAiStudioSetup'
 
 const DEFAULT_PLANNER = 'openai/gpt-5-mini'
 
@@ -21,6 +22,9 @@ const TASK_KINDS = ['material', 'backdrop']
  */
 export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   const [theme, setTheme] = useState('')
+  // optional inspiration image: data URL (JPEG, downscaled client-side)
+  const [inspiration, setInspiration] = useState(null)
+  const [inspirationName, setInspirationName] = useState('')
   const [planner, setPlanner] = useState(DEFAULT_PLANNER)
   // '' = Auto: the backend's tier resolver picks per task. Materials and
   // backgrounds are picked separately (backgrounds are 'strong' tier).
@@ -93,7 +97,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   if (!show) return null
 
   const run = async () => {
-    if (!theme.trim()) return
+    if (!theme.trim() && !inspiration) return
     const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
     const slippiDolphinPath = localStorage.getItem('slippi_dolphin_path')
     if (!vanillaIsoPath || !slippiDolphinPath) {
@@ -144,6 +148,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
         body: JSON.stringify({
           stageCode: stage.code,
           theme: theme.trim(),
+          inspirationImage: inspiration || undefined,
           plannerModel: planner,
           // Auto ('') sends neither — the backend's tier resolver picks
           imageProvider: options.find((o) => o.value === imageModel)?.provider,
@@ -218,10 +223,17 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
               className="ai-studio-theme"
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
-              placeholder={'e.g. "molten core: volcanic basalt, glowing lava cracks, apocalyptic ember sky"'}
+              placeholder={inspiration
+                ? 'optional with an image — add notes to steer it'
+                : 'e.g. "molten core: volcanic basalt, glowing lava cracks, apocalyptic ember sky"'}
               rows={3}
               autoFocus
             />
+            <InspirationPicker value={inspiration} name={inspirationName}
+                               onChange={(url, fname) => {
+                                 setInspiration(url)
+                                 setInspirationName(fname)
+                               }} />
             <label className="ai-studio-label">Planner model</label>
             <select className="ai-studio-planner" value={planner}
                     onChange={(e) => setPlanner(e.target.value)}>
@@ -270,7 +282,8 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
             {error && <div className="ai-studio-error">{error}</div>}
             <div className="ai-studio-actions">
               <button className="ai-studio-btn primary"
-                      disabled={!theme.trim() || ready === null} onClick={run}>
+                      disabled={(!theme.trim() && !inspiration) || ready === null}
+                      onClick={run}>
                 Generate
               </button>
               <button className="ai-studio-btn" onClick={handleClose}>Cancel</button>

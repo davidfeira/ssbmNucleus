@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, HSDRAW_EXE, LOGS_PATH, PROCESSOR_DIR, get_subprocess_args
+from core.constants import VANILLA_CSS_COLOR_ORDER
 from core.costume_files import find_costume_archive_name, find_vanilla_costume_archive
 from core.state import get_viewer_process, set_viewer_process, get_viewer_port, set_viewer_port
 
@@ -707,7 +708,7 @@ def get_vanilla_costumes(character):
             return jsonify({'success': False, 'error': f'Character {character} not found'}), 404
 
         costumes = []
-        for folder in sorted(char_dir.iterdir()):
+        for folder in char_dir.iterdir():
             if folder.is_dir() and folder.name.startswith('Pl'):
                 costume_code = Path(folder.name).stem
                 archive_file = find_vanilla_costume_archive(folder, costume_code)
@@ -727,6 +728,14 @@ def get_vanilla_costumes(character):
                         'hasCsp': (folder / 'csp.png').exists(),
                         'hasStock': (folder / 'stock.png').exists()
                     })
+
+        css_order = VANILLA_CSS_COLOR_ORDER.get(character, [])
+        def css_sort_key(c):
+            try:
+                return css_order.index(c['colorCode'])
+            except ValueError:
+                return len(css_order)
+        costumes.sort(key=css_sort_key)
 
         return jsonify({'success': True, 'costumes': costumes})
 

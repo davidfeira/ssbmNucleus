@@ -139,6 +139,112 @@ def test_hue_shift_only_masked_pixels():
     assert compose.hue_shift(arr, mask) is None      # no deltas -> None
 
 
+def _tri(uv0, uv1, uv2, p0, p1, p2):
+    return list(uv0) + list(uv1) + list(uv2) + list(p0) + list(p1) + list(p2)
+
+
+def test_rasterize_uv_layout_interpolates_positions():
+    from skinlab import compose
+    # one triangle covering the lower-left half of an 8x8 texture, mapped to
+    # a world quad in the XY plane (z=0): pos should interpolate linearly
+    tris = [_tri((0, 0), (1, 0), (0, 1),
+                 (0, 0, 0), (8, 0, 0), (0, 8, 0))]
+    pos, nrm, covered = compose.rasterize_uv_layout(tris, 8, 8)
+    assert covered[0, 0] and not covered[7, 7]
+    # texel centers map 1:1 onto world units here
+    assert np.allclose(pos[0, 0], (0.5, 0.5, 0), atol=0.6)
+    assert np.allclose(pos[0, 6], (6.5, 0.5, 0), atol=0.6)
+    # face normal is +/-Z
+    assert abs(nrm[0, 0][2]) > 0.99
+
+
+def test_rasterize_uv_layout_wrap_modes():
+    from skinlab import compose
+    # UVs spanning two repeats: with REPEAT both halves of the texture get
+    # painted; with CLAMP out-of-range texels fold onto the border
+    tris = [_tri((0, 0), (2, 0), (0, 1),
+                 (0, 0, 0), (16, 0, 0), (0, 8, 0))]
+    _, _, cov_rep = compose.rasterize_uv_layout(tris, 8, 8,
+                                                wrap_s=compose.WRAP_REPEAT)
+    assert cov_rep[0].all()
+    m = compose._fold_indices(np.array([8, 9, 15]), 8, compose.WRAP_MIRROR)
+    assert m.tolist() == [7, 6, 0]
+    c = compose._fold_indices(np.array([-3, 9]), 8, compose.WRAP_CLAMP)
+    assert c.tolist() == [0, 7]
+
+
+def test_triplanar_is_consistent_across_textures():
+    from skinlab import compose
+    # two different textures whose UV islands land on the SAME world surface
+    # must bake the SAME pattern -- that's the seamlessness guarantee
+    mat = (np.random.RandomState(7).rand(16, 16, 3) * 255).astype(np.uint8)
+    quad = ((0, 0, 0), (8, 0, 0), (0, 8, 0))
+    tris = [_tri((0, 0), (1, 0), (0, 1), *quad)]
+    pos_a, nrm_a, cov_a = compose.rasterize_uv_layout(tris, 8, 8)
+    pos_b, nrm_b, cov_b = compose.rasterize_uv_layout(tris, 8, 8)
+    sample_a = compose.triplanar_sample(mat, pos_a, nrm_a, 4.0)
+    sample_b = compose.triplanar_sample(mat, pos_b, nrm_b, 4.0)
+    both = cov_a & cov_b
+    assert np.allclose(sample_a[both], sample_b[both])
+
+
+def test_composite_project_paints_and_respects_mask():
+    from skinlab import compose
+    arr = np.zeros((8, 8, 4), dtype=np.uint8)
+    arr[..., :3] = 200
+    arr[..., 3] = 255
+    layout = {'triangles': [
+        _tri((0, 0), (1, 0), (0, 1), (0, 0, 0), (8, 0, 0), (0, 8, 0)),
+        _tri((1, 1), (1, 0), (0, 1), (8, 8, 0), (8, 0, 0), (0, 8, 0)),
+    ], 'wrapS': 1, 'wrapT': 1}
+    mat = np.zeros((4, 4, 3), dtype=np.uint8)
+    mat[..., 0] = 255   # pure red material
+    mask = np.zeros((8, 8), dtype=bool)
+    mask[:, :4] = True
+    out = compose.composite_project(arr, mat, mask, layout, world_scale=8.0)
+    assert out is not None
+    assert out[2, 2, 0] > 150 and out[2, 2, 1] < 100   # masked: red
+    assert tuple(out[2, 6][:3]) == (200, 200, 200)     # unmasked untouched
+    # empty mask -> None
+    assert compose.composite_project(
+        arr, mat, np.zeros((8, 8), bool), layout, 8.0) is None
+
+
+def test_composite_project_shared_shade_ref():
+    from skinlab import compose
+    layout = {'triangles': [
+        _tri((0, 0), (1, 0), (0, 1), (0, 0, 0), (8, 0, 0), (0, 8, 0)),
+        _tri((1, 1), (1, 0), (0, 1), (8, 8, 0), (8, 0, 0), (0, 8, 0)),
+    ], 'wrapS': 1, 'wrapT': 1}
+    mat = np.full((4, 4, 3), 128, dtype=np.uint8)
+    mask = np.ones((8, 8), dtype=bool)
+    dark = np.zeros((8, 8, 4), dtype=np.uint8)
+    dark[..., :3] = 40
+    dark[..., 3] = 255
+    light = np.zeros((8, 8, 4), dtype=np.uint8)
+    light[..., :3] = 220
+    light[..., 3] = 255
+    # per-texture refs: both expose the material identically (seam step)
+    a = compose.composite_project(dark, mat, mask, layout, 8.0)
+    b = compose.composite_project(light, mat, mask, layout, 8.0)
+    assert abs(int(a[4, 4, 0]) - int(b[4, 4, 0])) <= 2
+    # shared ref: the dark texture renders the material darker
+    ref = (compose.masked_lightness(dark, mask)
+           + compose.masked_lightness(light, mask)) / 2
+    a = compose.composite_project(dark, mat, mask, layout, 8.0, shade_ref=ref)
+    b = compose.composite_project(light, mat, mask, layout, 8.0, shade_ref=ref)
+    assert int(b[4, 4, 0]) - int(a[4, 4, 0]) > 40
+
+
+def test_layout_world_scale_from_bbox():
+    from skinlab import compose
+    layouts = [{'triangles': [
+        _tri((0, 0), (1, 0), (0, 1), (0, 0, 0), (10, 0, 0), (0, 10, 0))]}]
+    ws = compose.layout_world_scale(layouts, fraction=0.5)
+    assert abs(ws - np.sqrt(200) * 0.5) < 1e-6
+    assert compose.layout_world_scale([{'triangles': []}]) == 1.0
+
+
 def test_fox_region_map_is_valid():
     import json as _json
     path = BACKEND_DIR / 'assets' / 'texture_regions' / 'Fox.json'
@@ -181,6 +287,88 @@ def test_composite_routes_validation():
         assert res.status_code == 409
         res = c.get('/api/mex/skin-lab/regions')
         assert res.status_code == 409
+
+
+def test_material_stem_reference_aware():
+    from blueprints.skin_lab import _material_stem
+    base = {'prompt': 'red dragon scales'}
+    # stable without a reference, and a name still wins
+    assert _material_stem(base) == _material_stem(dict(base))
+    assert _material_stem({'prompt': 'x', 'name': 'fur-mat'}) == 'fur-mat'
+    # a reference image changes the stem (same prompt must not cache-collide)
+    ref_a = dict(base, referenceImage='data:image/jpeg;base64,AAAA')
+    ref_b = dict(base, referenceImage='data:image/jpeg;base64,BBBB')
+    assert _material_stem(ref_a) != _material_stem(base)
+    assert _material_stem(ref_a) != _material_stem(ref_b)
+    assert _material_stem(ref_a) == _material_stem(dict(ref_a))
+    # named + reference: the ref tag still lands in the stem
+    named = dict(ref_a, name='fur-mat')
+    assert _material_stem(named).startswith('fur-mat-')
+    assert _material_stem(named) != 'fur-mat'
+
+
+def test_ai_create_inspiration_image_validation(monkeypatch):
+    import base64 as _b64
+    import io as _io
+
+    from PIL import Image as _Image
+
+    import aiengine.keystore as keystore
+    from blueprints import skin_lab_ai as ai_module
+    monkeypatch.setattr(keystore, 'get_openrouter_key', lambda: '')
+    app = Flask(__name__)
+    app.register_blueprint(ai_module.skin_lab_ai_bp)
+    with app.test_client() as c:
+        # unreadable image -> 400 naming the field
+        res = c.post('/api/mex/skin-lab/ai-create', json={
+            'character': 'Fox', 'theme': 'x',
+            'inspirationImage': 'data:image/jpeg;base64,!!!!'})
+        assert res.status_code == 400
+        assert 'inspirationImage' in res.get_json()['error']
+        # an image makes theme optional: validation proceeds past the
+        # character/theme check to the key check
+        buf = _io.BytesIO()
+        _Image.new('RGBA', (4, 4), (255, 0, 0, 128)).save(buf, format='PNG')
+        uri = 'data:image/png;base64,' + _b64.b64encode(buf.getvalue()).decode()
+        res = c.post('/api/mex/skin-lab/ai-create', json={
+            'character': 'Fox', 'inspirationImage': uri})
+        assert res.status_code == 400
+        assert 'OpenRouter key' in res.get_json()['error']
+        # no image -> theme is still required
+        res = c.post('/api/mex/skin-lab/ai-create', json={'character': 'Fox'})
+        assert res.status_code == 400
+        assert 'theme' in res.get_json()['error']
+
+
+def test_stage_ai_create_inspiration_image_validation(monkeypatch):
+    import base64 as _b64
+    import io as _io
+
+    from PIL import Image as _Image
+
+    import aiengine.keystore as keystore
+    from blueprints import stage_lab_ai as stage_module
+    monkeypatch.setattr(keystore, 'get_openrouter_key', lambda: '')
+    app = Flask(__name__)
+    app.register_blueprint(stage_module.stage_lab_ai_bp)
+    with app.test_client() as c:
+        res = c.post('/api/mex/stage-lab/ai-create', json={
+            'stageCode': 'GrIz', 'theme': 'x',
+            'inspirationImage': 'data:image/jpeg;base64,!!!!'})
+        assert res.status_code == 400
+        assert 'inspirationImage' in res.get_json()['error']
+        # an image makes theme optional: validation proceeds to the key check
+        buf = _io.BytesIO()
+        _Image.new('RGB', (4, 4), (0, 200, 0)).save(buf, format='PNG')
+        uri = 'data:image/png;base64,' + _b64.b64encode(buf.getvalue()).decode()
+        res = c.post('/api/mex/stage-lab/ai-create', json={
+            'stageCode': 'GrIz', 'inspirationImage': uri})
+        assert res.status_code == 400
+        assert 'OpenRouter key' in res.get_json()['error']
+        # no image -> theme is still required
+        res = c.post('/api/mex/stage-lab/ai-create', json={'stageCode': 'GrIz'})
+        assert res.status_code == 400
+        assert 'theme' in res.get_json()['error']
 
 
 def test_routes_require_session():

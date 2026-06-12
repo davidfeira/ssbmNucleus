@@ -211,6 +211,16 @@ class ViewerSession:
             raise ViewerSessionError(reply.get('error') or 'no texture data')
         return b64decode(reply['data'])
 
+    def get_uv_layout(self):
+        """Per-texture UV layout: for every texture that geometry samples,
+        the triangles as [u0,v0,u1,v1,u2,v2, x0,y0,z0, x1,y1,z1, x2,y2,z2]
+        (UVs in wrap units, positions posed world space) plus wrapS/wrapT.
+        Used by projection-mode composites (compose.composite_project)."""
+        reply = self._request({'type': 'getUVLayout'}, 'uvLayout', timeout=60.0)
+        if reply.get('error'):
+            raise ViewerSessionError(reply['error'])
+        return reply.get('textures') or []
+
     def update_texture(self, index, png_bytes):
         """Replace a texture (PNG bytes; caller is responsible for sizing)."""
         reply = self._request(

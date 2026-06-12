@@ -1273,6 +1273,246 @@ namespace HSDRawViewer.Rendering.Models
             return textures;
         }
 
+        /// <summary>
+        /// Exports the UV layout of every texture in a previously captured
+        /// texture list: per texture, the triangles that sample it, as
+        /// (transformed UV, posed world-space position) per corner. UVs have
+        /// the TOBJ's texture matrix applied (repeat/mirror scaling included),
+        /// i.e. they are in WRAP units where [0,1] is one tile; positions
+        /// mirror gx.vert's skinning exactly at the CURRENT pose. Geometry of
+        /// hidden DOBJs is emitted first so overlapping bakes resolve in
+        /// favor of the visible mesh. Reflection/toon-mapped TOBJs have no
+        /// stable UV layout and are skipped.
+        /// </summary>
+        public List<object> GetUVLayout(List<TextureInfo> cachedTextureList)
+        {
+            const int W_MAX = 6;       // RenderPObj.MAX_WEIGHTS
+            const int W_STRIDE = 10;   // RenderPObj.WEIGHT_STRIDE
+
+            // bone matrices in shader order (RootJObj.Enumerate)
+            var worlds = new List<Matrix4>();
+            var binds = new List<Matrix4>();
+            if (RootJObj != null)
+            {
+                foreach (LiveJObj v in RootJObj.Enumerate)
+                {
+                    worlds.Add(v.WorldTransform);
+                    binds.Add(v.BindTransform);
+                }
+            }
+
+            // row-vector transforms (matches LiveJObj composition + how the
+            // shader sees the uploaded matrices)
+            Vector3 XformPos(Vector3 p, Matrix4 m) => Vector3.TransformPosition(p, m);
+            Vector2 XformUV(float u, float v, Matrix4 m)
+            {
+                float x = u * m.M11 + v * m.M21 + m.M41;
+                float y = u * m.M12 + v * m.M22 + m.M42;
+                float w = u * m.M14 + v * m.M24 + m.M44;
+                if (Math.Abs(w) < 1e-9f)
+                    w = 1;
+                return new Vector2(x / w, y / w);
+            }
+
+            var triangles = new Dictionary<int, List<float[]>>();
+
+            foreach (var dobj in RenderDobjs.OrderBy(d => d.Visible ? 1 : 0))
+            {
+                var texList = dobj._dobj?.Mobj?.Textures?.List;
+                if (texList == null || dobj.Parent == null)
+                    continue;
+
+                // which cached textures this dobj samples, via which vertex
+                // UV channel and texture matrix
+                var bindings = new List<(int cacheIdx, int channel, Matrix4 xform)>();
+                for (int ti = 0; ti < texList.Count; ti++)
+                {
+                    var tobj = texList[ti];
+                    if (tobj?.ImageData?.ImageData == null)
+                        continue;
+                    if (tobj.CoordType != HSDRaw.Common.COORD_TYPE.UV)
+                        continue;
+                    int gensrc = (int)tobj.GXTexGenSrc;
+                    int channel;
+                    if (gensrc >= (int)GXTexGenSrc.GX_TG_TEX0 && gensrc <= (int)GXTexGenSrc.GX_TG_TEX7)
+                        channel = Math.Min(gensrc - (int)GXTexGenSrc.GX_TG_TEX0, 3);
+                    else if (gensrc >= (int)GXTexGenSrc.GX_TG_TEXCOORD0 && gensrc <= (int)GXTexGenSrc.GX_TG_TEXCOORD6)
+                        channel = Math.Min(gensrc - (int)GXTexGenSrc.GX_TG_TEXCOORD0, 3);
+                    else
+                        continue;
+                    int ci = cachedTextureList.FindIndex(t => !t.IsMatAnim
+                        && TexDataEquals(t.Tobj?.ImageData?.ImageData, tobj.ImageData.ImageData));
+                    if (ci < 0)
+                        continue;
+                    Matrix4 xf;
+                    if (ti < dobj.TextureStates.Length && dobj.TextureStates[ti].TOBJ != null)
+                        xf = dobj.TextureStates[ti].Transform;
+                    else
+                    {
+                        var lt = new LiveTObj();
+                        lt.Reset(tobj);
+                        xf = lt.Transform;
+                    }
+                    bindings.Add((ci, channel, xf));
+                }
+                if (bindings.Count == 0)
+                    continue;
+
+                bool isSkeleton = dobj.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.SKELETON_ROOT);
+                Matrix4 single = dobj.Parent.WorldTransform;
+
+                foreach (var p in dobj.PObjs)
+                {
+                    GX_Attribute[] attrs;
+                    try
+                    {
+                        attrs = p.pobj.ToGXAttributes();
+                        if (attrs.Length == 0 || attrs[attrs.Length - 1].AttributeName != GXAttribName.GX_VA_NULL)
+                            continue;
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                    var dl = p.pobj.ToDisplayList(attrs);
+                    bool envelopes = p.HasWeighting;
+                    bool parent2 = p.pobj.Flags.HasFlag(POBJ_FLAG.UNKNOWN2);
+                    bool parent1 = !p.pobj.Flags.HasFlag(POBJ_FLAG.SHAPESET_AVERAGE);
+
+                    Vector3 PosedPosition(GX_Vertex v)
+                    {
+                        var pos = new Vector3(v.POS.X, v.POS.Y, v.POS.Z);
+                        int mi = Math.Clamp(v.PNMTXIDX / 3, 0, W_STRIDE - 1);
+                        if (envelopes)
+                        {
+                            // mirrors gx.vert: non-skeleton roots apply the
+                            // parent transform BEFORE skinning
+                            float w0 = p.Weights[mi * W_MAX];
+                            if (!isSkeleton)
+                                pos = XformPos(pos, single);
+                            if (isSkeleton && w0 == 1f)
+                            {
+                                int b0 = p.Envelopes[mi * W_MAX];
+                                if (b0 >= 0 && b0 < worlds.Count)
+                                    pos = XformPos(pos, worlds[b0]);
+                            }
+                            else
+                            {
+                                var skinned = Vector3.Zero;
+                                for (int wi = 0; wi < W_MAX; wi++)
+                                {
+                                    float w = p.Weights[mi * W_MAX + wi];
+                                    if (w <= 0)
+                                        continue;
+                                    int b = p.Envelopes[mi * W_MAX + wi];
+                                    if (b >= 0 && b < binds.Count)
+                                        skinned += XformPos(pos, binds[b]) * w;
+                                }
+                                pos = skinned;
+                            }
+                        }
+                        else if (parent2)
+                        {
+                            int b0 = p.Envelopes[mi * W_MAX];
+                            if (b0 >= 0 && b0 < worlds.Count)
+                                pos = XformPos(pos, worlds[b0]);
+                        }
+                        else if (parent1)
+                        {
+                            pos = XformPos(pos, single);
+                        }
+                        return pos;
+                    }
+
+                    int off = 0;
+                    foreach (var prim in dl.Primitives)
+                    {
+                        var verts = dl.Vertices.GetRange(off, prim.Count);
+                        off += prim.Count;
+                        switch (prim.PrimitiveType)
+                        {
+                            case GXPrimitiveType.Quads:
+                                verts = HSDRawViewer.Tools.TriangleConverter.QuadToList(verts);
+                                break;
+                            case GXPrimitiveType.TriangleStrip:
+                                verts = HSDRawViewer.Tools.TriangleConverter.StripToList(verts);
+                                break;
+                            case GXPrimitiveType.TriangleFan:
+                                {
+                                    // fan (c, v1, v2, v3...) -> (c,v1,v2), (c,v2,v3), ...
+                                    var fan = new List<GX_Vertex>();
+                                    for (int f = 1; f + 1 < verts.Count; f++)
+                                    {
+                                        fan.Add(verts[0]);
+                                        fan.Add(verts[f]);
+                                        fan.Add(verts[f + 1]);
+                                    }
+                                    verts = fan;
+                                }
+                                break;
+                            case GXPrimitiveType.Triangles:
+                                break;
+                            default:
+                                continue;   // points/lines paint nothing useful
+                        }
+                        for (int t = 0; t + 2 < verts.Count; t += 3)
+                        {
+                            Vector3 p0 = PosedPosition(verts[t]);
+                            Vector3 p1 = PosedPosition(verts[t + 1]);
+                            Vector3 p2 = PosedPosition(verts[t + 2]);
+
+                            foreach (var (ci, channel, xf) in bindings)
+                            {
+                                Vector2 RawUV(GX_Vertex v) => channel switch
+                                {
+                                    0 => new Vector2(v.TEX0.X, v.TEX0.Y),
+                                    1 => new Vector2(v.TEX1.X, v.TEX1.Y),
+                                    2 => new Vector2(v.TEX2.X, v.TEX2.Y),
+                                    _ => new Vector2(v.TEX3.X, v.TEX3.Y),
+                                };
+                                Vector2 uv0 = XformUV(RawUV(verts[t]).X, RawUV(verts[t]).Y, xf);
+                                Vector2 uv1 = XformUV(RawUV(verts[t + 1]).X, RawUV(verts[t + 1]).Y, xf);
+                                Vector2 uv2 = XformUV(RawUV(verts[t + 2]).X, RawUV(verts[t + 2]).Y, xf);
+
+                                // strips emit degenerate triangles; they paint nothing
+                                float area = Math.Abs((uv1.X - uv0.X) * (uv2.Y - uv0.Y)
+                                                    - (uv2.X - uv0.X) * (uv1.Y - uv0.Y));
+                                if (area < 1e-10f)
+                                    continue;
+
+                                if (!triangles.TryGetValue(ci, out var list))
+                                    triangles[ci] = list = new List<float[]>();
+                                list.Add(new[]
+                                {
+                                    uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y,
+                                    p0.X, p0.Y, p0.Z,
+                                    p1.X, p1.Y, p1.Z,
+                                    p2.X, p2.Y, p2.Z,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            var result = new List<object>();
+            foreach (var tex in cachedTextureList)
+            {
+                if (!triangles.TryGetValue(tex.Index, out var list))
+                    continue;
+                result.Add(new
+                {
+                    index = tex.Index,
+                    width = tex.Width,
+                    height = tex.Height,
+                    wrapS = (int)(tex.Tobj?.WrapS ?? GXWrapMode.REPEAT),
+                    wrapT = (int)(tex.Tobj?.WrapT ?? GXWrapMode.REPEAT),
+                    triangles = list,
+                });
+            }
+            return result;
+        }
+
         // GL texture indexes for content-duplicate instances that were merged by
         // an update (one array can only key one entry in imageBufferTextureIndex,
         // but the duplicates' GL textures still need refreshing on later updates).

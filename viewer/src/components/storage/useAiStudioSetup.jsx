@@ -189,6 +189,58 @@ const TASK_LABELS = {
   backdrop: 'Backgrounds',
 }
 
+/** Optional inspiration-image upload shared by the character + stage studios.
+ * Downscales to a ≤1024px JPEG on a white canvas client-side: caps the
+ * request body, and vision/image APIs 400 on exotic mimes (the backend
+ * re-checks anyway). value = data URL | null. */
+export function InspirationPicker({ value, name, onChange }) {
+  const ingest = (file) => {
+    if (!file || !file.type?.startsWith('image/')) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const scale = Math.min(1, 1024 / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        onChange(canvas.toDataURL('image/jpeg', 0.9), file.name)
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <>
+      <label className="ai-studio-label">Inspiration image (optional)</label>
+      {value ? (
+        <div className="ai-studio-insp">
+          <img src={value} alt="inspiration" />
+          <span className="ai-studio-insp-name">{name}</span>
+          <button className="ai-studio-insp-clear" title="Remove image"
+                  onClick={() => onChange(null, '')}>
+            ×
+          </button>
+        </div>
+      ) : (
+        <label className="ai-studio-drop"
+               onDragOver={(e) => e.preventDefault()}
+               onDrop={(e) => { e.preventDefault(); ingest(e.dataTransfer.files[0]) }}>
+          <input type="file" accept="image/*" hidden
+                 onChange={(e) => { ingest(e.target.files[0]); e.target.value = '' }} />
+          Drop an image here or click to browse — its palette and patterns
+          get woven in
+        </label>
+      )}
+    </>
+  )
+}
+
 /** 'Auto — <model>' for ONE task kind — the per-dropdown Auto label when a
  * studio has a separate picker per task. */
 export function autoOptionLabelFor(autoResolution, kind) {

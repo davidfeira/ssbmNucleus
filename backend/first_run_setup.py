@@ -132,8 +132,8 @@ class FirstRunSetup:
         else:
             self.bundled_resources_dir = None
             # In development, tools are in project root
-            self.csp_data_dir = project_root / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
-            self.hsdraw_path = project_root / "utility" / "website" / "backend" / "tools" / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows" / "HSDRawViewer.exe"
+            self.csp_data_dir = project_root / "utility" / "tools" / "processor" / "csp_data"
+            self.hsdraw_path = project_root / "utility" / "tools" / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows" / "HSDRawViewer.exe"
 
     def check_setup_needed(self) -> dict:
         """

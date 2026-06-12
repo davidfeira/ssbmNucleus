@@ -15,7 +15,8 @@ from .state import (
     get_viewer_port, set_viewer_port, get_current_project_path
 )
 from .constants import (
-    CHAR_PREFIXES, VANILLA_COSTUME_COUNT, VANILLA_ISO_MD5, STAGE_NAMES
+    CHAR_PREFIXES, VANILLA_COSTUME_COUNT, VANILLA_ISO_MD5, STAGE_NAMES,
+    VANILLA_CSS_COLOR_ORDER,
 )
 from .helpers import (
     calculate_auto_compression, cleanup_output_folder, get_folder_size,
@@ -35,6 +36,7 @@ __all__ = [
     'get_viewer_port', 'set_viewer_port', 'get_current_project_path',
     # constants
     'CHAR_PREFIXES', 'VANILLA_COSTUME_COUNT', 'VANILLA_ISO_MD5', 'STAGE_NAMES',
+    'VANILLA_CSS_COLOR_ORDER',
     # helpers
     'calculate_auto_compression', 'cleanup_output_folder', 'get_folder_size',
     'migrate_legacy_character_names', 'convert_windows_to_wsl_path',
