@@ -35,6 +35,24 @@ _test_lock = threading.Lock()
 _test_running = False
 
 
+def try_acquire_test_slot():
+    """Non-blocking claim of the one-Dolphin-at-a-time slot. Returns True if
+    claimed; caller must release_test_slot() when done. Used by background
+    jobs (screenshot backfill) so they never fight a user-started test."""
+    global _test_running
+    with _test_lock:
+        if _test_running:
+            return False
+        _test_running = True
+        return True
+
+
+def release_test_slot():
+    global _test_running
+    with _test_lock:
+        _test_running = False
+
+
 @test_in_game_bp.before_request
 def _guard_dolphin_already_open():
     """Every test-start endpoint launches its OWN throwaway Dolphin and drives it

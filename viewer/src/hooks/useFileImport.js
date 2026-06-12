@@ -31,6 +31,13 @@ export function useFileImport({
     if (slippiAction) formData.append('slippi_action', slippiAction)
     if (duplicateAction) formData.append('duplicate_action', duplicateAction)
 
+    // Let the backend capture an in-game screenshot for stage variants that
+    // ship without one (background job; needs the ISO + Dolphin to boot).
+    const vanillaIsoPath = localStorage.getItem('vanilla_iso_path')
+    const slippiDolphinPath = localStorage.getItem('slippi_dolphin_path')
+    if (vanillaIsoPath) formData.append('vanillaIsoPath', vanillaIsoPath)
+    if (slippiDolphinPath) formData.append('slippiDolphinPath', slippiDolphinPath)
+
     const response = await fetch(`${API_URL}/import/file`, {
       method: 'POST',
       body: formData,
