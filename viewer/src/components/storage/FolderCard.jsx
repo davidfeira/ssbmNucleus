@@ -8,6 +8,7 @@
  * - Rename and delete actions
  * - Skin count display
  */
+import { useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function FolderCard({
@@ -36,6 +37,11 @@ export default function FolderCard({
   onDelete,
   justDraggedRef
 }) {
+  // True when the click's mousedown happened while the rename input was open —
+  // that mousedown blurs the input (saving the name), and the resulting click
+  // on the card must not ALSO toggle the folder.
+  const wasEditingOnMouseDownRef = useRef(false)
+
   const classNames = [
     'folder-card',
     isExpanded && 'expanded',
@@ -56,7 +62,11 @@ export default function FolderCard({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onClick={() => { if (!isEditing && !justDraggedRef.current) { playSound('boop'); onToggle(folder.id); } }}
+      onMouseDown={() => { wasEditingOnMouseDownRef.current = isEditing }}
+      onClick={() => {
+        if (wasEditingOnMouseDownRef.current) { wasEditingOnMouseDownRef.current = false; return }
+        if (!isEditing && !justDraggedRef.current) { playSound('boop'); onToggle(folder.id, isExpanded); }
+      }}
     >
       <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
         {isExpanded ? (

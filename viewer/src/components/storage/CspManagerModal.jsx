@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
+import { playSound } from '../../utils/sounds'
 
 // Sub-modal for uploading a CSP. One image: the app scales it down for the
 // game and keeps up to a 4x copy as the HD vault preview.
@@ -293,11 +294,16 @@ export default function CspManagerModal({
     ? !!activeGroup?.hd
     : hdCspInfo?.exists
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
-    <div className="csp-manager-overlay" onClick={onClose}>
+    <div className="csp-manager-overlay" onClick={handleClose}>
       <div className="csp-manager-modal" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
-        <button className="csp-manager-close" onClick={onClose} title="Close">
+        <button className="csp-manager-close" onClick={handleClose} title="Close">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -557,7 +563,7 @@ export default function CspManagerModal({
 
         {/* Actions */}
         <div className="csp-manager-actions">
-          <button className="csp-manager-btn csp-manager-btn--cancel" onClick={onClose}>
+          <button className="csp-manager-btn csp-manager-btn--cancel" onClick={handleClose}>
             Cancel
           </button>
           <button className="csp-manager-btn csp-manager-btn--save" onClick={onSave}>

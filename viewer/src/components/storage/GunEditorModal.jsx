@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
+import { playSound } from '../../utils/sounds'
 
 /**
  * GunEditorModal - Modal for importing custom gun models
@@ -144,10 +145,15 @@ export default function GunEditorModal({
     }
   }
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
     <div
       className="gun-editor-overlay"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
       style={{
         position: 'absolute',
         inset: 0,
@@ -164,7 +170,7 @@ export default function GunEditorModal({
       <div className="gun-editor-modal" onClick={e => e.stopPropagation()}>
         <div className="gun-editor-header">
           <h3>{editingMod ? 'Edit Gun Model' : 'Import Gun Model'}</h3>
-          <button className="gun-editor-close" onClick={onClose}>&times;</button>
+          <button className="gun-editor-close" onClick={handleClose}>&times;</button>
         </div>
 
         <div className="modal-body">
@@ -255,7 +261,7 @@ export default function GunEditorModal({
             </button>
           )}
           <div className="modal-footer-right">
-            <button className="btn-secondary" onClick={onClose} disabled={saving || deleting}>
+            <button className="btn-secondary" onClick={handleClose} disabled={saving || deleting}>
               Cancel
             </button>
             <button className="btn-primary" onClick={handleSave} disabled={saving || deleting || !file}>

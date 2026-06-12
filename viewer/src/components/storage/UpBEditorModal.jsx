@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
+import { playSound } from '../../utils/sounds'
 
 /**
  * UpBEditorModal - Color picker UI for creating/editing Firefox/Firebird flame mods
@@ -391,8 +392,13 @@ export default function UpBEditorModal({
     return prop?.format || 'RGBY'
   }
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
-    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
           <div className="laser-editor-title">
@@ -401,7 +407,7 @@ export default function UpBEditorModal({
             </span>
             <span className="laser-editor-title-char">{character}</span>
           </div>
-          <button className="laser-editor-close" onClick={onClose}>
+          <button className="laser-editor-close" onClick={handleClose}>
             <CloseIcon />
           </button>
         </div>
@@ -559,7 +565,7 @@ export default function UpBEditorModal({
             </button>
           )}
           <div className="laser-editor-footer-right">
-            <button className="laser-editor-cancel" onClick={onClose}>
+            <button className="laser-editor-cancel" onClick={handleClose}>
               Cancel
             </button>
             <button

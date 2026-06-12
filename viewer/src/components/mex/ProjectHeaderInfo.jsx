@@ -6,7 +6,7 @@
  * The long name defaults to the project (folder) name when unset; committing a field
  * (blur / Enter) persists it via onSaveField.
  */
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { rgbaToDataUrl } from '../../utils/banner'
 
@@ -17,11 +17,21 @@ export default function ProjectHeaderInfo({ buildInfo, projectName, onOpenBanner
   const [longName, setLongName] = useState(storedLongName || projectName || '')
   const [longMaker, setLongMaker] = useState(storedLongMaker)
   const [savingField, setSavingField] = useState(null)
+  const nameInputRef = useRef(null)
+  const makerInputRef = useRef(null)
+  // Set when Escape cancels an edit so the resulting blur reverts instead of committing.
+  const escapedRef = useRef(false)
 
-  // Re-sync drafts whenever the underlying build info (or project) changes.
+  // Re-sync drafts whenever the underlying build info (or project) changes —
+  // but never overwrite a field the user is currently typing in (a refetch
+  // landing mid-edit used to reset the input under the cursor).
   useEffect(() => {
-    setLongName(storedLongName || projectName || '')
-    setLongMaker(storedLongMaker)
+    if (document.activeElement !== nameInputRef.current) {
+      setLongName(storedLongName || projectName || '')
+    }
+    if (document.activeElement !== makerInputRef.current) {
+      setLongMaker(storedLongMaker)
+    }
   }, [storedLongName, storedLongMaker, projectName])
 
   const bannerSrc = buildInfo
@@ -63,24 +73,46 @@ export default function ProjectHeaderInfo({ buildInfo, projectName, onOpenBanner
 
       <div className="mex-build-fields">
         <input
+          ref={nameInputRef}
           className="mex-inline-input mex-inline-input--name"
           value={longName}
           placeholder={projectName || 'Game name'}
           maxLength={63}
           spellCheck={false}
           onChange={(e) => setLongName(e.target.value)}
-          onBlur={() => commit('longName', longName, storedLongName, projectName)}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          onBlur={() => {
+            if (escapedRef.current) { escapedRef.current = false; return }
+            commit('longName', longName, storedLongName, projectName)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Escape') {
+              escapedRef.current = true
+              setLongName(storedLongName || projectName || '')
+              e.currentTarget.blur()
+            }
+          }}
         />
         <input
+          ref={makerInputRef}
           className="mex-inline-input mex-inline-input--maker"
           value={longMaker}
           placeholder="Creator"
           maxLength={63}
           spellCheck={false}
           onChange={(e) => setLongMaker(e.target.value)}
-          onBlur={() => commit('longMaker', longMaker, storedLongMaker)}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          onBlur={() => {
+            if (escapedRef.current) { escapedRef.current = false; return }
+            commit('longMaker', longMaker, storedLongMaker)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Escape') {
+              escapedRef.current = true
+              setLongMaker(storedLongMaker)
+              e.currentTarget.blur()
+            }
+          }}
         />
       </div>
 

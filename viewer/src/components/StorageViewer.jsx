@@ -15,7 +15,6 @@ import XdeltaCreateModal from './storage/XdeltaCreateModal'
 import XdeltaBuildModal from './storage/XdeltaBuildModal'
 import BundleEditModal from './storage/BundleEditModal'
 import ModeToolbar from './storage/ModeToolbar'
-import ImportToolbar from './storage/ImportToolbar'
 import ImportFab from './storage/ImportFab'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
@@ -1080,11 +1079,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectCharacter={setSelectedCustomCharacter}
           onBack={() => setShowCustomCharacters(false)}
-          onScanIso={() => {
-            setScanInitialTargets({ customCharacters: true })
-            setShowIsoScanModal(true)
-          }}
-          importing={importing}
         />
         {importFab}
         {importSlippiDialog}
@@ -1148,11 +1142,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectStage={setSelectedCustomStage}
           onBack={() => setShowCustomStages(false)}
-          onScanIso={() => {
-            setScanInitialTargets({ customStages: true })
-            setShowIsoScanModal(true)
-          }}
-          importing={importing}
           onRefresh={fetchCustomStages}
         />
         {importFab}
@@ -1404,10 +1393,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         }}
       />
 
-      <ImportToolbar
-        mode={mode}
-        onShowXdeltaImportModal={() => setShowXdeltaImportModal(true)}
-      />
       {importFab}
 
       {mode === 'characters' ? (

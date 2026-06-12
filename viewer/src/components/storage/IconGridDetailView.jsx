@@ -250,6 +250,7 @@ export default function IconGridDetailView({ modId, onBack, onModUpdated }) {
             disabled={savingName}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={saveName}
+            onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); saveName() }
               else if (e.key === 'Escape') { e.preventDefault(); cancelEditingName() }
@@ -477,6 +478,7 @@ export default function IconGridDetailView({ modId, onBack, onModUpdated }) {
                       autoFocus
                       onChange={(e) => setRelabelDraft(e.target.value)}
                       onBlur={saveRelabel}
+                      onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') { e.preventDefault(); saveRelabel() }
                         else if (e.key === 'Escape') { e.preventDefault(); cancelRelabel() }

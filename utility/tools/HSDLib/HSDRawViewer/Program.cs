@@ -564,10 +564,15 @@ namespace HSDRawViewer
                 }
 
                 // Create a form to host the viewport (hidden, never activates -
-                // batch CSP generation must not steal focus from the user)
+                // batch CSP generation must not steal focus from the user).
+                // Parked offscreen rather than minimized: a minimized window with
+                // ShowInTaskbar=false is drawn by Windows as a small caption box
+                // at the bottom-left of the desktop (the "lil popup" users saw).
                 using (var form = new NoActivateForm())
                 {
-                    form.WindowState = FormWindowState.Minimized;
+                    form.FormBorderStyle = FormBorderStyle.None;
+                    form.StartPosition = FormStartPosition.Manual;
+                    form.Location = new System.Drawing.Point(-32000, -32000);
                     form.ShowInTaskbar = false;
                     viewport.Dock = DockStyle.Fill;
                     form.Controls.Add(viewport);

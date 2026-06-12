@@ -23,7 +23,12 @@ export const buildDisplayList = (allSkins, expandedFolders = {}) => {
 
     if (item.type === 'folder') {
       folders.push({ folder: item, arrayIndex: i })
-      folderItems[item.id] = []
+      // Don't reset — the folder entry can sit AFTER its members in the array
+      // (drag/reorder writes that order), and clobbering here dropped every
+      // skin collected so far, so the folder opened empty.
+      if (!folderItems[item.id]) {
+        folderItems[item.id] = []
+      }
     } else if (item.visible !== false) {
       if (item.folder_id) {
         if (!folderItems[item.folder_id]) {

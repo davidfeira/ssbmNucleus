@@ -19,8 +19,6 @@ export default function CustomStagesGrid({
   isLoading,
   onSelectStage,
   onBack,
-  onScanIso,
-  importing,
   onRefresh
 }) {
   // Drag state
@@ -180,8 +178,11 @@ export default function CustomStagesGrid({
   }
 
   // ── Folder handlers ────────────────────────────────────────
-  const toggleFolder = async (folderId) => {
-    setExpandedFolders(prev => ({ ...prev, [folderId]: !(prev[folderId] ?? true) }))
+  const toggleFolder = async (folderId, currentExpanded) => {
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folderId]: currentExpanded !== undefined ? !currentExpanded : !(prev[folderId] ?? true)
+    }))
     try {
       await fetch(`${API_URL}/custom-stages/folders/toggle`, {
         method: 'POST',
@@ -262,7 +263,7 @@ export default function CustomStagesGrid({
 
   return (
     <div className="grid-wrapper">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', width: '100%' }}>
         <button
           className="mode-btn"
           onMouseEnter={playHoverSound}
@@ -271,22 +272,13 @@ export default function CustomStagesGrid({
           ← Back to Stages
         </button>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+        <div className="character-header-actions" style={{ marginBottom: 0, marginLeft: 'auto' }}>
           <button
             className="character-action-button"
             onMouseEnter={playHoverSound}
             onClick={() => { playSound('boop'); handleCreateFolder(); }}
           >
             New Folder
-          </button>
-          <button
-            className="intake-import-btn"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('start'); onScanIso(); }}
-            disabled={importing}
-            title="Extract the custom stages out of a built m-ex ISO"
-          >
-            Scan ISO
           </button>
         </div>
       </div>

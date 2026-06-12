@@ -13,9 +13,7 @@ export default function CustomCharactersGrid({
   customCharacters,
   isLoading,
   onSelectCharacter,
-  onBack,
-  onScanIso,
-  importing
+  onBack
 }) {
   return (
     <div className="grid-wrapper">
@@ -27,18 +25,6 @@ export default function CustomCharactersGrid({
         >
           ← Back to Characters
         </button>
-
-        <div className="import-file-container" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-          <button
-            className="intake-import-btn"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('start'); onScanIso(); }}
-            disabled={importing}
-            title="Extract the custom fighters out of a built m-ex ISO"
-          >
-            Scan ISO
-          </button>
-        </div>
       </div>
 
       <div className="custom-characters-grid">

@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
 import HexagonLoader from '../shared/HexagonLoader'
+import { playSound } from '../../utils/sounds'
 
 export default function EditModal({
   show,
@@ -112,8 +113,13 @@ export default function EditModal({
 
   const displayCspUrl = getDisplayCspUrl()
 
-  const handleOverlayClick = () => {
+  const handleCancel = () => {
+    playSound('back')
     onCancel()
+  }
+
+  const handleOverlayClick = () => {
+    handleCancel()
   }
 
   const handleContentClick = (e) => {
@@ -126,7 +132,7 @@ export default function EditModal({
         {/* Close Button */}
         <button
           className="edit-modal-close"
-          onClick={onCancel}
+          onClick={handleCancel}
           title="Close"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -647,7 +653,7 @@ export default function EditModal({
           </button>
           <button
             className="edit-modal-action-btn edit-modal-action-btn--cancel"
-            onClick={onCancel}
+            onClick={handleCancel}
             disabled={saving || deleting || exporting}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -173,8 +173,13 @@ export default function PoseSkinSelectorModal({
     setGenerating(false)
   }
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
-    <div className="pss-overlay" onClick={(e) => e.target === e.currentTarget && !generating && onClose()}>
+    <div className="pss-overlay" onClick={(e) => e.target === e.currentTarget && !generating && handleClose()}>
       <div className="pss-modal">
         {/* Header */}
         <div className="pss-header">
@@ -182,7 +187,7 @@ export default function PoseSkinSelectorModal({
             <span className="pss-title-label">Generate CSPs</span>
             <span className="pss-title-pose">"{poseName}"</span>
           </div>
-          <button className="pss-close-btn" onClick={onClose} disabled={generating}>
+          <button className="pss-close-btn" onClick={handleClose} disabled={generating}>
             <CloseIcon />
           </button>
         </div>
@@ -246,7 +251,7 @@ export default function PoseSkinSelectorModal({
               ) : (
                 <span>Generated {results.generated} CSP{results.generated !== 1 ? 's' : ''}{results.failed > 0 ? `, ${results.failed} failed` : ''}</span>
               )}
-              <button onClick={onClose}>Done</button>
+              <button onClick={handleClose}>Done</button>
             </div>
           ) : (
             <button

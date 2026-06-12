@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
+import { playSound } from '../../utils/sounds'
 
 /**
  * ShineEditorModal - Two-color gradient editor for Fox/Falco shine
@@ -387,8 +388,13 @@ export default function ShineEditorModal({
   // Get current layer info
   const currentLayerInfo = LAYER_INFO[selectedLayer]
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
-    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div className="laser-editor-modal shine-editor-modal">
         <div className="laser-editor-header">
           <div className="laser-editor-title">
@@ -397,7 +403,7 @@ export default function ShineEditorModal({
             </span>
             <span className="laser-editor-title-char">{character}</span>
           </div>
-          <button className="laser-editor-close" onClick={onClose}>
+          <button className="laser-editor-close" onClick={handleClose}>
             <CloseIcon />
           </button>
         </div>
@@ -530,7 +536,7 @@ export default function ShineEditorModal({
             </button>
           )}
           <div className="laser-editor-footer-right">
-            <button className="laser-editor-cancel" onClick={onClose}>
+            <button className="laser-editor-cancel" onClick={handleClose}>
               Cancel
             </button>
             <button

@@ -22,12 +22,20 @@ export default function AddCharacterModal({ cc }) {
 
   if (!showAddCharacterModal) return null
 
+  const handleClose = () => {
+    if (!batchAddingChars) {
+      playSound('back')
+      setShowAddCharacterModal(false)
+      setSelectedVaultChars(new Set())
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={() => { if (!batchAddingChars) { setShowAddCharacterModal(false); setSelectedVaultChars(new Set()) } }}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content add-character-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Add Custom Characters{selectedVaultChars.size > 0 ? ` (${selectedVaultChars.size} selected)` : ''}</h3>
-          <button className="modal-close" onClick={() => { if (!batchAddingChars) { setShowAddCharacterModal(false); setSelectedVaultChars(new Set()) } }}>&times;</button>
+          <button className="modal-close" onClick={handleClose}>&times;</button>
         </div>
         {vaultCharacters.length > 0 && (
           <div className="batch-controls" style={{ marginBottom: 'var(--space-2)' }}>

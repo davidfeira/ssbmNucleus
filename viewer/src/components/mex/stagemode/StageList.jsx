@@ -45,12 +45,20 @@ export default function StageList({ mode, onModeChange, sm, cs }) {
               onMouseEnter={playHoverSound}
               onClick={() => { playSound('boop'); sm.setSelectedStage(stage); }}
             >
-              <div className="fighter-name">{stage.name}</div>
-              <div className="fighter-info">
-                <span className="costume-count">{mexCount} in MEX</span>
-                {availableVariants.length > 0 && (
-                  <span className="available-count">{availableVariants.length} available</span>
-                )}
+              <img
+                src={stage.vanillaImage}
+                alt=""
+                className="stage-list-icon"
+                onError={(e) => e.target.style.display = 'none'}
+              />
+              <div className="fighter-content">
+                <div className="fighter-name">{stage.name}</div>
+                <div className="fighter-info">
+                  <span className="costume-count">{mexCount} in MEX</span>
+                  {availableVariants.length > 0 && (
+                    <span className="available-count">{availableVariants.length} available</span>
+                  )}
+                </div>
               </div>
             </div>
           )
@@ -60,12 +68,19 @@ export default function StageList({ mode, onModeChange, sm, cs }) {
           onMouseEnter={playHoverSound}
           onClick={() => { playSound('boop'); sm.setSelectedStage({ code: 'custom', name: 'Custom Stages', isCustom: true }); }}
         >
-          <div className="fighter-name">Custom Stages</div>
-          <div className="fighter-info">
-            <span className="costume-count">{cs.projectCustomStages.length} in ISO</span>
-            {cs.vaultStages.length > 0 && (
-              <span className="available-count">{cs.vaultStages.length} available</span>
-            )}
+          <div className="stage-list-icon stage-list-icon--placeholder">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/>
+            </svg>
+          </div>
+          <div className="fighter-content">
+            <div className="fighter-name">Custom Stages</div>
+            <div className="fighter-info">
+              <span className="costume-count">{cs.projectCustomStages.length} in ISO</span>
+              {cs.vaultStages.length > 0 && (
+                <span className="available-count">{cs.vaultStages.length} available</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

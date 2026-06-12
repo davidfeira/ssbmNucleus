@@ -601,6 +601,31 @@
   min-width: 0;
 }
 
+/* Stage list rows reuse .fighter-item; the icon is a small cropped
+   stage preview so rows line up 1:1 with fighter rows. */
+.stage-list-icon {
+  width: 32px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.stage-list-icon--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-elevated);
+}
+
+.fighter-item.selected .stage-list-icon--placeholder {
+  color: var(--color-bg-deep);
+  background: transparent;
+  border-color: var(--color-bg-deep);
+}
+
 .fighter-name {
   font-family: var(--font-display);
   font-weight: var(--font-medium);

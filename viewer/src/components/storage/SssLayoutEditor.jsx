@@ -492,7 +492,10 @@ export default function SssLayoutEditor() {
                   value={pageNameDraft}
                   onChange={(e) => setPageNameDraft(e.target.value)}
                   onBlur={commitRenamePage}
-                  onKeyDown={(e) => { if (e.key === 'Enter') commitRenamePage() }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRenamePage()
+                    if (e.key === 'Escape') { setEditingPageName(null); setPageNameDraft('') }
+                  }}
                   onClick={(e) => e.stopPropagation()}
                   style={{ width: '80px', fontSize: '0.75rem' }}
                 />

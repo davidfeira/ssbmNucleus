@@ -25,12 +25,15 @@ export function useFolderManagement({
   const [editingFolderId, setEditingFolderId] = useState(null)
   const [editingFolderName, setEditingFolderName] = useState('')
 
-  // Toggle folder expand/collapse
-  const toggleFolder = async (folderId) => {
+  // Toggle folder expand/collapse. currentExpanded is the state the folder is
+  // DISPLAYED with (which falls back to the persisted metadata value when the
+  // folder was never toggled this session) — deriving the toggle from local
+  // state alone made the first click on a persisted-closed folder a no-op.
+  const toggleFolder = async (folderId, currentExpanded) => {
     // Update local state immediately for responsive UI
     setExpandedFolders(prev => ({
       ...prev,
-      [folderId]: !(prev[folderId] ?? true)
+      [folderId]: currentExpanded !== undefined ? !currentExpanded : !(prev[folderId] ?? true)
     }))
 
     // Also persist to backend

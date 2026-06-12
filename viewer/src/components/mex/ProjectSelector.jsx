@@ -41,6 +41,10 @@ export default function ProjectSelector({
   const [selectedPatchId, setSelectedPatchId] = useState('')
   const [showPatchPickerModal, setShowPatchPickerModal] = useState(false)
   const createProjectNameInputRef = useRef(null)
+  // True only when a mousedown started on the overlay backdrop itself — a drag
+  // that starts inside the modal (e.g. selecting text in the name input) and
+  // releases over the backdrop must not close the modal and eat the typed name.
+  const nameOverlayMouseDownRef = useRef(false)
 
   const syncCreateProjectOverlay = (nextState) => {
     const overlayState = {
@@ -601,9 +605,28 @@ export default function ProjectSelector({
     }
 
     return (
-      <div className="project-name-modal-overlay" onClick={closeCreateProjectNameModal}>
+      <div
+        className="project-name-modal-overlay"
+        onMouseDown={(event) => { nameOverlayMouseDownRef.current = event.target === event.currentTarget }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget && nameOverlayMouseDownRef.current) {
+            playSound('back')
+            closeCreateProjectNameModal()
+          }
+          nameOverlayMouseDownRef.current = false
+        }}
+      >
         <div className="project-name-modal" onClick={(event) => event.stopPropagation()}>
-          <form className="project-name-form" onSubmit={handleCreateProjectNameSubmit}>
+          <form
+            className="project-name-form"
+            onSubmit={handleCreateProjectNameSubmit}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                playSound('back')
+                closeCreateProjectNameModal()
+              }
+            }}
+          >
             <h3>Name New Project</h3>
             <p>Choose a name for your new project.</p>
             <input

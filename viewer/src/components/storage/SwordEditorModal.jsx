@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
+import { playSound } from '../../utils/sounds'
 
 /**
  * SwordEditorModal - Color picker UI for creating/editing sword trail mods
@@ -231,8 +232,13 @@ export default function SwordEditorModal({
   const secondaryHex = toDisplayHex(colors.secondary)
   const tertiaryHex = toDisplayHex(colors.tertiary)
 
+  const handleClose = () => {
+    playSound('back')
+    onClose()
+  }
+
   const modal = (
-    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="laser-editor-overlay" onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div className="laser-editor-modal">
         <div className="laser-editor-header">
           <div className="laser-editor-title">
@@ -241,7 +247,7 @@ export default function SwordEditorModal({
             </span>
             <span className="laser-editor-title-char">{character}</span>
           </div>
-          <button className="laser-editor-close" onClick={onClose}>
+          <button className="laser-editor-close" onClick={handleClose}>
             <CloseIcon />
           </button>
         </div>
@@ -358,7 +364,7 @@ export default function SwordEditorModal({
             </button>
           )}
           <div className="laser-editor-footer-right">
-            <button className="laser-editor-cancel" onClick={onClose}>
+            <button className="laser-editor-cancel" onClick={handleClose}>
               Cancel
             </button>
             <button
