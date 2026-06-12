@@ -17,6 +17,8 @@ intake/
 output/
 output/temp_bundle_*
 /projects/
+# managed AI engine runtime (installed at runtime: Python+torch, bundled Ollama)
+/aiengine/
 
 # Build outputs
 dist/

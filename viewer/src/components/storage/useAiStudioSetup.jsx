@@ -13,10 +13,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { API_URL } from '../../config'
 
+// API planner LLMs (OpenRouter text models) — locked without a key
+const API_PLANNERS = [
+  { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
+  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+  { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+]
+
 export default function useAiStudioSetup(show, taskKinds) {
   const [ready, setReady] = useState(null)   // null = probing
   const [options, setOptions] = useState([])
-  const [localPlanners, setLocalPlanners] = useState([])
+  const [planners, setPlanners] = useState([])
   const [resolution, setResolution] = useState(null)
   const [autoResolution, setAutoResolution] = useState(null)
 
@@ -60,11 +67,34 @@ export default function useAiStudioSetup(show, taskKinds) {
           }
         }))
       }
-      // installed Ollama models double as free offline planner LLMs
-      setLocalPlanners((p.local || []).map((m) => ({
+      // planner list with locked/unlocked state, mirroring the image-model
+      // picker: API planners need a key; installed Ollama models are free;
+      // the recommended local LLM shows LOCKED until it's pulled
+      const keyOk2 = Boolean(st.hasKey || hasLocalKey)
+      const localList = (p.local || []).map((m) => ({
         id: `ollama:${m.name}`,
         label: `${m.name} — local LLM (free, offline)`,
-      })))
+        locked: false,
+      }))
+      if (p.recommended
+          && !localList.some((l) => l.id === `ollama:${p.recommended.name}`)) {
+        localList.push({
+          id: `ollama:${p.recommended.name}`,
+          label: `${p.recommended.name} — local LLM (free, offline)`,
+          locked: true,
+          reason: p.ollamaAvailable
+            ? 'pull it in AI Studio setup'
+            : 'set up local LLMs in AI Studio setup',
+        })
+      }
+      setPlanners([
+        ...API_PLANNERS.map((pl) => ({
+          ...pl,
+          locked: !keyOk2,
+          reason: 'needs an OpenRouter key',
+        })),
+        ...localList,
+      ])
     }).catch(() => { if (!cancelled) setReady(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,7 +136,7 @@ export default function useAiStudioSetup(show, taskKinds) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskKinds.join(','), hasLocalKey])
 
-  return { ready, options, localPlanners, resolution, autoResolution, resolveFor }
+  return { ready, options, planners, resolution, autoResolution, resolveFor }
 }
 
 const shortName = (label) => (label || '').replace(/\s*\([^)]*\)\s*$/, '')

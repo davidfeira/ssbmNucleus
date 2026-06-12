@@ -5,11 +5,7 @@ import { playSound } from '../../utils/sounds'
 import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
                            TimeEstimate, autoOptionLabel } from './useAiStudioSetup'
 
-const PLANNERS = [
-  { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
-  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-  { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
-]
+const DEFAULT_PLANNER = 'openai/gpt-5-mini'
 
 // stage alts generate both tile materials AND a coherent backdrop scene —
 // the backdrop is 'strong' tier and may escalate to a stronger/paid model
@@ -23,11 +19,11 @@ const TASK_KINDS = ['material', 'backdrop']
  */
 export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   const [theme, setTheme] = useState('')
-  const [planner, setPlanner] = useState(PLANNERS[0].id)
+  const [planner, setPlanner] = useState(DEFAULT_PLANNER)
   // '' = Auto: the backend's tier resolver picks per task
   const [imageModel, setImageModel] = useState(
     localStorage.getItem('ai_studio_image_model') || '')
-  const { ready, options, localPlanners, resolution, autoResolution, resolveFor } =
+  const { ready, options, planners, resolution, autoResolution, resolveFor } =
     useAiStudioSetup(show, TASK_KINDS)
   const [reviewPass, setReviewPass] = useState(false)
   const [assessment, setAssessment] = useState(null)
@@ -75,6 +71,17 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   useEffect(() => {
     if (show && ready) resolveFor(imageModel)
   }, [show, ready, imageModel, resolveFor])
+
+  // a locked planner can't run — fall back to the first unlocked one
+  useEffect(() => {
+    if (!show || !planners.length) return
+    const current = planners.find((p) => p.id === planner)
+    if (!current || current.locked) {
+      const first = planners.find((p) => !p.locked)
+      if (first) setPlanner(first.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, planners])
 
   if (!show) return null
 
@@ -199,11 +206,10 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
             <label className="ai-studio-label">Planner model</label>
             <select className="ai-studio-planner" value={planner}
                     onChange={(e) => setPlanner(e.target.value)}>
-              {PLANNERS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-              {localPlanners.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
+              {planners.map((p) => (
+                <option key={p.id} value={p.id} disabled={p.locked}>
+                  {p.locked ? `🔒 ${p.label} — ${p.reason}` : p.label}
+                </option>
               ))}
             </select>
             <label className="ai-studio-label">Image model (materials)</label>
