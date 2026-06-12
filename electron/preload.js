@@ -56,6 +56,46 @@ contextBridge.exposeInMainWorld('electron', {
   isElectron: true,
 
   /**
+   * Open a URL in the system browser
+   * @param {string} url
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // ============================================
+  // In-app updater
+  // ============================================
+
+  /**
+   * Get the running app version (package.json version)
+   * @returns {Promise<string>}
+   */
+  getAppVersion: () => ipcRenderer.invoke('update:get-version'),
+
+  /**
+   * Check the release server for a newer version.
+   * @returns {Promise<{success: boolean, update?: {version, notes, url, size}|null, error?: string}>}
+   */
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+
+  /**
+   * Download the available update, verify it, launch the installer, and quit.
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
+  /**
+   * Listen for update download progress
+   * @param {function} callback Called with {received, total} in bytes
+   * @returns {function} Cleanup function to remove listener
+   */
+  onUpdateProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
+
+  /**
    * Listen for nucleus:// protocol imports
    * @param {function} callback Function called with {url, name} when import is triggered
    * @returns {function} Cleanup function to remove listener

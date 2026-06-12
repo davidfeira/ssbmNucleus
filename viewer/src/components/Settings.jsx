@@ -11,6 +11,7 @@ import DiscordSection from './settings/DiscordSection'
 import VolumeSection from './settings/VolumeSection'
 import SetupSection from './settings/SetupSection'
 import AiStudioSection from './settings/AiStudioSection'
+import UpdateSection from './settings/UpdateSection'
 
 export default function Settings({ metadata, onOpenFirstRunSetup }) {
 
@@ -28,6 +29,7 @@ export default function Settings({ metadata, onOpenFirstRunSetup }) {
           <SetupSection onOpenFirstRunSetup={onOpenFirstRunSetup} />
 
           {/* App + community */}
+          <UpdateSection />
           <VolumeSection />
           <DiscordSection />
 

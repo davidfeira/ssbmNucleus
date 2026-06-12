@@ -903,6 +903,55 @@
 }
 
 /* ─────────────────────────────────────────
+   UPDATE SECTION
+   ───────────────────────────────────────── */
+
+.update-available-version {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-success);
+  margin-bottom: var(--space-2);
+}
+
+.update-notes {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  white-space: pre-line;
+  margin-bottom: var(--space-3);
+}
+
+.update-install-button {
+  width: 100%;
+}
+
+.update-progress-track {
+  margin-top: var(--space-3);
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-deep);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--gradient-cyan);
+  transition: width var(--transition-fast);
+}
+
+.update-status-ok {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-success);
+}
+
+.update-status-error {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
+/* ─────────────────────────────────────────
    VOLUME CONTROLS
    ───────────────────────────────────────── */
 

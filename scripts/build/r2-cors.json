@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://ssbmnucleus.net",
+          "https://www.ssbmnucleus.net",
+          "http://localhost:3000",
+          "http://localhost:5173"
+        ],
+        "methods": ["GET", "HEAD"]
+      },
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

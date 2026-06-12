@@ -331,6 +331,45 @@ ipcMain.handle('open-project-folder', async (event, projectPath) => {
   }
 });
 
+ipcMain.handle('open-external', async (event, url) => {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    return { success: false, error: 'Invalid URL' };
+  }
+  await shell.openExternal(url);
+  return { success: true };
+});
+
+// ============================================
+// In-app updater (R2 latest.json manifest)
+// ============================================
+const updater = require('./updater');
+
+ipcMain.handle('update:get-version', () => app.getVersion());
+
+ipcMain.handle('update:check', async () => {
+  try {
+    const update = await updater.check();
+    return { success: true, update };
+  } catch (err) {
+    console.error('[Updater] Check failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('update:install', async () => {
+  try {
+    await updater.install((received, total) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update:progress', { received, total });
+      }
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[Updater] Install failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
 // ============================================
 // Embedded Viewer Management (Named Pipe IPC)
 // ============================================
