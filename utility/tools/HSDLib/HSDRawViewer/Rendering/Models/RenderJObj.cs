@@ -37,6 +37,7 @@ namespace HSDRawViewer.Rendering.Models
         public HSDRaw.Common.HSD_TOBJ Tobj { get; set; } // Reference for updating HSD data
         public bool IsMatAnim { get; set; }     // a MatAnim swap frame (blink etc.), not a material texture
         public int AnimatesIndex { get; set; } = -1;  // texture index this swap frame animates, or -1
+        public bool IsExtraRoot { get; set; }   // from a non-rendered extra JOBJ root (e.g. Jigglypuff hats)
     }
 
     public class RenderJObj
@@ -93,6 +94,14 @@ namespace HSDRawViewer.Rendering.Models
         /// edits survive export. Set by hosts via SetMatAnims().
         /// </summary>
         private readonly List<(HSD_TexAnim anim, HSD_TOBJ[] frames)> _matAnimBanks = new();
+
+        /// <summary>
+        /// Extra JOBJ roots that are NOT part of the rendered model -- e.g.
+        /// Jigglypuff's alt-costume hats live in a second *Hat_TopN_joint
+        /// root. Their material textures must still appear in the texture
+        /// list and be reachable by updates. Set by hosts via SetExtraRoots().
+        /// </summary>
+        private readonly List<HSD_JOBJ> _extraRoots = new();
 
         /// <summary>
         /// For managing opengl buffers
@@ -1152,6 +1161,40 @@ namespace HSDRawViewer.Rendering.Models
             }
         }
 
+        /// <summary>
+        /// Registers JOBJ roots beyond the rendered one (costume accessories
+        /// like Jigglypuff's hats ship as their own *_TopN_joint root) so
+        /// their material textures appear in the texture list and are
+        /// covered by content-matched updates. The TOBJs are the raw file's
+        /// own accessors, so injections land in the file in place.
+        /// </summary>
+        public void SetExtraRoots(IEnumerable<HSD_JOBJ> roots)
+        {
+            _extraRoots.Clear();
+            if (roots == null)
+                return;
+            foreach (var root in roots)
+                if (root != null)
+                    _extraRoots.Add(root);
+        }
+
+        private IEnumerable<HSD_TOBJ> ExtraRootTobjs()
+        {
+            foreach (var root in _extraRoots)
+                foreach (var jobj in root.TreeList)
+                {
+                    if (jobj.Dobj == null)
+                        continue;
+                    foreach (var dobj in jobj.Dobj.List)
+                    {
+                        if (dobj?.Mobj?.Textures == null)
+                            continue;
+                        foreach (var tobj in dobj.Mobj.Textures.List)
+                            yield return tobj;
+                    }
+                }
+        }
+
         private static bool TexDataEquals(byte[] a, byte[] b)
             => ReferenceEquals(a, b)
                || (a != null && b != null && a.Length == b.Length
@@ -1268,6 +1311,25 @@ namespace HSDRawViewer.Rendering.Models
                     textureIndex++;
                     matAnimCount++;
                 }
+            }
+
+            // Extra (non-rendered) JOBJ roots -- e.g. Jigglypuff's alt-costume
+            // hats. Appended last so the material/matanim indexes existing
+            // callers cached stay stable.
+            int extraCount = 0;
+            foreach (var tobj in ExtraRootTobjs())
+            {
+                if (tobj?.ImageData?.ImageData == null)
+                    continue;
+                if (textures.Any(t => TexDataEquals(t.Tobj?.ImageData?.ImageData, tobj.ImageData.ImageData)))
+                    continue;
+
+                var info = MakeInfo(tobj, -1);
+                info.IsExtraRoot = true;
+                info.Name = $"Extra_{extraCount}";
+                textures.Add(info);
+                textureIndex++;
+                extraCount++;
             }
 
             return textures;
@@ -1593,6 +1655,8 @@ namespace HSDRawViewer.Rendering.Models
             foreach (var (_, frames) in _matAnimBanks)
                 foreach (var frame in frames)
                     Collect(frame);
+            foreach (var tobj in ExtraRootTobjs())
+                Collect(tobj);
             if (tobjsToUpdate.Count == 0)
             {
                 UpdateLog?.Invoke($"UpdateTexture: NO content match (oldData len={oldImageData.Length})");

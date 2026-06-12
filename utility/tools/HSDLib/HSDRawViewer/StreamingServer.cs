@@ -231,6 +231,20 @@ namespace HSDRawViewer
                     Log($"Registered {matAnimRoots.Count} matanim root(s)");
                 }
 
+                // Costume accessories can ship as EXTRA JOBJ roots (e.g.
+                // Jigglypuff's alt-costume hats: Ply*Hat_TopN_joint) -- the
+                // render model only walks the character root, so register
+                // the rest for texture-list/update coverage.
+                var extraJobjRoots = rawFile.Roots
+                    .Where(r => r.Data is HSD_JOBJ && !ReferenceEquals(r.Data, jobj))
+                    .Select(r => (HSD_JOBJ)r.Data)
+                    .ToList();
+                if (extraJobjRoots.Count > 0)
+                {
+                    _renderJObj.SetExtraRoots(extraJobjRoots);
+                    Log($"Registered {extraJobjRoots.Count} extra JOBJ root(s)");
+                }
+
                 var drawable = new SimpleJObjDrawable(_renderJObj);
                 _viewport.AddRenderer(drawable);
                 Log($"RenderJObj created. DOBJs: {_renderJObj.DObjCount}");
@@ -735,7 +749,8 @@ namespace HSDRawViewer
                                     name = t.Name,
                                     thumbnail = t.ThumbnailBase64,
                                     matAnim = t.IsMatAnim,
-                                    animates = t.AnimatesIndex
+                                    animates = t.AnimatesIndex,
+                                    extra = t.IsExtraRoot
                                 }).ToList();
                                 await SendJsonAsync(webSocket, new { type = "textureList", textures = textureList });
                             }

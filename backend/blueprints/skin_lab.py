@@ -729,7 +729,11 @@ def _load_region_map():
     if not name or not path.exists():
         return None
     region_map = json.loads(path.read_text(encoding='utf-8'))
-    material_count = sum(1 for t in _session.textures if not t.get('matAnim'))
+    # extra-root textures (e.g. Jigglypuff's alt-costume hats) are appended
+    # after the matanim entries and, like them, are not part of the material
+    # basis the maps were authored against.
+    material_count = sum(1 for t in _session.textures
+                         if not t.get('matAnim') and not t.get('extra'))
     basis_count = (region_map.get('basis') or {}).get('textureCount')
     region_map['approximate'] = (basis_count is not None
                                  and basis_count != material_count)
