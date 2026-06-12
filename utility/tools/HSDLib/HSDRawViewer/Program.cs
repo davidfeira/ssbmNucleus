@@ -1124,9 +1124,15 @@ namespace HSDRawViewer
                                     max = OpenTK.Mathematics.Vector3.ComponentMax(max, p);
                                 }
                                 var center = (min + max) / 2f;
-                                float radius = 0f;
+                                // robust radius: some imports carry far-flung
+                                // helper bones that balloon the max distance
+                                // and shrink the model to a speck (sm4sh
+                                // models) -- use a high percentile instead
+                                var dists = new List<float>();
                                 foreach (var p in positions)
-                                    radius = Math.Max(radius, (p - center).Length);
+                                    dists.Add((p - center).Length);
+                                dists.Sort();
+                                float radius = dists[Math.Min(dists.Count - 1, (int)(dists.Count * 0.92f))];
                                 // pad: meshes extend beyond bones (big-head swaps)
                                 radius = Math.Max(radius * 1.45f, 8f);
                                 viewport.Camera.FrameBoundingSphere(center, radius * 2f, 0);
@@ -4261,6 +4267,41 @@ namespace HSDRawViewer
                 IOModel model = scene.Models[0];
                 Console.WriteLine($"Loaded model with {model.Meshes.Count} meshes");
 
+                // SMD carries no material->texture links. Resolve textures from a
+                // sidecar map ("<model>.textures.json": material name -> image file,
+                // relative to the model's folder) or fall back to "<material>.png".
+                string modelFolder = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(modelFile));
+                var texMap = new Dictionary<string, string>();
+                string sidecar = modelFile + ".textures.json";
+                if (System.IO.File.Exists(sidecar))
+                {
+                    using (var texDoc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(sidecar)))
+                        foreach (var prop in texDoc.RootElement.EnumerateObject())
+                            texMap[prop.Name] = prop.Value.GetString();
+                    Console.WriteLine($"Loaded texture map with {texMap.Count} entries");
+                }
+                int texturesResolved = 0;
+                foreach (var mat in scene.Materials)
+                {
+                    if (mat.DiffuseMap != null && !string.IsNullOrEmpty(mat.DiffuseMap.FilePath))
+                        continue;
+                    string texFile = null;
+                    if (texMap.TryGetValue(mat.Name, out string mapped))
+                        texFile = mapped;
+                    else if (System.IO.File.Exists(System.IO.Path.Combine(modelFolder, mat.Name + ".png")))
+                        texFile = mat.Name + ".png";
+                    if (texFile != null)
+                    {
+                        mat.DiffuseMap = new IONET.Core.Model.IOTexture()
+                        {
+                            Name = System.IO.Path.GetFileNameWithoutExtension(texFile),
+                            FilePath = texFile,
+                        };
+                        texturesResolved++;
+                    }
+                }
+                Console.WriteLine($"Resolved textures for {texturesResolved}/{scene.Materials.Count} materials");
+
                 // Remove Blender's armature root if present
                 for (int i = 0; i < model.Skeleton.RootBones.Count; i++)
                 {
@@ -4270,6 +4311,22 @@ namespace HSDRawViewer
                         if (model.Skeleton.RootBones[i] != null)
                             model.Skeleton.RootBones[i].Parent = null;
                     }
+                }
+
+                // Preserve the original skeleton when the incoming joint tree matches its
+                // structure (required for animations and netplay-legal costumes). Mirrors
+                // the GUI flow in ModelImporter.ImportModelFromFile, minus the prompt.
+                bool preserveSkeleton = false;
+                if (original != null && model.Skeleton.RootBones.Count > 0 &&
+                    ModelImporter.JointTreeIsSimilar(original, model.Skeleton))
+                {
+                    Console.WriteLine("Skeleton structure matches original - preserving original bones");
+                    ModelImporter.ReplaceWithBonesFromFile(original, model.Skeleton.RootBones[0]);
+                    preserveSkeleton = true;
+                }
+                else
+                {
+                    Console.WriteLine("WARNING: skeleton structure does not match original - bones will come from the model file");
                 }
 
                 // Create default settings
@@ -4321,6 +4378,25 @@ namespace HSDRawViewer
                 {
                     var result = newModelField.GetValue(importer) as HSD_JOBJ;
                     Console.WriteLine($"NewModel found: {result != null}");
+
+                    // snap bone transforms back to the original's exact values
+                    // (text formats lose float precision), and restore the
+                    // original per-joint flags (CLASSICAL_SCALING, SKELETON,
+                    // TEXGEN...) which the importer derives instead of copying
+                    if (preserveSkeleton && result != null)
+                    {
+                        ModelImporter.ReplaceWithBonesFromFile(original, result);
+
+                        var origJoints = original.TreeList;
+                        var newJoints = result.TreeList;
+                        if (origJoints.Count == newJoints.Count)
+                        {
+                            for (int i = 0; i < origJoints.Count; i++)
+                                newJoints[i].Flags = origJoints[i].Flags;
+                            Console.WriteLine($"Restored original flags on {origJoints.Count} joints");
+                        }
+                    }
+
                     return result;
                 }
 

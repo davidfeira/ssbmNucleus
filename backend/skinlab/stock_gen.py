@@ -452,18 +452,24 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
     H, W = op.shape
     hx = int(np.clip(head_x, 0, W - 1))
 
-    def run_at(y, anchor, tol=3):
-        """The opaque [x0, x1] run of row y containing anchor (+- tol)."""
+    def run_at(y, anchor, tol=3, near=10):
+        """The opaque [x0, x1] run of row y containing anchor (+- tol), or
+        the nearest run within `near` px (split features like ears would
+        otherwise kill the walk at their gap)."""
         xs = np.where(op[y])[0]
         if len(xs) == 0:
             return None
         breaks = np.where(np.diff(xs) > 1)[0]
         starts = np.concatenate([[0], breaks + 1])
         ends = np.concatenate([breaks, [len(xs) - 1]])
+        best = None
         for s, e in zip(starts, ends):
             if xs[s] - tol <= anchor <= xs[e] + tol:
                 return int(xs[s]), int(xs[e])
-        return None
+            d = min(abs(anchor - int(xs[s])), abs(anchor - int(xs[e])))
+            if d <= near and (best is None or d < best[0]):
+                best = (d, int(xs[s]), int(xs[e]))
+        return (best[1], best[2]) if best else None
 
     # start AT the bone row and walk both ways. Scanning from the image top
     # used to latch onto thin protrusions (Pichu-style ears/antennae), die at
@@ -480,13 +486,14 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
         return None
 
     def walk(y_from, step, anchor):
-        """Collect (y, x0, x1) rows from y_from in direction step. Heads
-        widen GRADUALLY; a sudden width jump means another part merged into
-        the row (a tail or prop behind the model at the 3/4 angle) -- clip
-        such rows to a window around the tracked anchor."""
+        """Collect (y, x0, x1) rows from y_from in direction step. Heads and
+        shoulders widen GRADUALLY and symmetrically; a sudden ONE-SIDED width
+        jump is another part merging into the row (a tail or prop behind the
+        model at the 3/4 angle) -- clip the merged side back to the previous
+        row's extent so it can't hijack the profile or fake a neck cut."""
         out = []
         misses = 0
-        prev_w = None
+        prev = None   # previous (x0, x1)
         y = y_from
         while 0 <= y < H:
             r = run_at(y, anchor)
@@ -497,14 +504,21 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
                 y += step
                 continue
             misses = 0
-            w = r[1] - r[0] + 1
-            if prev_w is not None and prev_w >= 6 and w > max(prev_w * 1.5, prev_w + 8):
-                half = int(prev_w * 1.3 / 2) + 1
-                r = (max(r[0], anchor - half), min(r[1], anchor + half))
+            if prev is not None and (prev[1] - prev[0] + 1) >= 6:
+                prev_w = prev[1] - prev[0] + 1
                 w = r[1] - r[0] + 1
+                if w > max(prev_w * 1.25, prev_w + 6):
+                    lgrow = max(0, prev[0] - r[0])
+                    rgrow = max(0, r[1] - prev[1])
+                    grow = lgrow + rgrow
+                    if grow > 0 and min(lgrow, rgrow) < 0.3 * grow:
+                        # one-sided merge: clip the big side(s)
+                        x0 = r[0] if lgrow <= 0.3 * grow else prev[0] - 2
+                        x1 = r[1] if rgrow <= 0.3 * grow else prev[1] + 2
+                        r = (max(r[0], x0), min(r[1], x1))
             out.append((y, r[0], r[1]))
             anchor = (r[0] + r[1]) // 2
-            prev_w = w
+            prev = r
             y += step
         return out
 
@@ -514,24 +528,30 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24):
     profile = up[::-1] + down   # ordered top -> bottom
 
     # cut at the neck: either a hard width pinch below the head's widest row,
-    # or the dip-then-regrowth where the torso/shoulders widen again
+    # or the dip-then-regrowth where the torso/shoulders widen again. The
+    # bone is the CROWN, so the face is still WIDENING just below it -- cuts
+    # are forbidden until a face-height's worth of rows below the bone, or a
+    # crown dip-then-cheek-regrowth reads as a neck (the Pikachu strip bug).
+    ys_op, _ = np.where(op)
+    bbox_h = float(ys_op.max() - ys_op.min() + 1) if len(ys_op) else H
+    cut_floor = head_y + 0.10 * bbox_h
     widths = [x1 - x0 + 1 for _y, x0, x1 in profile]
     peak = 0
     dip = None
     cut = len(profile)
     for i in range(1, len(profile)):
-        below_bone = profile[i][0] > head_y
-        if dip is not None and below_bone and widths[i] > 1.35 * widths[dip]:
+        cuttable = profile[i][0] > cut_floor
+        if dip is not None and cuttable and widths[i] > 1.35 * widths[dip]:
             cut = dip + 1
             break
-        if below_bone and widths[i] < 0.5 * widths[peak]:
+        if cuttable and widths[i] < 0.5 * widths[peak]:
             cut = i + 1
             break
         if widths[i] >= widths[peak]:
             peak = i
             dip = None
-        elif dip is None or widths[i] <= widths[dip]:
-            dip = i
+        elif cuttable and (dip is None or widths[i] <= widths[dip]):
+            dip = i   # only rows past the floor may become the neck cut
     profile = profile[:cut]
     if not profile:
         return None
@@ -590,14 +610,25 @@ def generate_stock(vanilla_dir, character, costume_code,
     ref = vanilla_dir / character / costume_code
     if not ref.is_dir() and len(costume_code) >= 4:
         ref = vanilla_dir / character / (costume_code[:4] + 'Nr')
+    if not ref.is_dir() and len(costume_code) >= 4:
+        # vault character names don't always match the vanilla folder names
+        # (Nana skins live under 'Ice Climbers' but assets under 'Nana');
+        # costume codes are globally unique, so search every character
+        for cand in (costume_code, costume_code[:4] + 'Nr'):
+            hits = [d for d in vanilla_dir.glob(f'*/{cand}') if d.is_dir()]
+            if hits:
+                ref = hits[0]
+                break
+    # the vanilla stock is only needed as the RECOLOR base; head-shot crops
+    # draw the icon from scratch (Nana's vanilla folders ship no stock.png --
+    # the IC pair shares Popo's icon -- yet her skins still deserve crops)
     stock_path = ref / 'stock.png'
-    if not stock_path.exists():
-        return None
+    stock_exists = stock_path.exists()
     ref_dat = ref / f'{ref.name}.dat'
 
     pairs = None
     method = None
-    if modded_dat_path is not None and ref_dat.exists():
+    if stock_exists and modded_dat_path is not None and ref_dat.exists():
         pairs = texture_pixel_pairs(ref_dat, modded_dat_path)
         method = 'texture-diff'
 
@@ -618,7 +649,7 @@ def generate_stock(vanilla_dir, character, costume_code,
             logger.info(f"stock_gen: generated {character}/{costume_code} via csp-crop")
             return buf.getvalue(), 'csp-crop'
 
-    if pairs is None and modded_csp is not None:
+    if pairs is None and stock_exists and modded_csp is not None:
         ref_csp = ref / 'csp.png'
         if ref_csp.exists():
             pairs = csp_pixel_pairs(ref_csp, modded_csp)
