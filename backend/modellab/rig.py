@@ -1260,6 +1260,7 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
              if p not in (None, "util")]
     bone_affine: dict = {}
     part_params: dict = {}
+    chains: dict = {}
     info = []
     for part in parts:
         tgt_part = part
@@ -1314,6 +1315,8 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
             pivot_s = np.asarray(s_cpos).mean(axis=0)
             pivot_t = np.asarray(t_cpos).mean(axis=0)
         part_params[part] = [s_long, s_rad, src_dir, tgt_dir, pivot_s, pivot_t]
+        chains[part] = (s_chain, s_fr, [np.asarray(p) for p in s_cpos],
+                        t_fr, [np.asarray(p) for p in t_cpos])
 
     if not part_params:
         return False
@@ -1325,27 +1328,95 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
             part_params[a][0] = part_params[b][0] = ml
             part_params[a][1] = part_params[b][1] = mr
 
-    for part, (s_long, s_rad, src_dir, tgt_dir, pivot_s, pivot_t) \
-            in part_params.items():
-        R = _rot_between_vec(src_dir, tgt_dir)
+    LIMBS = ("l_arm", "r_arm", "l_leg", "r_leg")
+    bone_to_aff: dict = {}      # SOURCE bone id -> affine (M, src_anchor, tgt_anchor)
+
+    def assign_part_bones(part_name, aff):
+        for b, p in src_parts.items():
+            if p == part_name:
+                bone_to_aff[b] = aff
+
+    # CORE parts first (limb roots attach to the deformed torso). No rotation:
+    # core chain axes are noisy (fox's "head axis" runs through his
+    # ear/antenna chains) — rotating them crinks the neck.
+    for part in sorted(part_params, key=lambda p: p != "torso"):
+        if part in LIMBS:
+            continue
+        s_long, s_rad, src_dir, tgt_dir, pivot_s, pivot_t = part_params[part]
         u = src_dir / max(np.linalg.norm(src_dir), 1e-9)
         S = s_long * np.outer(u, u) + s_rad * (np.eye(3) - np.outer(u, u))
-        bone_affine[part] = (R @ S, pivot_s, pivot_t)
+        bone_affine[part] = (S, pivot_s, pivot_t)
+        assign_part_bones(part, bone_affine[part])
+
+    # LIMBS: per-SEGMENT mapping with true joint correspondence. One rigid
+    # rotation cannot unbend a source whose wait pose bends the elbow (marth's
+    # crossed arms rendered beside fox's hanging arm bones) — instead the
+    # upper and lower segments each get their own rotation, sharing the
+    # elbow/knee anchor, so bent limbs UNBEND onto the target's pose and stay
+    # connected by construction.
+    for part in LIMBS:
+        if part not in chains:
+            continue
+        s_chain, s_fr, s_cpos, t_fr, t_cpos = chains[part]
+        # principal source joints: steps >= 12% of the chain (skips zero-length
+        # assist joints), endpoints always included
+        keep = [0]
+        for i in range(1, len(s_fr)):
+            if s_fr[i] - s_fr[keep[-1]] >= 0.12 or i == len(s_fr) - 1:
+                keep.append(i)
+        if len(keep) < 2:
+            continue
+        fracs = [s_fr[i] for i in keep]
+        s_anchor = [s_cpos[i] for i in keep]
+        t_anchor = [_chain_point(f, t_fr, t_cpos)[0] for f in fracs]
+        # widen the limb laterally to the deformed torso's attachment (broad
+        # shoulders sink when pinned at fox's narrow roots); height/depth stay
+        # skeleton-true
+        if "torso" in bone_affine:
+            Mt, st, tt = bone_affine["torso"]
+            dx = float((Mt @ (s_anchor[0] - st) + tt)[0] - t_anchor[0][0])
+            t_anchor = [a + np.array([dx, 0, 0]) for a in t_anchor]
+
+        seg_affs = []
+        for i in range(len(fracs) - 1):
+            v_s = s_anchor[i + 1] - s_anchor[i]
+            v_t = t_anchor[i + 1] - t_anchor[i]
+            ls, lt = np.linalg.norm(v_s), np.linalg.norm(v_t)
+            if ls < 1e-6 or lt < 1e-6:
+                seg_affs.append((np.eye(3), s_anchor[i], t_anchor[i]))
+                continue
+            s = float(np.clip(lt / ls, 0.45, 1.8))
+            R = _rot_between_vec(v_s, v_t)
+            seg_affs.append((s * R, s_anchor[i], t_anchor[i]))
+        info.append(f"{part}:{len(seg_affs)}seg")
+
+        # every part bone joins the segment its chain-fraction falls into
+        cpos_arr = np.asarray(s_cpos)
+        for b, p in src_parts.items():
+            if p != part or b not in src_pos:
+                continue
+            bp = np.asarray(src_pos[b])
+            f = s_fr[int(np.linalg.norm(cpos_arr - bp, axis=1).argmin())]
+            si = 0
+            for i in range(len(fracs) - 1):
+                if f >= fracs[i]:
+                    si = i
+            bone_to_aff[b] = seg_affs[si]
+
+    if not bone_to_aff:
+        return False
     fb = bone_affine.get("torso") or next(iter(bone_affine.values()))
 
     pts = foreign.tri_pos.reshape(-1, 3)
     wpp = [w for tw in foreign.tri_src_w for w in tw]
     out = np.empty_like(pts)
-    part_w_cache: dict = {}
     for k in range(len(pts)):
-        # blend PART affines by the vert's source-weight part distribution —
-        # shoulder/hip verts carry mixed weights and deform like skin instead
-        # of tearing at a part boundary
+        # blend affines by the vert's source skin weights — shoulder/hip/elbow
+        # verts carry mixed weights and deform like skin instead of tearing
         acc = np.zeros(3)
         tot = 0.0
         for b, w in wpp[k]:
-            p = src_parts.get(b)
-            aff = bone_affine.get(p)
+            aff = bone_to_aff.get(b)
             if aff is None:
                 continue
             M, sp, tp = aff

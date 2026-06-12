@@ -21,7 +21,8 @@ DEFAULT_POSES = ["fox_wait1.json", "fox_run_f8.json",
                  "fox_jab_f9.json", "fox_nair_f10.json"]
 
 rig_path, out_png = sys.argv[1], sys.argv[2]
-pose_files = [Path(p) for p in sys.argv[3:]] or [RK / p for p in DEFAULT_POSES]
+extra = [p for p in sys.argv[3:] if not p.startswith("--")]
+pose_files = [Path(p) for p in extra] or [RK / p for p in DEFAULT_POSES]
 
 m = smd.load(rig_path)
 bind = joint_world_matrices(m)
@@ -36,13 +37,17 @@ YAWS = (20.0, 110.0)
 light = np.array([0.35, 0.55, 0.75])
 light /= np.linalg.norm(light)
 
+show_bones = "--bones" in sys.argv
+
 panes = []
 for pose_file in pose_files:
-    posed = repose_points(pts, w, skin_matrices(bind, load_pose(pose_file)))
+    pose = load_pose(pose_file)
+    posed = repose_points(pts, w, skin_matrices(bind, pose))
     posed = posed.reshape(-1, 3, 3)
     area = np.linalg.norm(np.cross(posed[:, 1] - posed[:, 0],
                                    posed[:, 2] - posed[:, 0]), axis=1)
     posed = posed[area > 1e-5]          # drop hidden-slot dummy tris
+    joints = np.array([m[:3, 3] for m in pose.values()])
     for yaw in YAWS:
         a = math.radians(yaw)
         rot = np.array([[math.cos(a), 0, math.sin(a)], [0, 1, 0],
@@ -57,13 +62,22 @@ for pose_file in pose_files:
         lo, hi = xy.reshape(-1, 2).min(axis=0), xy.reshape(-1, 2).max(axis=0)
         span = max((hi - lo).max(), 1e-9)
         margin = 0.06 * SIZE
-        p = (xy - lo) / span * (SIZE - 2 * margin) + margin
-        p += (SIZE - 2 * margin - (hi - lo) / span * (SIZE - 2 * margin)) / 2
+        scale = (SIZE - 2 * margin) / span
+        center = (SIZE - 2 * margin - (hi - lo) * scale) / 2
+        p = (xy - lo) * scale + margin + center
         im = Image.new("RGB", (SIZE, SIZE), (23, 30, 42))
         draw = ImageDraw.Draw(im)
         for i in np.argsort(t[:, :, 2].mean(axis=1)):
             g = int(grey[i])
             draw.polygon([tuple(q) for q in p[i]], fill=(g, g, g))
+        if show_bones:
+            jt = joints @ rot.T
+            jxy = jt[:, [0, 1]].copy()
+            jxy[:, 1] *= -1
+            jp = (jxy - lo) * scale + margin + center
+            for q in jp:
+                draw.ellipse([q[0] - 2, q[1] - 2, q[0] + 2, q[1] + 2],
+                             fill=(220, 80, 80))
         ImageDraw.Draw(im).text((8, 6), f"{pose_file.stem}  yaw{int(yaw)}",
                                 fill=(150, 170, 200))
         panes.append(im)
