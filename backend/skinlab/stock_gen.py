@@ -125,6 +125,38 @@ def texture_pixel_pairs(vanilla_dat_path, modded_dat_path):
     return src_px, dst_px
 
 
+def mapping_consistency(src_px, dst_px):
+    """How much a skin behaves like a COLOR REMAP: quantize source colors
+    into 16-unit RGB bins and measure the destination spread within each
+    bin. True recolors map each source color consistently (low). Material
+    REPAINTS send the same source color to different places (the same suit
+    brown becomes white on cloth but stays brown on skin) -- palette
+    remapping is ill-defined for those, and the head crop icon is better.
+    Calibration: vanilla colorways score 0.7-10.8 (Fox Gr's white->green
+    jacket vs white-that-stays is the honest ceiling), Green Ranger 13.9."""
+    q = (src_px // 16).astype(np.int64)
+    keys = q[:, 0] * 256 + q[:, 1] * 16 + q[:, 2]
+    order = np.argsort(keys)
+    keys_s = keys[order]
+    dst_s = dst_px[order]
+    bounds = np.where(np.diff(keys_s) > 0)[0] + 1
+    starts = np.concatenate([[0], bounds])
+    ends = np.concatenate([bounds, [len(keys_s)]])
+    tot, tot_w = 0.0, 0
+    for s, e in zip(starts, ends):
+        n = e - s
+        if n < 50:
+            continue
+        d = dst_s[s:e]
+        mu = np.median(d, axis=0)
+        tot += float(np.abs(d - mu).mean()) * n
+        tot_w += n
+    return tot / max(tot_w, 1)
+
+
+CONSISTENCY_MAX = 12.0
+
+
 def csp_pixel_pairs(vanilla_csp, modded_csp):
     """Aligned (src_px, dst_px) from two CSP renders (same pose/camera =>
     pixel-aligned). Inputs are paths or PNG bytes."""
@@ -551,6 +583,12 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
         if cuttable and widths[i] < 0.5 * widths[peak]:
             cut = i + 1
             break
+        # shoulder JUMP without any dip: helmets/heads that flow straight
+        # into chest armor at the 3/4 angle grow monotonically, so neither
+        # condition above fires -- a rapid sustained widening is the body
+        if cuttable and i >= 3 and widths[i] > 1.55 * widths[i - 3]:
+            cut = max(i - 2, 1)
+            break
         if widths[i] >= widths[peak]:
             peak = i
             dip = None
@@ -564,24 +602,27 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     y_end = profile[-1][0]
     # the box width comes from the HEAD rows only -- broad shoulders/capes
     # below the bone otherwise dominate the square and shrink the head to a
-    # sliver at icon size (they may hang off the box sides instead)
-    # absolute floor on the window: a crown bone AT the silhouette top makes
-    # the relative term ~0 and the "head" degenerates to the dome's tip
-    head_row_lim = head_y + max(0.30 * (head_y - y_top), 0.07 * bbox_h)
-    head_rows = [r for y, r in rows.items() if y <= head_row_lim]
+    # sliver at icon size (they may hang off the box sides instead). Head
+    # rows = rows above the cut floor (those are head by construction), and
+    # the representative head WIDTH is their median: chest armor that flows
+    # into the window's tail otherwise inflates the estimate (Green Ranger).
+    head_rows = [r for y, r in rows.items() if y <= cut_floor]
     if len(head_rows) >= 3:
         x_left = min(r[0] for r in head_rows)
         x_right = max(r[1] for r in head_rows)
+        # max, not median: dome-top characters (Pikachu, Gir) have narrow
+        # rows near the crown and a median there starves the cap to a sliver
+        head_w = float(max(r[1] - r[0] + 1 for r in head_rows))
     else:
         x_left = min(r[0] for r in rows.values())
         x_right = max(r[1] for r in rows.values())
+        head_w = float(x_right - x_left + 1)
 
     # heads are roughly as tall as they are wide: when no neck pinch exists
     # (hunched skeletons like Bowser walk straight into the body) cap the
     # crop height at ~1.3x the head width. Wide-headed blob characters
     # (Pikachu, Hello Kitty) have head_w ~ body width, so they keep their
     # full figure; narrow heads on big bodies get clipped to the head.
-    head_w = x_right - x_left + 1
     cap = int(y_top + 1.3 * head_w)
     if y_end > cap:
         y_end = cap
@@ -659,13 +700,22 @@ def generate_stock(vanilla_dir, character, costume_code,
 
     pairs = None
     method = None
+    low_confidence = False
     if stock_exists and modded_dat_path is not None and ref_dat.exists():
         pairs = texture_pixel_pairs(ref_dat, modded_dat_path)
         method = 'texture-diff'
+        if pairs is not None:
+            consistency = mapping_consistency(pairs[0], pairs[1])
+            if consistency > CONSISTENCY_MAX:
+                low_confidence = True
+                logger.info(f"stock_gen: mapping consistency {consistency:.1f} "
+                            f"> {CONSISTENCY_MAX} (material repaint) -> prefer crop")
 
     # texture lists that don't align mean a DIFFERENT MODEL: color transfer
-    # would repaint the wrong character's icon, so crop the real head instead
-    if pairs is None and head_shot_provider is not None:
+    # would repaint the wrong character's icon, so crop the real head instead.
+    # Material REPAINTS (low mapping consistency) also crop better, but keep
+    # the recolor as a fallback if the crop fails for them.
+    if (pairs is None or low_confidence) and head_shot_provider is not None:
         icon = None
         try:
             shot, head = head_shot_provider()
