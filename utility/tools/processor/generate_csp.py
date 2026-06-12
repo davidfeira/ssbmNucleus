@@ -727,14 +727,20 @@ def generate_head_shot(dat_filepath):
         cmd.insert(0, "wine")
 
     logger.info(f"Rendering head shot for {Path(dat_filepath).name} ({character})")
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                cwd=dat_dir, **get_windows_subprocess_args())
-    except Exception as e:
-        logger.error(f"Head shot render error: {e}")
-        return None, None
-    if result.returncode != 0 or not os.path.exists(output):
-        logger.error(f"Head shot render failed (rc={result.returncode})")
+    result = None
+    for attempt in (1, 2):   # transient GL/context crashes happen; retry once
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    cwd=dat_dir, **get_windows_subprocess_args())
+        except Exception as e:
+            logger.error(f"Head shot render error: {e}")
+            return None, None
+        if result.returncode == 0 and os.path.exists(output):
+            break
+        logger.warning(f"Head shot render attempt {attempt} failed "
+                       f"(rc={result.returncode})")
+    if result is None or result.returncode != 0 or not os.path.exists(output):
+        logger.error("Head shot render failed")
         return None, None
 
     head_info = None

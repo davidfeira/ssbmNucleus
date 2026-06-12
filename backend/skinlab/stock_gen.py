@@ -505,15 +505,25 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
 
     # start AT the bone row and walk both ways. Scanning from the image top
     # used to latch onto thin protrusions (Pichu-style ears/antennae), die at
-    # the first gap, and emit a sliver icon.
+    # the first gap, and emit a sliver icon. Among the rows around the bone,
+    # prefer the WIDEST run near the bone column: faces can be split into
+    # multiple runs at exactly the bone row, and anchoring on a degenerate
+    # sliver poisons the walk and the jump cut (Royal Mid-as Pikachu).
     start = None
-    for dy in range(0, H):
-        for y in (int(head_y) - dy, int(head_y) + dy):
-            if 0 <= y < H and run_at(y, hx) is not None:
-                start = y
+    best_w = 0
+    for y in range(max(0, int(head_y) - 4), min(H, int(head_y) + 5)):
+        r = run_at(y, hx, tol=int(W * 0.04))
+        if r is not None and (r[1] - r[0] + 1) > best_w:
+            best_w = r[1] - r[0] + 1
+            start = y
+    if start is None:
+        for dy in range(0, H):
+            for y in (int(head_y) - dy, int(head_y) + dy):
+                if 0 <= y < H and run_at(y, hx) is not None:
+                    start = y
+                    break
+            if start is not None:
                 break
-        if start is not None:
-            break
     if start is None:
         return None
 
@@ -554,10 +564,20 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
             y += step
         return out
 
-    start_run = run_at(start, hx)
-    up = walk(start - 1, -1, (start_run[0] + start_run[1]) // 2)
-    down = walk(start, +1, hx)
+    start_run = run_at(start, hx, tol=max(3, int(W * 0.04)))
+    if start_run is None:
+        start_run = run_at(start, hx)
+    if start_run is None:
+        return None
+    anchor0 = (start_run[0] + start_run[1]) // 2
+    up = walk(start - 1, -1, anchor0)
+    down = walk(start, +1, anchor0)
     profile = up[::-1] + down   # ordered top -> bottom
+    if debug_out is not None:
+        debug_out['up_len'] = len(up)
+        debug_out['down_len'] = len(down)
+        debug_out['profile_y'] = (profile[0][0], profile[-1][0]) if profile else None
+        debug_out['widths'] = [x1 - x0 + 1 for _y, x0, x1 in profile]
 
     # cut at the neck: either a hard width pinch below the head's widest row,
     # or the dip-then-regrowth where the torso/shoulders widen again. The
@@ -585,15 +605,22 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
             break
         # shoulder JUMP without any dip: helmets/heads that flow straight
         # into chest armor at the 3/4 angle grow monotonically, so neither
-        # condition above fires -- a rapid sustained widening is the body
-        if cuttable and i >= 3 and widths[i] > 1.55 * widths[i - 3]:
+        # condition above fires -- a rapid sustained widening is the body.
+        # The comparison row must be substantial: degenerate sliver rows
+        # (split faces) make any real row look like a jump.
+        if cuttable and i >= 3 and widths[i - 3] >= 12 \
+                and widths[i] > 1.55 * widths[i - 3]:
             cut = max(i - 2, 1)
             break
         if widths[i] >= widths[peak]:
             peak = i
             dip = None
-        elif cuttable and (dip is None or widths[i] <= widths[dip]):
-            dip = i   # only rows past the floor may become the neck cut
+        elif cuttable and widths[i] < 0.70 * widths[peak] \
+                and (dip is None or widths[i] <= widths[dip]):
+            # a dip only counts as a NECK candidate when it pinches well
+            # below the head peak -- blob characters (Pikachu) have shallow
+            # cheek-to-belly contours that would otherwise fake a neck
+            dip = i
     profile = profile[:cut]
     if not profile:
         return None
@@ -634,6 +661,24 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
     mask = np.zeros_like(op)
     for y, (x0, x1) in rows.items():
         mask[y, x0:x1 + 1] = True
+
+    # split-top recovery: heads whose crown is split into separate runs
+    # (Pikachu-style ears) stop the single-run walk below the actual top.
+    # Scoop rows ABOVE y_top whose opaque pixels overlap the head's x-range
+    # into the mask, and raise the box top to include them.
+    y = int(y_top) - 1
+    gap = 0
+    while y >= 0 and gap <= 2:
+        seg = op[y, x_left:x_right + 1]
+        if seg.any():
+            gap = 0
+            xs_ = np.where(seg)[0]
+            mask[y, x_left + xs_.min():x_left + xs_.max() + 1] = \
+                op[y, x_left + xs_.min():x_left + xs_.max() + 1]
+            y_top = float(y)
+        else:
+            gap += 1
+        y -= 1
 
     width = x_right - x_left + 1
     height = y_end - y_top + 1
