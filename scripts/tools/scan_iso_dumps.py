@@ -21,8 +21,8 @@ from pathlib import Path
 
 # Add paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-UTILITY_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "tools" / "processor"
-DAT_PROCESSOR_DIR = PROJECT_ROOT / "utility" / "website" / "backend" / "app" / "services"
+UTILITY_DIR = PROJECT_ROOT / "utility" / "tools" / "processor"
+DAT_PROCESSOR_DIR = PROJECT_ROOT / "utility" / "tools" / "services"
 sys.path.insert(0, str(UTILITY_DIR))
 sys.path.insert(0, str(DAT_PROCESSOR_DIR))
 

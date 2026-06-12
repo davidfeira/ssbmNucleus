@@ -155,19 +155,22 @@ for src_pattern, dst_folder in utility_modules:
         datas.append((py_file, dst_folder))
 
 # CSP generation data (character assets)
-csp_data_path = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'processor' / 'csp_data'
+csp_data_path = project_root / 'utility' / 'tools' / 'processor' / 'csp_data'
 if csp_data_path.exists():
     datas.append((str(csp_data_path), 'utility/tools/processor/csp_data'))
+else:
+    print(f'WARNING: csp_data not found at {csp_data_path} - CSP generation will be broken in this build')
 
-# HSDRawViewer and dependencies (entire directory needed for .NET app)
-hsdraw_dir = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'HSDLib' / 'HSDRawViewer' / 'bin' / 'Release' / 'net6.0-windows'
-if hsdraw_dir.exists():
-    datas.append((str(hsdraw_dir), 'utility/tools/HSDLib/HSDRawViewer/bin/Release/net6.0-windows'))
+# HSDRawViewer is NOT bundled into the backend exe: production uses the
+# self-contained publish that electron-builder ships at resources/utility/HSDRawViewer
+# (see package.json extraResources and Config.HSDRAW_EXE).
 
-# Costume validator
-validator_dir = project_root / 'utility' / 'website' / 'backend' / 'tools' / 'processor' / 'CostumeValidator'
+# Costume validator (validate_costume.py resolves it relative to its own dir)
+validator_dir = project_root / 'utility' / 'tools' / 'processor' / 'CostumeValidator'
 if validator_dir.exists():
     datas.append((str(validator_dir), 'utility/tools/processor/CostumeValidator'))
+else:
+    print(f'WARNING: CostumeValidator not found at {validator_dir} - netplay validation will be broken in this build')
 
 # Vanilla assets (character-specific)
 vanilla_dir = project_root / 'utility' / 'assets' / 'vanilla'

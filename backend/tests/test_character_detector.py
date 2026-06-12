@@ -19,7 +19,7 @@ from PIL import Image
 # Make character_detector importable from this test file location
 BACKEND_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
-PROCESSOR_DIR = BACKEND_DIR.parent / 'utility' / 'website' / 'backend' / 'tools' / 'processor'
+PROCESSOR_DIR = BACKEND_DIR.parent / 'utility' / 'tools' / 'processor'
 sys.path.insert(0, str(PROCESSOR_DIR))
 
 from character_detector import (

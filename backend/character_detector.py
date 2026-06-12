@@ -38,7 +38,7 @@ except ImportError:
 
 # Add utility scripts to path
 SCRIPT_DIR = Path(__file__).parent.parent
-UTILITY_DIR = SCRIPT_DIR / "utility" / "website" / "backend" / "tools" / "processor"
+UTILITY_DIR = SCRIPT_DIR / "utility" / "tools" / "processor"
 sys.path.insert(0, str(UTILITY_DIR))
 
 try:

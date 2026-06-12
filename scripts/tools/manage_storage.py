@@ -22,7 +22,7 @@ import re
 
 # Add utility scripts to path
 SCRIPT_DIR = Path(__file__).parent
-UTILITY_DIR = SCRIPT_DIR / "utility" / "website" / "backend" / "tools" / "processor"
+UTILITY_DIR = SCRIPT_DIR.parent.parent / "utility" / "tools" / "processor"
 sys.path.insert(0, str(UTILITY_DIR))
 
 from detect_character import DATParser
