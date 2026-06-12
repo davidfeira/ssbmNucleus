@@ -130,15 +130,25 @@ Critique it against the theme. Look specifically for: parts that still look
 STOCK/untouched (original colors: {color_facts}), regions whose color clashes
 with the theme, and anything too subtle to read. Check ALL three views.
 
-If it already reads well, reply {{"assessment": "<one sentence>", "steps": []}}.
-Otherwise reply with up to 3 FIX steps using the same ops:
+Valid regions (use these EXACT names): {region_names}
+
+Decide a verdict:
+- "good" -- the result reads well as-is. steps MUST be [].
+- "needs_fixes" -- you see problems. You MUST then include a fix step for
+  EVERY problem you name in the assessment (up to 3 steps). Never name a
+  problem without a corresponding fix step.
+
+Fix steps use the same ops:
   {{"op": "composite", "region": "<name>", "material_prompt": "...",
     "modulate": {{"lo": .., "hi": ..}}}}
   {{"op": "tint", "region": "<name>", "hue": 0-360, "saturation": 0-100}}
   {{"op": "hue-shift", "region": "<name>", "hueShift": -180..180,
     "saturationShift": -100..100}}
+The "eyes" region may be hue-shifted or tinted but NEVER composited.
 
-Reply with ONLY JSON: {{"assessment": "<one sentence>", "steps": [...]}}"""
+Reply with ONLY JSON:
+{{"verdict": "good" | "needs_fixes", "assessment": "<one sentence>",
+  "steps": [...]}}"""
 
 HUE_NAMES = [(15, 'red'), (40, 'orange'), (65, 'yellow'), (95, 'olive'),
              (150, 'green'), (185, 'teal'), (250, 'blue'), (290, 'purple'),
@@ -183,35 +193,76 @@ def _extract_json(text):
     return None
 
 
+def _clean_step(s, regions, composites):
+    """One step -> (step, None) when usable, (None, reason) when not.
+    `composites` = composite steps already accepted."""
+    if not isinstance(s, dict):
+        return None, 'a step was not an object'
+    op = s.get('op')
+    region = s.get('region')
+    if region not in regions:
+        return None, f'unknown region "{region}"'
+    if op == 'composite':
+        if not (s.get('material_prompt') or '').strip():
+            return None, f'composite on {region} had no material prompt'
+        if composites >= 3:
+            return None, f'composite on {region} was over the 3-composite limit'
+    elif op == 'tint':
+        if s.get('hue') is None:
+            return None, f'tint on {region} had no hue'
+    elif op == 'hue-shift':
+        if not s.get('hueShift') and not s.get('saturationShift'):
+            return None, f'hue-shift on {region} had no shift values'
+    else:
+        return None, f'unknown op "{op}"'
+    return s, None
+
+
 def _validate(plan, regions):
     if not isinstance(plan, dict) or not isinstance(plan.get('steps'), list):
         return None, 'the model returned no steps'
     steps, composites = [], 0
     for s in plan['steps'][:6]:
-        if not isinstance(s, dict):
+        step, _reason = _clean_step(s, regions, composites)
+        if step is None:
             continue
-        op = s.get('op')
-        region = s.get('region')
-        if region not in regions:
-            continue
-        if op == 'composite':
-            if not (s.get('material_prompt') or '').strip():
-                continue
+        if step['op'] == 'composite':
             composites += 1
-            if composites > 3:
-                continue
-        elif op == 'tint':
-            if s.get('hue') is None:
-                continue
-        elif op == 'hue-shift':
-            if not s.get('hueShift') and not s.get('saturationShift'):
-                continue
-        else:
-            continue
-        steps.append(s)
+        steps.append(step)
     if not steps:
         return None, 'the model returned no usable steps'
     return steps, None
+
+
+def _validate_review(review, regions):
+    """Review-pass fixes: keep what's usable and report WHY the rest was
+    dropped -- silently discarding them turns the review into commentary."""
+    raw = review.get('steps') if isinstance(review, dict) else None
+    if not isinstance(raw, list):
+        return [], ['the review reply had no steps list']
+    fixes, dropped, composites = [], [], 0
+    for s in raw[:3]:
+        step, reason = _clean_step(s, regions, composites)
+        if step is None:
+            dropped.append(reason)
+            continue
+        if step['op'] == 'composite':
+            composites += 1
+        fixes.append(step)
+    if len(raw) > 3:
+        dropped.append(f'{len(raw) - 3} step(s) over the 3-fix limit')
+    return fixes, dropped
+
+
+def _trim_assessment(text, limit=280):
+    """Cap the assessment at a WORD boundary (the old hard [:200] slice cut
+    sentences mid-word in the UI)."""
+    text = (text or '').strip()
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(' ', 1)[0].rstrip(',;:. ') + '…'
 
 
 def _vanilla_nr_code(character):
@@ -456,9 +507,11 @@ def ai_create():
             run_steps(steps, 30, 65)
 
             # Self-review round: the planner looks at its own render and emits
-            # fix steps. Nearly free for characters (sheet renders in seconds).
+            # fix steps that are EXECUTED before the final render. Nearly free
+            # for characters (sheet renders in seconds).
             assessment = None
             fixes = []
+            review_info = {'ran': bool(review_pass)}
             if review_pass:
                 emit('reviewing', 70, 'Rendering for self-review…')
                 sheet1 = _sheet_from_session(base_url)
@@ -468,14 +521,30 @@ def ai_create():
                         model,
                         REVIEW_PROMPT.format(
                             theme=theme,
+                            region_names=', '.join(rm['regions']),
                             color_facts=_color_facts(rm.get('liveMaskHints'))),
                         key, image_jpeg=sheet1, cost_log=planner_log)
                     review = _extract_json(reply) or {}
-                    assessment = (review.get('assessment') or '')[:200] or None
-                    fixes, _err = _validate(review, set(rm['regions']))
-                    fixes = fixes or []
+                    assessment = _trim_assessment(review.get('assessment'))
+                    fixes, dropped = _validate_review(review, set(rm['regions']))
+                    verdict = (review.get('verdict') or '').strip().lower()
+                    if verdict not in ('good', 'needs_fixes'):
+                        # older/looser models: infer from whether fixes came back
+                        verdict = 'needs_fixes' if (fixes or dropped) else 'good'
+                    review_info.update(verdict=verdict,
+                                       fixesApplied=len(fixes),
+                                       fixesDropped=dropped)
+                    if dropped:
+                        logger.warning(f'[ai-studio] review fixes dropped: {dropped}')
+                        emit('reviewing', 77,
+                             f'Review proposed {len(fixes) + len(dropped)} fixes; '
+                             f'{len(dropped)} unusable (dropped)')
+                    if verdict == 'needs_fixes' and not fixes:
+                        logger.warning('[ai-studio] review flagged issues but '
+                                       'produced no usable fix steps')
                 except Exception as e:
                     logger.warning(f'[ai-studio] review pass skipped: {e}')
+                    review_info['error'] = str(e)
                 if fixes:
                     run_steps(fixes, 78, 88, tag='Fix ')
 
@@ -485,7 +554,10 @@ def ai_create():
                 'success': True,
                 'sheet': 'data:image/jpeg;base64,' + base64.b64encode(sheet).decode('ascii'),
                 'skinName': skin_name,
-                'steps': steps + fixes,
+                'steps': steps + fixes,      # back-compat: full executed list
+                'planSteps': steps,
+                'fixSteps': fixes,
+                'review': review_info,
                 'assessment': assessment,
                 'generation': gen_log,
                 'planning': planner_log,

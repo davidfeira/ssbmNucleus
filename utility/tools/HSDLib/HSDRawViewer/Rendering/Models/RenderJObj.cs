@@ -35,6 +35,8 @@ namespace HSDRawViewer.Rendering.Models
         public string ThumbnailBase64 { get; set; }
         public int GlTextureId { get; set; }
         public HSDRaw.Common.HSD_TOBJ Tobj { get; set; } // Reference for updating HSD data
+        public bool IsMatAnim { get; set; }     // a MatAnim swap frame (blink etc.), not a material texture
+        public int AnimatesIndex { get; set; } = -1;  // texture index this swap frame animates, or -1
     }
 
     public class RenderJObj
@@ -82,6 +84,15 @@ namespace HSDRawViewer.Rendering.Models
         /// collection of renderable dobjs
         /// </summary>
         private List<RenderDObj> RenderDobjs = new();
+
+        /// <summary>
+        /// MatAnim texture-swap banks (blink frames etc.) from the DAT's
+        /// matanim_joint roots. Each entry pairs a TexAnim with synthetic
+        /// TOBJs wrapping its image/palette buffers IN PLACE -- injecting
+        /// into these TOBJs mutates the raw file's buffers directly, so
+        /// edits survive export. Set by hosts via SetMatAnims().
+        /// </summary>
+        private readonly List<(HSD_TexAnim anim, HSD_TOBJ[] frames)> _matAnimBanks = new();
 
         /// <summary>
         /// For managing opengl buffers
@@ -1108,13 +1119,87 @@ namespace HSDRawViewer.Rendering.Models
         }
 
         /// <summary>
-        /// Gets a list of all textures used by this model
+        /// Registers the DAT's matanim_joint roots so MatAnim texture-swap
+        /// frames (blink/half-closed eyes etc.) are exposed in the texture
+        /// list and covered by content-matched updates. The synthetic TOBJs
+        /// share the buffers' HSD_Image/HSD_Tlut accessors, so injections
+        /// land in the raw file in place.
+        /// </summary>
+        public void SetMatAnims(IEnumerable<HSD_MatAnimJoint> matAnimRoots)
+        {
+            _matAnimBanks.Clear();
+            if (matAnimRoots == null)
+                return;
+            foreach (var root in matAnimRoots)
+            {
+                if (root == null)
+                    continue;
+                foreach (var joint in root.TreeList)
+                {
+                    if (joint.MaterialAnimation == null)
+                        continue;
+                    foreach (var matAnim in joint.MaterialAnimation.List)
+                    {
+                        if (matAnim.TextureAnimation == null)
+                            continue;
+                        foreach (var texAnim in matAnim.TextureAnimation.List)
+                        {
+                            if (texAnim.ImageCount > 0 && texAnim.ImageBuffers != null)
+                                _matAnimBanks.Add((texAnim, texAnim.ToTOBJs()));
+                        }
+                    }
+                }
+            }
+        }
+
+        private static bool TexDataEquals(byte[] a, byte[] b)
+            => ReferenceEquals(a, b)
+               || (a != null && b != null && a.Length == b.Length
+                   && System.MemoryExtensions.SequenceEqual<byte>(a, b));
+
+        /// <summary>
+        /// Gets a list of all textures used by this model -- the material
+        /// (DOBJ) textures first, then any MatAnim swap frames whose content
+        /// isn't already listed (a TexAnim's frame 0 usually duplicates the
+        /// material texture it animates; those are skipped and instead used
+        /// to link the bank to its base texture via AnimatesIndex).
         /// </summary>
         public List<TextureInfo> GetTextureList()
         {
             var textures = new List<TextureInfo>();
             var seenTextures = new HashSet<byte[]>();
             int textureIndex = 0;
+
+            TextureInfo MakeInfo(HSD_TOBJ tobj, int glTextureId)
+            {
+                int width = tobj.ImageData.Width;
+                int height = tobj.ImageData.Height;
+                byte[] rgbaData = tobj.GetDecodedImageData();
+
+                // Generate thumbnail (64x64)
+                string thumbnailBase64 = "";
+                try
+                {
+                    using var image = SixLabors.ImageSharp.Image.LoadPixelData<SixLabors.ImageSharp.PixelFormats.Bgra32>(rgbaData, width, height);
+                    image.Mutate(x => x.Resize(64, 64));
+                    using var ms = new System.IO.MemoryStream();
+                    image.Save(ms, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+                    thumbnailBase64 = Convert.ToBase64String(ms.ToArray());
+                }
+                catch { }
+
+                return new TextureInfo
+                {
+                    Index = textureIndex,
+                    Width = width,
+                    Height = height,
+                    Name = $"Texture_{textureIndex}",
+                    RgbaData = rgbaData,
+                    ThumbnailBase64 = thumbnailBase64,
+                    GlTextureId = glTextureId,
+                    Tobj = tobj
+                };
+            }
 
             foreach (var dobj in RenderDobjs)
             {
@@ -1132,10 +1217,6 @@ namespace HSDRawViewer.Rendering.Models
 
                     seenTextures.Add(tobj.ImageData.ImageData);
 
-                    int width = tobj.ImageData.Width;
-                    int height = tobj.ImageData.Height;
-                    byte[] rgbaData = tobj.GetDecodedImageData();
-
                     // Get OpenGL texture ID
                     int glTextureId = -1;
                     if (imageBufferTextureIndex.TryGetValue(tobj.ImageData.ImageData, out int texIndex))
@@ -1143,31 +1224,49 @@ namespace HSDRawViewer.Rendering.Models
                         glTextureId = TextureManager.GetGLID(texIndex);
                     }
 
-                    // Generate thumbnail (64x64)
-                    string thumbnailBase64 = "";
-                    try
-                    {
-                        using var image = SixLabors.ImageSharp.Image.LoadPixelData<SixLabors.ImageSharp.PixelFormats.Bgra32>(rgbaData, width, height);
-                        image.Mutate(x => x.Resize(64, 64));
-                        using var ms = new System.IO.MemoryStream();
-                        image.Save(ms, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
-                        thumbnailBase64 = Convert.ToBase64String(ms.ToArray());
-                    }
-                    catch { }
-
-                    textures.Add(new TextureInfo
-                    {
-                        Index = textureIndex,
-                        Width = width,
-                        Height = height,
-                        Name = $"Texture_{textureIndex}",
-                        RgbaData = rgbaData,
-                        ThumbnailBase64 = thumbnailBase64,
-                        GlTextureId = glTextureId,
-                        Tobj = tobj
-                    });
-
+                    textures.Add(MakeInfo(tobj, glTextureId));
                     textureIndex++;
+                }
+            }
+
+            // MatAnim swap frames (blink etc.) -- textures the DOBJ walk
+            // can't see. Content-duplicates of listed textures are skipped
+            // (updates reach them via content matching); the rest are
+            // appended after the material textures so existing indexes are
+            // stable.
+            int matAnimCount = 0;
+            foreach (var (anim, frames) in _matAnimBanks)
+            {
+                // the bank's base texture: the listed texture some frame of
+                // this bank duplicates (frame 0 is the default/open state)
+                int animates = -1;
+                foreach (var frame in frames)
+                {
+                    if (frame?.ImageData?.ImageData == null)
+                        continue;
+                    var match = textures.FirstOrDefault(t => !t.IsMatAnim
+                        && TexDataEquals(t.Tobj?.ImageData?.ImageData, frame.ImageData.ImageData));
+                    if (match != null)
+                    {
+                        animates = match.Index;
+                        break;
+                    }
+                }
+
+                foreach (var frame in frames)
+                {
+                    if (frame?.ImageData?.ImageData == null)
+                        continue;
+                    if (textures.Any(t => TexDataEquals(t.Tobj?.ImageData?.ImageData, frame.ImageData.ImageData)))
+                        continue;
+
+                    var info = MakeInfo(frame, -1);
+                    info.IsMatAnim = true;
+                    info.AnimatesIndex = animates;
+                    info.Name = $"MatAnim_{matAnimCount}";
+                    textures.Add(info);
+                    textureIndex++;
+                    matAnimCount++;
                 }
             }
 
@@ -1223,28 +1322,37 @@ namespace HSDRawViewer.Rendering.Models
             byte[] oldImageData = texInfo.Tobj.ImageData.ImageData;
 
             // Find ALL TOBJs whose texture content matches, and every distinct
-            // backing array among them.
+            // backing array among them. MatAnim swap-frame TOBJs are included:
+            // a TexAnim's default frame often duplicates the material texture,
+            // and edits must land on BOTH or the character flashes the stock
+            // texture whenever the animation swaps frames (the blink bug).
             var tobjsToUpdate = new List<HSD_TOBJ>();
             var oldArrays = new List<byte[]>();
+            var seenImages = new HashSet<HSD_Image>();
+            void Collect(HSD_TOBJ tobj)
+            {
+                var data = tobj?.ImageData?.ImageData;
+                if (data == null)
+                    return;
+                if (!TexDataEquals(data, oldImageData))
+                    return;
+                // distinct TOBJs can share one HSD_Image accessor -- encode once
+                if (!seenImages.Add(tobj.ImageData))
+                    return;
+                tobjsToUpdate.Add(tobj);
+                if (!oldArrays.Any(a => ReferenceEquals(a, data)))
+                    oldArrays.Add(data);
+            }
             foreach (var dobj in RenderDobjs)
             {
                 if (dobj._dobj?.Mobj?.Textures == null)
                     continue;
                 foreach (var tobj in dobj._dobj.Mobj.Textures.List)
-                {
-                    var data = tobj?.ImageData?.ImageData;
-                    if (data == null)
-                        continue;
-                    bool match = ReferenceEquals(data, oldImageData)
-                        || (data.Length == oldImageData.Length
-                            && System.MemoryExtensions.SequenceEqual<byte>(data, oldImageData));
-                    if (!match)
-                        continue;
-                    tobjsToUpdate.Add(tobj);
-                    if (!oldArrays.Any(a => ReferenceEquals(a, data)))
-                        oldArrays.Add(data);
-                }
+                    Collect(tobj);
             }
+            foreach (var (_, frames) in _matAnimBanks)
+                foreach (var frame in frames)
+                    Collect(frame);
             if (tobjsToUpdate.Count == 0)
             {
                 UpdateLog?.Invoke($"UpdateTexture: NO content match (oldData len={oldImageData.Length})");

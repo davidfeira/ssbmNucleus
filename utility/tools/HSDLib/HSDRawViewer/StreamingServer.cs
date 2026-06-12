@@ -218,6 +218,19 @@ namespace HSDRawViewer
                 _renderJObj._settings.RenderBones = false;
                 _renderJObj._settings.RenderObjects = ObjectRenderMode.Visible;
 
+                // MatAnim swap frames (blink textures etc.) hide in
+                // matanim_joint roots -- register them so the texture list
+                // and texture updates cover them.
+                var matAnimRoots = rawFile.Roots
+                    .Where(r => r.Data is HSDRaw.Common.Animation.HSD_MatAnimJoint)
+                    .Select(r => (HSDRaw.Common.Animation.HSD_MatAnimJoint)r.Data)
+                    .ToList();
+                if (matAnimRoots.Count > 0)
+                {
+                    _renderJObj.SetMatAnims(matAnimRoots);
+                    Log($"Registered {matAnimRoots.Count} matanim root(s)");
+                }
+
                 var drawable = new SimpleJObjDrawable(_renderJObj);
                 _viewport.AddRenderer(drawable);
                 Log($"RenderJObj created. DOBJs: {_renderJObj.DObjCount}");
@@ -720,7 +733,9 @@ namespace HSDRawViewer
                                     width = t.Width,
                                     height = t.Height,
                                     name = t.Name,
-                                    thumbnail = t.ThumbnailBase64
+                                    thumbnail = t.ThumbnailBase64,
+                                    matAnim = t.IsMatAnim,
+                                    animates = t.AnimatesIndex
                                 }).ToList();
                                 await SendJsonAsync(webSocket, new { type = "textureList", textures = textureList });
                             }

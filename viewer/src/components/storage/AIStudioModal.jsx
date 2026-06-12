@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
+import ProgressPanel from '../export/ProgressPanel'
 import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
                            TimeEstimate, autoOptionLabel } from './useAiStudioSetup'
 
@@ -25,6 +26,8 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
   const [sheet, setSheet] = useState(null)
   const [skinName, setSkinName] = useState('')
   const [steps, setSteps] = useState([])
+  const [fixSteps, setFixSteps] = useState([])
+  const [review, setReview] = useState(null)
   const [costInfo, setCostInfo] = useState(null)
   const [assessment, setAssessment] = useState(null)
   const [error, setError] = useState(null)
@@ -93,7 +96,9 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
     socket.on('ailab_complete', (d) => {
       setSheet(d.sheet)
       setSkinName(d.skinName || theme)
-      setSteps(d.steps || [])
+      setSteps(d.planSteps || d.steps || [])
+      setFixSteps(d.fixSteps || [])
+      setReview(d.review || null)
       setCostInfo({ cost: d.estCostUsd, generation: d.generation || [],
                     planning: d.planning || [] })
       setAssessment(d.assessment || null)
@@ -225,29 +230,60 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
         )}
 
         {phase === 'running' && (
-          <div className="ai-studio-progress">
-            <div className="ai-studio-progress-bar">
-              <div className="ai-studio-progress-fill"
-                   style={{ width: `${status?.percentage ?? 0}%` }} />
-            </div>
-            <div className="ai-studio-progress-message">{status?.message}</div>
-          </div>
+          <ProgressPanel
+            title="Creating your skin…"
+            label="AI Studio progress"
+            progressValue={Number.isFinite(status?.percentage) ? status.percentage : null}
+            metaText={Number.isFinite(status?.percentage) ? `${Math.round(status.percentage)}%` : null}
+            messageText={status?.message || 'Starting…'}
+          />
         )}
 
         {(phase === 'preview' || phase === 'saving') && (
           <div className="ai-studio-preview">
             <img className="ai-studio-sheet" src={sheet} alt="skin preview" />
-            {steps.length > 0 && (
+            {(steps.length > 0 || fixSteps.length > 0) && (
               <div className="ai-studio-steps">
                 {steps.map((s, i) => (
                   <span key={i} className="ai-studio-step">
                     {s.op}:{s.region}
                   </span>
                 ))}
+                {fixSteps.map((s, i) => (
+                  <span key={`fix-${i}`} className="ai-studio-step fix"
+                        title="Applied by the self-review pass">
+                    fix · {s.op}:{s.region}
+                  </span>
+                ))}
               </div>
             )}
-            {assessment && (
-              <div className="ai-studio-assessment">“{assessment}”</div>
+            {(assessment || review) && (
+              <div className={'ai-studio-review'
+                              + (review?.verdict === 'needs_fixes' && !fixSteps.length
+                                 ? ' warn' : '')}>
+                {review && (
+                  <div className="ai-studio-review-head">
+                    {'Self-review — '}
+                    {fixSteps.length > 0
+                      ? `applied ${fixSteps.length} fix${fixSteps.length > 1 ? 'es' : ''}`
+                      : review.error
+                        ? 'skipped (planner error)'
+                        : review.verdict === 'needs_fixes'
+                          ? 'found issues but no usable fixes'
+                          : 'looks good as-is'}
+                  </div>
+                )}
+                {assessment && (
+                  <div className="ai-studio-assessment">“{assessment}”</div>
+                )}
+                {review?.fixesDropped?.length > 0 && (
+                  <div className="ai-studio-review-note">
+                    {review.fixesDropped.length} suggested
+                    fix{review.fixesDropped.length > 1 ? 'es were' : ' was'} dropped:
+                    {' '}{review.fixesDropped.join('; ')}
+                  </div>
+                )}
+              </div>
             )}
             <CostBreakdown costInfo={costInfo} />
             <input

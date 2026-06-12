@@ -690,8 +690,10 @@ export default function EditModal({
                   <p style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
                     {testStatus?.message || 'Working…'}
                   </p>
-                  {/* Captures keep their own window (the shot's resolution = window size). */}
-                  <DolphinEmbedPanel active={testMode !== 'capture'} fill />
+                  {/* Embedded for tests AND captures (shots grab the embedded
+                      window via PrintWindow — small resolution trade for not
+                      having a floating Dolphin over the app). */}
+                  <DolphinEmbedPanel active fill />
                   <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', maxWidth: 560, margin: '1rem auto 0' }}>
                     Builds a one-costume ISO and plays a short match in a throwaway Dolphin.
                     Your Slippi setup is untouched, and it never goes online.

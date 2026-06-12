@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { API_URL, BACKEND_URL } from '../../config'
 import { playSound } from '../../utils/sounds'
+import ProgressPanel from '../export/ProgressPanel'
+import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
 import useAiStudioSetup, { CostBreakdown, ResolutionNotice, SetupGate,
-                           TimeEstimate, autoOptionLabel } from './useAiStudioSetup'
+                           TimeEstimate, autoOptionLabelFor } from './useAiStudioSetup'
 
 const DEFAULT_PLANNER = 'openai/gpt-5-mini'
 
@@ -20,13 +22,18 @@ const TASK_KINDS = ['material', 'backdrop']
 export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
   const [theme, setTheme] = useState('')
   const [planner, setPlanner] = useState(DEFAULT_PLANNER)
-  // '' = Auto: the backend's tier resolver picks per task
+  // '' = Auto: the backend's tier resolver picks per task. Materials and
+  // backgrounds are picked separately (backgrounds are 'strong' tier).
   const [imageModel, setImageModel] = useState(
     localStorage.getItem('ai_studio_image_model') || '')
+  const [backdropModel, setBackdropModel] = useState(
+    localStorage.getItem('ai_studio_backdrop_model') || '')
   const { ready, options, planners, resolution, autoResolution, resolveFor } =
     useAiStudioSetup(show, TASK_KINDS)
   const [reviewPass, setReviewPass] = useState(false)
   const [assessment, setAssessment] = useState(null)
+  const [fixSteps, setFixSteps] = useState([])
+  const [review, setReview] = useState(null)
   const [phase, setPhase] = useState('form')        // form | running | preview | saving
   const [status, setStatus] = useState(null)
   const [screenshot, setScreenshot] = useState(null)
@@ -60,17 +67,17 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
 
   // drop a stale stored pick (model deleted/locked since) back to Auto
   useEffect(() => {
-    if (show && options.length && imageModel
-        && !options.some((o) => o.value === imageModel && !o.locked)) {
-      setImageModel('')
-    }
+    if (!show || !options.length) return
+    const usable = (v) => options.some((o) => o.value === v && !o.locked)
+    if (imageModel && !usable(imageModel)) setImageModel('')
+    if (backdropModel && !usable(backdropModel)) setBackdropModel('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, options])
 
-  // preview what materials vs backgrounds will actually run on
+  // escalation/error notices for what each task will actually run on
   useEffect(() => {
-    if (show && ready) resolveFor(imageModel)
-  }, [show, ready, imageModel, resolveFor])
+    if (show && ready) resolveFor({ material: imageModel, backdrop: backdropModel })
+  }, [show, ready, imageModel, backdropModel, resolveFor])
 
   // a locked planner can't run — fall back to the first unlocked one
   useEffect(() => {
@@ -105,7 +112,9 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
     socket.on('stagelab_complete', (d) => {
       setScreenshot(d.screenshot)
       setSkinName(d.skinName || theme)
-      setSteps(d.steps || [])
+      setSteps(d.planSteps || d.steps || [])
+      setFixSteps(d.fixSteps || [])
+      setReview(d.review || null)
       setCostInfo({ cost: d.estCostUsd, generation: d.generation || [],
                     planning: d.planning || [] })
       setAssessment(d.assessment || null)
@@ -131,6 +140,8 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
           // Auto ('') sends neither — the backend's tier resolver picks
           imageProvider: options.find((o) => o.value === imageModel)?.provider,
           imageModel: imageModel || undefined,
+          backdropProvider: options.find((o) => o.value === backdropModel)?.provider,
+          backdropModel: backdropModel || undefined,
           reviewPass,
           openrouterKey: localStorage.getItem('openrouter_api_key') || undefined,
           vanillaIsoPath,
@@ -212,13 +223,26 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
                 </option>
               ))}
             </select>
-            <label className="ai-studio-label">Image model (materials)</label>
+            <label className="ai-studio-label">Image model — materials</label>
             <select className="ai-studio-planner" value={imageModel}
                     onChange={(e) => {
                       setImageModel(e.target.value)
                       localStorage.setItem('ai_studio_image_model', e.target.value)
                     }}>
-              <option value="">{autoOptionLabel(autoResolution)}</option>
+              <option value="">{autoOptionLabelFor(autoResolution, 'material')}</option>
+              {options.map((m) => (
+                <option key={m.value} value={m.value} disabled={m.locked}>
+                  {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}
+                </option>
+              ))}
+            </select>
+            <label className="ai-studio-label">Image model — backgrounds</label>
+            <select className="ai-studio-planner" value={backdropModel}
+                    onChange={(e) => {
+                      setBackdropModel(e.target.value)
+                      localStorage.setItem('ai_studio_backdrop_model', e.target.value)
+                    }}>
+              <option value="">{autoOptionLabelFor(autoResolution, 'backdrop')}</option>
               {options.map((m) => (
                 <option key={m.value} value={m.value} disabled={m.locked}>
                   {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}
@@ -247,29 +271,65 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
         )}
 
         {phase === 'running' && (
-          <div className="ai-studio-progress">
-            <div className="ai-studio-progress-bar">
-              <div className="ai-studio-progress-fill"
-                   style={{ width: `${status?.percentage ?? 0}%` }} />
-            </div>
-            <div className="ai-studio-progress-message">{status?.message}</div>
-          </div>
+          <>
+            <ProgressPanel
+              title="Creating the stage alt…"
+              label="AI Stage Studio progress"
+              progressValue={Number.isFinite(status?.percentage) ? status.percentage : null}
+              metaText={Number.isFinite(status?.percentage) ? `${Math.round(status.percentage)}%` : null}
+              messageText={status?.message || 'Starting…'}
+            />
+            {/* the preview boot shows embedded here (build phases just show
+                the placeholder until Dolphin's render window exists) */}
+            <DolphinEmbedPanel active />
+          </>
         )}
 
         {(phase === 'preview' || phase === 'saving') && (
           <div className="ai-studio-preview">
             <img className="ai-studio-sheet" src={screenshot} alt="stage preview" />
-            {steps.length > 0 && (
+            {(steps.length > 0 || fixSteps.length > 0) && (
               <div className="ai-studio-steps">
                 {steps.map((s, i) => (
                   <span key={i} className="ai-studio-step">
                     {s.op}{s.region ? `:${s.region}` : ''}
                   </span>
                 ))}
+                {fixSteps.map((s, i) => (
+                  <span key={`fix-${i}`} className="ai-studio-step fix"
+                        title="Applied by the self-review pass">
+                    fix · {s.op}{s.region ? `:${s.region}` : ''}
+                  </span>
+                ))}
               </div>
             )}
-            {assessment && (
-              <div className="ai-studio-assessment">“{assessment}”</div>
+            {(assessment || review) && (
+              <div className={'ai-studio-review'
+                              + (review?.verdict === 'needs_fixes' && !fixSteps.length
+                                 ? ' warn' : '')}>
+                {review && (
+                  <div className="ai-studio-review-head">
+                    {'Self-review — '}
+                    {fixSteps.length > 0
+                      ? `applied ${fixSteps.length} fix${fixSteps.length > 1 ? 'es' : ''}`
+                      : review.error
+                        ? 'skipped (planner error)'
+                        : review.verdict === 'needs_fixes'
+                          ? 'found issues but no usable fixes'
+                          : 'looks good as-is'}
+                  </div>
+                )}
+                {assessment && (
+                  <div className="ai-studio-assessment">“{assessment}”</div>
+                )}
+                {review?.fixesDropped?.length > 0 && (
+                  <div className="ai-studio-review-note">
+                    {review.fixesDropped.length} suggested
+                    fix{review.fixesDropped.length > 1 ? 'es were' : ' was'} dropped:
+                    {' '}{review.fixesDropped.join('; ')}
+                  </div>
+                )}
+              </div>
             )}
             <CostBreakdown costInfo={costInfo} />
             <input

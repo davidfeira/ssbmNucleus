@@ -53,8 +53,23 @@ def _read_runs(days=None):
     return runs
 
 
-def aggregate(days=90):
-    """Per-model stats + totals over the window. Timing stats consider only
+def reset():
+    """Manual stats reset: the ledger moves aside to ai_runs.jsonl.bak (the
+    previous backup is replaced) — stats are otherwise ALL-TIME."""
+    with _lock:
+        try:
+            if RUNS_LEDGER.exists():
+                backup = RUNS_LEDGER.with_suffix('.jsonl.bak')
+                backup.unlink(missing_ok=True)
+                RUNS_LEDGER.rename(backup)
+        except OSError:
+            # fall back to truncating in place (e.g. a writer holds the file)
+            RUNS_LEDGER.write_text('', encoding='utf-8')
+
+
+def aggregate(days=None):
+    """Per-model stats + totals — ALL-TIME by default (reset is manual via
+    reset()); pass `days` for an explicit window. Timing stats consider only
     successful, non-cached runs (cache hits would skew averages to ~0)."""
     runs = _read_runs(days)
     groups = {}
@@ -65,6 +80,7 @@ def aggregate(days=90):
     for (provider, model), items in groups.items():
         attempts = [r for r in items if not r.get('cached')]
         timed = [r['seconds'] for r in attempts if r.get('success')]
+        costed = [r.get('est_cost_usd', 0) for r in attempts if r.get('success')]
         per_model.append({
             'provider': provider,
             'model': model,
@@ -73,6 +89,7 @@ def aggregate(days=90):
                             / len(attempts)) if attempts else None,
             'avgSeconds': round(sum(timed) / len(timed), 1) if timed else None,
             'medianSeconds': round(statistics.median(timed), 1) if timed else None,
+            'avgCostUsd': round(sum(costed) / len(costed), 4) if costed else None,
             'cachedHits': sum(1 for r in items if r.get('cached')),
             'lastTs': max(r['ts'] for r in items),
             'totalCostUsd': round(sum(r.get('est_cost_usd', 0)
@@ -90,9 +107,11 @@ def aggregate(days=90):
     }
 
 
-def model_stats(days=90):
-    """{model: {runs, avgSeconds, medianSeconds, lastTs}} keyed by the model
-    string recorded in the ledger — convenience for the catalog endpoint."""
+def model_stats(days=None):
+    """{model: {runs, avgSeconds, medianSeconds, avgCostUsd, lastTs}} keyed by
+    the model string recorded in the ledger (all-time by default) —
+    convenience for the catalog endpoint."""
     return {m['model']: {'runs': m['runs'], 'avgSeconds': m['avgSeconds'],
-                         'medianSeconds': m['medianSeconds'], 'lastTs': m['lastTs']}
+                         'medianSeconds': m['medianSeconds'],
+                         'avgCostUsd': m['avgCostUsd'], 'lastTs': m['lastTs']}
             for m in aggregate(days)['perModel']}

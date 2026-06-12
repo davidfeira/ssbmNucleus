@@ -19,7 +19,6 @@ export default function CustomStagesGrid({
   isLoading,
   onSelectStage,
   onBack,
-  onImportZip,
   onScanIso,
   importing,
   onRefresh
@@ -280,6 +279,15 @@ export default function CustomStagesGrid({
           >
             New Folder
           </button>
+          <button
+            className="intake-import-btn"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); onScanIso(); }}
+            disabled={importing}
+            title="Extract the custom stages out of a built m-ex ISO"
+          >
+            Scan ISO
+          </button>
         </div>
       </div>
 
@@ -381,38 +389,6 @@ export default function CustomStagesGrid({
         })}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
-        <label
-          className="intake-import-btn"
-          style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
-          onMouseEnter={playHoverSound}
-          onClick={() => { if (!importing) playSound('start'); }}
-        >
-          {importing ? 'Importing...' : 'Import ZIP'}
-          <input
-            type="file"
-            accept=".zip"
-            onChange={onImportZip}
-            disabled={importing}
-            style={{ display: 'none' }}
-          />
-        </label>
-        <label
-          className="intake-import-btn"
-          style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
-          onMouseEnter={playHoverSound}
-          onClick={() => { if (!importing) playSound('start'); }}
-        >
-          {importing ? 'Scanning...' : 'Scan ISO'}
-          <input
-            type="file"
-            accept=".iso,.gcm"
-            onChange={onScanIso}
-            disabled={importing}
-            style={{ display: 'none' }}
-          />
-        </label>
-      </div>
     </div>
   )
 }

@@ -667,7 +667,13 @@ def generate_texture():
 def _load_region_map():
     """The texture-region map for the open session's character (canonical name
     or a custom character's donor), or None. Flags 'approximate' when the open
-    DAT's texture count differs from the map's basis."""
+    DAT's texture count differs from the map's basis.
+
+    MatAnim swap frames (blink textures etc.) are folded in dynamically: each
+    frame inherits the region/protection of the material texture its bank
+    animates, so region ops (tint/composite/hue-shift) and pad masks cover
+    them without per-character map changes. Maps stay authored against the
+    material textures only -- basis counts ignore matanim entries."""
     character = (_meta or {}).get('character') or ''
     name = character
     if character.startswith('custom_characters/'):
@@ -679,9 +685,26 @@ def _load_region_map():
     if not name or not path.exists():
         return None
     region_map = json.loads(path.read_text(encoding='utf-8'))
+    material_count = sum(1 for t in _session.textures if not t.get('matAnim'))
     basis_count = (region_map.get('basis') or {}).get('textureCount')
     region_map['approximate'] = (basis_count is not None
-                                 and basis_count != len(_session.textures))
+                                 and basis_count != material_count)
+
+    links = {}   # material texture index -> [matanim swap-frame indexes]
+    for t in _session.textures:
+        animates = t.get('animates')
+        if t.get('matAnim') and isinstance(animates, int) and animates >= 0:
+            links.setdefault(animates, []).append(t['index'])
+    if links:
+        regions = region_map.get('regions') or {}
+        for region, idxs in regions.items():
+            extra = [m for base in idxs for m in links.get(base, [])]
+            if extra:
+                regions[region] = list(idxs) + extra
+        protected = region_map.get('protected') or []
+        extra = [m for base in protected for m in links.get(base, [])]
+        if extra:
+            region_map['protected'] = list(protected) + extra
     return region_map
 
 

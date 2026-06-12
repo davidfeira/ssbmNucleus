@@ -16,6 +16,7 @@ import XdeltaBuildModal from './storage/XdeltaBuildModal'
 import BundleEditModal from './storage/BundleEditModal'
 import ModeToolbar from './storage/ModeToolbar'
 import ImportToolbar from './storage/ImportToolbar'
+import ImportFab from './storage/ImportFab'
 import CharactersGrid from './storage/CharactersGrid'
 import StagesGrid from './storage/StagesGrid'
 import BulkStageCaptureModal from './storage/BulkStageCaptureModal'
@@ -87,13 +88,11 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [customStages, setCustomStages] = useState([])
   const [showCustomStages, setShowCustomStages] = useState(false)
   const [selectedCustomStage, setSelectedCustomStage] = useState(null)
-  const [customStageImporting, setCustomStageImporting] = useState(false)
 
   // Custom characters state (sub-page within characters mode)
   const [customCharacters, setCustomCharacters] = useState([])
   const [showCustomCharacters, setShowCustomCharacters] = useState(false)
   const [selectedCustomCharacter, setSelectedCustomCharacter] = useState(null)
-  const [customCharacterImporting, setCustomCharacterImporting] = useState(false)
 
   // Slippi retest dialog state (for retest from edit modal)
   const [retestingItem, setRetestingItem] = useState(null) // For retest dialog
@@ -102,6 +101,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   const [skinCreatorInitialCostume, setSkinCreatorInitialCostume] = useState(null) // For "edit from vault" flow
 
   const [showIsoScanModal, setShowIsoScanModal] = useState(false)
+  const [scanInitialPaths, setScanInitialPaths] = useState([])
+  const [scanInitialTargets, setScanInitialTargets] = useState(null)
 
   const [contextMenu, setContextMenu] = useState(null) // { x, y, type: 'skin'/'variant', item, index }
 
@@ -140,61 +141,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }
 
-  // Custom stage import handler
-  const handleCustomStageImport = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    setCustomStageImporting(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const response = await fetch(`${API_URL}/custom-stages/import-zip`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await response.json()
-      if (data.success) {
-        await fetchCustomStages()
-      } else {
-        alert(data.error || 'Import failed')
-      }
-    } catch (err) {
-      alert(`Import error: ${err.message}`)
-    } finally {
-      setCustomStageImporting(false)
-    }
-  }
-
-  // Custom stage scan ISO handler
-  const handleCustomStageScanIso = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    setCustomStageImporting(true)
-    try {
-      const response = await fetch(`${API_URL}/custom-stages/scan-iso`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isoPath: file.path })
-      })
-      const data = await response.json()
-      if (data.success) {
-        await fetchCustomStages()
-        if (data.message) {
-          alert(data.message)
-        }
-      } else {
-        alert(data.error || 'Scan failed')
-      }
-    } catch (err) {
-      alert(`Scan error: ${err.message}`)
-    } finally {
-      setCustomStageImporting(false)
-    }
-  }
+  // Custom stage zip imports and ISO scans now go through the unified
+  // ImportFab pipeline / the unified IsoScanModal.
 
   // Fetch custom characters
   const fetchCustomCharacters = async () => {
@@ -209,61 +157,8 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     }
   }
 
-  // Custom character import handler
-  const handleCustomCharacterImport = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    setCustomCharacterImporting(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const response = await fetch(`${API_URL}/custom-characters/import-zip`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await response.json()
-      if (data.success) {
-        await fetchCustomCharacters()
-      } else {
-        alert(data.error || 'Import failed')
-      }
-    } catch (err) {
-      alert(`Import error: ${err.message}`)
-    } finally {
-      setCustomCharacterImporting(false)
-    }
-  }
-
-  // Custom character scan ISO handler
-  const handleCustomCharacterScanIso = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    setCustomCharacterImporting(true)
-    try {
-      const response = await fetch(`${API_URL}/custom-characters/scan-iso`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isoPath: file.path })
-      })
-      const data = await response.json()
-      if (data.success) {
-        await fetchCustomCharacters()
-        if (data.message) {
-          alert(data.message)
-        }
-      } else {
-        alert(data.error || 'Scan failed')
-      }
-    } catch (err) {
-      alert(`Scan error: ${err.message}`)
-    } finally {
-      setCustomCharacterImporting(false)
-    }
-  }
+  // Custom character zip imports and ISO scans now go through the unified
+  // ImportFab pipeline / the unified IsoScanModal.
 
   // Drag and drop hook
   const {
@@ -296,28 +191,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // unmounts on Back. The rest of folder management (useFolderManagement) now
   // lives inside CharacterDetailView, which this state is injected into.
   const [expandedFolders, setExpandedFolders] = useState({})
-
-  // File import hook
-  const {
-    importing,
-    importMessage,
-    showSlippiDialog,
-    setShowSlippiDialog,
-    slippiDialogData,
-    setSlippiDialogData,
-    pendingFile,
-    setPendingFile,
-    showDuplicateDialog,
-    duplicateDialogData,
-    handleFileImport,
-    handleSlippiChoice,
-    handleDuplicateChoice
-  } = useFileImport({
-    mode,
-    API_URL,
-    onRefresh,
-    fetchStageVariants
-  })
 
   // Fetch bundles - defined before hooks that need it as callback
   const fetchBundles = useCallback(async () => {
@@ -448,6 +321,37 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
     setPlayMessage,
     setPlayError,
     setPlayLaunched
+  })
+
+  // Unified file import — one pipeline for everything the backend can
+  // auto-detect (costumes, stages, custom characters/stages, bundles,
+  // patches, menu mods). Fed by the floating Import button and window-wide
+  // drag-and-drop; refreshes whichever vault list each import lands in.
+  // (Declared after the xdelta/bundle hooks so their fetchers exist.)
+  const {
+    importing,
+    importMessage,
+    showSlippiDialog,
+    setShowSlippiDialog,
+    slippiDialogData,
+    setSlippiDialogData,
+    pendingFile,
+    setPendingFile,
+    showDuplicateDialog,
+    duplicateDialogData,
+    handleFileImport,
+    handleSlippiChoice,
+    handleDuplicateChoice
+  } = useFileImport({
+    API_URL,
+    refreshers: {
+      metadata: onRefresh,
+      stageVariants: fetchStageVariants,
+      customCharacters: fetchCustomCharacters,
+      customStages: fetchCustomStages,
+      patches: fetchXdeltaPatches,
+      bundles: fetchBundles
+    }
   })
 
   // Ref for setEditingItem - used by CSP manager callback (initialized after useEditModal)
@@ -1062,19 +966,83 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
 
 
+  // The one import affordance — floating button (bottom-right) + drop-anywhere
+  // overlay. Rendered in EVERY view of the vault; the sub-views below return
+  // early, so each includes these elements. The slippi/duplicate dialogs ride
+  // along for views that don't already render their own instance.
+  // ISO/GCM files split off into the ISO scan modal (Electron exposes the
+  // local path on File objects); everything else goes to /import/file.
+  const handleImportOrScan = (files) => {
+    const isIso = (f) => /\.(iso|gcm)$/i.test(f.name)
+    const isos = files.filter(isIso)
+    const rest = files.filter(f => !isIso(f))
+    if (isos.length) {
+      const paths = isos.map(f => f.path).filter(Boolean)
+      if (paths.length) {
+        setScanInitialPaths(paths)
+        setShowIsoScanModal(true)
+      }
+    }
+    if (rest.length) handleFileImport(rest)
+  }
+
+  const importFab = (
+    <>
+      <ImportFab
+        importing={importing}
+        importMessage={importMessage}
+        onImportFiles={handleImportOrScan}
+      />
+      {showIsoScanModal && (
+        <IsoScanModal
+          initialIsoPaths={scanInitialPaths}
+          initialTargets={scanInitialTargets}
+          onClose={() => {
+            setShowIsoScanModal(false)
+            setScanInitialPaths([])
+            setScanInitialTargets(null)
+          }}
+          onRefresh={onRefresh}
+          onCustomCharactersChanged={fetchCustomCharacters}
+          onCustomStagesChanged={fetchCustomStages}
+        />
+      )}
+    </>
+  )
+  const importSlippiDialog = (
+    <SlippiSafetyDialog
+      show={showSlippiDialog}
+      data={slippiDialogData}
+      onChoice={handleSlippiChoice}
+      isRetest={false}
+    />
+  )
+  const importDuplicateDialog = (
+    <DuplicateImportDialog
+      show={showDuplicateDialog}
+      data={duplicateDialogData}
+      onChoice={handleDuplicateChoice}
+    />
+  )
+
   // If a custom character is selected, show its detail view
   if (selectedCustomCharacter) {
     return (
-      <CustomCharacterDetailView
-        character={selectedCustomCharacter}
-        onBack={() => setSelectedCustomCharacter(null)}
-        onDelete={() => { setSelectedCustomCharacter(null); fetchCustomCharacters(); }}
-        onRename={(updated) => {
-          setSelectedCustomCharacter(updated)
-          fetchCustomCharacters()
-        }}
-        API_URL={API_URL}
-      />
+      <>
+        <CustomCharacterDetailView
+          character={selectedCustomCharacter}
+          onBack={() => setSelectedCustomCharacter(null)}
+          onDelete={() => { setSelectedCustomCharacter(null); fetchCustomCharacters(); }}
+          onRename={(updated) => {
+            setSelectedCustomCharacter(updated)
+            fetchCustomCharacters()
+          }}
+          API_URL={API_URL}
+        />
+        {importFab}
+        {importSlippiDialog}
+        {importDuplicateDialog}
+      </>
     )
   }
 
@@ -1112,10 +1080,15 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectCharacter={setSelectedCustomCharacter}
           onBack={() => setShowCustomCharacters(false)}
-          onImportZip={handleCustomCharacterImport}
-          onScanIso={handleCustomCharacterScanIso}
-          importing={customCharacterImporting}
+          onScanIso={() => {
+            setScanInitialTargets({ customCharacters: true })
+            setShowIsoScanModal(true)
+          }}
+          importing={importing}
         />
+        {importFab}
+        {importSlippiDialog}
+        {importDuplicateDialog}
       </div>
     )
   }
@@ -1123,16 +1096,21 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // If a custom stage is selected, show its detail view
   if (selectedCustomStage) {
     return (
-      <CustomStageDetailView
-        stage={selectedCustomStage}
-        onBack={() => setSelectedCustomStage(null)}
-        onDelete={() => { setSelectedCustomStage(null); fetchCustomStages(); }}
-        onRename={(updatedStage) => {
-          setSelectedCustomStage(updatedStage)
-          fetchCustomStages()
-        }}
-        API_URL={API_URL}
-      />
+      <>
+        <CustomStageDetailView
+          stage={selectedCustomStage}
+          onBack={() => setSelectedCustomStage(null)}
+          onDelete={() => { setSelectedCustomStage(null); fetchCustomStages(); }}
+          onRename={(updatedStage) => {
+            setSelectedCustomStage(updatedStage)
+            fetchCustomStages()
+          }}
+          API_URL={API_URL}
+        />
+        {importFab}
+        {importSlippiDialog}
+        {importDuplicateDialog}
+      </>
     )
   }
 
@@ -1170,11 +1148,16 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectStage={setSelectedCustomStage}
           onBack={() => setShowCustomStages(false)}
-          onImportZip={handleCustomStageImport}
-          onScanIso={handleCustomStageScanIso}
-          importing={customStageImporting}
+          onScanIso={() => {
+            setScanInitialTargets({ customStages: true })
+            setShowIsoScanModal(true)
+          }}
+          importing={importing}
           onRefresh={fetchCustomStages}
         />
+        {importFab}
+        {importSlippiDialog}
+        {importDuplicateDialog}
       </div>
     )
   }
@@ -1182,6 +1165,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
   // If a stage is selected, show its variants
   if (selectedStage) {
     return (
+      <>
       <StageDetailView
         selectedStage={selectedStage}
         stageVariants={stageVariants}
@@ -1268,12 +1252,16 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         // API
         API_URL={API_URL}
       />
+      {importFab}
+      {importDuplicateDialog}
+      </>
     )
   }
 
   // If a character is selected, show their skins
   if (selectedCharacter) {
     return (
+      <>
       <CharacterDetailView
         selectedCharacter={selectedCharacter}
         allCharacters={allCharacters}
@@ -1379,6 +1367,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         onCostumesUpdated={handleCostumeAssetsUpdated}
         API_URL={API_URL}
       />
+      {importFab}
+      {importDuplicateDialog}
+      </>
     )
   }
 
@@ -1415,19 +1406,9 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
 
       <ImportToolbar
         mode={mode}
-        importing={importing}
-        importMessage={importMessage}
-        onFileImport={handleFileImport}
         onShowXdeltaImportModal={() => setShowXdeltaImportModal(true)}
-        onShowIsoScanModal={() => setShowIsoScanModal(true)}
       />
-
-      {showIsoScanModal && (
-        <IsoScanModal
-          onClose={() => setShowIsoScanModal(false)}
-          onRefresh={onRefresh}
-        />
-      )}
+      {importFab}
 
       {mode === 'characters' ? (
         <CharactersGrid

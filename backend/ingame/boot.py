@@ -313,6 +313,34 @@ def dolphin_running():
     return pids
 
 
+DOLPHIN_OPEN_MSG = ("Close the other Dolphin window to continue — an "
+                    "already-open Slippi Dolphin steals input focus from the "
+                    "throwaway one this run boots, so it would just sit on "
+                    "the menu.")
+
+
+def wait_until_no_dolphin(emit=None, log=lambda m: None, timeout=300.0,
+                          percentage=5):
+    """Block until the user's own Dolphin window(s) close, telling them why
+    via the progress channel. Returns True when clear to boot; False when
+    the timeout expires with Dolphin still open. `emit` is the usual
+    (stage, percentage, message) progress emitter."""
+    pids = dolphin_running()
+    if not pids:
+        return True
+    log(f"waiting for the user's Dolphin to close (pids {pids})")
+    if emit:
+        emit("waiting", percentage, DOLPHIN_OPEN_MSG)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not dolphin_running():
+            log("the other Dolphin closed; continuing")
+            return True
+        time.sleep(1.0)
+    log("timed out waiting for the other Dolphin to close")
+    return False
+
+
 def pick_pipe_index(max_index=8):
     """Pick a slippibot<N> pipe index NOT currently in use, so we never collide
     with a Slippi instance the user already has open."""

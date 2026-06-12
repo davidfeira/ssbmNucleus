@@ -10,6 +10,7 @@ import { useEffect, useMemo } from 'react'
 import { API_URL } from '../../config'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { useBulkStageCapture } from '../../hooks/useBulkStageCapture'
+import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
 
 const STAGE_ORDER = ['Battlefield', 'Final Destination', 'Dreamland', "Yoshi's Story",
   'Pokemon Stadium', 'Fountain of Dreams']
@@ -155,6 +156,7 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
               <div style={{ width: `${progress?.percentage || 0}%`, height: '100%',
                 background: 'var(--color-accent, #6c8cff)', transition: 'width 0.3s' }} />
             </div>
+            <DolphinEmbedPanel active />
             <p style={{ marginTop: '0.5rem', color: 'var(--color-text-muted, #999)', fontSize: '0.8rem' }}>
               {progress?.percentage || 0}% — your Slippi setup is untouched
             </p>

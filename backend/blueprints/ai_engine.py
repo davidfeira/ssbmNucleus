@@ -9,7 +9,8 @@ POST /api/mex/ai-engine/install     {variant?: 'cuda'|'cpu'}  (events: aiengine_
 GET  /api/mex/ai-engine/routing
 POST /api/mex/ai-engine/routing     {standard?: {provider,model}|null, strong?: ...}
 POST /api/mex/ai-engine/resolve     {tasks: [{kind, tier?}], clientHasKey?}
-GET  /api/mex/ai-engine/stats?days=90
+GET  /api/mex/ai-engine/stats       all-time (?days=N for a window)
+POST /api/mex/ai-engine/stats/reset manual ledger reset (-> ai_runs.jsonl.bak)
 """
 import json
 import logging
@@ -286,25 +287,65 @@ RECOMMENDED_PLANNER = {'name': 'gemma3:4b', 'sizeGb': 3.3,
 _planner_pulls = {}     # model name -> True while a pull thread runs
 
 
+# The Ollama probe is the SLOW part of /planners (reachability timeouts, and
+# possibly spawning `ollama serve` + waiting for it) — cache it briefly so
+# the Settings card and the studio modals don't re-pay it on every open.
+_ollama_probe = {'ts': 0.0, 'base': None, 'models': []}
+_ollama_probe_lock = threading.Lock()
+OLLAMA_PROBE_TTL = 5.0
+
+
+def _probe_ollama():
+    import time as _time
+
+    import requests as _rq
+    from aiengine import ollama_runtime
+    with _ollama_probe_lock:
+        if _time.time() - _ollama_probe['ts'] < OLLAMA_PROBE_TTL:
+            return _ollama_probe['base'], _ollama_probe['models']
+        base = ollama_runtime.effective_url()
+        models = []
+        if base:
+            try:
+                tags = _rq.get(f'{base}/api/tags', timeout=3).json()
+                models = sorted(({'name': m['name'],
+                                  'sizeBytes': m.get('size', 0)}
+                                 for m in tags.get('models', [])),
+                                key=lambda m: m['name'])
+            except Exception:
+                base = None
+        _ollama_probe.update(ts=_time.time(), base=base, models=models)
+        return base, models
+
+
+def _invalidate_ollama_probe():
+    _ollama_probe['ts'] = 0.0
+
+
+def warm_ollama_probe():
+    """Fire-and-forget startup warm-up: bring the bundled Ollama up (if
+    installed) and prime the probe cache, so the first Settings/studio open
+    isn't the one that pays for the server spawn."""
+    threading.Thread(target=lambda: _safe_probe(), daemon=True).start()
+
+
+def _safe_probe():
+    try:
+        _probe_ollama()
+    except Exception:
+        logger.debug('ollama warm-up probe failed', exc_info=True)
+
+
 @ai_engine_bp.route('/api/mex/ai-engine/planners', methods=['GET'])
 def local_planners():
     """Local planner LLMs via Ollama: server reachability (user install OR
     the bundled portable runtime, auto-started when installed), installed
     models (with sizes), and the recommended model to pull. Planner ids are
     'ollama:<name>'."""
-    import requests as _rq
     from aiengine import ollama_runtime
-    base = ollama_runtime.effective_url()
-    models = []
-    if base:
-        try:
-            tags = _rq.get(f'{base}/api/tags', timeout=3).json()
-            models = sorted(({'name': m['name'], 'sizeBytes': m.get('size', 0),
-                              'pulling': bool(_planner_pulls.get(m['name']))}
-                             for m in tags.get('models', [])),
-                            key=lambda m: m['name'])
-        except Exception:
-            base = None
+    base, probed = _probe_ollama()
+    models = [{**m, 'pulling': bool(_planner_pulls.get(m['name']))}
+              for m in probed]
     # measured planner speeds/usage from the telemetry ledger — keys are the
     # planner ids ('ollama:gemma3:4b', 'openai/gpt-5-mini')
     stats = {m: s for m, s in telemetry.model_stats().items()
@@ -373,6 +414,7 @@ def pull_planner():
                         'completed': tick.get('completed'),
                         'total': tick.get('total'),
                     })
+            _invalidate_ollama_probe()   # the new model must show immediately
             socketio.emit('aiengine_planner_pull_complete', {'model': name})
         except Exception as e:
             logger.error(f'[ai-engine] planner pull failed: {e}')
@@ -403,13 +445,24 @@ def delete_planner():
             return jsonify({'success': False, 'error': r.text[:200]}), 500
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+    _invalidate_ollama_probe()
     return jsonify({'success': True})
 
 
 @ai_engine_bp.route('/api/mex/ai-engine/stats', methods=['GET'])
 def generation_stats():
+    """All-time stats by default; ?days=N for an explicit window."""
+    days = None
     try:
-        days = int(request.args.get('days', 90))
+        if request.args.get('days'):
+            days = int(request.args['days'])
     except ValueError:
-        days = 90
+        days = None
     return jsonify({'success': True, **telemetry.aggregate(days)})
+
+
+@ai_engine_bp.route('/api/mex/ai-engine/stats/reset', methods=['POST'])
+def reset_generation_stats():
+    """Manual reset: the ledger moves aside to ai_runs.jsonl.bak."""
+    telemetry.reset()
+    return jsonify({'success': True})

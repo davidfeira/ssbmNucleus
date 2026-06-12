@@ -1,13 +1,21 @@
 /**
- * IsoScanModal - Rip new costume skins from one or more vanilla / modded ISOs.
+ * IsoScanModal - Rip new content out of one or more vanilla / modded ISOs.
+ *
+ * Three scan targets, chosen by checkbox:
+ *   - Character skins: wit-based extraction + hash filtering, live SocketIO
+ *     progress, per-character CSP grid with checkboxes
+ *   - Custom characters / Custom stages: m-ex extraction via a temp MexCLI
+ *     project per ISO (synchronous, a minute or two per ISO); imported
+ *     straight into the vault with a summary shown afterwards
  *
  * Flow:
- *   idle      → user picks ISO files via native dialog, then "Start scan"
- *   scanning  → live progress over SocketIO (extracting / hashing / slippi / csp)
- *   results   → per-character CSP grid with checkboxes + stats bar
- *   importing → loader while importing selected DATs via the unified import path
- *   done      → success summary, refresh storage on close
- *   error     → error display, allow retry
+ *   idle        → pick ISO files + scan targets, then "Start scan"
+ *   scanning    → custom extraction passes first, then the skins job
+ *   results     → skins CSP grid (+ custom extraction summary) → import
+ *   custom-done → summary when only custom targets were scanned
+ *   importing   → loader while importing selected DATs
+ *   done        → success summary, refresh storage on close
+ *   error       → error display, allow retry
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +27,7 @@ import './IsoScanModal.css'
 
 const PHASE_LABEL = {
   pending: 'Preparing…',
+  custom: 'Extracting m-ex content',
   extracting: 'Extracting ISOs',
   scanning: 'Hash filtering',
   slippi: 'Slippi safety check',
@@ -28,9 +37,30 @@ const PHASE_LABEL = {
   error: 'Error',
 }
 
-export default function IsoScanModal({ onClose, onRefresh }) {
-  const [phase, setPhase] = useState('idle') // idle | scanning | results | importing | done | error
-  const [isoPaths, setIsoPaths] = useState([])
+const TARGET_DEFAULTS = { skins: true, customCharacters: false, customStages: false }
+
+export default function IsoScanModal({
+  onClose,
+  onRefresh,
+  initialIsoPaths,
+  initialTargets,
+  onCustomCharactersChanged,
+  onCustomStagesChanged
+}) {
+  const [phase, setPhase] = useState('idle') // idle | scanning | results | custom-done | importing | done | error
+  // Seeded when the unified Import button / drag-and-drop receives .iso files
+  const [isoPaths, setIsoPaths] = useState(() => initialIsoPaths || [])
+  // Which scan targets to run; remembered across sessions. An explicit
+  // initialTargets (e.g. the custom grids' Scan ISO buttons) wins.
+  const [targets, setTargets] = useState(() => {
+    if (initialTargets) return { ...TARGET_DEFAULTS, skins: false, ...initialTargets }
+    try {
+      return { ...TARGET_DEFAULTS, ...JSON.parse(localStorage.getItem('iso_scan_targets') || '{}') }
+    } catch {
+      return TARGET_DEFAULTS
+    }
+  })
+  const [customSummary, setCustomSummary] = useState(null)
   const [witAvailable, setWitAvailable] = useState(null)
   const [jobId, setJobId] = useState(null)
   const [progress, setProgress] = useState({ status: 'pending', percent: 0, message: '' })
@@ -120,12 +150,75 @@ export default function IsoScanModal({ onClose, onRefresh }) {
     setIsoPaths(isoPaths.filter(p => p !== path))
   }
 
+  const anyTarget = targets.skins || targets.customCharacters || targets.customStages
+
+  const toggleTarget = (key) => {
+    const next = { ...targets, [key]: !targets[key] }
+    setTargets(next)
+    try { localStorage.setItem('iso_scan_targets', JSON.stringify(next)) } catch { /* ignore */ }
+  }
+
   const startScan = async () => {
-    if (!isoPaths.length || !witAvailable) return
+    if (!isoPaths.length || !anyTarget) return
+    if (targets.skins && !witAvailable) return
     playSound('start')
     setPhase('scanning')
     setProgress({ status: 'pending', percent: 0, message: 'Starting…' })
     setErrorMsg(null)
+    setCustomSummary(null)
+
+    // Custom m-ex extraction passes run first. Each builds a temp MexCLI
+    // project per ISO, so these are synchronous and take a minute or two
+    // per ISO per target.
+    const customTargets = [
+      targets.customCharacters && ['characters', 'custom-characters', 'custom characters'],
+      targets.customStages && ['stages', 'custom-stages', 'custom stages'],
+    ].filter(Boolean)
+
+    if (customTargets.length) {
+      const summary = {}
+      const totalSteps = customTargets.length * isoPaths.length
+      let step = 0
+      for (const [key, route, label] of customTargets) {
+        const acc = { imported: [], skipped: [], errors: [] }
+        for (const isoPath of isoPaths) {
+          const isoName = isoPath.split(/[\\/]/).pop()
+          setProgress({
+            status: 'custom',
+            percent: Math.round((step / totalSteps) * 100),
+            message: `Extracting ${label} from ${isoName}…`,
+          })
+          try {
+            const res = await fetch(`${API_URL}/${route}/scan-iso`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ isoPath }),
+            })
+            const data = await res.json()
+            if (data.success) {
+              acc.imported.push(...(data.imported || []))
+              acc.skipped.push(...(data.skipped || []))
+            } else {
+              acc.errors.push(`${isoName}: ${data.error || 'failed'}`)
+            }
+          } catch (e) {
+            acc.errors.push(`${isoName}: ${e.message}`)
+          }
+          step += 1
+        }
+        summary[key] = acc
+      }
+      setCustomSummary(summary)
+      if (summary.characters?.imported.length) onCustomCharactersChanged?.()
+      if (summary.stages?.imported.length) onCustomStagesChanged?.()
+    }
+
+    if (!targets.skins) {
+      setPhase('custom-done')
+      playSound('newSkin')
+      return
+    }
+
     try {
       const res = await fetch(`${API_URL}/iso-scan/start`, {
         method: 'POST',
@@ -225,6 +318,27 @@ export default function IsoScanModal({ onClose, onRefresh }) {
   const totalNew = Object.values(characters).reduce((n, arr) => n + arr.length, 0)
   const selectedCount = selected.size
 
+  const customSummaryBlock = customSummary && (
+    <div className="iso-scan-custom-summary">
+      {[['characters', 'Custom characters'], ['stages', 'Custom stages']].map(([key, label]) => {
+        const s = customSummary[key]
+        if (!s) return null
+        return (
+          <div key={key} className="iso-scan-custom-summary-row">
+            <strong>{label}:</strong>{' '}
+            {s.imported.length
+              ? `imported ${s.imported.join(', ')}`
+              : 'nothing new found'}
+            {s.skipped.length > 0 && ` · ${s.skipped.length} already in vault`}
+            {s.errors.length > 0 && (
+              <span className="iso-scan-custom-summary-error"> · {s.errors.join(' · ')}</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
   // ─── Render ───────────────────────────────────────────────
 
   return (
@@ -232,9 +346,9 @@ export default function IsoScanModal({ onClose, onRefresh }) {
       <div className="edit-modal-content iso-scan-modal" onClick={(e) => e.stopPropagation()}>
         {phase === 'idle' && (
           <>
-            <h2>Scan ISOs for new skins</h2>
+            <h2>Scan ISOs</h2>
 
-            {witAvailable === false && (
+            {witAvailable === false && targets.skins && (
               <div className="iso-scan-warning">
                 <strong>wit.exe missing.</strong>
                 <p>
@@ -246,10 +360,38 @@ export default function IsoScanModal({ onClose, onRefresh }) {
             )}
 
             <p className="iso-scan-help">
-              Pick one or more <code>.iso</code> files. Nucleus extracts each, compares every
-              costume file against your vault + vanilla assets, and shows you only the new
-              ones with thumbnails so you can pick which to keep.
+              Pick one or more <code>.iso</code> files and what to scan them for.
+              Skins are compared against your vault + vanilla assets and shown as
+              thumbnails so you pick which to keep; custom m-ex characters and
+              stages are extracted straight into the vault.
             </p>
+
+            <div className="iso-scan-targets">
+              <label onMouseEnter={playHoverSound}>
+                <input
+                  type="checkbox"
+                  checked={targets.skins}
+                  onChange={() => { playSound('boop'); toggleTarget('skins') }}
+                />
+                Character skins
+              </label>
+              <label onMouseEnter={playHoverSound} title="Extract added m-ex fighters (slower: builds a temp project per ISO)">
+                <input
+                  type="checkbox"
+                  checked={targets.customCharacters}
+                  onChange={() => { playSound('boop'); toggleTarget('customCharacters') }}
+                />
+                Custom characters
+              </label>
+              <label onMouseEnter={playHoverSound} title="Extract added m-ex stages (slower: builds a temp project per ISO)">
+                <input
+                  type="checkbox"
+                  checked={targets.customStages}
+                  onChange={() => { playSound('boop'); toggleTarget('customStages') }}
+                />
+                Custom stages
+              </label>
+            </div>
 
             <div className="iso-scan-file-list">
               {isoPaths.length === 0 && (
@@ -285,7 +427,7 @@ export default function IsoScanModal({ onClose, onRefresh }) {
                 className="btn-save"
                 onMouseEnter={playHoverSound}
                 onClick={startScan}
-                disabled={!isoPaths.length || !witAvailable}
+                disabled={!isoPaths.length || !anyTarget || (targets.skins && !witAvailable)}
               >
                 Start scan ({isoPaths.length})
               </button>
@@ -334,9 +476,22 @@ export default function IsoScanModal({ onClose, onRefresh }) {
           </>
         )}
 
+        {phase === 'custom-done' && (
+          <>
+            <h2 style={{ color: 'var(--color-success)' }}>Extraction complete</h2>
+            {customSummaryBlock}
+            <div className="edit-buttons">
+              <button className="btn-save" onMouseEnter={playHoverSound} onClick={handleClose}>
+                Done
+              </button>
+            </div>
+          </>
+        )}
+
         {phase === 'results' && (
           <>
             <h2>Scan complete — {totalNew} new skin{totalNew === 1 ? '' : 's'}</h2>
+            {customSummaryBlock}
 
             <div className="iso-scan-toolbar">
               <button className="iso-scan-mini" onMouseEnter={playHoverSound}
@@ -431,6 +586,9 @@ export default function IsoScanModal({ onClose, onRefresh }) {
                 <strong>{stats.dupes}</strong> dupes&nbsp;·&nbsp;
                 <strong>{stats.slippi_matched}</strong> slippi-matched&nbsp;·&nbsp;
                 <strong>{stats.data_mod}</strong> data&nbsp;mods
+                {stats.custom_fighter > 0 && (
+                  <>&nbsp;·&nbsp;<strong>{stats.custom_fighter}</strong> custom-fighter&nbsp;files</>
+                )}
               </div>
             )}
 

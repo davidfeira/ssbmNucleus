@@ -1,21 +1,33 @@
 /**
- * useFileImport Hook
+ * useFileImport Hook — the one import pipeline for the whole vault.
  *
- * Manages file import functionality including:
- * - File upload and detection
- * - Slippi safety dialog handling
- * - Duplicate skin dialog handling
- * - Import success/error messages
+ * Feeds files (from the floating Import button, drag-and-drop, or any legacy
+ * input) to the backend's unified /import/file endpoint, which auto-detects
+ * costumes, stages, custom characters, custom stages (incl. classic stage.yml
+ * packages), bundles, xdelta patches, and menu mods. Handles:
+ * - Slippi safety dialog (single file) / auto-fix (batch)
+ * - Duplicate dialog (single file) / auto-skip (batch)
+ * - type-aware refresh of whichever vault list the import landed in
+ * - import success/error messages (backend messages are user-ready)
  */
 
 import { useState } from 'react'
 import { playSound } from '../utils/sounds'
 
+// What each successful import type means for UI refresh + summary counting.
+const TYPE_LABELS = {
+  character: 'costume(s)',
+  stage: 'stage variant(s)',
+  custom_character: 'custom character(s)',
+  custom_stage: 'custom stage(s)',
+  bundle: 'bundle(s)',
+  patch: 'patch(es)',
+  menu_mod: 'menu mod(s)',
+}
+
 export function useFileImport({
-  mode,
   API_URL,
-  onRefresh,
-  fetchStageVariants
+  refreshers = {}
 }) {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
@@ -45,7 +57,46 @@ export function useFileImport({
     return await response.json()
   }
 
-  const handleFileImport = async (event, slippiAction = null) => {
+  // Refresh whichever lists the imported types touch (each at most once).
+  const refreshForTypes = async (types) => {
+    await refreshers.metadata?.()
+    if (types.has('stage')) await refreshers.stageVariants?.()
+    if (types.has('custom_character')) await refreshers.customCharacters?.()
+    if (types.has('custom_stage')) await refreshers.customStages?.()
+    if (types.has('patch')) await refreshers.patches?.()
+    if (types.has('bundle')) await refreshers.bundles?.()
+  }
+
+  const countItems = (data) =>
+    data.imported_count
+    ?? (data.patches?.length || data.mods?.length)
+    ?? 1
+
+  const successMessage = (data) => {
+    // The backend's messages are user-ready ("Imported custom stage: X
+    // (converted from classic m-ex format)", "— capturing screenshot in the
+    // background", ...) so prefer them.
+    if (data.message) return `✓ ${data.message}`
+    const label = TYPE_LABELS[data.type] || 'item(s)'
+    return `✓ Imported ${countItems(data)} ${label}`
+  }
+
+  const finishSoon = (delay = 3000) => {
+    setTimeout(() => {
+      setImporting(false)
+      setImportMessage('')
+    }, delay)
+  }
+
+  // Accepts a DOM change event, a FileList, or an array of Files.
+  const normalizeFiles = (eventOrFiles) => {
+    if (!eventOrFiles) return []
+    if (eventOrFiles.target?.files) return Array.from(eventOrFiles.target.files)
+    if (typeof eventOrFiles.length === 'number') return Array.from(eventOrFiles)
+    return []
+  }
+
+  const handleFileImport = async (eventOrFiles, slippiAction = null) => {
     // Handle slippi action continuation (single file)
     if (slippiAction && pendingFile) {
       setImporting(true)
@@ -54,14 +105,8 @@ export function useFileImport({
         const data = await importSingleFile(pendingFile, slippiAction)
         if (data.success) {
           playSound(data.camera_sound ? 'camera' : 'newSkin')
-          const typeMsg = data.type === 'character'
-            ? `${data.imported_count} costume(s)`
-            : `${data.stage} stage`
-          setImportMessage(`✓ Imported ${typeMsg}!`)
-          await onRefresh()
-          if (data.type === 'stage' && mode === 'stages') {
-            await fetchStageVariants()
-          }
+          setImportMessage(successMessage(data))
+          await refreshForTypes(new Set([data.type]))
         } else {
           playSound('error')
           setImportMessage(`✗ Import failed: ${data.error}`)
@@ -71,22 +116,22 @@ export function useFileImport({
         setImportMessage(`✗ Error: ${err.message}`)
       }
       setPendingFile(null)
-      setTimeout(() => {
-        setImporting(false)
-        setImportMessage('')
-      }, 2000)
+      finishSoon(2000)
       return
     }
 
-    const files = Array.from(event.target.files || [])
+    const files = normalizeFiles(eventOrFiles)
     if (files.length === 0) return
 
     setImporting(true)
     let successCount = 0
     let errorCount = 0
-    let totalCostumes = 0
+    let totalItems = 0
     let skippedCount = 0
     let cameraSoundCount = 0
+    let lastError = null
+    let lastSuccess = null
+    const importedTypes = new Set()
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -103,19 +148,20 @@ export function useFileImport({
             setShowSlippiDialog(true)
             setImporting(false)
             setImportMessage('')
-            if (event && event.target) event.target.value = null
+            if (eventOrFiles?.target) eventOrFiles.target.value = null
             return
           } else {
             // For batch import, auto-fix slippi issues
             const fixData = await importSingleFile(file, 'fix')
             if (fixData.success) {
               successCount++
-              totalCostumes += fixData.imported_count || 1
-              if (fixData.camera_sound) {
-                cameraSoundCount++
-              }
+              totalItems += countItems(fixData)
+              importedTypes.add(fixData.type)
+              lastSuccess = fixData
+              if (fixData.camera_sound) cameraSoundCount++
             } else {
               errorCount++
+              lastError = fixData.error
             }
             continue
           }
@@ -129,7 +175,7 @@ export function useFileImport({
             setShowDuplicateDialog(true)
             setImporting(false)
             setImportMessage('')
-            if (event && event.target) event.target.value = null
+            if (eventOrFiles?.target) eventOrFiles.target.value = null
             return
           } else {
             // For batch import, auto-skip duplicates
@@ -140,23 +186,21 @@ export function useFileImport({
 
         if (data.success) {
           successCount++
-          totalCostumes += data.imported_count || 1
-          if (data.camera_sound) {
-            cameraSoundCount++
-          }
-          if (data.type === 'stage' && mode === 'stages') {
-            await fetchStageVariants()
-          }
+          totalItems += countItems(data)
+          importedTypes.add(data.type)
+          lastSuccess = data
+          if (data.camera_sound) cameraSoundCount++
         } else {
           errorCount++
+          lastError = data.error
         }
       } catch (err) {
         errorCount++
+        lastError = err.message
       }
     }
 
-    // Final refresh and summary
-    await onRefresh()
+    await refreshForTypes(importedTypes)
 
     if (successCount > 0) {
       playSound(cameraSoundCount > 0 ? 'camera' : 'newSkin')
@@ -165,21 +209,31 @@ export function useFileImport({
       playSound('error')
     }
 
-    const skippedPart = skippedCount > 0 ? `, ${skippedCount} skipped, already owned` : ''
-    const summary = errorCount > 0
-      ? `✓ Imported ${totalCostumes} costume(s) from ${successCount} files (${errorCount} failed${skippedPart})`
-      : skippedCount > 0
-        ? `✓ Imported ${totalCostumes} costume(s) from ${successCount} files (${skippedCount} skipped, already owned)`
-        : `✓ Imported ${totalCostumes} costume(s) from ${successCount} files!`
+    // Summary. Single file: the backend message (or specific error) verbatim.
+    // Batch: counts by what actually happened.
+    let summary
+    if (files.length === 1) {
+      summary = successCount
+        ? successMessage(lastSuccess)
+        : skippedCount
+          ? 'Skipped (already owned)'
+          : `✗ ${lastError || 'Import failed'}`
+    } else {
+      const typeBreakdown = [...importedTypes]
+        .map(t => TYPE_LABELS[t] || t).join(', ')
+      const parts = [`✓ Imported ${totalItems} item(s) from ${successCount} file(s)`]
+      if (typeBreakdown) parts.push(`(${typeBreakdown})`)
+      if (skippedCount) parts.push(`· ${skippedCount} skipped, already owned`)
+      if (errorCount) parts.push(`· ${errorCount} failed${lastError ? `: ${lastError}` : ''}`)
+      summary = successCount === 0 && errorCount > 0
+        ? `✗ ${errorCount} failed${lastError ? `: ${lastError}` : ''}`
+        : parts.join(' ')
+    }
     setImportMessage(summary)
-
-    setTimeout(() => {
-      setImporting(false)
-      setImportMessage('')
-    }, 3000)
+    finishSoon(errorCount > 0 ? 6000 : 3500)
 
     // Reset file input
-    if (event && event.target) event.target.value = null
+    if (eventOrFiles?.target) eventOrFiles.target.value = null
   }
 
   const handleSlippiChoice = (choice) => {
@@ -205,14 +259,8 @@ export function useFileImport({
         const data = await importSingleFile(file, null, 'import_anyway')
         if (data.success) {
           playSound(data.camera_sound ? 'camera' : 'newSkin')
-          const typeMsg = data.type === 'character'
-            ? `${data.imported_count} costume(s)`
-            : `${data.stage} stage`
-          setImportMessage(`✓ Imported ${typeMsg}!`)
-          await onRefresh()
-          if (data.type === 'stage' && mode === 'stages') {
-            await fetchStageVariants()
-          }
+          setImportMessage(successMessage(data))
+          await refreshForTypes(new Set([data.type]))
         } else {
           playSound('error')
           setImportMessage(`✗ Import failed: ${data.error}`)
@@ -221,10 +269,7 @@ export function useFileImport({
         playSound('error')
         setImportMessage(`✗ Error: ${err.message}`)
       }
-      setTimeout(() => {
-        setImporting(false)
-        setImportMessage('')
-      }, 2000)
+      finishSoon(2000)
     } else {
       // skip
       setImportMessage('Skipped (already owned)')

@@ -29,8 +29,8 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from blueprints.skin_lab_ai import (AI_LAB_ENABLED, DEFAULT_PLANNER,
-                                    _call_planner, _extract_json,
-                                    is_local_planner)
+                                    _call_planner, _clean_step, _extract_json,
+                                    _trim_assessment, is_local_planner)
 from core.config import STORAGE_PATH
 
 logger = logging.getLogger(__name__)
@@ -80,14 +80,49 @@ Critique it against the theme. Look for: regions that still look STOCK,
 surfaces whose color clashes with the theme, muddy/crusty textures, and
 readability problems (the playfield must stay distinct from the background).
 
-Regions you can target:
+Regions you can target (use these EXACT names):
 {region_summary}
 
-If it already reads well, reply {{"assessment": "<one sentence>", "steps": []}}.
-Otherwise reply with up to 3 FIX steps using the same ops (composite /
-tint / hue-shift / material-tint) as before.
+Decide a verdict:
+- "good" -- the result reads well as-is. steps MUST be [].
+- "needs_fixes" -- you see problems. You MUST then include a fix step for
+  EVERY problem you name in the assessment (up to 3 steps). Never name a
+  problem without a corresponding fix step.
 
-Reply with ONLY JSON: {{"assessment": "<one sentence>", "steps": [...]}}"""
+Fix steps use the same ops (composite / tint / hue-shift / material-tint)
+as before.
+
+Reply with ONLY JSON:
+{{"verdict": "good" | "needs_fixes", "assessment": "<one sentence>",
+  "steps": [...]}}"""
+
+
+def _validate_stage_review(review, regions, tints_used):
+    """Review fixes with DROP REASONS (a silently discarded fix turns the
+    review into commentary). Returns (fixes, fix_tints, dropped)."""
+    raw = review.get('steps') if isinstance(review, dict) else None
+    if not isinstance(raw, list):
+        return [], [], ['the review reply had no steps list']
+    fixes, tints, dropped, composites = [], [], [], 0
+    for s in raw[:3]:
+        if isinstance(s, dict) and s.get('op') == 'material-tint':
+            if not s.get('hueShift'):
+                dropped.append('material-tint had no hueShift')
+            elif tints_used + len(tints) >= 1:
+                dropped.append('material-tint was over the 1-tint limit')
+            else:
+                tints.append({'hueShift': float(s['hueShift'])})
+            continue
+        step, reason = _clean_step(s, regions, composites)
+        if step is None:
+            dropped.append(reason)
+            continue
+        if step['op'] == 'composite':
+            composites += 1
+        fixes.append(step)
+    if len(raw) > 3:
+        dropped.append(f'{len(raw) - 3} step(s) over the 3-fix limit')
+    return fixes, tints, dropped
 
 
 def _validate_stage(plan, regions):
@@ -150,9 +185,13 @@ def stage_ai_create():
     code = (data.get('stageCode') or '').strip()
     theme = (data.get('theme') or '').strip()
     model = (data.get('plannerModel') or DEFAULT_PLANNER).strip()
-    # empty provider/model = 'Auto': the tier resolver picks per task
+    # empty provider/model = 'Auto': the tier resolver picks per task.
+    # Materials and backdrops are picked SEPARATELY (the UI has a dropdown
+    # for each); imageProvider/imageModel = materials, backdrop* = backgrounds.
     image_provider = (data.get('imageProvider') or '').strip().lower()
     image_model = (data.get('imageModel') or '').strip() or None
+    backdrop_provider = (data.get('backdropProvider') or '').strip().lower()
+    backdrop_model = (data.get('backdropModel') or '').strip() or None
     review_pass = bool(data.get('reviewPass'))   # opt-in: costs another ISO + boot
     from aiengine import keystore
     key = (data.get('openrouterKey') or keystore.get_openrouter_key() or '').strip()
@@ -192,6 +231,15 @@ def stage_ai_create():
 
         work = Path(tempfile.mkdtemp(prefix='stagelab_'))
         try:
+            # an already-open Dolphin would break the preview boot later (it
+            # steals input focus) — wait for the user to close it BEFORE the
+            # planning call spends money; the progress message tells them why
+            if os.name == 'nt':
+                from ingame.boot import DOLPHIN_OPEN_MSG, wait_until_no_dolphin
+                if not wait_until_no_dolphin(emit, log=lambda m: logger.info(
+                        f'[stage-studio] {m}')):
+                    raise StageOpsError(DOLPHIN_OPEN_MSG)
+
             emit('planning', 10, f'Asking {model.split("/")[-1]} for a plan…')
             notes = rm.get('notes') or {}
             region_summary = '\n'.join(
@@ -222,17 +270,20 @@ def stage_ai_create():
             gen_log = []
 
             def gen(prompt_text, quality=False):
-                # backdrops are 'strong' tier (coherent scene work); the
-                # resolver picks the model — escalating past tile-only locals
+                # backdrops are 'strong' tier (coherent scene work); each task
+                # kind carries its own user pick — empty = the tier resolver
+                # decides (escalating past tile-only locals for scenes)
                 params = {'prompt': prompt_text, 'kind': 'stage',
                           'tier': 'strong' if quality else 'standard',
                           'openrouterKey': key}
                 if quality:
                     params['style'] = 'scene'
-                if image_model:
-                    params['model'] = image_model
-                elif image_provider:
-                    params['provider'] = image_provider
+                sel_model = backdrop_model if quality else image_model
+                sel_provider = backdrop_provider if quality else image_provider
+                if sel_model:
+                    params['model'] = sel_model
+                elif sel_provider:
+                    params['provider'] = sel_provider
                 emit('applying', None, 'Generating material…')
                 t0 = time.time()
                 path, info = _generate_material(params)
@@ -287,21 +338,37 @@ def stage_ai_create():
             # second ISO/capture verifies (costs another ~2-3 minutes).
             assessment = None
             fixes, fix_tints = [], []
+            review_info = {'ran': bool(review_pass)}
             if review_pass:
                 emit('reviewing', 75, f'{model.split("/")[-1]} is reviewing the screenshot…')
                 try:
-                    from blueprints.skin_lab_ai import _call_planner
                     reply = _call_planner(
                         model,
                         STAGE_REVIEW_PROMPT.format(theme=theme,
                                                    region_summary=region_summary),
                         key, image_jpeg=res['png'], cost_log=planner_log)
                     review = _extract_json(reply) or {}
-                    assessment = (review.get('assessment') or '')[:200] or None
-                    fixes, fix_tints, _err = _validate_stage(review, set(rm['regions']))
-                    fixes, fix_tints = fixes or [], fix_tints or []
+                    assessment = _trim_assessment(review.get('assessment'))
+                    fixes, fix_tints, dropped = _validate_stage_review(
+                        review, set(rm['regions']), len(tints))
+                    verdict = (review.get('verdict') or '').strip().lower()
+                    if verdict not in ('good', 'needs_fixes'):
+                        verdict = 'needs_fixes' if (fixes or fix_tints or dropped) \
+                            else 'good'
+                    review_info.update(verdict=verdict,
+                                       fixesApplied=len(fixes) + len(fix_tints),
+                                       fixesDropped=dropped)
+                    if dropped:
+                        logger.warning(f'[stage-studio] review fixes dropped: {dropped}')
+                        emit('reviewing', 77,
+                             f'Review proposed {len(fixes) + len(fix_tints) + len(dropped)} '
+                             f'fixes; {len(dropped)} unusable (dropped)')
+                    if verdict == 'needs_fixes' and not fixes and not fix_tints:
+                        logger.warning('[stage-studio] review flagged issues but '
+                                       'produced no usable fix steps')
                 except Exception as e:
                     logger.warning(f'[stage-studio] review pass skipped: {e}')
+                    review_info['error'] = str(e)
                 if fixes or fix_tints:
                     emit('applying', 80, f'Applying {len(fixes) + len(fix_tints)} fix step(s)…')
                     work2 = work / 'review'
@@ -310,8 +377,11 @@ def stage_ai_create():
                     res = build_and_capture(out_dat, 85)
                     if not res.get('png'):
                         raise StageOpsError(f"re-capture failed: {res.get('reason')}")
-                    steps = steps + fixes
-                    tints = tints + fix_tints
+
+            plan_steps = steps + [{'op': 'material-tint', **t} for t in tints]
+            fix_steps = fixes + [{'op': 'material-tint', **t} for t in fix_tints]
+            steps = steps + fixes
+            tints = tints + fix_tints
 
             keep_dat = STORAGE_PATH / 'skinlab_stages' / f'_pending_{stage_file_name(code)}'
             shutil.copy2(out_dat, keep_dat)
@@ -326,6 +396,9 @@ def stage_ai_create():
                               + base64.b64encode(res['png']).decode('ascii'),
                 'skinName': skin_name,
                 'steps': steps + ([{'op': 'material-tint', **t} for t in tints]),
+                'planSteps': plan_steps,
+                'fixSteps': fix_steps,
+                'review': review_info,
                 'assessment': assessment,
                 'generation': gen_log,
                 'planning': planner_log,

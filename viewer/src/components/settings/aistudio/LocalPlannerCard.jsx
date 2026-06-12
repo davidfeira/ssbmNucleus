@@ -13,6 +13,7 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
   const [pull, setPull] = useState(null)   // {model, completed, total, status}
   const [rtInstall, setRtInstall] = useState(null)   // {message, percentage}
   const [error, setError] = useState(null)
+  const [expanded, setExpanded] = useState(null)   // model name, accordion-style
 
   const load = useCallback(() => {
     fetch(`${API_URL}/ai-engine/planners`)
@@ -125,109 +126,184 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
     }
   }
 
-  if (!info) return null
-  const rec = info.recommended
-  const hasRec = (info.local || []).some((m) => m.name === rec?.name)
-
-  return (
+  const cardShell = (children, badge) => (
     <div className="aistudio-card">
       <div className="aistudio-card-title">
         Local planner LLM
-        {info.ollamaAvailable
-          ? <span className="aistudio-badge good">Ollama running</span>
-          : <span className="aistudio-badge muted">Ollama not found</span>}
+        {badge}
       </div>
       <p className="section-description">
         The text model that plans the skins. With one installed, planning is
         free and offline — no API key needed.
       </p>
-
-      {!info.ollamaAvailable ? (
-        rtInstall || info.bundled?.installing ? (
-          <div className="aistudio-progress">
-            <div className="ai-studio-progress-bar">
-              <div
-                className={`ai-studio-progress-fill${rtInstall?.percentage == null ? ' indeterminate' : ''}`}
-                style={{ width: `${rtInstall?.percentage ?? 100}%` }}
-              />
-            </div>
-            <div className="ai-studio-progress-message">
-              {rtInstall?.message || 'installing Ollama…'}
-            </div>
-          </div>
-        ) : (
-          <>
-            {info.bundled?.supported && (
-              <div className="aistudio-model-actions">
-                <button className="iso-browse-button" onMouseEnter={playHoverSound}
-                        onClick={installRuntime}>
-                  Install bundled Ollama (~1.2 GB)
-                </button>
-                <span className="aistudio-row-hint">
-                  self-contained — managed by the app
-                </span>
-              </div>
-            )}
-            <div className="aistudio-callout warning">
-              No Ollama server found.
-              {info.bundled?.supported
-                ? ' Use the one-click install above, or '
-                : ' '}
-              install it yourself from ollama.com, then{' '}
-              <button className="aistudio-linkbtn" onClick={load}>re-check</button>.
-            </div>
-          </>
-        )
-      ) : (
-        <>
-          {(info.local || []).map((m) => (
-            <div key={m.name} className="aistudio-row">
-              <div className="aistudio-row-head" style={{ cursor: 'default' }}>
-                <span className="aistudio-dot on" />
-                <span className="aistudio-row-name">
-                  {m.name}
-                  {m.name === rec?.name ? ' — recommended' : ''}
-                </span>
-                <span className="aistudio-row-hint">{fmtBytes(m.sizeBytes)}</span>
-                <button className="iso-browse-button danger"
-                        onMouseEnter={playHoverSound}
-                        onClick={() => remove(m.name)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {pull ? (
-            <div className="aistudio-progress">
-              <div className="ai-studio-progress-bar">
-                <div
-                  className="ai-studio-progress-fill"
-                  style={{
-                    width: pull.total
-                      ? `${Math.round(100 * (pull.completed || 0) / pull.total)}%`
-                      : '100%',
-                  }}
-                />
-              </div>
-              <div className="ai-studio-progress-message">
-                {pull.model}: {pull.total
-                  ? `${fmtBytes(pull.completed || 0)} / ${fmtBytes(pull.total)}`
-                  : (pull.status || 'pulling…')}
-              </div>
-            </div>
-          ) : !hasRec && rec && (
-            <div className="aistudio-model-actions">
-              <button className="iso-browse-button" onMouseEnter={playHoverSound}
-                      onClick={() => startPull(rec.name)}>
-                Get {rec.name} (~{rec.sizeGb} GB)
-              </button>
-              <span className="aistudio-row-hint">{rec.blurb}</span>
-            </div>
-          )}
-        </>
-      )}
+      {children}
       {error && <div className="aistudio-callout danger">{error}</div>}
     </div>
+  )
+
+  // skeleton while /planners loads — same card, no layout pop-in
+  if (!info) {
+    return cardShell(null,
+      <span className="aistudio-badge muted">checking Ollama…</span>)
+  }
+
+  const rec = info.recommended
+  const hasRec = (info.local || []).some((m) => m.name === rec?.name)
+  const stats = info.stats || {}
+  const measured = (name) => {
+    const s = stats[`ollama:${name}`]
+    return s?.avgSeconds != null
+      ? `~${Math.round(s.avgSeconds)}s/plan measured (${s.runs} runs)`
+      : null
+  }
+  const toggleRow = (name) => {
+    playSound('tick')
+    setExpanded(expanded === name ? null : name)
+  }
+  const pullProgress = pull && (
+    <div className="aistudio-progress">
+      <div className="ai-studio-progress-bar">
+        <div
+          className="ai-studio-progress-fill"
+          style={{
+            width: pull.total
+              ? `${Math.round(100 * (pull.completed || 0) / pull.total)}%`
+              : '100%',
+          }}
+        />
+      </div>
+      <div className="ai-studio-progress-message">
+        {pull.model}: {pull.total
+          ? `${fmtBytes(pull.completed || 0)} / ${fmtBytes(pull.total)}`
+          : (pull.status || 'pulling…')}
+      </div>
+    </div>
+  )
+
+  if (!info.ollamaAvailable) {
+    return cardShell(
+      rtInstall || info.bundled?.installing ? (
+        <div className="aistudio-progress">
+          <div className="ai-studio-progress-bar">
+            <div
+              className={`ai-studio-progress-fill${rtInstall?.percentage == null ? ' indeterminate' : ''}`}
+              style={{ width: `${rtInstall?.percentage ?? 100}%` }}
+            />
+          </div>
+          <div className="ai-studio-progress-message">
+            {rtInstall?.message || 'installing Ollama…'}
+          </div>
+        </div>
+      ) : (
+        <>
+          {info.bundled?.supported && (
+            <div className="aistudio-model-actions">
+              <button className="iso-browse-button" onMouseEnter={playHoverSound}
+                      onClick={installRuntime}>
+                Install bundled Ollama (~1.2 GB)
+              </button>
+              <span className="aistudio-row-hint">
+                self-contained — managed by the app
+              </span>
+            </div>
+          )}
+          <div className="aistudio-callout warning">
+            No Ollama server found.
+            {info.bundled?.supported
+              ? ' Use the one-click install above, or '
+              : ' '}
+            install it yourself from ollama.com, then{' '}
+            <button className="aistudio-linkbtn" onClick={load}>re-check</button>.
+          </div>
+        </>
+      ),
+      <span className="aistudio-badge muted">Ollama not found</span>,
+    )
+  }
+
+  // mirror the image-model catalog: one slim accordion row per model —
+  // status dot / lock, name, compact hint, details + actions in the body
+  return cardShell(
+    <>
+      {(info.local || []).map((m) => {
+        const pulling = pull?.model === m.name || m.pulling
+        return (
+          <div key={m.name}
+               className={`aistudio-row${expanded === m.name ? ' expanded' : ''}`}>
+            <button className="aistudio-row-head" onMouseEnter={playHoverSound}
+                    onClick={() => toggleRow(m.name)}>
+              {pulling
+                ? <span className="aistudio-dot busy" />
+                : <span className="aistudio-dot on" />}
+              <span className="aistudio-row-name">
+                {m.name}{m.name === rec?.name ? ' — recommended' : ''}
+              </span>
+              <span className="aistudio-row-hint">
+                unlocked · {fmtBytes(m.sizeBytes)}
+              </span>
+              <span className="aistudio-row-chevron">
+                {expanded === m.name ? '▾' : '▸'}
+              </span>
+            </button>
+            {expanded === m.name && (
+              <div className="aistudio-row-body">
+                <div className="aistudio-model-head">
+                  <span className="aistudio-badge good">free · offline</span>
+                </div>
+                <div className="aistudio-model-specs">
+                  <span>{fmtBytes(m.sizeBytes)} on disk</span>
+                  {measured(m.name) && <span>{measured(m.name)}</span>}
+                </div>
+                {pulling ? pullProgress : (
+                  <div className="aistudio-model-actions">
+                    <button className="iso-browse-button danger"
+                            onMouseEnter={playHoverSound}
+                            onClick={() => remove(m.name)}>
+                      Delete ({fmtBytes(m.sizeBytes)})
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {!hasRec && rec && (
+        <div className={`aistudio-row${expanded === rec.name ? ' expanded' : ''}${pull?.model === rec.name ? '' : ' locked'}`}>
+          <button className="aistudio-row-head" onMouseEnter={playHoverSound}
+                  onClick={() => toggleRow(rec.name)}>
+            {pull?.model === rec.name
+              ? <span className="aistudio-dot busy" />
+              : <span className="aistudio-lock">🔒</span>}
+            <span className="aistudio-row-name">{rec.name} — recommended</span>
+            <span className={`aistudio-row-hint${pull?.model === rec.name ? '' : ' locked'}`}>
+              {pull?.model === rec.name
+                ? (pull.total
+                  ? `${Math.round(100 * (pull.completed || 0) / pull.total)}%…`
+                  : 'starting…')
+                : 'not downloaded yet'}
+            </span>
+            <span className="aistudio-row-chevron">
+              {expanded === rec.name ? '▾' : '▸'}
+            </span>
+          </button>
+          {expanded === rec.name && (
+            <div className="aistudio-row-body">
+              <div className="aistudio-model-desc">{rec.blurb}</div>
+              {pull?.model === rec.name ? pullProgress : (
+                <div className="aistudio-model-actions">
+                  <button className="iso-browse-button" onMouseEnter={playHoverSound}
+                          onClick={() => startPull(rec.name)}>
+                    Download (~{rec.sizeGb} GB)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </>,
+    <span className="aistudio-badge good">Ollama running</span>,
   )
 }

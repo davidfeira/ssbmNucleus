@@ -21,23 +21,30 @@ const API_PLANNERS = [
 ]
 
 export default function useAiStudioSetup(show, taskKinds) {
+  const hasLocalKey = Boolean(localStorage.getItem('openrouter_api_key'))
+
   const [ready, setReady] = useState(null)   // null = probing
   const [options, setOptions] = useState([])
-  const [planners, setPlanners] = useState([])
+  // the API planners render INSTANTLY (their lock state is a best guess from
+  // the localStorage key); /planners refines labels + appends local LLMs —
+  // no empty dropdown popping in after the slow Ollama probe
+  const [planners, setPlanners] = useState(() => API_PLANNERS.map((pl) => ({
+    ...pl, locked: !hasLocalKey, reason: 'needs an OpenRouter key',
+  })))
   const [resolution, setResolution] = useState(null)
   const [autoResolution, setAutoResolution] = useState(null)
-
-  const hasLocalKey = Boolean(localStorage.getItem('openrouter_api_key'))
 
   useEffect(() => {
     if (!show) return
     let cancelled = false
+    const stPromise = fetch(`${API_URL}/skin-lab/ai-status`).then((r) => r.json())
+
+    // gate + image options: fast local endpoints, render as soon as they land
     Promise.all([
-      fetch(`${API_URL}/skin-lab/ai-status`).then((r) => r.json()),
+      stPromise,
       fetch(`${API_URL}/ai-engine/models`).then((r) => r.json()),
       fetch(`${API_URL}/ai-engine/status`).then((r) => r.json()).catch(() => ({})),
-      fetch(`${API_URL}/ai-engine/planners`).then((r) => r.json()).catch(() => ({})),
-    ]).then(([st, m, eng, p]) => {
+    ]).then(([st, m, eng]) => {
       if (cancelled) return
       setReady(Boolean(st.hasKey || hasLocalKey || st.localModelReady))
       if (m.success) {
@@ -67,14 +74,26 @@ export default function useAiStudioSetup(show, taskKinds) {
           }
         }))
       }
-      // planner list with locked/unlocked state, mirroring the image-model
-      // picker: API planners need a key; installed Ollama models are free;
-      // the recommended local LLM shows LOCKED until it's pulled. Measured
-      // s/plan from telemetry replaces guesswork once runs exist.
+    }).catch(() => { if (!cancelled) setReady(false) })
+
+    // planner list refinement: /planners can be slower (it probes Ollama),
+    // so it updates the already-rendered list instead of gating it.
+    // API planners need a key; installed Ollama models are free; the
+    // recommended local LLM shows LOCKED until it's pulled. Measured
+    // s/plan + cost from telemetry replace guesswork once runs exist.
+    Promise.all([
+      stPromise.catch(() => ({})),
+      fetch(`${API_URL}/ai-engine/planners`).then((r) => r.json()),
+    ]).then(([st, p]) => {
+      if (cancelled) return
       const keyOk2 = Boolean(st.hasKey || hasLocalKey)
       const speed = (id) => {
         const s = p.stats?.[id]
-        return s?.avgSeconds != null ? ` — ~${Math.round(s.avgSeconds)}s/plan` : ''
+        if (!s) return ''
+        const parts = []
+        if (s.avgSeconds != null) parts.push(`~${Math.round(s.avgSeconds)}s`)
+        if (s.avgCostUsd > 0) parts.push(`~${money(s.avgCostUsd)}`)
+        return parts.length ? ` — ${parts.join(' · ')}/plan` : ''
       }
       const localList = (p.local || []).map((m) => ({
         id: `ollama:${m.name}`,
@@ -101,7 +120,7 @@ export default function useAiStudioSetup(show, taskKinds) {
         })),
         ...localList,
       ])
-    }).catch(() => { if (!cancelled) setReady(false) })
+    }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show])
@@ -122,10 +141,15 @@ export default function useAiStudioSetup(show, taskKinds) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show])
 
-  const resolveFor = useCallback((selectedModel) => {
+  // `selected` is either one model id (applied to every task kind) or a
+  // per-kind map like { material: '...', backdrop: '...' } when the studio
+  // has a dropdown per task. '' / missing = Auto for that kind.
+  const resolveFor = useCallback((selected) => {
+    const modelFor = (kind) => (selected && typeof selected === 'object'
+      ? selected[kind] : selected)
     const tasks = taskKinds.map((kind) => ({
       kind,
-      model: selectedModel || undefined,
+      model: modelFor(kind) || undefined,
     }))
     fetch(`${API_URL}/ai-engine/resolve`, {
       method: 'POST',
@@ -136,7 +160,8 @@ export default function useAiStudioSetup(show, taskKinds) {
       .then((d) => {
         if (!d.success) return
         setResolution(d.tasks)
-        if (!selectedModel) setAutoResolution(d.tasks)
+        const allAuto = taskKinds.every((kind) => !modelFor(kind))
+        if (allAuto) setAutoResolution(d.tasks)
       })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,17 +189,26 @@ const TASK_LABELS = {
   backdrop: 'Backgrounds',
 }
 
-/** Per-task "what will run" — ONE BOX PER TASK, so mod types that need the
- * stronger model (e.g. stage backdrops) get their own clearly-marked second
- * box, and mod types that don't simply don't show it. */
+/** 'Auto — <model>' for ONE task kind — the per-dropdown Auto label when a
+ * studio has a separate picker per task. */
+export function autoOptionLabelFor(autoResolution, kind) {
+  const t = (autoResolution || []).find((x) => x.kind === kind
+                                              && !x.error && x.label)
+  return t ? `Auto — ${shortName(t.label)}` : 'Auto (recommended)'
+}
+
+/** Escalation/error notices ONLY. What each task runs on is already visible
+ * in its own picker (the Auto option names the resolved model), so plain
+ * "Materials → X" echo rows are noise — a row appears here only when the
+ * resolver had to OVERRIDE the pick (escalation) or can't run it (error). */
 export function ResolutionNotice({ resolution }) {
-  if (!resolution) return null
+  const rows = (resolution || []).filter((t) => t.escalated || t.error)
+  if (!rows.length) return null
   return (
     <>
-      {resolution.map((t) => (
-        <div key={t.kind}
-             className={`ai-studio-resolution${t.escalated || t.error ? ' escalated' : ''}`}>
-          <div className={`ai-studio-progress-message${t.escalated || t.error ? ' escalated' : ''}`}>
+      {rows.map((t) => (
+        <div key={t.kind} className="ai-studio-resolution escalated">
+          <div className="ai-studio-progress-message escalated">
             {TASK_LABELS[t.kind] || t.kind} → {t.error ? t.error : t.label}
           </div>
           {t.escalated && t.reason && (

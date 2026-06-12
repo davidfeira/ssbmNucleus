@@ -142,6 +142,12 @@ app.register_blueprint(skin_lab_ai_bp)
 app.register_blueprint(stage_lab_ai_bp)
 app.register_blueprint(ai_engine_bp)
 
+# Warm the Ollama probe in the background: starting the bundled server +
+# reachability timeouts can take seconds, and without this the FIRST open of
+# Settings/AI Studio is the one that pays for it (the planner UI "pops in").
+from blueprints.ai_engine import warm_ollama_probe  # noqa: E402
+warm_ollama_probe()
+
 
 # SocketIO connection handlers
 @socketio.on('connect')

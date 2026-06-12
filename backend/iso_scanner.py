@@ -160,6 +160,27 @@ def _character_from_filename(path: str) -> Optional[str]:
     return CHAR_CODE_TO_NAME.get(stem[2:4])
 
 
+def _is_custom_fighter_file(path: str) -> bool:
+    """True for costume files that belong to an m-ex CUSTOM fighter slot.
+
+    Added fighters get freshly generated Pl codes (e.g. PlQpQg.dat in a build
+    with a custom 'Qp' character). Their CONTENT still carries the symbols of
+    whatever vanilla fighter they were cloned from, so symbol-based detection
+    would happily misfile them as e.g. Fox skins — but they belong to the
+    custom fighter (the custom-characters ISO scan extracts them properly,
+    fighter + costumes together). Filename code not in the vanilla table =
+    custom fighter slot.
+
+    Extra COSTUME slots for vanilla fighters (PlFxYe, PlFxAg, ...) keep the
+    vanilla character code and are NOT matched by this.
+    """
+    name = os.path.basename(path)
+    stem = os.path.splitext(name)[0]
+    if len(stem) < 4 or not stem.lower().startswith('pl'):
+        return False
+    return stem[2:4] not in CHAR_CODE_TO_NAME
+
+
 @dataclass
 class CandidateSkin:
     key: str
@@ -186,7 +207,8 @@ class IsoScanJob:
     error: Optional[str] = None
     stats: dict = field(default_factory=lambda: {
         'existing': 0, 'vanilla': 0, 'dupes': 0,
-        'slippi_matched': 0, 'data_mod': 0, 'unknown': 0, 'errors': 0,
+        'slippi_matched': 0, 'data_mod': 0, 'custom_fighter': 0,
+        'unknown': 0, 'errors': 0,
         'total_files': 0,
     })
     candidates: dict[str, list[CandidateSkin]] = field(default_factory=dict)
@@ -722,6 +744,18 @@ def _run_scan(job: IsoScanJob, on_event):
                 job.stats['dupes'] += 1
                 continue
             seen_hashes.add(file_hash)
+
+            # Custom-fighter costume slots (PlQp*, ...) are NOT vanilla-char
+            # skins: their content symbols still say e.g. Fox (cloned from
+            # Fox), so the symbol-based identification below would misfile
+            # them. They're handled by the custom-characters scan instead.
+            if _is_custom_fighter_file(fp):
+                job.stats['custom_fighter'] += 1
+                logger.info(
+                    f"[iso-scan][id] CUSTOM_FIGHTER {os.path.basename(fp)} — "
+                    "non-vanilla Pl code; belongs to a custom character"
+                )
+                continue
 
             # Identify character
             try:

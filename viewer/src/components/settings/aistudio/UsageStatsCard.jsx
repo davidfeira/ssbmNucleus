@@ -1,15 +1,18 @@
 /**
  * UsageStatsCard - measured generation times + costs per model, from the
  * backend's ai_runs.jsonl ledger. Empty until the first generation runs.
+ * Stats are ALL-TIME; the Reset button moves the ledger aside and starts
+ * fresh (it also resets the measured s/plan & cost hints in the pickers).
  */
 import { useCallback, useEffect, useState } from 'react'
+import { playHoverSound, playSound } from '../../../utils/sounds'
 import { fmtAgo } from './useAiEngine'
 
 export default function UsageStatsCard({ API_URL, refreshKey }) {
   const [stats, setStats] = useState(null)
 
   const load = useCallback(() => {
-    fetch(`${API_URL}/ai-engine/stats?days=90`)
+    fetch(`${API_URL}/ai-engine/stats`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setStats(d) })
       .catch(() => {})
@@ -17,11 +20,32 @@ export default function UsageStatsCard({ API_URL, refreshKey }) {
 
   useEffect(() => { load() }, [load, refreshKey])
 
+  const reset = async () => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Reset all generation stats? The measured speed/cost '
+                        + 'hints in the model pickers start over.')) return
+    try {
+      const res = await fetch(`${API_URL}/ai-engine/stats/reset`,
+                              { method: 'POST' })
+      const d = await res.json()
+      if (d.success) {
+        playSound('boop')
+        load()
+      }
+    } catch { /* leave the table as-is */ }
+  }
+
   if (!stats || !stats.perModel?.length) return null
 
   return (
     <div className="aistudio-card">
-      <div className="aistudio-card-title">Generation stats (90 days)</div>
+      <div className="aistudio-card-title">
+        Generation stats
+        <button className="aistudio-linkbtn" style={{ marginLeft: 'auto' }}
+                onMouseEnter={playHoverSound} onClick={reset}>
+          Reset
+        </button>
+      </div>
       <table className="aistudio-stats-table">
         <thead>
           <tr>
@@ -44,7 +68,7 @@ export default function UsageStatsCard({ API_URL, refreshKey }) {
         </tbody>
       </table>
       <div className="aistudio-storage-footer">
-        {stats.totals.runs} generations
+        {stats.totals.runs} generations · all time
         {stats.totals.costUsd > 0 ? ` · $${stats.totals.costUsd.toFixed(2)} total API spend` : ''}
       </div>
     </div>

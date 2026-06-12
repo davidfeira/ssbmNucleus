@@ -37,8 +37,10 @@ export default function InGameTestPanel({ test, onStart, label = 'Test in Game',
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
           {testStatus?.message || 'Working…'}
         </p>
-        {/* Captures keep their own window (the shot's resolution = window size). */}
-        <DolphinEmbedPanel active={testMode !== 'capture'} />
+        {/* Embedded for tests AND captures (shots are grabbed via PrintWindow
+            at the embedded size — a small resolution trade for not having a
+            floating Dolphin window over the app). */}
+        <DolphinEmbedPanel active />
         <p style={{ fontSize: '0.8em', color: 'var(--color-text-secondary)', marginTop: '0.75rem' }}>
           Builds a one-mod ISO and plays a short match in a throwaway Dolphin.
           Your Slippi setup is untouched, and it never goes online.

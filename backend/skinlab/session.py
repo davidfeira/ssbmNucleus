@@ -192,9 +192,14 @@ class ViewerSession:
     # ------------------------------------------------------------------ #
     def _load_texture_list(self):
         reply = self._request({'type': 'getTextures'}, 'textureList')
+        # matAnim/animates: MatAnim swap frames (blink textures etc.) the
+        # viewer appends after the material textures; `animates` is the
+        # material texture index the swap bank animates (-1 if unlinked).
         self.textures = [
             {'index': t.get('index'), 'name': t.get('name'),
-             'width': t.get('width'), 'height': t.get('height')}
+             'width': t.get('width'), 'height': t.get('height'),
+             'matAnim': bool(t.get('matAnim')),
+             'animates': t.get('animates', -1)}
             for t in (reply.get('textures') or [])
         ]
 

@@ -53,35 +53,9 @@ def release_test_slot():
         _test_running = False
 
 
-@test_in_game_bp.before_request
-def _guard_dolphin_already_open():
-    """Every test-start endpoint launches its OWN throwaway Dolphin and drives it
-    over a pipe. If the user already has a Slippi/Dolphin window open, the second
-    one steals the foreground and the test just sits on the menu (never pressing a
-    button) -- so refuse early with a clear message. Skipped for GETs (e.g.
-    /status) and while a test is already running (the per-endpoint one-at-a-time
-    guard answers that case, and our own harness Dolphin would be running)."""
-    if request.method != 'POST' or os.name != 'nt' or _test_running:
-        return None
-    # The window-embed endpoints position OUR OWN harness Dolphin -- they're not
-    # a test start, and a late poll after a test ends must not 409.
-    if '/test-in-game/window/' in (request.path or ''):
-        return None
-    try:
-        from ingame.boot import dolphin_running
-        open_pids = dolphin_running()
-    except Exception:
-        return None
-    if open_pids:
-        return jsonify({
-            'success': False,
-            'dolphinOpen': True,
-            'error': ('A Dolphin window is already open. Close any running Slippi '
-                      'Dolphin first — the in-game test launches its own Dolphin, '
-                      'and a second one steals focus so the test just sits on the '
-                      'menu.'),
-        }), 409
-    return None
+# NOTE: an already-open user Dolphin no longer 409s test starts here — the
+# engine (runner.run_test / capture_*) WAITS for the user to close it, telling
+# them why via the progress channel, then continues automatically.
 
 
 def _paired_nana_zip(character, skin_id):

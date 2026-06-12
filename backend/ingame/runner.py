@@ -362,6 +362,14 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
         "screenshot": None, "drove": [], "online_aborted": False,
     }
 
+    # an already-open Dolphin steals input focus from the throwaway one —
+    # wait for the user to close it (the progress message says why) instead
+    # of dying minutes later with a confusing menu timeout
+    from .boot import DOLPHIN_OPEN_MSG, wait_until_no_dolphin
+    if not wait_until_no_dolphin(emit, log=log):
+        result.update(verdict="error", reason=DOLPHIN_OPEN_MSG)
+        return result
+
     boot = DolphinBoot(iso_path, slippi_path, runs_root,
                        hires_textures=hires_textures, load_seed=load_seed, log=log)
     p = None  # so the error-path screenshots / finally can reference it safely

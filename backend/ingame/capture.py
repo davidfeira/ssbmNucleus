@@ -23,7 +23,7 @@ CameraDebugMode at 0x80453004.
 
 import time
 
-from .boot import DolphinBoot
+from .boot import DOLPHIN_OPEN_MSG, DolphinBoot, wait_until_no_dolphin
 from .melee_mem import Dolphin
 from .melee_pipe import Pipe
 from .melee_css import Cursor
@@ -39,6 +39,19 @@ CKIND_FOX = 0x02   # external char id; the fighter is invisible for the shot any
 
 def _noop(*_a, **_k):
     pass
+
+
+def _await_dolphin_clear(result, emit, log=_noop):
+    """An already-open Dolphin steals the foreground from our throwaway one,
+    so menu inputs go nowhere and the run dies with a confusing pipe/menu
+    timeout. WAIT for the user to close it (the progress message tells them
+    to), continuing automatically. Mutates+returns `result` only when the
+    wait timed out; returns None when clear to boot."""
+    if wait_until_no_dolphin(emit, log=log):
+        return None
+    result['reason'] = DOLPHIN_OPEN_MSG
+    result['dolphinOpen'] = True
+    return result
 
 
 # --- clean-shot RAM patches (gecko "04" codes as plain 32-bit writes) ----------
@@ -118,6 +131,8 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
     emit = emit or _noop
     log = log or _noop
     result = {"ok": False, "png": None, "reason": ""}
+    if _await_dolphin_clear(result, emit, log):
+        return result
 
     boot = DolphinBoot(iso_path, slippi_path, runs_root,
                        hires_textures=hires_textures, clean_osd=True, log=log)
@@ -307,6 +322,8 @@ def capture_pause(iso_path, slippi_path, runs_root, emit=None, log=None, settle=
     emit = emit or _noop
     log = log or _noop
     result = {"ok": False, "png": None, "reason": ""}
+    if _await_dolphin_clear(result, emit, log):
+        return result
 
     boot = DolphinBoot(iso_path, slippi_path, runs_root, clean_osd=True, log=log)
     p = None
@@ -420,6 +437,8 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
     emit = emit or _noop
     log = log or _noop
     result = {"ok": False, "shots": [], "reason": ""}
+    if _await_dolphin_clear(result, emit, log):
+        return result
 
     boot = DolphinBoot(iso_path, slippi_path, runs_root,
                        hires_textures=hires_textures, clean_osd=True, log=log)

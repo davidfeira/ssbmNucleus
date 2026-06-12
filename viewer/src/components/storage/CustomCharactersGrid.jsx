@@ -14,7 +14,6 @@ export default function CustomCharactersGrid({
   isLoading,
   onSelectCharacter,
   onBack,
-  onImportZip,
   onScanIso,
   importing
 }) {
@@ -30,36 +29,15 @@ export default function CustomCharactersGrid({
         </button>
 
         <div className="import-file-container" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-          <label
+          <button
             className="intake-import-btn"
-            style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
             onMouseEnter={playHoverSound}
-            onClick={() => { if (!importing) playSound('start'); }}
+            onClick={() => { playSound('start'); onScanIso(); }}
+            disabled={importing}
+            title="Extract the custom fighters out of a built m-ex ISO"
           >
-            {importing ? 'Importing...' : 'Import ZIP'}
-            <input
-              type="file"
-              accept=".zip"
-              onChange={onImportZip}
-              disabled={importing}
-              style={{ display: 'none' }}
-            />
-          </label>
-          <label
-            className="intake-import-btn"
-            style={{ cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}
-            onMouseEnter={playHoverSound}
-            onClick={() => { if (!importing) playSound('start'); }}
-          >
-            {importing ? 'Scanning...' : 'Scan ISO'}
-            <input
-              type="file"
-              accept=".iso,.gcm"
-              onChange={onScanIso}
-              disabled={importing}
-              style={{ display: 'none' }}
-            />
-          </label>
+            Scan ISO
+          </button>
         </div>
       </div>
 
