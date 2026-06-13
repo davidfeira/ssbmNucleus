@@ -28,7 +28,9 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [draggingCostume, setDraggingCostume] = useState(null)  // bundled costume index being dragged
   const [skinDropActive, setSkinDropActive] = useState(false)
   const [draggingSkinId, setDraggingSkinId] = useState(null)    // added skin being reordered
-  const [skinDragOverId, setSkinDragOverId] = useState(null)    // added skin currently hovered
+  const [skinDragOverId, setSkinDragOverId] = useState(null)    // added skin currently hovered (insert-before)
+  const [costumeDragOverId, setCostumeDragOverId] = useState(null) // bundled costume hovered (insert-before)
+  const [costumesDropActive, setCostumesDropActive] = useState(false) // skin->costume promote highlight
   const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
   const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
   const [skinCreatorCostume, setSkinCreatorCostume] = useState(null) // opens SkinCreator on this skin
@@ -585,6 +587,52 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     }
   }
 
+  // Reorder bundled costumes by drag-and-drop (insert dragged before target).
+  const handleCostumeReorder = async (draggedIndex, targetCostume) => {
+    setCostumeDragOverId(null)
+    const draggedStem = costumes.find(c => c.index === draggedIndex)?.edit_id
+    const targetStem = targetCostume?.edit_id
+    if (!draggedStem || !targetStem || draggedStem === targetStem) return
+    const order = costumes.map(c => c.edit_id)
+    const from = order.indexOf(draggedStem)
+    const to = order.indexOf(targetStem)
+    if (from === -1 || to === -1) return
+    order.splice(to, 0, order.splice(from, 1)[0])
+    try {
+      const res = await fetch(`${API_URL}/custom-characters/${character.slug}/costumes/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order })
+      })
+      const data = await res.json()
+      if (data.success) { playSound('boop'); await fetchDetail() }
+      else flashSkinMessage(`Reorder failed: ${data.error}`)
+    } catch (err) {
+      flashSkinMessage(`Reorder error: ${err.message}`)
+    }
+  }
+
+  // Promote an added skin to a bundled costume (drag a custom skin up into Costumes).
+  const handleSkinToCostume = async (skinId) => {
+    setCostumesDropActive(false)
+    if (!skinId) return
+    try {
+      const res = await fetch(
+        `${API_URL}/custom-characters/${character.slug}/skins/${skinId}/to-costume`,
+        { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        playSound('newSkin')
+        flashSkinMessage('Promoted skin to a costume')
+        await fetchDetail()
+      } else {
+        flashSkinMessage(`Promote failed: ${data.error}`)
+      }
+    } catch (err) {
+      flashSkinMessage(`Promote error: ${err.message}`)
+    }
+  }
+
   // stop audio when leaving the page
   useEffect(() => () => { audioRef.current?.pause() }, [])
 
@@ -978,9 +1026,24 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           </div>
         )}
 
-        {/* ── Costumes ── */}
+        {/* ── Costumes (drop a custom skin here to promote it) ── */}
         {costumes.length > 0 && (
-          <div className="custom-char-costumes">
+          <div
+            className={`custom-char-costumes custom-costume-dropzone${draggingSkinId != null ? ' promote-ready' : ''}${costumesDropActive ? ' promote-active' : ''}`}
+            onDragOver={(e) => {
+              if (draggingSkinId != null) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }
+            }}
+            onDragEnter={(e) => {
+              if (draggingSkinId != null) { e.preventDefault(); setCostumesDropActive(true) }
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget)) return
+              setCostumesDropActive(false)
+            }}
+            onDrop={(e) => {
+              if (draggingSkinId != null) { e.preventDefault(); handleSkinToCostume(draggingSkinId) }
+            }}
+          >
             <div className="custom-char-section-header">
               <h3 className="custom-char-section-title">Costumes</h3>
               {detail?.team_colors && costumes.length > 1 && (
@@ -1008,7 +1071,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
               {costumes.map((costume) => (
                 <div
                   key={costume.index}
-                  className={`custom-char-costume-card${draggingCostume === costume.index ? ' dragging' : ''}${selectedTeamColor ? ' team-assignable' : ''}`}
+                  className={`custom-char-costume-card${draggingCostume === costume.index ? ' dragging' : ''}${costumeDragOverId === costume.edit_id ? ' drop-before' : ''}${selectedTeamColor ? ' team-assignable' : ''}`}
                   draggable={costumes.length > 1 && renamingCostume?.index !== costume.index && !selectedTeamColor}
                   onClick={selectedTeamColor ? () => handleCostumeTeamAssign(costume.index) : undefined}
                   onDragStart={(e) => {
@@ -1019,11 +1082,23 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                   }}
                   onDragEnd={() => {
                     delete document.documentElement.dataset.nucInternalDrag
-                    setDraggingCostume(null); setSkinDropActive(false)
+                    setDraggingCostume(null); setSkinDropActive(false); setCostumeDragOverId(null)
+                  }}
+                  onDragOver={(e) => {
+                    if (draggingCostume != null && draggingCostume !== costume.index) {
+                      e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+                      if (costumeDragOverId !== costume.edit_id) setCostumeDragOverId(costume.edit_id)
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (draggingCostume != null && draggingCostume !== costume.index) {
+                      e.preventDefault(); e.stopPropagation()
+                      handleCostumeReorder(draggingCostume, costume)
+                    }
                   }}
                   title={selectedTeamColor
                     ? `Set as the ${selectedTeamColor} team costume`
-                    : costumes.length > 1 ? 'Drag down into Custom Skins to make this a removable skin' : undefined}
+                    : costumes.length > 1 ? 'Drag onto another costume to reorder, or down into Custom Skins' : undefined}
                 >
                   {costume.csp_url ? (
                     <img
@@ -1127,7 +1202,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             {addedSkins.map((skin) => (
               <div
                 key={skin.id}
-                className={`custom-char-costume-card${draggingSkinId === skin.id ? ' dragging' : ''}${skinDragOverId === skin.id ? ' drag-over' : ''}`}
+                className={`custom-char-costume-card${draggingSkinId === skin.id ? ' dragging' : ''}${skinDragOverId === skin.id ? ' drop-before' : ''}`}
                 draggable={addedSkins.length > 1}
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = 'move'

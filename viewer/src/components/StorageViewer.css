@@ -8840,10 +8840,27 @@
   margin-left: 0;
 }
 
-/* Reorder drag feedback for added skins */
-.custom-char-costume-card.drag-over {
+/* Reorder feedback: insert-before line indicator + dragged-card dim */
+.custom-char-costume-card.drop-before {
+  box-shadow: inset 3px 0 0 0 var(--color-gold), 0 0 8px rgba(255, 200, 60, 0.35);
+}
+
+.custom-char-costume-card.dragging {
+  opacity: 0.45;
+}
+
+/* Promote a custom skin up into Costumes (drag a skin onto the Costumes area) */
+.custom-costume-dropzone.promote-ready {
+  outline: 2px dashed var(--color-border-strong, #4a5568);
+  outline-offset: -4px;
+  border-radius: var(--radius-md);
+}
+
+.custom-costume-dropzone.promote-active {
   outline: 2px dashed var(--color-gold);
-  outline-offset: 2px;
+  outline-offset: -4px;
+  background: rgba(255, 200, 60, 0.06);
+  border-radius: var(--radius-md);
 }
 
 .custom-char-costume-card.team-assignable {

@@ -1717,6 +1717,182 @@ def bundled_costume_to_skin(slug, index):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/costumes/reorder', methods=['POST'])
+def reorder_bundled_costumes(slug):
+    """Reorder a custom character's bundled costumes. Body: {order: [stem,...]}
+    (DAT stems, i.e. the frontend's costume edit_id). Rewrites fighter.json
+    (storage + embedded), fixes visibilityIndex, and reshuffles the positional
+    csp_N/stock_N previews to follow."""
+    try:
+        order = (request.get_json(silent=True) or {}).get('order') or []
+        char_dir = CUSTOM_CHARACTERS_PATH / slug
+        fighter_json_path = char_dir / 'fighter.json'
+        if not fighter_json_path.exists():
+            return jsonify({'success': False, 'error': 'Character not found'}), 404
+
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
+            fighter_data = json.load(f)
+        costumes = fighter_data.get('costumes', [])
+
+        def _stem(c):
+            return Path((c.get('file') or {}).get('fileName') or '').stem
+
+        by_stem = {_stem(c): c for c in costumes}
+        # snapshot positional previews by stem before reordering
+        prev = {}
+        for i, c in enumerate(costumes):
+            for kind in ('csp', 'stock'):
+                p = char_dir / f'{kind}_{i}.png'
+                if p.exists():
+                    prev[(_stem(c), kind)] = p.read_bytes()
+
+        seen, new_costumes = set(), []
+        for s in order:
+            c = by_stem.get(s)
+            if c is not None and s not in seen:
+                new_costumes.append(c); seen.add(s)
+        for c in costumes:  # keep any not named in order
+            if _stem(c) not in seen:
+                new_costumes.append(c)
+
+        for i, c in enumerate(new_costumes):
+            c.setdefault('file', {})['visibilityIndex'] = i
+        fighter_data['costumes'] = new_costumes
+
+        with open(fighter_json_path, 'w', encoding='utf-8') as f:
+            json.dump(fighter_data, f, indent=2)
+        _rewrite_fighter_zip(char_dir,
+                             mutate_json=lambda m: ({**m, 'costumes': new_costumes}))
+
+        # rewrite positional previews in the new order
+        for i, c in enumerate(new_costumes):
+            for kind in ('csp', 'stock'):
+                data = prev.get((_stem(c), kind))
+                target = char_dir / f'{kind}_{i}.png'
+                if data is not None:
+                    target.write_bytes(data)
+                elif target.exists():
+                    target.unlink()
+
+        metadata = _read_metadata()
+        entry = _find_entry(metadata, slug)
+        if entry is not None:
+            # reorder costume_meta to match (cosmetic; _sync rebuilds by stem)
+            cm = {m['id']: m for m in entry.get('costume_meta', [])}
+            entry['costume_meta'] = [cm[s] for c in new_costumes
+                                     if (s := _stem(c)) in cm]
+            _write_metadata(metadata)
+
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Reorder bundled costumes error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/skins/<skin_id>/to-costume', methods=['POST'])
+def skin_to_bundled_costume(slug, skin_id):
+    """Promote an added skin to a bundled costume (drag a custom skin UP into
+    Costumes). Inverse of bundled_costume_to_skin: the skin's zip is folded
+    back into fighter.zip and a new costume entry is appended to fighter.json.
+    The jointSymbol is read straight from the DAT so the model's real root is
+    used (recolors can differ). icon/csp are left null — install regenerates
+    them from the DAT like any imported costume."""
+    try:
+        import io
+        char_dir = CUSTOM_CHARACTERS_PATH / slug
+        fighter_json_path = char_dir / 'fighter.json'
+        if not fighter_json_path.exists():
+            return jsonify({'success': False, 'error': 'Character not found'}), 404
+
+        metadata = _read_metadata()
+        entry = _find_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Character not found in metadata'}), 404
+
+        skins = entry.get('added_skins', [])
+        skin = next((s for s in skins if s.get('id') == skin_id), None)
+        if skin is None:
+            return jsonify({'success': False, 'error': 'Skin not found'}), 404
+
+        skins_dir = char_dir / 'skins'
+        skin_zip_path = skins_dir / skin.get('filename', f'{skin_id}.zip')
+        if not skin_zip_path.exists():
+            return jsonify({'success': False, 'error': 'Skin zip missing'}), 404
+        zip_bytes = skin_zip_path.read_bytes()
+        dat_name, err = _validate_costume_zip(zip_bytes)
+        if err:
+            return jsonify({'success': False, 'error': err}), 400
+        stem = Path(dat_name).stem
+        inner_name = f'{stem}.zip'
+
+        with open(fighter_json_path, 'r', encoding='utf-8') as f:
+            fighter_data = json.load(f)
+        costumes = fighter_data.setdefault('costumes', [])
+
+        existing = {Path((c.get('file') or {}).get('fileName') or '').stem for c in costumes}
+        if stem in existing:
+            return jsonify({'success': False,
+                            'error': f'A bundled costume named {stem} already exists'}), 400
+
+        # jointSymbol from the DAT itself (its embedded root symbol)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            dat_bytes = zf.read(next(n for n in zf.namelist()
+                                     if n.lower().endswith(('.dat', '.usd'))))
+        m = re.search(rb'Ply[A-Za-z0-9]+_Share_joint', dat_bytes)
+        joint = (m.group(0).decode() if m
+                 else (costumes[0].get('file') or {}).get('jointSymbol') if costumes else None)
+
+        template = costumes[0] if costumes else {}
+        new_index = len(costumes)
+        new_costume = {
+            'name': skin.get('color') or stem,
+            'colorSmashGroup': template.get('colorSmashGroup', -1),
+            'file': {
+                'visibilityIndex': new_index,
+                'fileName': dat_name,
+                'jointSymbol': joint,
+                'materialSymbol': None,
+            },
+            'icon': None,
+            'csp': None,
+        }
+
+        def _add(meta):
+            meta.setdefault('costumes', []).append(new_costume)
+            return meta
+
+        costumes.append(new_costume)
+        with open(fighter_json_path, 'w', encoding='utf-8') as f:
+            json.dump(fighter_data, f, indent=2)
+        _rewrite_fighter_zip(char_dir, mutate_json=_add, replace_entries={inner_name: zip_bytes})
+
+        # materialize the bundled costume + previews (reuse the posed skin CSP)
+        costumes_dir = char_dir / 'costumes'
+        costumes_dir.mkdir(exist_ok=True)
+        (costumes_dir / inner_name).write_bytes(zip_bytes)
+        if (skins_dir / f'{skin_id}_csp.png').exists():
+            shutil.copy2(skins_dir / f'{skin_id}_csp.png', costumes_dir / f'{stem}_csp.png')
+            shutil.copy2(skins_dir / f'{skin_id}_csp.png', char_dir / f'csp_{new_index}.png')
+        if (skins_dir / f'{skin_id}_csp_hd.png').exists():
+            shutil.copy2(skins_dir / f'{skin_id}_csp_hd.png', costumes_dir / f'{stem}_csp_hd.png')
+        if (skins_dir / f'{skin_id}_stc.png').exists():
+            shutil.copy2(skins_dir / f'{skin_id}_stc.png', costumes_dir / f'{stem}_stc.png')
+            shutil.copy2(skins_dir / f'{skin_id}_stc.png', char_dir / f'stock_{new_index}.png')
+
+        for p in skins_dir.glob(f'{skin_id}*'):
+            p.unlink()
+        entry['added_skins'] = [s for s in skins if s.get('id') != skin_id]
+        entry['costume_count'] = len(costumes)
+        _sync_costume_meta(entry, char_dir, fighter_data)
+        _write_metadata(metadata)
+
+        logger.info(f"[OK] Promoted skin {skin_id} ({dat_name}) of {slug} to bundled costume {new_index}")
+        return jsonify({'success': True, 'costume_count': len(costumes)})
+    except Exception as e:
+        logger.error(f"Skin to costume error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ============= Audio (victory theme / announcer / sound bank) =============
 
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/audio/victory-theme', methods=['GET'])
