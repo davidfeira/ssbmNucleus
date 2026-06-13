@@ -5,6 +5,7 @@ import IconReorderList from './IconReorderList'
 import PropsPopup from './PropsPopup'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL } from '../../config'
+import { applyCssTemplate, buildCssGridTemplate, pickAutoColumns } from '../../utils/cssGridLayout'
 
 // Per-slot layout fields: these stay with the slot position when icon
 // identities are reordered/swapped within the list
@@ -15,50 +16,6 @@ const CSS_BASE_WIDTH = 3.5
 const CSS_BASE_HEIGHT = 3.4
 const CSS_TEMPLATE_WIDTH = 35.05
 const CSS_TEMPLATE_HEIGHT = 28.8
-
-function applyCssTemplate(icons, template) {
-  const { iconsPerRow, scaleX, scaleY, centerX, centerY, iconWidth, iconHeight,
-          iconSideDropX, iconSideDropY, iconSideDropZ } = template
-  const count = icons.length
-  if (count === 0 || iconsPerRow <= 0) return icons
-
-  const rows = Math.ceil(count / iconsPerRow)
-  const iw = iconWidth * scaleX
-  const ih = iconHeight * scaleY
-  const totalW = Math.min(count, iconsPerRow) * iw
-  const totalH = rows * ih
-
-  return icons.map((icon, i) => {
-    const col = i % iconsPerRow
-    const row = Math.floor(i / iconsPerRow)
-    const iconsInRow = row === rows - 1 ? count - row * iconsPerRow : iconsPerRow
-    const isEdge = col === 0 || col === iconsInRow - 1
-
-    // Center partial rows (e.g. a trailing row of 8 in a 9-wide grid)
-    const rowOffsetX = (iconsPerRow - iconsInRow) * iw / 2
-
-    let x = centerX - totalW / 2 + iw * col + iw / 2 + rowOffsetX
-    let y = centerY + totalH / 2 - ih * row - ih / 2
-    let z = 0
-    let colOffX = 0, colOffY = 0
-
-    if (isEdge) {
-      colOffX = -iconSideDropX
-      colOffY = -iconSideDropY
-      z = iconSideDropZ
-    }
-
-    return {
-      ...icon,
-      x, y, z,
-      scaleX, scaleY,
-      collisionSizeX: iconWidth,
-      collisionSizeY: iconHeight,
-      collisionOffsetX: colOffX,
-      collisionOffsetY: colOffY
-    }
-  })
-}
 
 function getCssCollisionRect(icon) {
   return {
@@ -258,30 +215,9 @@ export default function CssLayoutEditor() {
     if (!layout) return
     const count = icons.length
     if (count === 0 || cols <= 0) return
-    const rows = Math.ceil(count / cols)
-
-    // Vanilla 9x3 grid boundaries (game units)
-    const vanillaW = 63.45  // 9 * 7.05
-    const vanillaH = 21.6   // 3 * 7.2
-    const centerX = 0.05
-    const centerY = 9.5
-    const baseW = 7.05
-    const baseH = 7.2
 
     // Scale each axis independently to fill the vanilla bounding box exactly
-    const sx = vanillaW / (cols * baseW)
-    const sy = vanillaH / (rows * baseH)
-
-    const newTemplate = {
-      ...layout.template,
-      iconsPerRow: cols,
-      scaleX: sx,
-      scaleY: sy,
-      iconWidth: baseW,
-      iconHeight: baseH,
-      centerX,
-      centerY
-    }
+    const newTemplate = buildCssGridTemplate(layout.template, count, cols)
     updateTemplate(newTemplate)
     updateIcons(applyCssTemplate(icons, newTemplate))
   }, [layout, icons, updateIcons, updateTemplate])
@@ -413,6 +349,11 @@ export default function CssLayoutEditor() {
           <span className="sss-grid-dim">
             ({Math.ceil(icons.length / (layout?.template?.iconsPerRow ?? 9))} rows)
           </span>
+          <button
+            className="sss-tab-btn"
+            onClick={() => { playSound('boop'); handleApplyGrid(pickAutoColumns(icons.length)) }}
+            title="Auto-fit columns and rows to the icon count"
+          >Auto</button>
           <button className="sss-tab-btn" onClick={handleResetVanilla}>Reset</button>
         </div>
         <div className="sss-bottom-group">

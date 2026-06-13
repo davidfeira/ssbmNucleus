@@ -27,13 +27,13 @@ export default function CustomCharactersGrid({
         </button>
       </div>
 
-      <div className="custom-characters-grid">
+      <div className="characters-grid custom-characters-grid">
         {isLoading ? (
           Array.from({ length: 8 }).map((_, idx) => (
             <SkeletonCard key={`skeleton-cc-${idx}`} />
           ))
         ) : customCharacters.length === 0 ? (
-          <div className="no-skins-message" style={{ gridColumn: '1 / -1' }}>
+          <div className="no-skins-message" style={{ width: '100%' }}>
             <p>No custom characters yet. Import a fighter package or scan an ISO.</p>
           </div>
         ) : customCharacters.map((char) => (
@@ -48,24 +48,20 @@ export default function CustomCharactersGrid({
                 <img
                   src={char.icon_url}
                   alt={char.name}
-                  className="character-icon"
-                  style={{ imageRendering: 'pixelated' }}
+                  className="character-css-icon"
                   onError={(e) => {
                     e.target.style.display = 'none'
                     e.target.nextSibling.style.display = 'flex'
                   }}
                 />
               ) : null}
-              <div className="stage-placeholder" style={{ display: char.has_css_icon ? 'none' : 'flex' }}>
-                {char.name[0]}
+              <div className="character-placeholder" style={{ display: char.has_css_icon ? 'none' : 'flex' }}>
+                <span className="character-initial">{char.name[0]}</span>
               </div>
             </div>
-            <div className="character-info">
-              <h3 className="character-name">{char.name}</h3>
-              <p className="skin-count">
-                <span>{char.costume_count}</span> costume{char.costume_count !== 1 ? 's' : ''}
-              </p>
-            </div>
+            <p className="skin-count">
+              <span>{char.costume_count}</span> costume{char.costume_count !== 1 ? 's' : ''}
+            </p>
           </div>
         ))}
       </div>

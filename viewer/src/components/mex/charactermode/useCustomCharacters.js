@@ -3,6 +3,7 @@
  * install/remove logic for CharacterMode.
  */
 import { useState } from 'react'
+import { computeAutoCssLayout } from '../../../utils/cssGridLayout'
 
 export default function useCustomCharacters({ API_URL, onRefresh }) {
   // Add character modal state
@@ -36,6 +37,9 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
     })
   }
 
+  // Re-fit the character select grid to the new roster: auto-pick
+  // columns/rows for the icon count and re-center every row (the old inline
+  // version kept the column count fixed and left partial rows off-center).
   const autoApplyCssGrid = async () => {
     try {
       const res = await fetch(`${API_URL}/menus/css/layout`)
@@ -43,21 +47,10 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
       if (!data.success) return
       const { icons, template } = data
       if (!icons || !template || icons.length === 0) return
-      const cols = template.iconsPerRow || 9
-      const rows = Math.ceil(icons.length / cols)
-      const vanillaW = 63.45, vanillaH = 21.6, baseW = 7.05, baseH = 7.2
-      const sx = vanillaW / (cols * baseW), sy = vanillaH / (rows * baseH)
-      const newTemplate = { ...template, scaleX: sx, scaleY: sy, iconWidth: baseW, iconHeight: baseH, centerX: 0.05, centerY: 9.5 }
-      const iw = baseW * sx, ih = baseH * sy
-      const totalW = Math.min(icons.length, cols) * iw, totalH = rows * ih
-      const gridIcons = icons.map((icon, i) => {
-        const col = i % cols, row = Math.floor(i / cols)
-        return { ...icon, x: newTemplate.centerX - totalW / 2 + iw * col + iw / 2, y: newTemplate.centerY + totalH / 2 - ih * row - ih / 2, z: 0, scaleX: sx, scaleY: sy, collisionSizeX: baseW, collisionSizeY: baseH, collisionOffsetX: 0, collisionOffsetY: 0 }
-      })
       await fetch(`${API_URL}/menus/css/layout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ icons: gridIcons, template: newTemplate })
+        body: JSON.stringify(computeAutoCssLayout(icons, template))
       })
     } catch (err) {
       console.error('Auto CSS grid failed:', err)
@@ -102,6 +95,8 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
       })
       const data = await response.json()
       if (data.success) {
+        // Removing a fighter leaves a gap in the select-screen grid; re-fit it
+        await autoApplyCssGrid()
         onRefresh()
       } else {
         alert(data.error || 'Failed to remove fighter')
