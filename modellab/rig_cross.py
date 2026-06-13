@@ -42,7 +42,8 @@ if "--rot-y" in sys.argv:
     rot_y = float(sys.argv[sys.argv.index("--rot-y") + 1])
     args = [a for a in args if a != sys.argv[sys.argv.index("--rot-y") + 1]]
 tag = args[-1] if len(args) > (1 if mesh_override else 2) else "v1"
-rig_only = "--rig-only" in sys.argv     # stop after the SMD (fast QA loop)
+rig_only = "--rig-only" in sys.argv     # stop after the SMD (fast geometry QA)
+textured_only = "--textured" in sys.argv  # rig+import+textured render, no ISO
 
 
 def joint_symbol(dat_path):
@@ -118,6 +119,23 @@ if (acc_dir / "cape.smd").exists():
     else:
         print(f"WARNING accessory step failed, shipping without cape:\n"
               f"{r.stdout[-500:]}")
+
+# 3c. TEXTURED game-accurate render of the imported DAT (HSDRaw --csp). The
+# grey Python painters can't show texture/UV/material/normal bugs — this is the
+# gate that catches them offline (e.g. the AI-costume UV scramble). ALWAYS look
+# at this before trusting a rig.
+from render_dat import render_dat  # noqa: E402
+
+csp_png = ML / "shots" / f"{src_slug}_{tag}_textured.png"
+csp_png.parent.mkdir(parents=True, exist_ok=True)
+if render_dat(out_dat, csp_png):
+    print(f"textured render: {csp_png}  <-- INSPECT for texture/material issues")
+else:
+    print("WARNING textured render failed")
+
+if textured_only:
+    print(f"textured-only: wrote {out_dat.name} + render, skipping ISO")
+    sys.exit(0)
 
 # 4. pack as a costume zip (placeholder csp/stc) and build the ISO
 src_zip = BACKEND.parent / "storage" / "Fox" / "roundtrip-test-plfxrt.zip"
