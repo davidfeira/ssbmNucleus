@@ -5,7 +5,7 @@ import { playSound } from '../../utils/sounds'
 import ProgressPanel from '../export/ProgressPanel'
 import useAiStudioSetup, { CostBreakdown, InspirationPicker, ResolutionNotice,
                            SetupGate, TimeEstimate,
-                           autoOptionLabel } from './useAiStudioSetup'
+                           autoValueFor } from './useAiStudioSetup'
 
 const TASK_KINDS = ['material']
 const DEFAULT_PLANNER = 'openai/gpt-5-mini'
@@ -195,7 +195,7 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
     <div className="ai-studio-overlay" onClick={handleClose}>
       <div className="ai-studio-modal" onClick={(e) => e.stopPropagation()}>
         <div className="ai-studio-header">
-          <h3>✨ AI Skin Studio — {character}</h3>
+          <h3>🎨 AI Skin Studio — {character}</h3>
           <button className="ai-studio-close" onClick={handleClose}>×</button>
         </div>
 
@@ -229,12 +229,12 @@ export default function AIStudioModal({ show, character, onClose, onSaved }) {
               ))}
             </select>
             <label className="ai-studio-label">Image model (materials)</label>
-            <select className="ai-studio-planner" value={imageModel}
+            <select className="ai-studio-planner"
+                    value={imageModel || autoValueFor(autoResolution, 'material')}
                     onChange={(e) => {
                       setImageModel(e.target.value)
                       localStorage.setItem('ai_studio_image_model', e.target.value)
                     }}>
-              <option value="">{autoOptionLabel(autoResolution)}</option>
               {options.map((m) => (
                 <option key={m.value} value={m.value} disabled={m.locked}>
                   {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}

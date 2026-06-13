@@ -114,7 +114,7 @@ export default function AiStudioSection({ API_URL }) {
         <div className="aistudio-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="aistudio-modal" onClick={(e) => e.stopPropagation()}>
             <div className="aistudio-modal-header">
-              <h3>✨ AI Studio setup</h3>
+              <h3>🎨 AI Studio setup</h3>
               <button className="aistudio-modal-close"
                       onClick={() => setShowModal(false)}>×</button>
             </div>

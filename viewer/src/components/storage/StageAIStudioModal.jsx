@@ -6,7 +6,7 @@ import ProgressPanel from '../export/ProgressPanel'
 import DolphinEmbedPanel from '../shared/DolphinEmbedPanel'
 import useAiStudioSetup, { CostBreakdown, InspirationPicker, ResolutionNotice,
                            SetupGate, TimeEstimate,
-                           autoOptionLabelFor } from './useAiStudioSetup'
+                           autoValueFor } from './useAiStudioSetup'
 
 const DEFAULT_PLANNER = 'openai/gpt-5-mini'
 
@@ -210,7 +210,7 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
     <div className="ai-studio-overlay" onClick={handleClose}>
       <div className="ai-studio-modal" onClick={(e) => e.stopPropagation()}>
         <div className="ai-studio-header">
-          <h3>✨ AI Stage Studio — {stage.name}</h3>
+          <h3>🎨 AI Stage Studio — {stage.name}</h3>
           <button className="ai-studio-close" onClick={handleClose}>×</button>
         </div>
 
@@ -244,12 +244,13 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
               ))}
             </select>
             <label className="ai-studio-label">Image model — materials</label>
-            <select className="ai-studio-planner" value={imageModel}
+            <span className="ai-studio-hint">A small model is fine here — materials are tiny swatches, so the size barely matters.</span>
+            <select className="ai-studio-planner"
+                    value={imageModel || autoValueFor(autoResolution, 'material')}
                     onChange={(e) => {
                       setImageModel(e.target.value)
                       localStorage.setItem('ai_studio_image_model', e.target.value)
                     }}>
-              <option value="">{autoOptionLabelFor(autoResolution, 'material')}</option>
               {options.map((m) => (
                 <option key={m.value} value={m.value} disabled={m.locked}>
                   {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}
@@ -257,12 +258,13 @@ export default function StageAIStudioModal({ show, stage, onClose, onSaved }) {
               ))}
             </select>
             <label className="ai-studio-label">Image model — backgrounds</label>
-            <select className="ai-studio-planner" value={backdropModel}
+            <span className="ai-studio-hint">Use a bigger model here — scenes and large details need the extra quality.</span>
+            <select className="ai-studio-planner"
+                    value={backdropModel || autoValueFor(autoResolution, 'backdrop')}
                     onChange={(e) => {
                       setBackdropModel(e.target.value)
                       localStorage.setItem('ai_studio_backdrop_model', e.target.value)
                     }}>
-              <option value="">{autoOptionLabelFor(autoResolution, 'backdrop')}</option>
               {options.map((m) => (
                 <option key={m.value} value={m.value} disabled={m.locked}>
                   {m.locked ? `🔒 ${m.label} — ${m.reason}` : m.label}

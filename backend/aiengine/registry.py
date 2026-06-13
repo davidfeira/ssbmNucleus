@@ -24,6 +24,7 @@ class ModelSpec:
     speed_blurb: str = ''        # static hint shown until measured stats exist
     tier_fit: frozenset = field(default_factory=frozenset)
     cost_per_image_usd: float = 0.0
+    power: int = 0               # relative capability rank, low → high (display order)
 
 
 MODELS = {
@@ -40,6 +41,7 @@ MODELS = {
         description='SD-Turbo — 1-step 512px drafts and texture tiles',
         speed_blurb='fastest',
         tier_fit=frozenset({'standard'}),
+        power=1,
     ),
     'flux-klein-4b': ModelSpec(
         id='flux-klein-4b',
@@ -54,6 +56,7 @@ MODELS = {
         description='FLUX.2 Klein 4B — sharper materials, handles scenes',
         speed_blurb='slower',
         tier_fit=frozenset({'standard', 'strong'}),
+        power=2,
     ),
     'z-image-turbo': ModelSpec(
         id='z-image-turbo',
@@ -68,6 +71,7 @@ MODELS = {
         description='Z-Image Turbo 6B — best local quality, scene-capable',
         speed_blurb='slowest',
         tier_fit=frozenset({'standard', 'strong'}),
+        power=3,
     ),
     # --- API models (no local VRAM, billed per call) ---
     'gemini-image': ModelSpec(
@@ -77,6 +81,7 @@ MODELS = {
         description='Nano Banana (Gemini 2.5 Flash Image) — fast, cheap API tier',
         tier_fit=frozenset({'standard', 'strong'}),
         cost_per_image_usd=0.04,
+        power=5,
     ),
     'gemini-image-pro': ModelSpec(
         id='gemini-image-pro',
@@ -85,6 +90,7 @@ MODELS = {
         description='Nano Banana Pro (Gemini 3 Pro Image) — top tier',
         tier_fit=frozenset({'standard', 'strong'}),
         cost_per_image_usd=0.15,
+        power=6,
     ),
     'gpt-image-mini': ModelSpec(
         id='gpt-image-mini',
@@ -93,6 +99,7 @@ MODELS = {
         description='GPT-5 Image Mini — cheaper OpenAI image tier',
         tier_fit=frozenset({'standard', 'strong'}),
         cost_per_image_usd=0.04,
+        power=4,
     ),
 }
 

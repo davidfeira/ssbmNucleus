@@ -13,11 +13,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { API_URL } from '../../config'
 
-// API planner LLMs (OpenRouter text models) — locked without a key
+// API planner LLMs (OpenRouter text models) — locked without a key.
+// Ordered least → most powerful (the free local Ollama planners, the weakest
+// tier, render ABOVE these) so the dropdown reads up to the strongest planner.
 const API_PLANNERS = [
-  { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
-  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
   { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+  { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini (recommended)' },
 ]
 
 export default function useAiStudioSetup(show, taskKinds) {
@@ -111,14 +113,15 @@ export default function useAiStudioSetup(show, taskKinds) {
             : 'set up local LLMs in AI Studio setup',
         })
       }
+      // locals first (weakest), then API planners least → most powerful
       setPlanners([
+        ...localList,
         ...API_PLANNERS.map((pl) => ({
           ...pl,
           label: `${pl.label}${speed(pl.id)}`,
           locked: !keyOk2,
           reason: 'needs an OpenRouter key',
         })),
-        ...localList,
       ])
     }).catch(() => {})
     return () => { cancelled = true }
@@ -168,20 +171,6 @@ export default function useAiStudioSetup(show, taskKinds) {
   }, [taskKinds.join(','), hasLocalKey])
 
   return { ready, options, planners, resolution, autoResolution, resolveFor }
-}
-
-const shortName = (label) => (label || '').replace(/\s*\([^)]*\)\s*$/, '')
-
-/** 'Auto — SD-Turbo' / 'Auto — SD-Turbo / scenes: Nano Banana' — shows what
- * the resolver would actually pick for THIS machine's setup. */
-export function autoOptionLabel(autoResolution) {
-  const ok = (autoResolution || []).filter((t) => !t.error && t.label)
-  if (!ok.length) return 'Auto (recommended)'
-  const names = [...new Set(ok.map((t) => shortName(t.label)))]
-  if (names.length === 1) return `Auto — ${names[0]}`
-  const material = ok.find((t) => t.kind === 'material')
-  const backdrop = ok.find((t) => t.kind === 'backdrop')
-  return `Auto — ${shortName(material?.label)} / scenes: ${shortName(backdrop?.label)}`
 }
 
 const TASK_LABELS = {
@@ -241,12 +230,13 @@ export function InspirationPicker({ value, name, onChange }) {
   )
 }
 
-/** 'Auto — <model>' for ONE task kind — the per-dropdown Auto label when a
- * studio has a separate picker per task. */
-export function autoOptionLabelFor(autoResolution, kind) {
+/** The model VALUE the resolver would auto-pick for a task kind — matches an
+ * option's `value`, so a picker can show the auto choice as its selected item
+ * (no separate '(Auto)' entry). '' until the resolve probe lands. */
+export function autoValueFor(autoResolution, kind) {
   const t = (autoResolution || []).find((x) => x.kind === kind
-                                              && !x.error && x.label)
-  return t ? `Auto — ${shortName(t.label)}` : 'Auto (recommended)'
+                                              && !x.error && x.model)
+  return t ? t.model : ''
 }
 
 /** Escalation/error notices ONLY. What each task runs on is already visible

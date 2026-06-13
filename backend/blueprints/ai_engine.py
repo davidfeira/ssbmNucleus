@@ -83,7 +83,8 @@ def list_models():
     has_key = bool(keystore.get_openrouter_key())
 
     models = []
-    for spec in MODELS.values():
+    # least → most powerful, so every picker/catalog reads up to the top model
+    for spec in sorted(MODELS.values(), key=lambda s: s.power):
         st = statuses.get(spec.id) or {}
         entry = {
             'id': spec.id,
