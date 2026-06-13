@@ -1065,12 +1065,15 @@ def parametric_weights(pts, vert_parts, proxy_parts, proxy_parents, proxy_pos,
 # emit                                                                        #
 # --------------------------------------------------------------------------- #
 def emit(rigkit: smd.SMD, foreign: ForeignMesh, weights, out_path: Path,
-         max_texture: int = 512, visible_indices=None, total_dobjs=None):
+         max_texture: int = 512, visible_indices=None, total_dobjs=None,
+         low_foreign: ForeignMesh = None, low_weights=None, low_indices=None):
     """Write the rigged SMD. When the character's costume visibility table is
-    known, REAL mesh groups are placed at the HighPoly (always-rendered) DObj
-    indices and degenerate dummy DObjs fill the LowPoly (hidden) slots —
+    known, REAL high-poly groups fill the HighPoly (always-rendered) DObj
+    indices; a decimated LOW-poly model (build_low_poly) fills the given
+    LowPoly indices; degenerate dummy DObjs fill every remaining slot —
     otherwise the game's low-poly hiding eats whichever chunks land in the
-    hidden index range (the in-game "shredded" artifact).
+    hidden range (the in-game "shredded" artifact). Without a low model the
+    LowPoly slots stay dummies (off-screen magnifier then shows nothing).
     """
     # real skeleton joints only (the rig kit also carries "Joint_X_Object_Y"
     # mesh placeholder nodes from the vanilla mesh — drop those)
@@ -1079,75 +1082,102 @@ def emit(rigkit: smd.SMD, foreign: ForeignMesh, weights, out_path: Path,
 
     import re
 
-    # ordered real groups + per-group forced single-bind weights
-    real_groups = list(dict.fromkeys(foreign.tri_group))
+    # ordered high groups + per-group forced single-bind weights
+    high_groups = list(dict.fromkeys(foreign.tri_group))
     single_joint: dict = {}
-    for g in real_groups:
+    for g in high_groups:
         src_name = str(foreign.group_names.get(g, ""))
         if "_SINGLE" in src_name:
             mj = re.match(r"Joint_(\d+)", src_name)
             if mj:
                 single_joint[g] = (int(mj.group(1)), 1.0)
+    low_groups = (list(dict.fromkeys(low_foreign.tri_group))
+                  if low_foreign is not None else [])
+    low_set = set(low_indices or [])
 
-    # decide the DObj slot for every output index
+    # decide the DObj slot KIND for every output index
     if visible_indices:
-        total = max(total_dobjs or 0, max(visible_indices) + 1)
-        slots = ["real" if i in visible_indices else "dummy" for i in range(total)]
+        total = max(total_dobjs or 0, max(visible_indices) + 1,
+                    (max(low_set) + 1) if low_set else 0)
+        slots = []
+        for i in range(total):
+            if i in visible_indices:
+                slots.append("high")
+            elif i in low_set:
+                slots.append("low")
+            else:
+                slots.append("dummy")
     else:
-        slots = ["real"] * len(real_groups)
+        slots = ["high"] * len(high_groups)
 
     # mesh placeholder nodes in slot order: this is how IONET's SMD importer
     # reconstructs per-DObj meshes (vertex parent = mesh node id) and the
     # order determines the in-game DObj index
     next_id = max(b.id for b in joints) + 1
-    group_node: dict = {}
+    high_node: dict = {}
+    low_node: dict = {}
     dummy_nodes: list = []
-    real_iter = iter(real_groups)
-    placed = 0
+    hi = iter(high_groups)
+    lo = iter(low_groups)
     for i, kind in enumerate(slots):
-        g = next(real_iter, None) if kind == "real" else None
-        name = (str(foreign.group_names.get(g, "")) if g in single_joint
-                else f"Joint_0_Object_{i}")
-        out.bones.append(smd.Bone(id=next_id, name=name or f"Joint_0_Object_{i}",
-                                  parent=-1))
-        if g is not None:
-            group_node[g] = next_id
-            placed += 1
+        if kind == "high":
+            g = next(hi, None)
+            name = (str(foreign.group_names.get(g, "")) if g in single_joint
+                    else f"Joint_0_Object_{i}")
+            out.bones.append(smd.Bone(id=next_id,
+                                      name=name or f"Joint_0_Object_{i}",
+                                      parent=-1))
+            (high_node.__setitem__(g, next_id) if g is not None
+             else dummy_nodes.append(next_id))
+        elif kind == "low":
+            g = next(lo, None)
+            out.bones.append(smd.Bone(id=next_id, name=f"Joint_0_Object_{i}",
+                                      parent=-1))
+            (low_node.__setitem__(g, next_id) if g is not None
+             else dummy_nodes.append(next_id))
         else:
+            out.bones.append(smd.Bone(id=next_id, name=f"Joint_0_Object_{i}",
+                                      parent=-1))
             dummy_nodes.append(next_id)
         next_id += 1
-    # leftover real groups (more groups than visible slots): append at the end
-    for g in real_iter:
+    # leftover groups (more groups than their slots): append at the end
+    for g in hi:
         out.bones.append(smd.Bone(id=next_id, name=f"Joint_0_Object_x{next_id}",
                                   parent=-1))
-        group_node[g] = next_id
+        high_node[g] = next_id
+        next_id += 1
+    for g in lo:
+        out.bones.append(smd.Bone(id=next_id, name=f"Joint_0_Object_x{next_id}",
+                                  parent=-1))
+        low_node[g] = next_id
         next_id += 1
 
     # triangles must appear grouped in slot order for the importer to build
     # DObjs in the intended sequence
-    tri_by_group: dict = {}
+    tri_by_high: dict = {}
     for t in range(len(foreign.tri_pos)):
-        tri_by_group.setdefault(foreign.tri_group[t], []).append(t)
+        tri_by_high.setdefault(foreign.tri_group[t], []).append(t)
+    tri_by_low: dict = {}
+    if low_foreign is not None:
+        for t in range(len(low_foreign.tri_pos)):
+            tri_by_low.setdefault(low_foreign.tri_group[t], []).append(t)
 
-    k_base = {g: None for g in real_groups}
-    # precompute corner offsets (k) per triangle: corners are 3*t + c
     dummy_mat = foreign.tri_mat[0] if foreign.tri_mat else "mat0"
 
-    def emit_group(g):
-        node = group_node[g]
-        for t in tri_by_group[g]:
+    def emit_group(g, node, mesh, w_list, tri_by, single):
+        for t in tri_by[g]:
             verts = []
             for c in range(3):
-                w = [single_joint[g]] if g in single_joint else weights[t * 3 + c]
+                w = [single[g]] if g in single else w_list[t * 3 + c]
                 verts.append(smd.Vertex(
-                    pos=tuple(foreign.tri_pos[t][c]),
-                    normal=tuple(foreign.tri_norm[t][c]),
-                    uv=tuple(foreign.tri_uv[t][c]),
+                    pos=tuple(mesh.tri_pos[t][c]),
+                    normal=tuple(mesh.tri_norm[t][c]),
+                    uv=tuple(mesh.tri_uv[t][c]),
                     weights=w,
                     parent=node,
                 ))
             out.triangles.append(
-                smd.Triangle(material=foreign.tri_mat[t], verts=tuple(verts)))
+                smd.Triangle(material=mesh.tri_mat[t], verts=tuple(verts)))
 
     def emit_dummy(node):
         # one micro-triangle, textured (textureless DObjs hang the game),
@@ -1162,19 +1192,30 @@ def emit(rigkit: smd.SMD, foreign: ForeignMesh, weights, out_path: Path,
                 weights=[(4, 1.0)], parent=node))
         out.triangles.append(smd.Triangle(material=dummy_mat, verts=tuple(verts)))
 
-    real_iter2 = iter([g for g in real_groups])
+    hi2 = iter(high_groups)
+    lo2 = iter(low_groups)
     di = 0
     for kind in slots:
-        if kind == "real":
-            g = next(real_iter2, None)
+        if kind == "high":
+            g = next(hi2, None)
             if g is not None:
-                emit_group(g)
+                emit_group(g, high_node[g], foreign, weights, tri_by_high,
+                           single_joint)
             else:
-                emit_dummy(dummy_nodes[di]); di += 1  # exhausted: pad
+                emit_dummy(dummy_nodes[di]); di += 1   # exhausted: pad
+        elif kind == "low":
+            g = next(lo2, None)
+            if g is not None:
+                emit_group(g, low_node[g], low_foreign, low_weights,
+                           tri_by_low, {})
+            else:
+                emit_dummy(dummy_nodes[di]); di += 1
         else:
             emit_dummy(dummy_nodes[di]); di += 1
-    for g in real_iter2:
-        emit_group(g)
+    for g in hi2:
+        emit_group(g, high_node[g], foreign, weights, tri_by_high, single_joint)
+    for g in lo2:
+        emit_group(g, low_node[g], low_foreign, low_weights, tri_by_low, {})
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     smd.save(out, out_path)
@@ -1256,6 +1297,23 @@ def load_visibility(char_code):
     if not high:
         return None, None
     return high, max(high | low) + 1
+
+
+def load_low_indices(char_code):
+    """Sorted LowPoly (off-screen magnifier / shadow) DObj indices for a
+    character's costume-0 table; [] when unknown. The engine renders this set
+    ONLY in the magnifier and hides it in normal play, so a decimated copy of
+    the body placed here is the proper low-detail model (vs the dummy specks
+    emit() falls back to)."""
+    table_path = Path(__file__).parent / "visibility_tables.json"
+    if not table_path.exists() or not char_code:
+        return []
+    data = json.loads(table_path.read_text())
+    entry = data.get(char_code)
+    if not entry or not entry.get("costumes"):
+        return []
+    c0 = entry["costumes"][0]
+    return sorted({i for e in (c0.get("low") or []) for i in e})
 
 
 def load_dynamics(char_code):
@@ -1959,6 +2017,51 @@ def recompute_normals(foreign: ForeignMesh):
     foreign.tri_norm = norms.reshape(foreign.tri_norm.shape)
 
 
+def build_low_poly(foreign: ForeignMesh, weights, char_code, log=print):
+    """Derive the character's LOW-POLY model (the off-screen magnifier mesh,
+    and the engine's projected-shadow source) from the FINAL rigged geometry.
+
+    The visibility table hides the LowPoly DObj set in normal play and renders
+    it in the magnifier; vanilla characters ship a real ~7% decimation there
+    (Falcon: 485 tris vs 6480). Our emit() otherwise drops degenerate dummies
+    into those slots, so an AI/cross costume is invisible off-screen and casts
+    a broken shadow. This decimates the final body to a small budget and
+    carries each low vertex's skin weights from its nearest high-poly corner,
+    so it deforms with the same skeleton.
+
+    Returns (low_foreign, low_weights, place_indices) or (None, None, None)
+    when the character's low set is unknown (emit then dummies as before).
+    Call AFTER recompute_normals(foreign): low normals reproject from the high
+    mesh's final smooth normals (then re-smooth on the low geometry)."""
+    low_idx = load_low_indices(char_code)
+    if not low_idx:
+        return None, None, None
+    n_tris = len(foreign.tri_pos)
+    if n_tris < 24:
+        return None, None, None     # nothing worth a second LOD
+
+    # vanilla low is ~7% of high; keep within the community <900-tri budget
+    target = max(150, min(700, n_tris // 12))
+    lf = ForeignMesh(foreign.tri_pos.copy(), foreign.tri_norm.copy(),
+                     foreign.tri_uv.copy(), list(foreign.tri_mat),
+                     foreign.textures, ["lowpoly"] * n_tris)
+    lf = decimate(lf, target)
+    recompute_normals(lf)
+
+    # weights: the low mesh is a coarsening of the SAME final surface, so the
+    # nearest high-poly corner's (already valid, <=2-bone, normalized) weights
+    # are correct. cKDTree over the high corners — bounded, fast.
+    from scipy.spatial import cKDTree
+    high_corners = foreign.tri_pos.reshape(-1, 3)
+    _, nn = cKDTree(high_corners).query(lf.tri_pos.reshape(-1, 3), workers=-1)
+    low_weights = [weights[int(i)] for i in nn]
+
+    place = [low_idx[0]]            # one low DObj carries it; rest stay dummies
+    log(f"low-poly: {len(lf.tri_pos)} tris (from {n_tris}) at DObj {place[0]}, "
+        f"{len(low_idx) - 1} dummy low slots")
+    return lf, low_weights, place
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
@@ -2355,8 +2458,17 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     recompute_normals(foreign)
     log("recomputed smooth vertex normals")
 
+    # real LOW-POLY model (off-screen magnifier + projected shadow): a decimated
+    # copy of the final body at the LowPoly DObj indices, instead of the dummy
+    # specks that left AI/cross costumes invisible off-screen. Skinned by
+    # nearest-high-corner weights so it deforms with the same skeleton.
+    low_foreign, low_weights, low_idx = build_low_poly(
+        foreign, weights, char_code, log=log)
+
     n_tex = emit(rigkit, foreign, weights, Path(out_path), max_texture,
-                 visible_indices=visible, total_dobjs=total)
+                 visible_indices=visible, total_dobjs=total,
+                 low_foreign=low_foreign, low_weights=low_weights,
+                 low_indices=low_idx)
     log(f"rigged: scale {scale:.3f}, {len(weights)} corners, {n_tex} textures")
     return {"tris": len(foreign.tri_pos), "scale": scale, "textures": n_tex}
 
