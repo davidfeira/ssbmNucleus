@@ -23,7 +23,7 @@ WORK.mkdir(exist_ok=True)
 
 # slug -> (pose yml, donor vanilla AJ)
 CONFIG = {
-    "slippy":            (POSES / "Fox/slippi.yml",          VANILLA / "Fox/PlFxAJ.dat"),
+    "slippy":            (POSES / "Fox/slippi2.yml",         VANILLA / "Fox/PlFxAJ.dat"),
     "shadow-mewtwo":     (POSES / "Mewtwo/shadowmetwto.yml", VANILLA / "Mewtwo/PlMtAJ.dat"),
     "phantom-ganondorf": (POSES / "Ganondorf/phantomganon.yml", VANILLA / "Ganondorf/PlGnAJ.dat"),
     "cdi-king":          (POSES / "Ganondorf/cdiking.yml",   VANILLA / "Ganondorf/PlGnAJ.dat"),
