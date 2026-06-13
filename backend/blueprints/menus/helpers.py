@@ -42,6 +42,10 @@ PAUSE_PATH = MENUS_PATH / 'pause'
 PAUSE_PATH.mkdir(parents=True, exist_ok=True)
 PAUSE_METADATA = PAUSE_PATH / 'metadata.json'
 
+PERCENT_PATH = MENUS_PATH / 'percent'
+PERCENT_PATH.mkdir(parents=True, exist_ok=True)
+PERCENT_METADATA = PERCENT_PATH / 'metadata.json'
+
 SCREENSHOT_CANDIDATES = ['screenshot_0.png', 'screenshot.png', 'preview.png']
 
 # Canonical Melee character → list of accepted filename stems (lowercase).

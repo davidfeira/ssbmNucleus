@@ -20,7 +20,8 @@ from stage_detector import detect_stage_from_zip
 from dat_processor import validate_for_slippi
 from blueprints.xdelta import load_xdelta_metadata, save_xdelta_metadata
 from blueprints.menus import (install_icon_grid_mod, looks_like_icon_grid_zip,
-                              install_pause_mods_from_zip, looks_like_pause_zip)
+                              install_pause_mods_from_zip, looks_like_pause_zip,
+                              install_percent_mods_from_zip, looks_like_percent_zip)
 from extra_types import get_storage_character
 
 from . import import_bp
@@ -599,6 +600,25 @@ def import_file():
                         'mods': mods,
                         'imported_count': len(mods),
                         'message': f"Imported {len(mods)} pause screen mod(s): {names}"
+                    })
+                except (zipfile.BadZipFile, RuntimeError):
+                    pass
+
+            # PHASE 4.6: Try percent font / HUD (IfAll) detection
+            logger.info('Phase 4.6: Attempting percent font detection...')
+            if looks_like_percent_zip(temp_zip_path):
+                logger.info('[OK] Detected percent font mod')
+                try:
+                    percent_name = custom_title or Path(file.filename).stem
+                    mods = install_percent_mods_from_zip(temp_zip_path, name=percent_name)
+                    names = ', '.join(m.get('name', '?') for m in mods)
+                    return jsonify({
+                        'success': True,
+                        'type': 'menu_mod',
+                        'menu_mod_type': 'percent_font',
+                        'mods': mods,
+                        'imported_count': len(mods),
+                        'message': f"Imported {len(mods)} percent font mod(s): {names}"
                     })
                 except (zipfile.BadZipFile, RuntimeError):
                     pass

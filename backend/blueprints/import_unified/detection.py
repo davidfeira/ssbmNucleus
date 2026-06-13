@@ -17,6 +17,7 @@ Types, in dispatch priority order:
     xdelta                  .xdelta extension or .xdelta member(s)
     css_icon_grid           '='-prefixed icon PNGs, or MnSlChr/MexSelectChr dat
     pause_screen            GmPause*.dat/.usd member
+    percent_font            IfAll*.dat/.usd member (HUD percent typeface)
     css_background          MnSlMap (SSS) dat; MnSlChr ambiguous w/ icon grid
     music                   .hps extension or .hps member(s)
     character_renamed       costume DAT(s) whose filenames don't start with
@@ -217,12 +218,16 @@ def detect_content_type(archive_path, filename=None, deep=True):
                       for b in basenames)
     has_gmpause = any('gmpause' in b and b.endswith(('.dat', '.usd'))
                       for b in basenames)
+    has_ifall = any(b.startswith('ifall') and b.endswith(('.dat', '.usd'))
+                    for b in basenames)
 
     if len(equals_pngs) >= 2 or has_mnslchr:
         add('css_icon_grid', {'icon_pngs': len(equals_pngs),
                               'has_mnslchr': has_mnslchr})
     if has_gmpause:
         add('pause_screen')
+    if has_ifall:
+        add('percent_font')
     if has_mnslmap or has_mnslchr:
         # MnSlMap is unambiguously a background source; MnSlChr could be either
         # an icon-grid source or a CSS background source.

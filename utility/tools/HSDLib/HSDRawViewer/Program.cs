@@ -147,6 +147,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for HUD (IfAll.dat/.usd) texture export/import mode
+            if (args.Length >= 1 && args[0] == "--hud-textures")
+            {
+                Console.WriteLine("HUD textures mode detected");
+                RunHudTexturesOperation(args);
+                return;
+            }
+
             // Check for stage texture export/import mode (Gr*.dat map_head models)
             if (args.Length >= 1 && args[0] == "--stage-textures")
             {
@@ -3307,6 +3315,296 @@ namespace HSDRawViewer
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: Pause screen operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// One texture slot in a HUD interface file (IfAll.dat/.usd). Material
+        /// textures hang off the JOBJ tree; digit glyphs (the percent font) are
+        /// texture-swap animation frames in MatAnim TexAnim image banks.
+        /// </summary>
+        private class HudTexEntry
+        {
+            public string Root;
+            public string Kind;              // "mat" or "anim"
+            public HSD_TOBJ Tobj;            // mat: live TOBJ in the model
+            public HSD_TexAnim Ta;           // anim: owning texture animation
+            public int Frame;                // anim: index into Ta.ImageBuffers
+            // NOTE: ImageBuffers[i] returns an embedded-struct COPY — reads see
+            // the real child structs, but writes must go back through the
+            // indexer setter (see the import path below).
+            public HSD_Image Image => Kind == "mat" ? Tobj.ImageData : Ta.ImageBuffers[Frame].Data;
+            public HSD_Tlut Tlut => Kind == "mat"
+                ? Tobj.TlutData
+                : (Ta.TlutBuffers != null && Frame < Ta.TlutBuffers.Length ? Ta.TlutBuffers[Frame].Data : null);
+        }
+
+        static List<HudTexEntry> CollectHudTextures(HSDRawFile rawFile)
+        {
+            var result = new List<HudTexEntry>();
+
+            void AddJointTextures(string rootName, HSD_JOBJ joint)
+            {
+                if (joint == null) return;
+                foreach (var (_, tobj) in CollectAllTextures(joint))
+                    result.Add(new HudTexEntry { Root = rootName, Kind = "mat", Tobj = tobj });
+            }
+
+            void AddMatAnimTextures(string rootName, HSD_MatAnimJoint majRoot)
+            {
+                if (majRoot == null) return;
+                foreach (var maj in majRoot.TreeList)
+                {
+                    if (maj.MaterialAnimation == null) continue;
+                    foreach (var ma in maj.MaterialAnimation.List)
+                    {
+                        if (ma.TextureAnimation == null) continue;
+                        foreach (var ta in ma.TextureAnimation.List)
+                        {
+                            var bufs = ta.ImageBuffers;
+                            if (bufs == null) continue;
+                            for (int i = 0; i < bufs.Length; i++)
+                            {
+                                if (bufs[i]?.Data?.ImageData == null) continue;
+                                result.Add(new HudTexEntry
+                                {
+                                    Root = rootName,
+                                    Kind = "anim",
+                                    Ta = ta,
+                                    Frame = i,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            void AddDesc(string rootName, HSD_JOBJDesc desc)
+            {
+                if (desc == null) return;
+                AddJointTextures(rootName, desc.RootJoint);
+                var majArr = desc.MaterialAnimations?.Array;
+                if (majArr == null) return;
+                foreach (var maj in majArr)
+                    AddMatAnimTextures(rootName, maj);
+            }
+
+            foreach (var r in rawFile.Roots)
+            {
+                if (r.Data is HSDNullPointerArrayAccessor<HSD_JOBJDesc> descArray)
+                {
+                    var descs = descArray.Array;
+                    if (descs == null) continue;
+                    foreach (var desc in descs)
+                        AddDesc(r.Name, desc);
+                }
+                else if (r.Data is HSD_SOBJ sobj)
+                {
+                    var descs = sobj.JOBJDescs?.Array;
+                    if (descs == null) continue;
+                    foreach (var desc in descs)
+                        AddDesc(r.Name, desc);
+                }
+                else if (r.Data is HSD_MatAnimJoint majRoot)
+                {
+                    AddMatAnimTextures(r.Name, majRoot);
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// HUD interface file (IfAll.dat/.usd) texture export/import — covers the
+        /// percent font (DmgNum/DmgMrk digit glyph anim frames) and the other
+        /// in-game HUD elements (stocks, timer, magnifier...).
+        /// \   Export: HSDRawViewer.exe --hud-textures export <ifall.usd> <output_dir>
+        /// \   Import: HSDRawViewer.exe --hud-textures import <ifall.usd> <spec.json> <output.usd>
+        /// \ spec.json: {"replacements": [{"index": 12, "png": "...", "format": "original"|"rgb5a3"}]}
+        /// </summary>
+        static void RunHudTexturesOperation(string[] args)
+        {
+            try
+            {
+                string subCommand = args.Length >= 2 ? args[1].ToLower() : "";
+
+                if (subCommand == "export" && args.Length >= 4)
+                {
+                    string datFile = args[2];
+                    string outDir = args[3];
+                    System.IO.Directory.CreateDirectory(outDir);
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+                    var allTex = CollectHudTextures(rawFile);
+                    if (allTex.Count == 0)
+                    {
+                        Console.WriteLine("ERROR: No HUD textures found (not an interface file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    Console.WriteLine($"Found {allTex.Count} textures:");
+                    var manifest = new List<Dictionary<string, object>>();
+                    int index = 0;
+                    foreach (var entry in allTex)
+                    {
+                        var tobj = entry.Kind == "mat"
+                            ? entry.Tobj
+                            : new HSD_TOBJ { ImageData = entry.Image, TlutData = entry.Tlut };
+                        string fmt = tobj.ImageData.Format.ToString();
+                        int w = tobj.ImageData.Width;
+                        int h = tobj.ImageData.Height;
+                        string fileName = $"hud_t{index}_{entry.Root}_{entry.Kind}_{w}x{h}_{fmt}.png";
+                        using (var image = tobj.ToImage())
+                        using (var fs = new System.IO.FileStream(System.IO.Path.Combine(outDir, fileName), System.IO.FileMode.Create))
+                        {
+                            image.Save(fs, new PngEncoder());
+                        }
+                        // Raw-buffer fingerprint (image + palette bytes) so callers
+                        // can diff a mod against vanilla without comparing PNGs
+                        var md5 = System.Security.Cryptography.MD5.Create();
+                        var imgBytes = tobj.ImageData.ImageData ?? Array.Empty<byte>();
+                        md5.TransformBlock(imgBytes, 0, imgBytes.Length, null, 0);
+                        var tlutBytes = tobj.TlutData?.TlutData ?? Array.Empty<byte>();
+                        md5.TransformFinalBlock(tlutBytes, 0, tlutBytes.Length);
+                        manifest.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["root"] = entry.Root,
+                            ["kind"] = entry.Kind,
+                            ["width"] = w,
+                            ["height"] = h,
+                            ["format"] = fmt,
+                            ["filename"] = fileName,
+                            ["md5"] = Convert.ToHexString(md5.Hash).ToLowerInvariant(),
+                        });
+                        Console.WriteLine($"  t{index} {entry.Root} {entry.Kind}: {w}x{h} {fmt}");
+                        index++;
+                    }
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(outDir, "manifest.json"),
+                        JsonSerializer.Serialize(new Dictionary<string, object> { ["textures"] = manifest },
+                                                 new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"SUCCESS: Exported {index} textures");
+                }
+                else if (subCommand == "import" && args.Length >= 5)
+                {
+                    string datFile = args[2];
+                    string specFile = args[3];
+                    string outputDat = args[4];
+
+                    Console.WriteLine($"Loading: {datFile}");
+                    var rawFile = new HSDRawFile(datFile);
+                    var allTex = CollectHudTextures(rawFile);
+                    if (allTex.Count == 0)
+                    {
+                        Console.WriteLine("ERROR: No HUD textures found (not an interface file?)");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    using var specDoc = JsonDocument.Parse(System.IO.File.ReadAllText(specFile));
+                    int replaced = 0;
+                    foreach (var entry in specDoc.RootElement.GetProperty("replacements").EnumerateArray())
+                    {
+                        string pngPath = entry.GetProperty("png").GetString();
+                        string formatMode = entry.TryGetProperty("format", out var fmtEl)
+                            ? fmtEl.GetString() : "original";
+                        int idx = entry.GetProperty("index").GetInt32();
+                        if (idx < 0 || idx >= allTex.Count)
+                        {
+                            Console.WriteLine($"WARNING: texture index {idx} out of range (file has {allTex.Count}); skipping");
+                            continue;
+                        }
+                        if (!System.IO.File.Exists(pngPath))
+                        {
+                            Console.WriteLine($"WARNING: png not found: {pngPath}; skipping");
+                            continue;
+                        }
+
+                        var target = allTex[idx];
+                        var oldImage = target.Image;
+
+                        HSDRaw.GX.GXTexFmt imgFormat;
+                        HSDRaw.GX.GXTlutFmt palFormat;
+                        if (formatMode == "rgb5a3")
+                        {
+                            // Color support for user-uploaded images (most
+                            // vanilla HUD glyphs are grayscale I4/IA4)
+                            imgFormat = HSDRaw.GX.GXTexFmt.RGB5A3;
+                            palFormat = HSDRaw.GX.GXTlutFmt.IA8;
+                        }
+                        else
+                        {
+                            imgFormat = oldImage.Format;
+                            palFormat = target.Tlut?.Format ?? HSDRaw.GX.GXTlutFmt.IA8;
+                        }
+
+                        using var userImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(pngPath);
+                        using var resized = userImage.Clone(ctx => ctx.Resize(oldImage.Width, oldImage.Height));
+
+                        if (target.Kind == "mat")
+                        {
+                            // HSDRaw save dedupes identical buffers, so slots can
+                            // share one pixel buffer (see GmPause t4/t10) — give
+                            // the TOBJ its own image struct before injecting.
+                            target.Tobj.ImageData = new HSD_Image()
+                            {
+                                Width = oldImage.Width,
+                                Height = oldImage.Height,
+                                Format = oldImage.Format,
+                                MipMap = oldImage.MipMap,
+                                MinLOD = oldImage.MinLOD,
+                                MaxLOD = oldImage.MaxLOD,
+                            };
+                            target.Tobj.InjectBitmap(resized, imgFormat, palFormat);
+                        }
+                        else
+                        {
+                            // Anim frames: encode into a scratch TOBJ, then write
+                            // the rewired buffer back through the array indexer —
+                            // ImageBuffers[i] is an embedded-struct copy, so
+                            // setting Data on it alone never reaches the file.
+                            var scratch = new HSD_TOBJ();
+                            scratch.InjectBitmap(resized, imgFormat, palFormat);
+                            var bufs = target.Ta.ImageBuffers;
+                            var buf = bufs[target.Frame];
+                            buf.Data = scratch.ImageData;
+                            bufs[target.Frame] = buf;
+                            if (scratch.TlutData != null && target.Ta.TlutBuffers != null
+                                && target.Frame < target.Ta.TlutBuffers.Length)
+                            {
+                                var tluts = target.Ta.TlutBuffers;
+                                var tlut = tluts[target.Frame];
+                                tlut.Data = scratch.TlutData;
+                                tluts[target.Frame] = tlut;
+                            }
+                        }
+                        Console.WriteLine($"  Replaced t{idx} ({target.Root} {target.Kind}) {oldImage.Width}x{oldImage.Height} as {imgFormat}");
+                        replaced++;
+                    }
+
+                    if (replaced == 0)
+                    {
+                        Console.WriteLine("ERROR: No textures were replaced");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    rawFile.Save(outputDat);
+                    Console.WriteLine($"SUCCESS: Replaced {replaced} textures, saved to: {outputDat}");
+                }
+                else
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --hud-textures export <ifall.usd> <output_dir>");
+                    Console.WriteLine("  Import: HSDRawViewer.exe --hud-textures import <ifall.usd> <spec.json> <output.usd>");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: HUD textures operation failed: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Environment.Exit(1);
             }

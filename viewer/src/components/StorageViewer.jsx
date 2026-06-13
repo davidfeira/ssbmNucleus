@@ -27,6 +27,8 @@ import IconGridModsView from './storage/IconGridModsView'
 import BackgroundModsView from './storage/BackgroundModsView'
 import DoorModsView from './storage/DoorModsView'
 import PauseModsView from './storage/PauseModsView'
+import HudMenuTypesGrid from './storage/HudMenuTypesGrid'
+import PercentFontView from './storage/PercentFontView'
 import SssLayoutEditor from './storage/SssLayoutEditor'
 import CharacterDetailView from './storage/CharacterDetailView'
 import StageDetailView from './storage/StageDetailView'
@@ -1499,8 +1501,20 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             <BackgroundModsView />
           )}
 
-          {selectedMenuType === 'pause' && (
+          {selectedMenuType === 'hud' && !selectedMenuModType && (
+            <HudMenuTypesGrid onSelectModType={setSelectedMenuModType} />
+          )}
+
+          {selectedMenuType === 'hud' && selectedMenuModType === 'pause_screen' && (
             <PauseModsView onDetailChange={setMenuDetailOpen} />
+          )}
+
+          {selectedMenuType === 'hud' && selectedMenuModType === 'percent_font' && (
+            <PercentFontView onDetailChange={setMenuDetailOpen} />
+          )}
+
+          {selectedMenuType === 'hud' && selectedMenuModType === 'ready_go' && (
+            <PercentFontView onDetailChange={setMenuDetailOpen} category="readygo" />
           )}
         </div>
       ) : (

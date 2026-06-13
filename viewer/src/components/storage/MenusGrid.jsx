@@ -9,7 +9,7 @@ import { playSound, playHoverSound } from '../../utils/sounds'
 const MENU_TYPES = [
   { key: 'css', name: 'Character Select Screen', short: 'CSS' },
   { key: 'sss', name: 'Stage Select Screen', short: 'SSS' },
-  { key: 'pause', name: 'Pause Screen', short: 'Pause' }
+  { key: 'hud', name: 'In-Game HUD', short: 'HUD' }
 ]
 
 export default function MenusGrid({ onSelectMenuType }) {

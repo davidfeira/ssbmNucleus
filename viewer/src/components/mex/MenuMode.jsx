@@ -18,7 +18,7 @@ import usePagination from '../shared/usePagination'
 const MENU_TYPES = [
   { key: 'css', name: 'Character Select Screen', short: 'CSS' },
   { key: 'sss', name: 'Stage Select Screen', short: 'SSS' },
-  { key: 'pause', name: 'Pause Screen', short: 'Pause', noLayout: true },
+  { key: 'hud', name: 'In-Game HUD', short: 'HUD', noLayout: true },
 ]
 
 const CSS_SUBMOD_TYPES = [
@@ -31,8 +31,10 @@ const SSS_SUBMOD_TYPES = [
   { key: 'background', name: 'Background', description: 'SSS background model and animations' },
 ]
 
-const PAUSE_SUBMOD_TYPES = [
+const HUD_SUBMOD_TYPES = [
   { key: 'pause_screen', name: 'Pause Screen', description: 'In-game pause overlay textures' },
+  { key: 'percent_font', name: 'Percent Font', description: 'Damage percent digits and HUD typeface' },
+  { key: 'ready_go', name: 'Ready / Go / Game', description: 'Match start/end word banners' },
 ]
 
 export default function MenuMode({ mode, onModeChange }) {
@@ -43,6 +45,8 @@ export default function MenuMode({ mode, onModeChange }) {
   const [bgMods, setBgMods] = useState([])
   const [doorMods, setDoorMods] = useState([])
   const [pauseMods, setPauseMods] = useState([])
+  const [percentMods, setPercentMods] = useState([])
+  const [readygoMods, setReadygoMods] = useState([])
   const [loading, setLoading] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [installMessage, setInstallMessage] = useState('')
@@ -89,6 +93,26 @@ export default function MenuMode({ mode, onModeChange }) {
     }
   }, [])
 
+  const fetchPercentMods = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/percent/list?category=percent`)
+      const data = await res.json()
+      if (data.success) setPercentMods(data.mods || [])
+    } catch (err) {
+      console.error('Failed to fetch percent mods:', err)
+    }
+  }, [])
+
+  const fetchReadygoMods = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/percent/list?category=readygo`)
+      const data = await res.json()
+      if (data.success) setReadygoMods(data.mods || [])
+    } catch (err) {
+      console.error('Failed to fetch ready/go mods:', err)
+    }
+  }, [])
+
   // One loading flag covering ALL of the selected menu's fetches - previously
   // only the icon-grid fetch toggled it, so pause/doors/background lists
   // flashed "No mods in vault" and then popped in
@@ -96,20 +120,22 @@ export default function MenuMode({ mode, onModeChange }) {
     let fetches = []
     if (selectedMenu === 'css') fetches = [fetchIconGridMods(), fetchBgMods(), fetchDoorMods()]
     if (selectedMenu === 'sss') fetches = [fetchBgMods()]
-    if (selectedMenu === 'pause') fetches = [fetchPauseMods()]
+    if (selectedMenu === 'hud') fetches = [fetchPauseMods(), fetchPercentMods(), fetchReadygoMods()]
     if (fetches.length === 0) return
 
     let cancelled = false
     setLoading(true)
     Promise.all(fetches).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods, fetchPauseMods])
+  }, [selectedMenu, fetchIconGridMods, fetchBgMods, fetchDoorMods, fetchPauseMods, fetchPercentMods, fetchReadygoMods])
 
   const getModsForSubmod = (key) => {
     if (key === 'icon_grid') return iconGridMods
     if (key === 'background') return bgMods
     if (key === 'doors') return doorMods
     if (key === 'pause_screen') return pauseMods
+    if (key === 'percent_font') return percentMods
+    if (key === 'ready_go') return readygoMods
     return []
   }
 
@@ -166,6 +192,8 @@ export default function MenuMode({ mode, onModeChange }) {
           installEndpoint = `${API_URL}/menus/css/doors/install/${selectedMod.id}`
         } else if (selectedSubmod === 'pause_screen') {
           installEndpoint = `${API_URL}/menus/pause/install/${selectedMod.id}`
+        } else if (selectedSubmod === 'percent_font' || selectedSubmod === 'ready_go') {
+          installEndpoint = `${API_URL}/menus/percent/install/${selectedMod.id}`
         } else {
           installEndpoint = `${API_URL}/menus/css/icon_grid/install/${selectedMod.id}`
         }
@@ -192,7 +220,7 @@ export default function MenuMode({ mode, onModeChange }) {
 
   const submodTypes = selectedMenu === 'css' ? CSS_SUBMOD_TYPES
     : selectedMenu === 'sss' ? SSS_SUBMOD_TYPES
-    : selectedMenu === 'pause' ? PAUSE_SUBMOD_TYPES : []
+    : selectedMenu === 'hud' ? HUD_SUBMOD_TYPES : []
 
   // ── Layout editors (not a normal import flow) ──
   if ((selectedMenu === 'css' || selectedMenu === 'sss') && selectedSubmod === 'layout') {
