@@ -187,7 +187,7 @@ export default function AIModelStudioModal({ show, character, onClose, onSaved }
     <div className="ai-studio-overlay" onClick={handleClose}>
       <div className="ai-studio-modal" onClick={(e) => e.stopPropagation()}>
         <div className="ai-studio-header">
-          <h3>🧊 AI Model Studio — {character}</h3>
+          <h3>🎨 AI Model Studio — {character}</h3>
           <button className="ai-studio-close" onClick={handleClose}>×</button>
         </div>
 
