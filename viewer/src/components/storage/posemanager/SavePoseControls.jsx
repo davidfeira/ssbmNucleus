@@ -14,6 +14,9 @@ export default function SavePoseControls({ poseLibrary }) {
   return (
     <>
       {/* Save controls */}
+      <div className="pm-save-hint" style={{ fontSize: '12px', opacity: 0.6, padding: '0 4px 6px' }}>
+        Pick an animation from the list (or use the loaded pose), scrub to a frame, then name and save.
+      </div>
       <div className="pm-save-controls">
         <input
           type="text"

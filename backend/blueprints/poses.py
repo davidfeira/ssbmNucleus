@@ -54,6 +54,137 @@ def _character_aj_file(character):
     return VANILLA_ASSETS_DIR / character / f"Pl{char_prefix}AJ.dat"
 
 
+# ----- "Scene poses": save the baked vanilla CSP pose + a custom camera ------
+#
+# Scene-mode characters (DK, Mewtwo, Ganon, ...) load a baked animation from
+# their csp_data/<char>/scene.yml in the viewer. A user can pose with that
+# baked animation (no AJ symbol) and just rotate/scrub. Such a pose stores
+# `useSceneAnimation: true` (no animSymbol). At render time we merge the
+# character's scene.yml (its settings + baked `animation:` block, kept
+# byte-for-byte) with the pose's camera/frame/hiddenNodes into a temp
+# `scene.yml`, which the existing scene-mode render path consumes.
+
+def _character_scene_file(character):
+    """The baked csp_data scene.yml for a character (canonical scene-mode
+    char, or a custom char whose donor skeleton is scene-mode). None when the
+    character has no baked scene — those must pose via an AJ symbol."""
+    slug = custom_character_slug(character)
+    if slug:
+        from blueprints.viewer import custom_character_based_on
+        name = custom_character_based_on(slug)
+    else:
+        name = character
+    if not name:
+        return None
+    folder = name
+    if name == 'Ice Climbers':
+        folder = 'Ice Climbers (Popo)'
+    if name == 'Mr. Game & Watch':
+        folder = 'G&W'
+    scene = PROCESSOR_DIR / 'csp_data' / folder / 'scene.yml'
+    return scene if scene.exists() else None
+
+
+def _parse_pose_yaml(text):
+    """Parse the flat pose YAML this module writes (frame/camera/hiddenNodes/
+    flags). Hand-rolled to avoid a pyyaml dependency."""
+    out = {'camera': {}, 'hiddenNodes': []}
+    in_camera = False
+    in_hidden = False
+    for raw in text.splitlines():
+        if not raw.strip():
+            continue
+        if raw.startswith('- ') and in_hidden:
+            try:
+                out['hiddenNodes'].append(int(raw[2:].strip()))
+            except ValueError:
+                pass
+            continue
+        if not raw[0].isspace():
+            in_camera = raw.startswith('camera:')
+            in_hidden = raw.startswith('hiddenNodes:')
+            if ':' in raw and not in_camera and not in_hidden:
+                k, v = raw.split(':', 1)
+                out[k.strip()] = v.strip()
+            continue
+        if in_camera and ':' in raw:
+            k, v = raw.split(':', 1)
+            out['camera'][k.strip()] = v.strip()
+    return out
+
+
+def _build_scene_pose_yaml(scene_path, pose):
+    """Merge a character's baked scene.yml with a pose's camera/frame/
+    hiddenNodes. Keeps the scene's `settings:` + `animation:` blocks intact;
+    overrides only the camera fields the pose actually sets (preserving the
+    scene camera's mode/clip planes, which scene-mode render needs)."""
+    lines = scene_path.read_text(encoding='utf-8', errors='replace').splitlines()
+    order, tops = [], {}
+    for i, l in enumerate(lines):
+        if l and not l[0].isspace() and not l.startswith('-'):
+            key = l.split(':', 1)[0].strip()
+            tops[key] = i
+            order.append(key)
+
+    def next_after(key, eof):
+        idx = order.index(key)
+        return tops[order[idx + 1]] if idx + 1 < len(order) else eof
+
+    # Camera: start from the scene's camera block, override pose-set fields
+    cam = pose.get('camera') or {}
+    cs, ce = tops['camera'], next_after('camera', len(lines))
+    new_cam = ['camera:']
+    for cl in lines[cs + 1:ce]:
+        k = cl.split(':', 1)[0].strip()
+        new_cam.append(f'  {k}: {cam[k]}' if k in cam else cl)
+
+    keep_key = 'settings' if 'settings' in tops else 'animation'
+    keep = lines[tops[keep_key]:next_after('animation', len(lines))]
+
+    header = [
+        f"frame: {pose.get('frame', 0)}",
+        f"cSPMode: {str(pose.get('cSPMode', pose.get('cspMode', True))).lower()}",
+        f"showGrid: {str(pose.get('showGrid', False)).lower()}",
+        f"showBackdrop: {str(pose.get('showBackdrop', False)).lower()}",
+    ] + new_cam
+
+    footer = []
+    if pose.get('hiddenNodes'):
+        footer.append('hiddenNodes:')
+        footer += [f'- {n}' for n in pose['hiddenNodes']]
+
+    return '\n'.join(header + keep + footer) + '\n'
+
+
+def _render_pose_csp(dat_file, character, pose_path, aj_file, scale, no_shadow=False):
+    """Render a CSP from a saved pose. Scene poses (`useSceneAnimation: true`)
+    merge the character's baked scene.yml; symbol poses go straight through the
+    animSymbol+AJ path. Returns the generated CSP path or None."""
+    try:
+        text = Path(pose_path).read_text(encoding='utf-8', errors='replace')
+    except Exception:
+        text = ''
+
+    if re.search(r'(?m)^useSceneAnimation:\s*true\s*$', text):
+        scene_src = _character_scene_file(character)
+        if scene_src is None:
+            logger.warning(f"Scene pose for {character} but no baked scene.yml found")
+            return None
+        tmp = tempfile.mkdtemp(prefix='scenepose_')
+        try:
+            scene_yml = Path(tmp) / 'scene.yml'   # name matters: triggers scene mode
+            scene_yml.write_text(_build_scene_pose_yaml(scene_src, _parse_pose_yaml(text)),
+                                 encoding='utf-8')
+            return generate_single_csp_internal(
+                str(dat_file), character, str(scene_yml), None, scale, no_shadow)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    return generate_single_csp_internal(
+        str(dat_file), character, str(pose_path),
+        str(aj_file) if aj_file and Path(aj_file).exists() else None, scale, no_shadow)
+
+
 def _custom_base_costume_dat(slug, temp_dir):
     """Extract a custom character's first bundled costume DAT (for pose
     thumbnails). Prefers the materialized costumes/<stem>.zip, falls back to
@@ -115,6 +246,23 @@ def save_pose():
                 'error': 'Missing character, poseName, or sceneData parameter'
             }), 400
 
+        # A pose needs a base animation. Two valid sources:
+        #  1. An AJ animation the user picked from the list (animSymbol).
+        #  2. The character's baked scene animation (scene-mode chars like DK)
+        #     — used as-is when no symbol was picked but a scene.yml exists.
+        # Anything else (e.g. a custom char sitting in bind pose) would render
+        # as a T-pose, so it is rejected.
+        anim_symbol = scene_data.get('animSymbol')
+        has_symbol = bool(anim_symbol) and str(anim_symbol).strip().lower() not in ('none', 'null')
+        use_scene = not has_symbol and _character_scene_file(character) is not None
+        if not has_symbol and not use_scene:
+            return jsonify({
+                'success': False,
+                'error': 'No animation selected. Pick an animation from the '
+                         'list (and scrub to a frame) before saving — '
+                         'otherwise the pose renders as a T-pose.'
+            }), 400
+
         # Sanitize pose name for filesystem
         safe_name = re.sub(r'[<>:"/\\|?*]', '_', pose_name)
         safe_name = safe_name.strip()
@@ -128,12 +276,15 @@ def save_pose():
         poses_dir = _poses_dir(character)
         poses_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build YAML content
+        # Build YAML content. Symbol poses carry `animSymbol:`; scene poses
+        # carry `useSceneAnimation: true` (the baked animation is merged in
+        # from the character's scene.yml at render time).
+        anim_line = f"animSymbol: {anim_symbol}" if has_symbol else "useSceneAnimation: true"
         yaml_content = f"""frame: {scene_data.get('frame', 0)}
 cSPMode: {str(scene_data.get('cspMode', True)).lower()}
 showGrid: {str(scene_data.get('showGrid', False)).lower()}
 showBackdrop: {str(scene_data.get('showBackdrop', False)).lower()}
-animSymbol: {scene_data.get('animSymbol', '')}
+{anim_line}
 camera:
   x: {scene_data.get('camera', {}).get('x', 0)}
   y: {scene_data.get('camera', {}).get('y', 10)}
@@ -180,14 +331,9 @@ camera:
                 logger.info(f"Generating pose thumbnail using {base_dat}")
                 logger.info(f"AJ file: {aj_file} (exists: {aj_file.exists() if aj_file else False})")
 
-                # Generate CSP with the pose scene file and AJ file for animations
-                csp_path = generate_single_csp_internal(
-                    str(base_dat),
-                    character,
-                    str(pose_path),  # Use pose YAML as scene file
-                    str(aj_file) if aj_file and Path(aj_file).exists() else None,
-                    1  # 1x scale for thumbnails
-                )
+                # Generate CSP from the pose (symbol pose or baked scene pose)
+                csp_path = _render_pose_csp(
+                    str(base_dat), character, pose_path, aj_file, 1)
 
                 if csp_path and Path(csp_path).exists():
                     # Move CSP to thumbnail location
@@ -348,13 +494,8 @@ def _generate_pose_csps_for_skin(character, skin, pose_name, pose_path, aj_file,
         for gen_scale, is_hd in scales_to_generate:
             logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={gen_scale}x)")
 
-            csp_path = generate_single_csp_internal(
-                str(dat_file),
-                character,
-                str(pose_path),
-                str(aj_file) if aj_file and Path(aj_file).exists() else None,
-                gen_scale
-            )
+            csp_path = _render_pose_csp(
+                str(dat_file), character, pose_path, aj_file, gen_scale)
 
             if csp_path and Path(csp_path).exists():
                 # Apply character-specific layers (Fox gun, Ness flip, etc.)
@@ -764,9 +905,8 @@ def apply_pose_to_costume():
                         return jsonify({'success': False,
                                         'error': f'Pose {pose_name} not found'}), 404
                     aj_file = _character_aj_file(character)
-                    csp_path = generate_single_csp_internal(
-                        str(dat_path), character, str(pose_path),
-                        str(aj_file) if aj_file and Path(aj_file).exists() else None, 1)
+                    csp_path = _render_pose_csp(
+                        str(dat_path), character, pose_path, aj_file, 1)
                     if not csp_path or not Path(csp_path).exists():
                         return jsonify({'success': False,
                                         'error': 'CSP generation failed'}), 500

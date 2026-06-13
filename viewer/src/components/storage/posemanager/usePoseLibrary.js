@@ -56,6 +56,9 @@ export default function usePoseLibrary({ show, character, API_URL, viewerRef }) 
       if (!sceneData) {
         throw new Error('Failed to export scene data')
       }
+      // No client-side animation guard: a pose is valid either with a picked
+      // AJ animation OR with a scene-mode character's baked pose (no symbol).
+      // The backend decides and returns a clear error for the bind-pose case.
 
       // Save pose via API
       const response = await fetch(`${API_URL}/storage/poses/save`, {
