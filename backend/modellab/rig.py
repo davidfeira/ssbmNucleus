@@ -1518,12 +1518,178 @@ def _rot_between_vec(u, v):
     return np.eye(3) + s * K + (1 - c) * (K @ K)
 
 
+def extract_cloth_accessory(foreign, vert_parts, src_parts, src_parents,
+                            src_world_mats, dyn_chains, tgt_parts, tgt_parents,
+                            tgt_pos, src_geom, tgt_geom, out_dir, log=print):
+    """Split the CLOTH part into a mexCostume physics accessory (akaneia
+    wiki): cape geometry + the source's own dynamic joint chains, in the
+    frame of an attach joint the game overwrites with a fighter bone at
+    runtime. Returns (keep_tri_mask, attach_bone_target, n_cloth_tris) or
+    None when there is no usable cloth."""
+    import shutil as _shutil
+
+    cloth_corners = [i for i, vp in enumerate(vert_parts) if vp == "cloth"]
+    if not cloth_corners or not dyn_chains:
+        return None
+    n_tri = len(foreign.tri_pos)
+    tri_cloth = np.zeros(n_tri, dtype=bool)
+    for i in cloth_corners:
+        tri_cloth[i // 3] = True
+    # majority vote per triangle
+    counts = np.zeros(n_tri)
+    for i in cloth_corners:
+        counts[i // 3] += 1
+    tri_cloth = counts >= 2
+    if tri_cloth.sum() < 8:
+        return None
+
+    # source chain joints (from the dynamics dump: root + descendants)
+    kids: dict = {}
+    for b, par in src_parents.items():
+        kids.setdefault(par, []).append(b)
+    chain_lists = []
+    for ch in dyn_chains:
+        chain = [ch["bone"]]
+        while True:
+            nxt = [c for c in kids.get(chain[-1], [])
+                   if src_parts.get(c) == "cloth"]
+            if not nxt:
+                break
+            chain.append(nxt[0])
+        chain_lists.append((ch, chain[:max(len(ch["joints"]), 1)]))
+
+    attach_src = src_parents.get(chain_lists[0][1][0])
+    if attach_src is None or attach_src not in src_world_mats:
+        return None
+    A = src_world_mats[attach_src]
+    A_inv = np.linalg.inv(A)
+
+    # torso scale (same trimmed-RMS signal as the deform)
+    def trimmed_rms(geom):
+        if geom is None or len(geom) < 12:
+            return None
+        arr = np.asarray(geom)
+        c = arr.mean(axis=0)
+        d2 = ((arr - c) ** 2).sum(axis=1)
+        keep = d2 <= np.percentile(d2, 85)
+        return float(np.sqrt(d2[keep].mean()))
+
+    s_sp = trimmed_rms((src_geom or {}).get("torso"))
+    t_sp = trimmed_rms((tgt_geom or {}).get("torso"))
+    s = float(np.clip((t_sp / s_sp) if (s_sp and t_sp and s_sp > 1e-6)
+                      else 1.0, 0.5, 2.0))
+
+    # accessory skeleton: J0 attach + J1 offset + the source chains
+    acc = smd.SMD()
+    acc.bones.append(smd.Bone(id=0, name="JOBJ_0", parent=-1))
+    acc.bones.append(smd.Bone(id=1, name="JOBJ_1", parent=0))
+    local_of: dict = {}
+    nxt_id = 2
+    local_chains = []
+    for ch, chain in chain_lists:
+        ids = []
+        for j, b in enumerate(chain):
+            par_local = 1 if j == 0 else local_of[chain[j - 1]]
+            wm = src_world_mats.get(b)
+            pm = (src_world_mats.get(src_parents.get(b))
+                  if j > 0 else A)
+            lp = (np.linalg.inv(pm) @ wm)[:3, 3] * s if wm is not None \
+                else np.zeros(3)
+            acc.bones.append(smd.Bone(
+                id=nxt_id, name=f"JOBJ_{nxt_id}", parent=par_local,
+                pos=tuple(float(x) for x in lp)))
+            local_of[b] = nxt_id
+            ids.append(nxt_id)
+            nxt_id += 1
+        local_chains.append((ch, ids))
+
+    # placeholder mesh nodes per material (IONET groups DObjs by them)
+    mats = list(dict.fromkeys(
+        foreign.tri_mat[t] for t in range(n_tri) if tri_cloth[t]))
+    mat_node = {}
+    for m in mats:
+        acc.bones.append(smd.Bone(id=nxt_id, name=f"Joint_1_Object_{len(mat_node)}",
+                                  parent=-1))
+        mat_node[m] = nxt_id
+        nxt_id += 1
+
+    # cape triangles in attach-local space, weights remapped to local ids
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    flat_w = [w for tw in foreign.tri_src_w for w in tw]
+    for t in range(n_tri):
+        if not tri_cloth[t]:
+            continue
+        verts = []
+        for c in range(3):
+            k = t * 3 + c
+            p = np.asarray(foreign.tri_pos[t][c])
+            pl = (A_inv @ np.append(p, 1.0))[:3] * s
+            nrm = A_inv[:3, :3] @ np.asarray(foreign.tri_norm[t][c])
+            wl = []
+            for b, w in flat_w[k]:
+                wl.append((local_of.get(b, 1), w))
+            merged: dict = {}
+            for b, w in wl:
+                merged[b] = merged.get(b, 0.0) + w
+            tot = sum(merged.values()) or 1.0
+            wl = sorted(((b, w / tot) for b, w in merged.items()),
+                        key=lambda kv: -kv[1])[:MAX_WEIGHTS_DEFAULT]
+            tot2 = sum(w for _, w in wl) or 1.0
+            verts.append(smd.Vertex(
+                pos=tuple(float(x) for x in pl),
+                normal=tuple(float(x) for x in nrm),
+                uv=tuple(float(x) for x in foreign.tri_uv[t][c]),
+                weights=[(b, w / tot2) for b, w in wl],
+                parent=mat_node[foreign.tri_mat[t]]))
+        acc.triangles.append(smd.Triangle(material=foreign.tri_mat[t],
+                                          verts=tuple(verts)))
+
+    smd.save(acc, out_dir / "cape.smd")
+    # texture sidecar + copies
+    sidecar = {}
+    for m in mats:
+        tex = foreign.textures.get(m)
+        if tex is None:
+            continue
+        if isinstance(tex, (str, Path)):
+            name = Path(tex).name
+            _shutil.copyfile(tex, out_dir / name)
+        else:                       # PIL image (GLB sources)
+            name = f"{m}.png"
+            tex.save(out_dir / name)
+        sidecar[m] = name
+    (out_dir / "cape.smd.textures.json").write_text(json.dumps(sidecar))
+
+    # localized dynamics
+    dyn_local = []
+    for ch, ids in local_chains:
+        dyn_local.append({
+            "bone": ids[0], "PARAM1": ch["PARAM1"], "PARAM2": ch["PARAM2"],
+            "PARAM3": ch["PARAM3"], "joints": ch["joints"][:len(ids)],
+        })
+    (out_dir / "dynamics_local.json").write_text(json.dumps(dyn_local, indent=1))
+
+    # fox-side attach bone: top of the target torso chain (chest)
+    t_chain = _part_chain("torso", tgt_parts, tgt_parents, tgt_pos)
+    attach_tgt = t_chain[-1] if t_chain else 4
+    (out_dir / "attach.json").write_text(json.dumps({"attachBone": int(attach_tgt)}))
+
+    log(f"cloth accessory: {int(tri_cloth.sum())} tris, "
+        f"{len(local_chains)} chains, attach JOBJ_{attach_tgt} (src {attach_src})")
+    return ~tri_cloth, int(attach_tgt), int(tri_cloth.sum())
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
-             target_pose=None, src_pose=None, log=print):
+             target_pose=None, src_pose=None, accessory_dir=None,
+             cape_dynamics=None, log=print):
     """Full rigging pass (the function behind the CLI): foreign mesh ->
-    SMD (+textures/sidecar) rigged to the rig kit's skeleton. Returns stats."""
+    SMD (+textures/sidecar) rigged to the rig kit's skeleton. Returns stats.
+    With accessory_dir + cape_dynamics (the source's dynamic-params dump),
+    cloth geometry is split into a mexCostume physics accessory instead of
+    being skinned onto the body."""
     rigkit = smd.load(rigkit_path)
     foreign = load_foreign(Path(mesh_path))
     log(f"rig kit: {len(rigkit.bones)} bones, {len(rigkit.triangles)} tris; "
@@ -1686,6 +1852,33 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                            if b.name.startswith("JOBJ_")}
         tgt_parents_map = {b.id: b.parent for b in rigkit.bones
                            if b.name.startswith("JOBJ_")}
+
+        # split cloth into a mexCostume physics accessory before skinning
+        if accessory_dir and cape_dynamics and Path(cape_dynamics).exists():
+            dyn_chains = json.loads(Path(cape_dynamics).read_text())
+            res = extract_cloth_accessory(
+                foreign, vert_parts, src_parts, src_parents_map,
+                src_pose_mats, dyn_chains, tgt_parts, tgt_parents_map,
+                pose_world, src_geom, tgt_geom, accessory_dir, log=log)
+            if res is not None:
+                keep_tri, _, _ = res
+                keep_c = np.repeat(keep_tri, 3)
+                fm = ForeignMesh(
+                    foreign.tri_pos[keep_tri], foreign.tri_norm[keep_tri],
+                    foreign.tri_uv[keep_tri],
+                    [m for t, m in enumerate(foreign.tri_mat) if keep_tri[t]],
+                    foreign.textures,
+                    [g for t, g in enumerate(foreign.tri_group) if keep_tri[t]])
+                fm.group_names = foreign.group_names
+                fm.src_smd = foreign.src_smd
+                fm.tri_src_w = [w for t, w in enumerate(foreign.tri_src_w)
+                                if keep_tri[t]]
+                foreign = fm
+                vert_parts = [p for i, p in enumerate(vert_parts) if keep_c[i]]
+                vert_part_sets = [p for i, p in enumerate(vert_part_sets)
+                                  if keep_c[i]]
+                src_geom.pop("cloth", None)
+
         deformed = segment_deform(foreign, src_parts, src_parents_map,
                                   src_bone_pos, tgt_parts, tgt_parents_map,
                                   pose_world, src_geom=src_geom,

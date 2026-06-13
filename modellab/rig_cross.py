@@ -6,6 +6,7 @@ usage: rig_cross.py <src_slug> <SrcCode> [tag]
    ex: rig_cross.py marth PlMs v1
 """
 import io
+import json
 import os
 import re
 import subprocess
@@ -54,12 +55,16 @@ from modellab.rig import rig_mesh  # noqa: E402
 out_dir = ML / "out" / f"{src_slug}_on_fox"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_smd = out_dir / f"{src_slug}_{tag}.smd"
+acc_dir = out_dir / f"accessory_{tag}"
+cape_dyn = RK / src_slug / f"{src_slug}_cape_dynamics.json"
 rig_mesh(str(RK / "fox" / "fox_vanilla.smd"),
          str(RK / src_slug / f"{src_slug}_vanilla.smd"),
          str(out_smd),
          char_code="PlFx", src_char_code=src_code,
          target_pose=str(RK / "fox" / "fox_wait1.json"),
-         src_pose=str(wait))
+         src_pose=str(wait),
+         accessory_dir=str(acc_dir) if cape_dyn.exists() else None,
+         cape_dynamics=str(cape_dyn) if cape_dyn.exists() else None)
 
 if rig_only:
     print(f"rig-only: wrote {out_smd}")
@@ -75,6 +80,22 @@ r = subprocess.run(
 if r.returncode != 0 or not out_dat.exists():
     sys.exit(f"import failed:\n{r.stdout[-900:]}\n{r.stderr[-900:]}")
 print(f"imported {out_dat.name} ({out_dat.stat().st_size} bytes)")
+
+# 3b. attach the mexCostume cloth accessory (real cape physics)
+if (acc_dir / "cape.smd").exists():
+    attach = json.loads((acc_dir / "attach.json").read_text())["attachBone"]
+    acc_dat = out_dir / f"{out_dat.stem}_acc.dat"
+    r = subprocess.run(
+        [str(EXE), "--accessory", str(out_dat), str(acc_dir / "cape.smd"),
+         str(attach), str(acc_dir / "dynamics_local.json"), str(acc_dat)],
+        capture_output=True, text=True, timeout=600)
+    if r.returncode == 0 and acc_dat.exists():
+        out_dat = acc_dat
+        print(f"accessory attached (bone {attach}) -> {out_dat.name} "
+              f"({out_dat.stat().st_size} bytes)")
+    else:
+        print(f"WARNING accessory step failed, shipping without cape:\n"
+              f"{r.stdout[-500:]}")
 
 # 4. pack as a costume zip (placeholder csp/stc) and build the ISO
 src_zip = BACKEND.parent / "storage" / "Fox" / "roundtrip-test-plfxrt.zip"

@@ -172,6 +172,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Attach a mexCostume physics accessory (cape/cloth with its own
+            // dynamic joint chains) to a costume dat
+            if (args.Length >= 1 && args[0] == "--accessory")
+            {
+                RunAddAccessory(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -1304,6 +1312,123 @@ namespace HSDRawViewer
         /// frame as JSON. Usage:
         ///   --dump-pose <costume.dat> <PlXxAJ.dat> <animSubstring> <out.json> [frame]
         /// </summary>
+        // --accessory <costume.dat> <accessory.smd> <attachBone> <dynamics.json> <out.dat>
+        // Adds a mexCostume physics accessory (akaneia m-ex wiki): the model
+        // gets its own joint chains, attaches to AttachBone at runtime, and
+        // the game runs real cloth dynamics over the chains in dynamics.json
+        // (accessory-LOCAL bone indices; params copied from a vanilla cape).
+        static void RunAddAccessory(string[] args)
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            if (args.Length < 6)
+            {
+                Console.WriteLine("Usage: --accessory <costume.dat> <accessory.smd> <attachBone> <dynamics.json> <out.dat>");
+                return;
+            }
+            try
+            {
+                string datFile = args[1], modelFile = args[2];
+                int attachBone = int.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture);
+                string dynJson = args[4], outFile = args[5];
+
+                var file = new HSDRawFile(datFile);
+
+                HSD_JOBJ accRoot = ImportModelHeadless(modelFile, null);
+                if (accRoot == null)
+                {
+                    Console.WriteLine("FAILED: accessory model import returned null");
+                    return;
+                }
+
+                int nDobj = 0;
+                foreach (var j in accRoot.TreeList)
+                {
+                    var dobj = j.Dobj;
+                    while (dobj != null) { nDobj++; dobj = dobj.Next; }
+                }
+                Console.WriteLine($"Accessory: {accRoot.TreeList.Count} joints, {nDobj} dobjs");
+                byte[] allIdx = new byte[nDobj];
+                for (int i = 0; i < nDobj; i++) allIdx[i] = (byte)i;
+
+                HSDRaw.Melee.Pl.SBM_LookupTable MakeTable(byte[] entries)
+                {
+                    var e = new HSDRaw.Melee.Pl.SBM_LookupEntry { Entries = entries };
+                    var t = new HSDRaw.Melee.Pl.SBM_LookupTable();
+                    t.LookupEntries = new HSDArrayAccessor<HSDRaw.Melee.Pl.SBM_LookupEntry> { Array = new[] { e } };
+                    return t;
+                }
+                var lookup = new HSDRaw.Melee.Pl.SBM_CostumeLookupTable
+                {
+                    // no separate low poly: the wiki says use the high poly
+                    // indices in the low poly table
+                    HighPoly = new HSDArrayAccessor<HSDRaw.Melee.Pl.SBM_LookupTable> { Array = new[] { MakeTable(allIdx) } },
+                    LowPoly = new HSDArrayAccessor<HSDRaw.Melee.Pl.SBM_LookupTable> { Array = new[] { MakeTable(allIdx) } },
+                    MetalPoly = new HSDArrayAccessor<HSDRaw.Melee.Pl.SBM_LookupTable> { Array = new[] { MakeTable(allIdx) } },
+                };
+
+                var descs = new List<HSDRaw.Melee.Pl.SBM_DynamicDesc>();
+                using (var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(dynJson)))
+                {
+                    foreach (var chain in doc.RootElement.EnumerateArray())
+                    {
+                        var desc = new HSDRaw.Melee.Pl.SBM_DynamicDesc
+                        {
+                            BoneIndex = chain.GetProperty("bone").GetInt32(),
+                            PARAM1 = chain.GetProperty("PARAM1").GetSingle(),
+                            PARAM2 = chain.GetProperty("PARAM2").GetSingle(),
+                            PARAM3 = chain.GetProperty("PARAM3").GetSingle(),
+                        };
+                        var plist = new List<HSDRaw.Melee.Pl.SBM_DynamicParams>();
+                        foreach (var joint in chain.GetProperty("joints").EnumerateArray())
+                        {
+                            float[] v = joint.EnumerateArray().Select(x => x.GetSingle()).ToArray();
+                            plist.Add(new HSDRaw.Melee.Pl.SBM_DynamicParams
+                            {
+                                PARAM1 = v[0], PARAM2 = v[1],
+                                RotX = v[2], RotY = v[3], RotZ = v[4], RotW = v[5],
+                                RotLimit = v[6], PARAM8 = v[7], PARAM9 = v[8],
+                                PARAM10 = v[9], PARAM11 = v[10], PARAM12 = v[11],
+                                PARAM13 = v[12], RotMomentumSpeed = v[13],
+                                MaxAngleChange = v[14],
+                            });
+                        }
+                        desc.Parameters = plist.ToArray();
+                        descs.Add(desc);
+                    }
+                }
+                Console.WriteLine($"Dynamics: {descs.Count} chains");
+
+                var acc = new HSDRaw.MEX.MEX_CostumeAccessory
+                {
+                    RootJoint = accRoot,
+                    AttachBone = attachBone,
+                    DynamicCount = descs.Count,
+                    LookupCount = 1,
+                    LookupTable = lookup,
+                    DynamicHitCount = 0,
+                };
+                acc.DynamicDef = new HSDFixedLengthPointerArrayAccessor<HSDRaw.Melee.Pl.SBM_DynamicDesc> { Array = descs.ToArray() };
+
+                var sym = new HSDRaw.MEX.MEX_CostumeSymbol();
+                sym.New();
+                sym.AccessoryCount = 1;
+                sym.Accessories = new HSDFixedLengthPointerArrayAccessor<HSDRaw.MEX.MEX_CostumeAccessory> { Array = new[] { acc } };
+
+                // replace an existing mexCostume root if present
+                for (int i = file.Roots.Count - 1; i >= 0; i--)
+                    if (file.Roots[i].Name == "mexCostume")
+                        file.Roots.RemoveAt(i);
+                file.Roots.Add(new HSDRootNode { Name = "mexCostume", Data = sym });
+                file.Save(outFile);
+                Console.WriteLine($"SUCCESS: wrote {outFile} (attach bone {attachBone}, {descs.Count} dynamic chains, {nDobj} dobjs)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"FAILED: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+            }
+        }
+
         static void RunDumpPose(string[] args)
         {
             if (args.Length < 5)
