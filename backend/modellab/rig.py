@@ -1680,6 +1680,31 @@ def extract_cloth_accessory(foreign, vert_parts, src_parts, src_parents,
     return ~tri_cloth, int(attach_tgt), int(tri_cloth.sum())
 
 
+def recompute_normals(foreign: ForeignMesh):
+    """Smooth vertex normals from the FINAL geometry (weld + area-weighted
+    face normals). The deform pipeline moves vertices through repose, part
+    deform and un-pose without transforming the stored normals — the game
+    then shades with stale directions (close-up torso garble; invisible in
+    the lab renders, which derive face normals from geometry)."""
+    pts = foreign.tri_pos.reshape(-1, 3)
+    key = np.round(pts / 1e-4).astype(np.int64)
+    welded: dict = {}
+    corner_to_v = np.empty(len(pts), dtype=np.int64)
+    for i, k in enumerate(map(tuple, key)):
+        corner_to_v[i] = welded.setdefault(k, len(welded))
+
+    fn = np.cross(foreign.tri_pos[:, 1] - foreign.tri_pos[:, 0],
+                  foreign.tri_pos[:, 2] - foreign.tri_pos[:, 0])
+    acc = np.zeros((len(welded), 3))
+    for t in range(len(foreign.tri_pos)):
+        for c in range(3):
+            acc[corner_to_v[t * 3 + c]] += fn[t]
+    norms = acc[corner_to_v]
+    ln = np.linalg.norm(norms, axis=1, keepdims=True)
+    norms = np.divide(norms, ln, out=np.zeros_like(norms), where=ln > 1e-12)
+    foreign.tri_norm = norms.reshape(foreign.tri_norm.shape)
+
+
 def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
              max_weights=MAX_WEIGHTS_DEFAULT, max_tris=9000, max_texture=512,
              rigid_bone=None, char_code=None, src_char_code=None,
@@ -1924,6 +1949,12 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
             out_pts[i] = p[:3]
         foreign.tri_pos = out_pts.reshape(foreign.tri_pos.shape)
         log("un-posed verts into target bind space")
+
+    if vert_parts is not None:
+        # melee sources went through repose/deform/un-pose without their
+        # stored normals following — rebuild them from the final geometry
+        recompute_normals(foreign)
+        log("recomputed smooth vertex normals")
 
     n_tex = emit(rigkit, foreign, weights, Path(out_path), max_texture,
                  visible_indices=visible, total_dobjs=total)
