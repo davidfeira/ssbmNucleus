@@ -27,6 +27,7 @@ import AIStudioModal from './AIStudioModal'
 import AIModelStudioModal from './AIModelStudioModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseManagerModal from './PoseManagerModal'
+import { getDefaultCostumeCode } from './posemanager/animData'
 import SoundPacksModal from './SoundPacksModal'
 import ExtrasPageView from './ExtrasPageView'
 import { hasExtras } from '../../config/extraTypes'
@@ -288,6 +289,14 @@ export default function CharacterDetailView({
             >
               🔊 Sounds
             </button>
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowPoseManager(true); }}
+              title="Create and manage CSP / portrait poses for this character's costumes"
+            >
+              🎭 Poses
+            </button>
             {hasCharacterExtras && (
               <button
                 className="character-action-button character-action-button--extras"
@@ -508,6 +517,13 @@ export default function CharacterDetailView({
       <PoseManagerModal
         show={showPoseManager}
         character={selectedCharacter}
+        models={(() => {
+          const def = getDefaultCostumeCode(selectedCharacter)
+          const list = allSkins
+            .filter(s => s.type !== 'folder')
+            .map(s => ({ value: s.id, label: s.color || s.id, skinId: s.id }))
+          return def ? [{ value: '__default__', label: 'Default', costumeCode: def }, ...list] : list
+        })()}
         onClose={() => setShowPoseManager(false)}
         onRefresh={onRefresh}
         onCostumesUpdated={onCostumesUpdated}

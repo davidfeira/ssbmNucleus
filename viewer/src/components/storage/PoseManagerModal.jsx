@@ -33,6 +33,10 @@ export default function PoseManagerModal({
   // vault instead of a vanilla costume code.
   displayName,
   baseSkinId,
+  // Optional list of models to choose from in the create view:
+  // [{ value, label, skinId? , costumeCode? }]. Falls back to baseSkinId /
+  // the default costume code when omitted.
+  models,
   onClose,
   onRefresh,
   onCostumesUpdated,
@@ -43,6 +47,33 @@ export default function PoseManagerModal({
 }) {
   const viewerRef = useRef(null)
   const [mode, setMode] = useState('library') // 'library' | 'create'
+  // Which model the create-view viewer loads (#2). null => default/baseSkinId.
+  const [selectedModelValue, setSelectedModelValue] = useState(null)
+  // "Start from existing pose" (#3): {sceneFile, animSymbol, frame, poseName}.
+  const [startFrom, setStartFrom] = useState(null)
+
+  const modelList = Array.isArray(models) ? models : []
+  const selectedModel =
+    modelList.find(m => m.value === selectedModelValue) ||
+    modelList.find(m => m.skinId && m.skinId === baseSkinId) ||
+    modelList[0] || null
+
+  // Fetch a saved pose's viewer scene file + animation, then open the create
+  // view starting from it.
+  const startFromPose = async (pose) => {
+    try {
+      const res = await fetch(
+        `${API_URL}/storage/poses/scene-file/${encodeURIComponent(character)}/${encodeURIComponent(pose.name)}`)
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to load pose')
+      setStartFrom({ sceneFile: data.sceneFile, animSymbol: data.animSymbol,
+                     frame: data.frame, poseName: pose.name })
+      playSound('start')
+      setMode('create')
+    } catch (err) {
+      console.error('[PoseManager] start-from-pose error:', err)
+    }
+  }
 
   // Viewer coordination: animation list polling + load-animation calls
   // (only active while the create view has the viewer mounted)
@@ -62,12 +93,12 @@ export default function PoseManagerModal({
 
   // Always open on the library view
   useEffect(() => {
-    if (show) setMode('library')
+    if (show) { setMode('library'); setStartFrom(null); setSelectedModelValue(null) }
   }, [show])
 
   // A successful save returns to the library, where the new pose now shows
   useEffect(() => {
-    if (saveSuccess) setMode('library')
+    if (saveSuccess) { setMode('library'); setStartFrom(null) }
   }, [saveSuccess])
 
   if (!show) return null
@@ -101,12 +132,34 @@ export default function PoseManagerModal({
             {/* Create view: viewer + animation browser */}
             <div className="pm-body">
               <div className="pm-left-section">
+                {modelList.length > 1 && (
+                  <div className="pm-model-select">
+                    <label>Model:</label>
+                    <select
+                      value={selectedModel?.value ?? ''}
+                      onChange={(e) => { playSound('boop'); setSelectedModelValue(e.target.value) }}
+                    >
+                      {modelList.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                    {startFrom && (
+                      <span className="pm-startfrom-tag">from “{startFrom.poseName}”</span>
+                    )}
+                  </div>
+                )}
                 <div className="pm-viewer-section">
                   <EmbeddedModelViewer
+                    key={`${selectedModel?.value || baseSkinId || 'default'}|${startFrom?.poseName || 'new'}`}
                     ref={viewerRef}
                     character={character}
-                    skinId={baseSkinId || undefined}
-                    costumeCode={baseSkinId ? undefined : getDefaultCostumeCode(character)}
+                    skinId={selectedModel ? (selectedModel.skinId || undefined) : (baseSkinId || undefined)}
+                    costumeCode={selectedModel
+                      ? (selectedModel.skinId ? undefined : selectedModel.costumeCode)
+                      : (baseSkinId ? undefined : getDefaultCostumeCode(character))}
+                    overrideSceneFile={startFrom?.sceneFile || null}
+                    startAnimSymbol={startFrom?.animSymbol || null}
+                    startFrame={startFrom?.frame || 0}
                     onClose={onClose}
                     inline={true}
                     cspMode={true}
@@ -141,7 +194,7 @@ export default function PoseManagerModal({
             <div className="pm-library-grid">
               <div
                 className="pm-create-card"
-                onClick={() => { playSound('start'); setMode('create'); }}
+                onClick={() => { playSound('start'); setStartFrom(null); setMode('create'); }}
               >
                 <span className="pm-create-icon">+</span>
                 <span>Create New Pose</span>
@@ -169,6 +222,7 @@ export default function PoseManagerModal({
                       if (onSelectPose) { onSelectPose(pose); return }
                       playSound('boop'); setSelectedPose(pose)
                     }}
+                    onStartFrom={startFromPose}
                     API_URL={API_URL}
                   />
                 ))

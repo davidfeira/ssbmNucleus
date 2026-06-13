@@ -277,6 +277,57 @@ export const POSE_MANAGER_STYLES = `
           color: white;
         }
 
+        .pm-pose-edit {
+          position: absolute;
+          top: 4px;
+          right: 32px;
+          width: 24px;
+          height: 24px;
+          background: rgba(6, 12, 20, 0.8);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-sm);
+          color: var(--color-text-secondary);
+          cursor: pointer;
+          opacity: 0;
+          transition: all var(--transition-fast);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+        }
+
+        .pm-pose-card:hover .pm-pose-edit {
+          opacity: 1;
+        }
+
+        .pm-pose-edit:hover {
+          background: var(--color-accent, #4a9eff);
+          border-color: var(--color-accent, #4a9eff);
+          color: white;
+        }
+
+        .pm-model-select {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: var(--space-1) 0 var(--space-2);
+          font-size: 13px;
+          color: var(--color-text-secondary);
+        }
+
+        .pm-model-select select {
+          background: var(--color-bg-elevated, rgba(6, 12, 20, 0.8));
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-sm);
+          color: var(--color-text-primary);
+          padding: 2px 6px;
+        }
+
+        .pm-startfrom-tag {
+          color: var(--color-text-tertiary, #8a97a8);
+          font-style: italic;
+        }
+
         .pm-pose-name {
           padding: var(--space-1) var(--space-2);
           font-family: var(--font-display);

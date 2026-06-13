@@ -134,7 +134,13 @@ const EmbeddedModelViewer = forwardRef(({
   showBackground = true,
   // Callback when scene is exported (for pose manager)
   onSceneExported = null,
-  inline = false
+  inline = false,
+  // "Start from existing pose": a scene file to load instead of the character's
+  // default (restores camera/frame/hiddenNodes), plus an optional AJ animation
+  // symbol to load once connected (for symbol poses).
+  overrideSceneFile = null,
+  startAnimSymbol = null,
+  startFrame = 0
 }, ref) => {
   const placeholderRef = useRef(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -154,6 +160,18 @@ const EmbeddedModelViewer = forwardRef(({
   const [selectedAnim, setSelectedAnim] = useState('')
   const [animFilter, setAnimFilter] = useState('')
   const [collapsedCategories, setCollapsedCategories] = useState({})
+
+  // "Start from existing pose": apply frame + pause when the load completes
+  // (handled in the animLoaded message, not a fixed timeout, to avoid the
+  // race where animLoaded arrives after a timeout and re-sets playing=true).
+  const startAnimSymbolRef = useRef(null)
+  const startFrameRef = useRef(0)
+  const startFromDoneRef = useRef(false)
+  useEffect(() => {
+    startAnimSymbolRef.current = startAnimSymbol
+    startFrameRef.current = startFrame
+    startFromDoneRef.current = false
+  }, [startAnimSymbol, startFrame])
 
   // Check if Electron API is available
   const hasElectron = typeof window !== 'undefined' && window.electron?.viewerStart
@@ -225,6 +243,13 @@ const EmbeddedModelViewer = forwardRef(({
         console.log('[EmbeddedViewer] Got vanilla paths:', viewerPaths)
       }
 
+      // "Start from existing pose": swap in the pose's scene file so the native
+      // viewer restores its camera/frame/hiddenNodes (and baked animation, for
+      // scene poses) on load.
+      if (overrideSceneFile) {
+        viewerPaths.sceneFile = overrideSceneFile
+      }
+
       console.log('[EmbeddedViewer] Starting viewer...')
       const result = await window.electron.viewerStart(viewerPaths)
 
@@ -242,7 +267,7 @@ const EmbeddedModelViewer = forwardRef(({
     } finally {
       viewerStarting = false
     }
-  }, [datFile, sceneFile, ajFile, logsPath, character, skinId, costumeCode, hasElectron])
+  }, [datFile, sceneFile, ajFile, logsPath, character, skinId, costumeCode, hasElectron, overrideSceneFile])
 
   // Stop the viewer
   const stopViewer = useCallback(async () => {
@@ -330,8 +355,21 @@ const EmbeddedModelViewer = forwardRef(({
         case 'animLoaded':
           setSelectedAnim(message.symbol)
           setAnimFrameCount(message.frameCount || 0)
-          setAnimFrame(0)
-          setAnimPlaying(true)
+          // Starting from an existing pose: seek to its frame and pause,
+          // instead of playing from frame 0.
+          if (startAnimSymbolRef.current &&
+              message.symbol === startAnimSymbolRef.current &&
+              !startFromDoneRef.current) {
+            startFromDoneRef.current = true
+            const f = startFrameRef.current || 0
+            setAnimFrame(f)
+            setAnimPlaying(false)
+            window.electron.viewerAnimSetFrame(f)
+            window.electron.viewerAnimPause()
+          } else {
+            setAnimFrame(0)
+            setAnimPlaying(true)
+          }
           break
         case 'animFrame':
           setAnimFrame(message.frame)
@@ -375,6 +413,15 @@ const EmbeddedModelViewer = forwardRef(({
       stopViewer()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Start from existing pose" (symbol poses): once connected, load the saved
+  // animation. The animLoaded handler then seeks to the saved frame and pauses.
+  // Camera/hiddenNodes were already restored from the scene file at startup;
+  // scene poses bake the animation in and need nothing here.
+  useEffect(() => {
+    if (!isConnected || !hasElectron || !startAnimSymbol) return
+    window.electron.viewerLoadAnim(startAnimSymbol)
+  }, [isConnected, hasElectron, startAnimSymbol])
 
   // Mouse handlers for camera control
   const handleMouseDown = (e) => {

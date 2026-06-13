@@ -459,6 +459,13 @@ ipcMain.handle('viewer:animToggle', async () => {
   return false;
 });
 
+ipcMain.handle('viewer:animPause', async () => {
+  if (viewerManager) {
+    return viewerManager.animPause();
+  }
+  return false;
+});
+
 ipcMain.handle('viewer:animSetFrame', async (event, frame) => {
   if (viewerManager) {
     return viewerManager.animSetFrame(frame);

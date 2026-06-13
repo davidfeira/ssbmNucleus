@@ -155,6 +155,11 @@ contextBridge.exposeInMainWorld('electron', {
   viewerAnimToggle: () => ipcRenderer.invoke('viewer:animToggle'),
 
   /**
+   * Pause animation playback
+   */
+  viewerAnimPause: () => ipcRenderer.invoke('viewer:animPause'),
+
+  /**
    * Set animation frame
    */
   viewerAnimSetFrame: (frame) => ipcRenderer.invoke('viewer:animSetFrame', frame),

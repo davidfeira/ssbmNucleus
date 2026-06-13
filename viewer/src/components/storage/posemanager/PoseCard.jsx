@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { TrashIcon } from '../../shared/Icons'
 
 // Pose Card Component
-export default function PoseCard({ pose, character, onDelete, onClick, API_URL }) {
+export default function PoseCard({ pose, character, onDelete, onClick, onStartFrom, API_URL }) {
   const [deleting, setDeleting] = useState(false)
 
   const handleDelete = async (e) => {
@@ -40,6 +40,15 @@ export default function PoseCard({ pose, character, onDelete, onClick, API_URL }
           <div className="pm-pose-placeholder">
             {pose.name.charAt(0).toUpperCase()}
           </div>
+        )}
+        {onStartFrom && (
+          <button
+            className="pm-pose-edit"
+            onClick={(e) => { e.stopPropagation(); onStartFrom(pose) }}
+            title="Create a new pose starting from this one"
+          >
+            ✎
+          </button>
         )}
         <button
           className="pm-pose-delete"

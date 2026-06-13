@@ -185,6 +185,35 @@ def _render_pose_csp(dat_file, character, pose_path, aj_file, scale, no_shadow=F
         str(aj_file) if aj_file and Path(aj_file).exists() else None, scale, no_shadow)
 
 
+def _camera_scene_yaml(pose):
+    """A viewer scene file carrying just a pose's camera/frame/hiddenNodes (no
+    baked animation). For 'start from a symbol pose': SceneSettings restores the
+    camera + frame on load (it ignores the unrelated keys), and the viewer loads
+    the animation separately by symbol. farClip/nearClip are spelled out because
+    scene-mode load replaces the whole camera, so missing planes => 0 => broken."""
+    cam = pose.get('camera') or {}
+    lines = [
+        f"frame: {pose.get('frame', 0)}",
+        f"cSPMode: {str(pose.get('cSPMode', 'true')).lower()}",
+        f"showGrid: {str(pose.get('showGrid', 'false')).lower()}",
+        f"showBackdrop: {str(pose.get('showBackdrop', 'false')).lower()}",
+        "camera:",
+        f"  x: {cam.get('x', 0)}",
+        f"  y: {cam.get('y', 10)}",
+        f"  z: {cam.get('z', -80)}",
+        f"  scale: {cam.get('scale', 1)}",
+        f"  fovRadians: {cam.get('fovRadians', 0.5236)}",
+        f"  rotationXRadians: {cam.get('rotationXRadians', 0)}",
+        f"  rotationYRadians: {cam.get('rotationYRadians', 0)}",
+        "  farClipPlane: 100000",
+        "  nearClipPlane: 10",
+    ]
+    if pose.get('hiddenNodes'):
+        lines.append('hiddenNodes:')
+        lines += [f'- {n}' for n in pose['hiddenNodes']]
+    return '\n'.join(lines) + '\n'
+
+
 def _custom_base_costume_dat(slug, temp_dir):
     """Extract a custom character's first bundled costume DAT (for pose
     thumbnails). Prefers the materialized costumes/<stem>.zip, falls back to
@@ -378,6 +407,9 @@ def list_poses(character):
         pose_key = _pose_character_key(character)
         poses = []
         for pose_file in poses_dir.glob("*.yml"):
+            # transient viewer scene files written by the scene-file endpoint
+            if pose_file.stem.endswith('__viewer'):
+                continue
             thumb_path = poses_dir / f"{pose_file.stem}_thumb.png"
             poses.append({
                 'name': pose_file.stem,
@@ -396,6 +428,48 @@ def list_poses(character):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@poses_bp.route('/api/mex/storage/poses/scene-file/<path:character>/<pose_name>', methods=['GET'])
+def get_pose_scene_file(character, pose_name):
+    """Return a viewer-ready scene file for 'start from existing pose'.
+
+    The embedded viewer restores camera/frame/hiddenNodes from any scene file
+    on load. Scene poses also restore their baked animation (merged scene.yml);
+    symbol poses return the camera scene file plus the animSymbol for the client
+    to load into the viewer after it connects.
+    """
+    try:
+        pose_path = _poses_dir(character) / f"{pose_name}.yml"
+        if not pose_path.exists():
+            return jsonify({'success': False, 'error': f'Pose {pose_name} not found'}), 404
+
+        text = pose_path.read_text(encoding='utf-8', errors='replace')
+        parsed = _parse_pose_yaml(text)
+        is_scene = bool(re.search(r'(?m)^useSceneAnimation:\s*true\s*$', text))
+        out_path = _poses_dir(character) / f"{pose_name}__viewer.yml"
+
+        if is_scene:
+            scene_src = _character_scene_file(character)
+            if scene_src is None:
+                return jsonify({'success': False,
+                                'error': 'No baked scene for this character'}), 404
+            out_path.write_text(_build_scene_pose_yaml(scene_src, parsed), encoding='utf-8')
+            anim_symbol = None
+        else:
+            out_path.write_text(_camera_scene_yaml(parsed), encoding='utf-8')
+            anim_symbol = parsed.get('animSymbol')
+
+        try:
+            frame = int(float(parsed.get('frame', 0)))
+        except (TypeError, ValueError):
+            frame = 0
+
+        return jsonify({'success': True, 'sceneFile': str(out_path),
+                        'animSymbol': anim_symbol, 'frame': frame})
+    except Exception as e:
+        logger.error(f"Get pose scene-file error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @poses_bp.route('/storage/poses/<path:character>/<filename>')

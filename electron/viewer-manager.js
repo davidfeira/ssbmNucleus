@@ -382,6 +382,13 @@ class ViewerManager {
   }
 
   /**
+   * Pause animation playback
+   */
+  animPause() {
+    return this.send({ type: 'animPause' });
+  }
+
+  /**
    * Set animation frame
    */
   animSetFrame(frame) {

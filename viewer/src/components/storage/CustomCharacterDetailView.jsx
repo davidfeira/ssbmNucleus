@@ -1267,6 +1267,9 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         character={pseudoCostumes}
         displayName={character.name}
         baseSkinId={detail?.costumes?.[0]?.id}
+        models={(detail?.costumes || []).map(c => ({
+          value: c.id, label: c.color || c.id, skinId: c.id
+        }))}
         onClose={() => setShowPoseManager(false)}
         onRefresh={fetchDetail}
         API_URL={API_URL}
