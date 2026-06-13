@@ -4,6 +4,11 @@ conversion + pose-space retargeting), then import and build a test ISO.
 
 usage: rig_cross.py <src_slug> <SrcCode> [tag]
    ex: rig_cross.py marth PlMs v1
+
+Foreign (non-melee) meshes — GLB/OBJ from the AI path — have no source
+skeleton, so no pose retargeting and no cape split; pass the mesh instead
+of a source code:
+   ex: rig_cross.py pilot --mesh path/to/model.glb v1 [--rot-y 180]
 """
 import io
 import json
@@ -23,9 +28,20 @@ ML = Path(r"C:\Users\david\projects\ssbmNucleus-master\ssbmNucleus\modellab")
 RK = ML / "rigkits"
 VANILLA_ISO = r"C:\Users\david\projects\melee\working\melee-vanilla-v1.02-working.iso"
 
-src_slug = sys.argv[1]
-src_code = sys.argv[2]
-tag = sys.argv[3] if len(sys.argv) > 3 else "v1"
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+src_slug = args[0]
+mesh_override = None
+rot_y = 0.0
+if "--mesh" in sys.argv:
+    mesh_override = sys.argv[sys.argv.index("--mesh") + 1]
+    args = [a for a in args if a != mesh_override]
+    src_code = None
+else:
+    src_code = args[1]
+if "--rot-y" in sys.argv:
+    rot_y = float(sys.argv[sys.argv.index("--rot-y") + 1])
+    args = [a for a in args if a != sys.argv[sys.argv.index("--rot-y") + 1]]
+tag = args[-1] if len(args) > (1 if mesh_override else 2) else "v1"
 rig_only = "--rig-only" in sys.argv     # stop after the SMD (fast QA loop)
 
 
@@ -38,16 +54,19 @@ def joint_symbol(dat_path):
     raise RuntimeError(f"no joint symbol in {dat_path}")
 
 
-# 1. source Wait1 pose (frame 0 = the rest pose the game actually shows)
-wait = RK / src_slug / f"{src_slug}_wait1.json"
-if not wait.exists():
-    r = subprocess.run(
-        [str(EXE), "--dump-pose", str(FILES / f"{src_code}Nr.dat"),
-         str(FILES / f"{src_code}AJ.dat"), "Wait1", str(wait), "0"],
-        capture_output=True, text=True, timeout=300)
+# 1. source Wait1 pose (frame 0 = the rest pose the game actually shows);
+# foreign meshes have no skeleton to repose — bind-vs-bind alignment only
+wait = None
+if mesh_override is None:
+    wait = RK / src_slug / f"{src_slug}_wait1.json"
     if not wait.exists():
-        sys.exit(f"pose dump failed:\n{r.stdout[-600:]}\n{r.stderr[-600:]}")
-    print(f"dumped {wait.name}")
+        r = subprocess.run(
+            [str(EXE), "--dump-pose", str(FILES / f"{src_code}Nr.dat"),
+             str(FILES / f"{src_code}AJ.dat"), "Wait1", str(wait), "0"],
+            capture_output=True, text=True, timeout=300)
+        if not wait.exists():
+            sys.exit(f"pose dump failed:\n{r.stdout[-600:]}\n{r.stderr[-600:]}")
+        print(f"dumped {wait.name}")
 
 # 2. rig onto fox
 from modellab.rig import rig_mesh  # noqa: E402
@@ -58,13 +77,16 @@ out_smd = out_dir / f"{src_slug}_{tag}.smd"
 acc_dir = out_dir / f"accessory_{tag}"
 cape_dyn = RK / src_slug / f"{src_slug}_cape_dynamics.json"
 rig_mesh(str(RK / "fox" / "fox_vanilla.smd"),
-         str(RK / src_slug / f"{src_slug}_vanilla.smd"),
-         str(out_smd),
+         mesh_override or str(RK / src_slug / f"{src_slug}_vanilla.smd"),
+         str(out_smd), rot_y=rot_y,
          char_code="PlFx", src_char_code=src_code,
-         target_pose=str(RK / "fox" / "fox_wait1.json"),
-         src_pose=str(wait),
-         accessory_dir=str(acc_dir) if cape_dyn.exists() else None,
-         cape_dynamics=str(cape_dyn) if cape_dyn.exists() else None)
+         target_pose=(str(RK / "fox" / "fox_wait1.json")
+                      if mesh_override is None else None),
+         src_pose=str(wait) if wait else None,
+         accessory_dir=(str(acc_dir)
+                        if cape_dyn.exists() and not mesh_override else None),
+         cape_dynamics=(str(cape_dyn)
+                        if cape_dyn.exists() and not mesh_override else None))
 
 if rig_only:
     print(f"rig-only: wrote {out_smd}")

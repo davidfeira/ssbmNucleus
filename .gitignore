@@ -99,6 +99,7 @@ releases/
 
 # model-lab artifacts (regenerable; NEVER commit ISOs)
 /modellab/*.iso
+/modellab/*.glb
 /modellab/rigkits/
 /modellab/out/
 /modellab/shots/

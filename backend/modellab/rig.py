@@ -215,11 +215,28 @@ def render_mesh_preview(mesh_path, out_png, size=420, yaws=(20.0, 110.0)):
     return out_png
 
 
+def _clean_soup(verts, faces):
+    """Recover a near-manifold mesh from AI triangle soup so QEM can collapse
+    it. Hunyuan3D's marching-cubes export DUPLICATES every face (~1.66x) and
+    leaves non-manifold edges — QEM simplifiers treat each as a border and
+    stop at a huge floor (the pilot: 234k faces, euler 92871, both pyfqmr AND
+    fast_simplification refused to go below 92930 = the duplicate-face count).
+    Merging coincident verts + dropping degenerate/duplicate faces drops euler
+    to ~0 and lets decimation reach the real target."""
+    import trimesh
+    m = trimesh.Trimesh(vertices=verts, faces=faces, process=True)
+    m.merge_vertices(digits_vertex=4)
+    m.update_faces(m.nondegenerate_faces(height=1e-6))
+    m.update_faces(m.unique_faces())
+    m.remove_unreferenced_vertices()
+    return np.asarray(m.vertices), np.asarray(m.faces)
+
+
 def decimate(foreign: ForeignMesh, max_tris: int) -> ForeignMesh:
     """Reduce the foreign mesh to ~max_tris, re-projecting UVs and normals
-    from the original surface (fast_simplification drops attributes)."""
-    import trimesh
-    import fast_simplification
+    from the original surface (the simplifier drops attributes)."""
+    import pyfqmr
+    from scipy.spatial import cKDTree
 
     if len(foreign.tri_pos) <= max_tris:
         return foreign
@@ -242,22 +259,33 @@ def decimate(foreign: ForeignMesh, max_tris: int) -> ForeignMesh:
 
         verts = tri.reshape(-1, 3)
         faces = np.arange(len(verts)).reshape(-1, 3)
-        src = trimesh.Trimesh(vertices=verts, faces=faces, process=True)
-        ratio = 1.0 - (n_target / len(src.faces))
-        v2, f2 = fast_simplification.simplify(
-            src.vertices, src.faces, target_reduction=min(max(ratio, 0.0), 0.99))
+        cv, cf = _clean_soup(verts, faces)
+        s = pyfqmr.Simplify()
+        s.setMesh(cv, cf)
+        s.simplify_mesh(target_count=n_target, aggressiveness=7,
+                        preserve_border=False, verbose=0)
+        v2, f2, _ = s.getMesh()
 
-        # re-project per-corner attributes from the ORIGINAL surface
-        orig = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+        # re-project per-corner attributes from the ORIGINAL corners by NEAREST
+        # corner. The tree is built on DEDUPLICATED corners with
+        # balanced_tree/compact_nodes off and workers=-1: querying a tree built
+        # over the 10x-duplicated raw corners hung scipy indefinitely (a known
+        # degeneracy with coincident points). Nearest-corner matches the
+        # existing intent (UVs were snapped to the dominant corner, not
+        # interpolated); the old trimesh.proximity.closest_point was O(q*faces)
+        # in memory and blew RSS past 40GB on a 234k-face AI mesh.
         corners = v2[f2].reshape(-1, 3)
-        closest, _, tri_id = trimesh.proximity.closest_point(orig, corners)
-        bary = trimesh.triangles.points_to_barycentric(tri[tri_id], closest)
-        bad = ~np.isfinite(bary).all(axis=1)
-        bary[bad] = 1.0 / 3.0
-        # UV interpolation across seams is wrong — snap to the dominant corner
-        dominant = bary.argmax(axis=1)
-        uv = foreign.tri_uv[idx][tri_id, dominant]
-        nrm = np.einsum("kc,kcj->kj", bary, foreign.tri_norm[idx][tri_id])
+        orig_uv = foreign.tri_uv[idx].reshape(-1, 2)
+        orig_norm = foreign.tri_norm[idx].reshape(-1, 3)
+        uniq, inv = np.unique(verts, axis=0, return_inverse=True)
+        u_uv = np.empty((len(uniq), 2), orig_uv.dtype)
+        u_norm = np.empty((len(uniq), 3), orig_norm.dtype)
+        u_uv[inv] = orig_uv
+        u_norm[inv] = orig_norm
+        tree = cKDTree(uniq, balanced_tree=False, compact_nodes=False)
+        _, nn = tree.query(corners, k=1, workers=-1)
+        uv = u_uv[nn]
+        nrm = u_norm[nn]
         norms = np.linalg.norm(nrm, axis=1, keepdims=True)
         nrm = nrm / np.maximum(norms, 1e-9)
 
