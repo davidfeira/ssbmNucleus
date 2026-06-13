@@ -269,6 +269,13 @@ Numbers from the Deoxys fix:
 - **Inject every color.** Colors share geometry but each has its own model file;
   reuse one low-poly SMD but inject into `Pl<XX>Nr/Bu/Gr/Ye` (`inject_lowpoly_to_vault.py`
   does all colors automatically).
+- **Per-color joint symbols.** Some bases color-code the model's joint symbol —
+  Roy/Emblem uses `PlyEmblem5KRe_Share_joint` (red), `…Bu…` (blue), etc., while
+  Mewtwo shares `PlyMewtwo5K_Share_joint` across all colors. `inject_lowpoly_to_vault.py`
+  **auto-detects** the symbol from each color model, so the `<jointSymbol>` arg is only
+  a fallback. The single low-poly SMD still works for every color — `ImportModelHeadless`
+  matches by skeleton *structure*, not symbol name (verified: Lyn's 5 colors, 5 different
+  symbols, one SMD).
 - **Revert any repoint when injecting.** If you repointed first, pass the original
   (pre-repoint) `fighter.zip` as the source so the low table points back at the
   real low DObjs (where the geometry now is). The injector handles this.

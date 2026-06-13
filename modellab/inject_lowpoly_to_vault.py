@@ -67,13 +67,17 @@ work.mkdir(parents=True)
 def inject_dat(dat_bytes, name):
     src = work / name
     src.write_bytes(dat_bytes)
+    # joint symbol is per-MODEL (some bases, e.g. Roy/Emblem, color-code it:
+    # PlyEmblem5KRe_Share_joint for red) — detect it from this dat, not a fixed arg
+    js = next((n for n, _ in DatFile(str(src)).roots
+               if n.endswith("_joint") and "matanim" not in n), None) or jsym
     out = work / name.replace(".dat", "_lp.dat")
-    r = subprocess.run([str(EXE), "--inject-lowpoly", str(src), jsym, lowsmd,
+    r = subprocess.run([str(EXE), "--inject-lowpoly", str(src), js, lowsmd,
                         str(low_idx), str(out)],
                        capture_output=True, text=True, timeout=300)
     if not out.exists():
-        raise RuntimeError(f"inject failed for {name}:\n{r.stdout[-600:]}\n{r.stderr[-300:]}")
-    print(f"  {name}: {r.stdout.strip().splitlines()[-1]}")
+        raise RuntimeError(f"inject failed for {name} ({js}):\n{r.stdout[-600:]}\n{r.stderr[-300:]}")
+    print(f"  {name} [{js}]: {r.stdout.strip().splitlines()[-1]}")
     return out.read_bytes()
 
 

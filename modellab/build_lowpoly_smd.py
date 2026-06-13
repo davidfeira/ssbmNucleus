@@ -70,8 +70,9 @@ S.save(out, out_path)
 # texture sidecar (single material) + copy the texture next to the SMD
 if sidecar and low_mat in sidecar:
     tex = src_path.parent / sidecar[low_mat]
-    if tex.exists():
-        shutil.copyfile(tex, out_path.parent / sidecar[low_mat])
+    dest = out_path.parent / sidecar[low_mat]
+    if tex.exists() and tex.resolve() != dest.resolve():
+        shutil.copyfile(tex, dest)
     Path(str(out_path) + ".textures.json").write_text(
         json.dumps({low_mat: sidecar[low_mat]}))
 
