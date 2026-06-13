@@ -84,7 +84,7 @@ export default function CostumeSelectStep({
             onClick={() => { playSound('start'); onOpenAiStudio(); }}
           >
             <div className="costume-preview">
-              <div className="costume-placeholder">{aiReady ? '✨' : '🔒'}</div>
+              <div className="costume-placeholder">{aiReady ? '🎨' : '🔒'}</div>
             </div>
             <div className="costume-name">AI Skin Studio</div>
           </div>
@@ -97,7 +97,7 @@ export default function CostumeSelectStep({
             onClick={() => { playSound('start'); onOpenModelStudio(); }}
           >
             <div className="costume-preview">
-              <div className="costume-placeholder">🎨</div>
+              <div className="costume-placeholder">✨</div>
             </div>
             <div className="costume-name">AI Model Studio</div>
           </div>
