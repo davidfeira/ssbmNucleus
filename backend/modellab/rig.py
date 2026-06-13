@@ -232,11 +232,95 @@ def _clean_soup(verts, faces):
     return np.asarray(m.vertices), np.asarray(m.faces)
 
 
+def _reproject_attrs(o_pos, o_uv, o_norm, pts, pts_n=None):
+    """Transfer UV + normal from the original triangles to decimated vertices
+    by CLOSEST-POINT-ON-TRIANGLE barycentric interpolation.
+
+    Nearest-vertex (or nearest deduplicated-position) transfer corrupts a
+    textured atlas: the decimator MOVES vertices, so a small position error
+    jumps to a different UV island, and welding seam corners (same position,
+    different UV) picks one side arbitrarily — the whole body samples scrambled
+    atlas fragments (the in-game "chrome"). Barycentric within a single source
+    triangle keeps each sample on a consistent UV island.
+
+    pts_n (per-query surface normals, e.g. the decimated face normals) breaks
+    ties by ORIENTATION: AI 'soup' has internal/overlapping faces (jacket over
+    body, hollow cavities), so the geometrically-nearest original face to a
+    surface vertex can be a back/internal face with unrelated UVs. Scoring
+    distance * (1 + 2*(1-alignment)) makes a misaligned face have to be far
+    closer to win, keeping samples on the correct outer surface.
+
+    Fast + bounded memory: cKDTree over face CENTROIDS (no point duplication,
+    so no scipy hang), K nearest faces per vertex, clamped-barycentric closest
+    point. (The old trimesh.proximity.closest_point was O(query*faces) in
+    memory — 40GB+ on a 234k-face mesh.)"""
+    from scipy.spatial import cKDTree
+    F = len(o_pos)
+    cent = o_pos.mean(axis=1)
+    tree = cKDTree(cent, balanced_tree=False, compact_nodes=False)
+    K = min(12, F)
+    ofn = np.cross(o_pos[:, 1] - o_pos[:, 0], o_pos[:, 2] - o_pos[:, 0])
+    ofl = np.linalg.norm(ofn, axis=1, keepdims=True)
+    ofn = np.divide(ofn, ofl, out=np.zeros_like(ofn), where=ofl > 1e-12)
+
+    def sample(q, qn):
+        _, idx = tree.query(q, k=K, workers=-1)
+        if idx.ndim == 1:
+            idx = idx[:, None]
+        n = len(q)
+        bs = np.full(n, np.inf)
+        buv = np.zeros((n, 2))
+        bn = np.zeros((n, 3))
+        for k in range(idx.shape[1]):
+            f = idx[:, k]
+            tp = o_pos[f]
+            a, b, c = tp[:, 0], tp[:, 1], tp[:, 2]
+            v0, v1, v2 = b - a, c - a, q - a
+            d00 = (v0 * v0).sum(1); d01 = (v0 * v1).sum(1); d11 = (v1 * v1).sum(1)
+            d20 = (v2 * v0).sum(1); d21 = (v2 * v1).sum(1)
+            den = d00 * d11 - d01 * d01
+            den = np.where(np.abs(den) < 1e-12, 1e-12, den)
+            vv = (d11 * d20 - d01 * d21) / den
+            ww = (d00 * d21 - d01 * d20) / den
+            bary = np.clip(np.stack([1 - vv - ww, vv, ww], axis=1), 0, None)
+            bary /= bary.sum(1, keepdims=True) + 1e-12
+            recon = (bary[:, :, None] * tp).sum(1)
+            dist = np.linalg.norm(q - recon, axis=1)
+            sc = dist * (1.0 + 2.0 * (1.0 - np.clip((ofn[f] * qn).sum(1), -1, 1))) \
+                if qn is not None else dist
+            m = sc < bs
+            bs[m] = sc[m]
+            buv[m] = (bary[:, :, None] * o_uv[f])[m].sum(1)
+            bn[m] = (bary[:, :, None] * o_norm[f])[m].sum(1)
+        return buv, bn
+
+    best_uv, best_n = sample(pts, pts_n)
+
+    # per-face UV coherence: a decimated triangle whose 3 corners landed on
+    # DIFFERENT atlas islands (large UV spread) is a cross-island shard (the
+    # speckle that survives even at high tri counts). Re-sample those faces at
+    # the CENTROID and flatten all 3 corners onto it — one atlas point, no
+    # stretch across islands. Corners come grouped 3-per-face (v2[f2]).
+    uvf = best_uv.reshape(-1, 3, 2)
+    spread = np.linalg.norm(uvf - uvf.mean(1, keepdims=True), axis=2).max(1)
+    bad = spread > 0.06
+    if bad.any():
+        pf = pts.reshape(-1, 3, 3)[bad].mean(1)
+        nf = pts_n.reshape(-1, 3, 3)[bad].mean(1) if pts_n is not None else None
+        cuv, cn = sample(pf, nf)
+        bad3 = np.repeat(bad, 3)
+        best_uv[bad3] = np.repeat(cuv, 3, axis=0)
+        best_n[bad3] = np.repeat(cn, 3, axis=0)
+
+    ln = np.linalg.norm(best_n, axis=1, keepdims=True)
+    best_n = np.divide(best_n, ln, out=np.zeros_like(best_n), where=ln > 1e-9)
+    return best_uv, best_n
+
+
 def decimate(foreign: ForeignMesh, max_tris: int) -> ForeignMesh:
     """Reduce the foreign mesh to ~max_tris, re-projecting UVs and normals
     from the original surface (the simplifier drops attributes)."""
     import pyfqmr
-    from scipy.spatial import cKDTree
 
     if len(foreign.tri_pos) <= max_tris:
         return foreign
@@ -264,30 +348,20 @@ def decimate(foreign: ForeignMesh, max_tris: int) -> ForeignMesh:
         s.setMesh(cv, cf)
         s.simplify_mesh(target_count=n_target, aggressiveness=7,
                         preserve_border=False, verbose=0)
-        v2, f2, _ = s.getMesh()
+        v2, f2, fn2 = s.getMesh()           # fn2 = per-face normals
 
-        # re-project per-corner attributes from the ORIGINAL corners by NEAREST
-        # corner. The tree is built on DEDUPLICATED corners with
-        # balanced_tree/compact_nodes off and workers=-1: querying a tree built
-        # over the 10x-duplicated raw corners hung scipy indefinitely (a known
-        # degeneracy with coincident points). Nearest-corner matches the
-        # existing intent (UVs were snapped to the dominant corner, not
-        # interpolated); the old trimesh.proximity.closest_point was O(q*faces)
-        # in memory and blew RSS past 40GB on a 234k-face AI mesh.
+        # re-project UV + normal from the ORIGINAL triangles onto the decimated
+        # vertices by closest-point barycentric, using the decimated face
+        # normals to reject internal/back faces (seam- + soup-safe — see
+        # _reproject_attrs)
         corners = v2[f2].reshape(-1, 3)
-        orig_uv = foreign.tri_uv[idx].reshape(-1, 2)
-        orig_norm = foreign.tri_norm[idx].reshape(-1, 3)
-        uniq, inv = np.unique(verts, axis=0, return_inverse=True)
-        u_uv = np.empty((len(uniq), 2), orig_uv.dtype)
-        u_norm = np.empty((len(uniq), 3), orig_norm.dtype)
-        u_uv[inv] = orig_uv
-        u_norm[inv] = orig_norm
-        tree = cKDTree(uniq, balanced_tree=False, compact_nodes=False)
-        _, nn = tree.query(corners, k=1, workers=-1)
-        uv = u_uv[nn]
-        nrm = u_norm[nn]
-        norms = np.linalg.norm(nrm, axis=1, keepdims=True)
-        nrm = nrm / np.maximum(norms, 1e-9)
+        fn2 = np.asarray(fn2)
+        fl = np.linalg.norm(fn2, axis=1, keepdims=True)
+        fn2 = np.divide(fn2, fl, out=np.zeros_like(fn2), where=fl > 1e-9)
+        corner_n = np.repeat(fn2, 3, axis=0)
+        uv, nrm = _reproject_attrs(tri, foreign.tri_uv[idx],
+                                   foreign.tri_norm[idx], corners,
+                                   pts_n=corner_n)
 
         n_f = len(f2)
         out_pos.append(corners.reshape(n_f, 3, 3))
@@ -2026,11 +2100,15 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
         foreign.tri_pos = out_pts.reshape(foreign.tri_pos.shape)
         log("un-posed verts into target bind space")
 
-    if vert_parts is not None:
-        # melee sources went through repose/deform/un-pose without their
-        # stored normals following — rebuild them from the final geometry
-        recompute_normals(foreign)
-        log("recomputed smooth vertex normals")
+    # GX lights with the STORED vertex normals; the lab painter derives its
+    # own from geometry, so bad stored normals are INVISIBLE offline but show
+    # in-game as specular garbage (chrome shards over the texture). Rebuild
+    # smooth normals from the FINAL geometry — unconditionally: melee sources
+    # scramble normals through repose/deform/un-pose, foreign (GLB/AI) meshes
+    # scramble them through decimation's per-corner attribute copy. Either way
+    # the only reliable normals are the ones derived from the emitted verts.
+    recompute_normals(foreign)
+    log("recomputed smooth vertex normals")
 
     n_tex = emit(rigkit, foreign, weights, Path(out_path), max_texture,
                  visible_indices=visible, total_dobjs=total)
