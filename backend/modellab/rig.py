@@ -603,7 +603,7 @@ def sane_surface(rigkit: smd.SMD):
 def transfer_weights(
     rigkit: smd.SMD, foreign: ForeignMesh, max_weights: int = MAX_WEIGHTS_DEFAULT,
     surface=None, surface_pts=None, bone_world=None, forbidden=None,
-    part_of=None, vert_parts=None, match_pos=None,
+    part_of=None, vert_parts=None, match_pos=None, smooth_iters=4,
 ) -> list[list[tuple[int, float]]]:
     """Per-corner weights for the foreign mesh, sampled from the rig-kit mesh.
 
@@ -740,7 +740,7 @@ def transfer_weights(
         total = sum(acc.values()) or 1.0
         raw.append({b: w / total for b, w in acc.items()})
 
-    smoothed = smooth_weights(pts, raw, iterations=4)
+    smoothed = smooth_weights(pts, raw, iterations=smooth_iters)
 
     # distance gate: smoothing can diffuse weights far up the body (collar ->
     # head picks up ARM bones; at non-rest poses those verts stretch between
@@ -925,6 +925,58 @@ def smooth_weights(pts: np.ndarray, weights: list[dict], iterations: int = 12):
         vw = new
 
     return [vw[corner_to_v[i]] for i in range(len(pts))]
+
+
+def parametric_weights(pts, vert_parts, proxy_parts, proxy_parents, proxy_pos,
+                       tgt_parts, tgt_parents, tgt_pos, log=print):
+    """Weight each vert by its fraction ALONG ITS OWN LIMB, mapped onto the
+    target's bone chain — so the bend lives at the HUMAN's joint (where the
+    geometry bends), not where a proximity transfer's single-bone sample lands.
+
+    For each part: take the proxy chain's root->tip axis, project every vert to
+    a fraction t in [0,1], and map t onto the target bone chain by cumulative
+    LENGTH fraction, blending the two bracketing target bones. A vert at the
+    human's knee (t~0.5) thus blends Fox's knee-adjacent bones and bends with
+    them. Returns per-corner {bone: weight} (pre-smoothing). Used for the GLB/AI
+    path; melee sources keep the proximity transfer."""
+    HIP = 4
+    part_data = {}
+    for part in {p for p in vert_parts if p}:
+        pchain = _part_chain(part, proxy_parts, proxy_parents, proxy_pos)
+        tchain = _part_chain(part, tgt_parts, tgt_parents, tgt_pos)
+        if len(pchain) < 2 or len(tchain) < 1:
+            continue
+        root = np.asarray(proxy_pos[pchain[0]], float)
+        axis = np.asarray(proxy_pos[pchain[-1]], float) - root
+        L = float(np.linalg.norm(axis))
+        if L < 1e-6:
+            continue
+        tfr = _chain_param(tchain, tgt_pos)[0] if len(tchain) >= 2 else [0.0]
+        part_data[part] = (root, axis / L, L, tchain, tfr)
+
+    out = []
+    for k in range(len(pts)):
+        d = part_data.get(vert_parts[k])
+        if d is None:
+            out.append({HIP: 1.0})
+            continue
+        root, ax, L, tchain, tfr = d
+        if len(tchain) == 1:
+            out.append({tchain[0]: 1.0})
+            continue
+        t = float(np.clip(np.dot(pts[k] - root, ax) / L, 0.0, 1.0))
+        wl = {tchain[-1]: 1.0}
+        for i in range(len(tfr) - 1):
+            if t <= tfr[i + 1] + 1e-9:
+                seg = tfr[i + 1] - tfr[i]
+                a = float(np.clip((t - tfr[i]) / seg if seg > 1e-9 else 0.0, 0, 1))
+                wl = {tchain[i]: 1.0 - a, tchain[i + 1]: a}
+                break
+        out.append({b: w for b, w in wl.items() if w > 1e-4})
+    from collections import Counter
+    log("parametric weights: parts "
+        f"{dict(Counter(p for p in vert_parts if p in part_data))}")
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -1974,6 +2026,7 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                   else np.array([v.pos for t in surface for v in t.verts]))
     scale = 1.0
     deformed = False
+    glb_proxy = None        # set on the GLB/AI path for parametric skinning
     if vert_parts is not None and pose_world is not None and src_pose:
         src_pose_mats = load_pose(src_pose)
         src_bone_pos = {j: m[:3, 3] for j, m in src_pose_mats.items()}
@@ -2036,6 +2089,47 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
             if abs(dy) < 2.5:
                 pts[:, 1] += dy
                 foreign.tri_pos = pts.reshape(foreign.tri_pos.shape)
+    elif vert_parts is None and Path(mesh_path).suffix.lower() != ".smd":
+        # GLB / AI foreign mesh: NO source skeleton. Segment the humanoid
+        # geometrically, synthesize a proxy skeleton, and land each part on
+        # Fox's BIND bone anchors — a long human's limbs otherwise overshoot
+        # Fox's short bones under one global scale (janky stretched arms/legs).
+        from modellab.geometric_parts import label_vertices
+        # PART-CONSTRAINED transfer (not a geometry deform): segment the
+        # humanoid so a forearm vert can't bind a leg bone (the in-game jank),
+        # then global-align. A proxy-skeleton segment_deform was tried and
+        # MANGLED the arms — rotating the A-pose onto Fox's bind T-pose stretched
+        # them to noodles (proxy_skeleton() is parked in geometric_parts for a
+        # future, gentler deform). The part constraint is the stable win.
+        glb_labels, ginfo = label_vertices(foreign.tri_pos.reshape(-1, 3), log=log)
+        scale, _ = align(foreign, target_pts, rot_y)
+        bind = joint_world_positions(rigkit)
+        glb_pts = foreign.tri_pos.reshape(-1, 3)
+        lab = np.array(glb_labels, dtype=object)
+        # (Tried feet-to-neck shrink/squash to land the human's joints on Fox's
+        # — both made it WORSE: any global distortion pulls the mesh off Fox's
+        # surface and the nearest-vert transfer degrades. Fox's proportions are
+        # too extreme. The lever that helps is heavier weight SMOOTHING below,
+        # which blends the single-bone joints so knees/elbows bend.)
+        # L/R match: if the GLB faces opposite Fox, its left arm sits on Fox's
+        # right side and the part constraint would drag arms across the body.
+        fox_lx = float(np.mean([bind[b][0] for b, p in tgt_parts.items()
+                                if p == "l_arm" and b in bind] or [0.0]))
+        glb_lx = (float(glb_pts[lab == "l_arm"][:, 0].mean())
+                  if (lab == "l_arm").any() else 0.0)
+        if fox_lx != 0 and np.sign(fox_lx) != np.sign(glb_lx):
+            swap = {"l_arm": "r_arm", "r_arm": "l_arm",
+                    "l_leg": "r_leg", "r_leg": "l_leg"}
+            glb_labels = [swap.get(p, p) for p in glb_labels]
+            log("L/R swapped to match Fox facing")
+        # proxy skeleton (on the aligned, L/R-matched mesh) drives PARAMETRIC
+        # skinning at the weight step — the real fix for torn joints.
+        from modellab.geometric_parts import proxy_skeleton
+        _pp, _ppar, _ppos, _ = proxy_skeleton(glb_pts, glb_labels, ginfo, log=log)
+        glb_proxy = (_pp, _ppar, _ppos)
+        vert_parts = glb_labels
+        vert_part_sets = [({p} if p else None) for p in glb_labels]
+        deformed = True       # geometry finalized by the global align above
     if not deformed:
         scale, offset = align(foreign, target_pts, rot_y)
 
@@ -2046,17 +2140,19 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     # onto the target's hip->neck span; the real geometry stays untouched.
     match_pos = None
     if deformed and vert_parts is not None:
+        # bind pose for the GLB path (no animation pose); Wait1 for melee
+        bw = pose_world if pose_world is not None else joint_world_positions(rigkit)
         t_tor_chain = _part_chain(
             "torso", tgt_parts,
             {b.id: b.parent for b in rigkit.bones
-             if b.name.startswith("JOBJ_")}, pose_world)
+             if b.name.startswith("JOBJ_")}, bw)
         pts_now = foreign.tri_pos.reshape(-1, 3)
         torso_mask = np.array([vp == "torso" for vp in vert_parts])
         if torso_mask.sum() > 50 and t_tor_chain:
             tys = pts_now[torso_mask][:, 1]
             s_lo, s_hi = np.percentile(tys, 5), np.percentile(tys, 95)
-            t_lo = pose_world[t_tor_chain[0]][1]
-            t_hi = pose_world[t_tor_chain[-1]][1]
+            t_lo = bw[t_tor_chain[0]][1]
+            t_hi = bw[t_tor_chain[-1]][1]
             pad = 0.25 * max(t_hi - t_lo, 1e-6)
             t_lo, t_hi = t_lo - pad, t_hi + pad
             if s_hi - s_lo > 1e-6 and t_hi > t_lo:
@@ -2072,6 +2168,25 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
         # debug/prop mode: the whole mesh rides one bone
         weights = [[(int(rigid_bone), 1.0)]] * (len(foreign.tri_pos) * 3)
         log(f"rigid-bound everything to JOBJ_{rigid_bone}")
+    elif glb_proxy is not None:
+        # GLB/AI: PARAMETRIC skinning. Proximity transfer copies Fox's
+        # single-bone weights and the bend never lands at the human's joint
+        # (torn knees). Instead weight each vert by its fraction along its own
+        # limb, mapped onto Fox's bone chain, then smooth to blend shoulders/
+        # hips. recompute_normals + emit follow as usual.
+        pts_w = foreign.tri_pos.reshape(-1, 3)
+        tgt_parents_map = {b.id: b.parent for b in rigkit.bones
+                           if b.name.startswith("JOBJ_")}
+        raw = parametric_weights(
+            pts_w, vert_parts, glb_proxy[0], glb_proxy[1], glb_proxy[2],
+            tgt_parts, tgt_parents_map, joint_world_positions(rigkit), log=log)
+        smoothed = smooth_weights(pts_w, raw, iterations=10)
+        weights = []
+        for d in smoothed:
+            top = sorted(d.items(), key=lambda kv: -kv[1])[:max_weights]
+            tot = sum(w for _, w in top) or 1.0
+            weights.append([(int(b), w / tot) for b, w in top])
+        log(f"parametric skinning: {len(weights)} corners, smoothed")
     else:
         weights = transfer_weights(rigkit, foreign, max_weights, surface=surface,
                                    surface_pts=surf_pts, bone_world=pose_world,
