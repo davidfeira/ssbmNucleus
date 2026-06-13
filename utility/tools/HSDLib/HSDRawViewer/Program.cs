@@ -1409,8 +1409,17 @@ namespace HSDRawViewer
                 };
                 acc.DynamicDef = new HSDFixedLengthPointerArrayAccessor<HSDRaw.Melee.Pl.SBM_DynamicDesc> { Array = descs.ToArray() };
 
+                // do NOT call New(): it creates EMPTY CostumeVisLookup /
+                // CostumeMatLookup overrides for the MAIN model (count 0,
+                // null table) - a runtime that null-checks the outer pointer
+                // then derefs the table crashes at costume load. Leave both
+                // null so the loader skips the override path entirely.
                 var sym = new HSDRaw.MEX.MEX_CostumeSymbol();
-                sym.New();
+                // the accessor base ctor invokes New() which creates EMPTY main-model
+                // lookup overrides (count 0 / null table) - the runtime derefs the
+                // null table at costume load. Null them out explicitly.
+                sym.CostumeVisLookup = null;
+                sym.CostumeMatLookup = null;
                 sym.AccessoryCount = 1;
                 sym.Accessories = new HSDFixedLengthPointerArrayAccessor<HSDRaw.MEX.MEX_CostumeAccessory> { Array = new[] { acc } };
 
