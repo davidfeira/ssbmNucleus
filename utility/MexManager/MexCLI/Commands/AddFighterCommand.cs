@@ -27,12 +27,23 @@ namespace MexCLI.Commands
             string currentPath = workspace.GetFilePath(current);
             string originalPath = workspace.GetFilePath(original);
 
-            if (File.Exists(originalPath) && File.Exists(currentPath))
+            // Only collapse onto the original when the two files are byte-identical.
+            // A differing _00n copy is a genuine variant (e.g. a clone's modified
+            // effect file) and must be kept — collapsing it would corrupt that fighter.
+            if (File.Exists(originalPath) && File.Exists(currentPath) &&
+                FilesAreIdentical(originalPath, currentPath))
             {
-                // Original already exists — use it, delete the duplicate
+                // Original already exists and matches — use it, delete the duplicate
                 File.Delete(currentPath);
                 setter(files, original);
             }
+        }
+
+        private static bool FilesAreIdentical(string a, string b)
+        {
+            FileInfo fa = new(a), fb = new(b);
+            if (fa.Length != fb.Length) return false;
+            return File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));
         }
 
         public static int Execute(string[] args)

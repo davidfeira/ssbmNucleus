@@ -101,6 +101,34 @@ namespace mexLib
         /// <param name="filename"></param>
         /// <param name="symbol"></param>
         /// <returns></returns>
+        // cache of effect-file content hashes (keyed by disc filename) so the
+        // content-dedup below doesn't re-read the same file for every fighter
+        private readonly Dictionary<string, string?> _effectHashByFile = new();
+
+        private string? GetEffectFileHash(string filename)
+        {
+            if (_effectHashByFile.TryGetValue(filename, out string? cached))
+                return cached;
+
+            string? hash = null;
+            try
+            {
+                string path = Workspace.GetFilePath(filename);
+                if (File.Exists(path))
+                {
+                    using System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+                    hash = Convert.ToHexString(md5.ComputeHash(File.ReadAllBytes(path)));
+                }
+            }
+            catch
+            {
+                hash = null;
+            }
+
+            _effectHashByFile[filename] = hash;
+            return hash;
+        }
+
         public int GetEffectID(string filename, string symbol)
         {
             if (string.IsNullOrEmpty(filename) || string.IsNullOrEmpty(symbol))
@@ -113,6 +141,29 @@ namespace mexLib
             {
                 EffectFiles[effect].Symbol = symbol;
                 return effect;
+            }
+
+            // content-dedup: the import pipeline renames colliding effect files to
+            // Ef*_001.dat / _002.dat copies, but many are byte-identical. Without
+            // collapsing them each copy burns one of the 64 m-ex effect slots and
+            // overflows the table — late fighters then get effId 255 (-1) and crash
+            // in-game with "fighter N does not have effBehaviorTable". If a slot
+            // already holds a byte-identical file, reuse it (identical files export
+            // identical symbols, so pointing at the canonical slot is safe).
+            string? hash = GetEffectFileHash(filename);
+            if (hash != null)
+            {
+                for (int i = 0; i < EffectFiles.Count; i++)
+                {
+                    if (i == 30) continue; // reserved slot
+                    string? existing = EffectFiles[i].FileName;
+                    if (string.IsNullOrEmpty(existing)) continue;
+                    if (GetEffectFileHash(existing) == hash)
+                    {
+                        EffectFiles[i].Symbol = symbol;
+                        return i;
+                    }
+                }
             }
 
             // find slot for new effect
@@ -134,8 +185,12 @@ namespace mexLib
                 return EffectFiles.Count - 1;
             }
 
-            // no room for new effects
-            return -1;
+            // no room: fail the build loudly instead of writing a 255 effect id
+            // that boots into a "does not have effBehaviorTable" crash
+            throw new Exception(
+                $"Effect table is full (m-ex caps effects at 64 slots): no room for " +
+                $"'{filename}' ({symbol}). The roster has too many distinct effect files. " +
+                $"Remove unneeded characters or share effect files between clones.");
         }
     }
 
