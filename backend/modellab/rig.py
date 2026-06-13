@@ -2126,6 +2126,41 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
         # skinning at the weight step — the real fix for torn joints.
         from modellab.geometric_parts import proxy_skeleton
         _pp, _ppar, _ppos, _ = proxy_skeleton(glb_pts, glb_labels, ginfo, log=log)
+        # per-limb axis ALIGN (rotation, pivot at the limb root): the bind
+        # geometry's arm points in the A-pose direction but the target's arm
+        # BONE points elsewhere, so LBS shears the arm when posed (legs already
+        # align -> ~identity, skipped). Rotate each limb's geometry onto its
+        # target bone-chain axis; the root stays put so the shoulder/hip seam is
+        # minimal and the weight smoothing closes it. This is a single clean
+        # rotation per limb — NOT segment_deform's multi-segment version that
+        # mangled.
+        fox_parents = {b.id: b.parent for b in rigkit.bones
+                       if b.name.startswith("JOBJ_")}
+        labarr = np.array(glb_labels, dtype=object)
+        for part in ("l_arm", "r_arm", "l_leg", "r_leg"):
+            mask = labarr == part
+            pchain = _part_chain(part, _pp, _ppar, _ppos)
+            tchain = _part_chain(part, tgt_parts, fox_parents, bind)
+            if mask.sum() < 20 or len(pchain) < 2 or len(tchain) < 2:
+                continue
+            root = np.asarray(_ppos[pchain[0]], float)
+            p_ax = np.asarray(_ppos[pchain[-1]], float) - root
+            t_ax = (np.asarray(bind[tchain[-1]], float)
+                    - np.asarray(bind[tchain[0]], float))
+            pn, tn = np.linalg.norm(p_ax), np.linalg.norm(t_ax)
+            if pn < 1e-6 or tn < 1e-6:
+                continue
+            ang = np.degrees(np.arccos(
+                np.clip(np.dot(p_ax / pn, t_ax / tn), -1, 1)))
+            if ang < 8:
+                continue
+            R = _rot_between_vec(p_ax, t_ax)
+            glb_pts[mask] = (glb_pts[mask] - root) @ R.T + root
+            log(f"  limb align {part}: {ang:.0f} deg")
+        foreign.tri_pos = glb_pts.reshape(foreign.tri_pos.shape)
+        # recompute proxy on the rotated geometry so weight fractions match
+        _pp, _ppar, _ppos, _ = proxy_skeleton(
+            foreign.tri_pos.reshape(-1, 3), glb_labels, ginfo, log=lambda *a: None)
         glb_proxy = (_pp, _ppar, _ppos)
         vert_parts = glb_labels
         vert_part_sets = [({p} if p else None) for p in glb_labels]
