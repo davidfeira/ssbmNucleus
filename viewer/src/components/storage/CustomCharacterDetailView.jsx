@@ -31,6 +31,8 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [skinDragOverId, setSkinDragOverId] = useState(null)    // added skin currently hovered (insert-before)
   const [costumeDragOverId, setCostumeDragOverId] = useState(null) // bundled costume hovered (insert-before)
   const [costumesDropActive, setCostumesDropActive] = useState(false) // skin->costume promote highlight
+  const [poseList, setPoseList] = useState([])                   // saved poses for the default-pose picker
+  const [applyingDefaultPose, setApplyingDefaultPose] = useState(false)
   const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
   const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
   const [skinCreatorCostume, setSkinCreatorCostume] = useState(null) // opens SkinCreator on this skin
@@ -633,6 +635,41 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     }
   }
 
+  // Load the char's saved poses for the default-pose picker
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API_URL}/storage/poses/list/${encodeURIComponent(pseudoCostumes)}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d.success) setPoseList(d.poses || []) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [API_URL, pseudoCostumes])
+
+  // Set the default CSP pose and re-render every costume + skin in it.
+  const handleSetDefaultPose = async (poseName) => {
+    if (!poseName) return
+    setApplyingDefaultPose(true)
+    try {
+      const res = await fetch(`${API_URL}/custom-characters/${character.slug}/default-pose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poseName })
+      })
+      const data = await res.json()
+      if (data.success) {
+        playSound('camera')
+        flashSkinMessage(`Default pose set — re-rendered ${data.rendered} CSPs`)
+        await fetchDetail()
+      } else {
+        flashSkinMessage(`Set default pose failed: ${data.error}`)
+      }
+    } catch (err) {
+      flashSkinMessage(`Default pose error: ${err.message}`)
+    } finally {
+      setApplyingDefaultPose(false)
+    }
+  }
+
   // stop audio when leaving the page
   useEffect(() => () => { audioRef.current?.pause() }, [])
 
@@ -781,6 +818,22 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             >
               🎭 Manage Poses
             </button>
+            {poseList.length > 0 && (
+              <select
+                className="default-pose-select"
+                value={detail?.default_pose || ''}
+                disabled={applyingDefaultPose}
+                onChange={(e) => handleSetDefaultPose(e.target.value)}
+                title="Re-render every costume + skin CSP in this pose and remember it as the default"
+              >
+                <option value="" disabled>
+                  {applyingDefaultPose ? 'Applying…' : 'Default pose…'}
+                </option>
+                {poseList.map(p => (
+                  <option key={p.name} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            )}
             {!testActive && (
               <button
                 className="ingame-test-cta"

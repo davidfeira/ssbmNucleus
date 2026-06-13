@@ -198,6 +198,18 @@ def _rewrite_fighter_zip(char_dir, mutate_json=None, drop_entries=None, replace_
     return True
 
 
+def _replace_zip_member(zip_path, member, data):
+    """Replace one member in a zip (e.g. csp.png), preserving all other entries."""
+    import io
+    src = zipfile.ZipFile(zip_path, 'r')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            dst.writestr(item, data if item.filename == member else src.read(item.filename))
+    src.close()
+    Path(zip_path).write_bytes(buf.getvalue())
+
+
 def _update_fighter_json_everywhere(char_dir, mutate):
     """Apply `mutate(fighter_dict)` to BOTH the storage fighter.json and the
     one embedded in fighter.zip."""
@@ -1039,6 +1051,7 @@ def get_custom_character_detail(slug):
             'ending_movies': sum(1 for v in (fighter_data.get('media') or {}).values() if v),
             'costumes': costumes,
             'added_skins': added_skins,
+            'default_pose': entry.get('default_pose'),
             'has_css_icon': (char_dir / 'css_icon.png').exists(),
             'icon_url': f"/api/mex/custom-characters/{slug}/icon",
             'zip_assets': zip_assets,
@@ -1890,6 +1903,112 @@ def skin_to_bundled_costume(slug, skin_id):
         return jsonify({'success': True, 'costume_count': len(costumes)})
     except Exception as e:
         logger.error(f"Skin to costume error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/default-pose', methods=['POST'])
+def set_custom_character_default_pose(slug):
+    """Set the character's default CSP pose and re-render every bundled costume
+    + added skin's main CSP (SD + HD) in it. Body: {poseName}. Stores
+    `default_pose` on the metadata entry. Pose must already exist in the char's
+    pose library."""
+    try:
+        import io
+        import tempfile
+        from blueprints.poses import _poses_dir, _character_aj_file, _render_pose_csp
+
+        pose_name = ((request.get_json(silent=True) or {}).get('poseName') or '').strip()
+        if not pose_name:
+            return jsonify({'success': False, 'error': 'Missing poseName'}), 400
+
+        char_dir = CUSTOM_CHARACTERS_PATH / slug
+        if not (char_dir / 'fighter.json').exists():
+            return jsonify({'success': False, 'error': 'Character not found'}), 404
+        metadata = _read_metadata()
+        entry = _find_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Character not found in metadata'}), 404
+
+        char_key = f'custom_characters/{slug}/costumes'   # so the pose helpers resolve the slug
+        pose_path = _poses_dir(char_key) / f'{pose_name}.yml'
+        if not pose_path.exists():
+            return jsonify({'success': False, 'error': f'Pose {pose_name} not found'}), 404
+        aj_file = _character_aj_file(char_key)
+
+        with open(char_dir / 'fighter.json', 'r', encoding='utf-8') as f:
+            fighter_data = json.load(f)
+        costumes_dir = char_dir / 'costumes'
+        costumes_dir.mkdir(exist_ok=True)
+        skins_dir = char_dir / 'skins'
+        rendered = 0
+
+        def _dat_from_zip(zbytes):
+            with zipfile.ZipFile(io.BytesIO(zbytes)) as zf:
+                n = next((x for x in zf.namelist()
+                          if x.lower().endswith(('.dat', '.usd')) and not x.endswith('/')), None)
+                return (n, zf.read(n)) if n else (None, None)
+
+        def _render(dat_bytes, dat_filename):
+            """Render SD+HD CSP for a DAT, return (sd_bytes, hd_bytes) or None."""
+            tmp = tempfile.mkdtemp(prefix='defpose_')
+            try:
+                dp = Path(tmp) / dat_filename
+                dp.write_bytes(dat_bytes)
+                out = {}
+                for scale in (1, 4):
+                    csp = _render_pose_csp(str(dp), char_key, pose_path, aj_file, scale)
+                    if not csp or not Path(csp).exists():
+                        return None
+                    out[scale] = Path(csp).read_bytes()
+                return out[1], out[4]
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+        # bundled costumes
+        for i, costume in enumerate(fighter_data.get('costumes', [])):
+            dat_name = (costume.get('file') or {}).get('fileName') or ''
+            stem = Path(dat_name).stem
+            src = costumes_dir / f'{stem}.zip'
+            if not src.exists():
+                continue
+            _, dat_bytes = _dat_from_zip(src.read_bytes())
+            if dat_bytes is None:
+                continue
+            res = _render(dat_bytes, dat_name)
+            if res is None:
+                continue
+            sd, hd = res
+            (costumes_dir / f'{stem}_csp.png').write_bytes(sd)
+            (costumes_dir / f'{stem}_csp_hd.png').write_bytes(hd)
+            (char_dir / f'csp_{i}.png').write_bytes(sd)
+            _replace_zip_member(costumes_dir / f'{stem}.zip', 'csp.png', sd)
+            _rewrite_fighter_zip(char_dir, replace_entries={f'{stem}.zip': (costumes_dir / f'{stem}.zip').read_bytes()})
+            rendered += 1
+
+        # added skins
+        for skin in entry.get('added_skins', []):
+            sid = skin.get('id')
+            src = skins_dir / skin.get('filename', f'{sid}.zip')
+            if not src.exists():
+                continue
+            dat_name, dat_bytes = _dat_from_zip(src.read_bytes())
+            if dat_bytes is None:
+                continue
+            res = _render(dat_bytes, Path(dat_name).name)
+            if res is None:
+                continue
+            sd, hd = res
+            (skins_dir / f'{sid}_csp.png').write_bytes(sd)
+            (skins_dir / f'{sid}_csp_hd.png').write_bytes(hd)
+            _replace_zip_member(src, 'csp.png', sd)
+            rendered += 1
+
+        entry['default_pose'] = pose_name
+        _write_metadata(metadata)
+        logger.info(f"[OK] Set default pose '{pose_name}' for {slug}; re-rendered {rendered} CSPs")
+        return jsonify({'success': True, 'default_pose': pose_name, 'rendered': rendered})
+    except Exception as e:
+        logger.error(f"Set default pose error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

@@ -8840,6 +8840,18 @@
   margin-left: 0;
 }
 
+.default-pose-select {
+  background: var(--color-bg-elevated, rgba(6, 12, 20, 0.8));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.default-pose-select:disabled { opacity: 0.6; cursor: wait; }
+
 /* Reorder feedback: insert-before line indicator + dragged-card dim */
 .custom-char-costume-card.drop-before {
   box-shadow: inset 3px 0 0 0 var(--color-gold), 0 0 8px rgba(255, 200, 60, 0.35);
