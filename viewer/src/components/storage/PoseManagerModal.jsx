@@ -132,40 +132,46 @@ export default function PoseManagerModal({
             {/* Create view: viewer + animation browser */}
             <div className="pm-body">
               <div className="pm-left-section">
-                {modelList.length > 1 && (
-                  <div className="pm-model-select">
-                    <label>Model:</label>
-                    <select
-                      value={selectedModel?.value ?? ''}
-                      onChange={(e) => { playSound('boop'); setSelectedModelValue(e.target.value) }}
-                    >
-                      {modelList.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                    {startFrom && (
-                      <span className="pm-startfrom-tag">from “{startFrom.poseName}”</span>
-                    )}
+                {/* Model picker sits in a LEFT column, not above the viewer:
+                    the native HSD render window is an OS-topmost overlay over
+                    the viewport, so a dropdown opening down over it would be
+                    occluded. Keeping it left of the viewport avoids that. */}
+                <div className="pm-create-row">
+                  {modelList.length > 1 && (
+                    <div className="pm-model-select">
+                      <label>Model</label>
+                      <select
+                        value={selectedModel?.value ?? ''}
+                        onChange={(e) => { playSound('boop'); setSelectedModelValue(e.target.value) }}
+                      >
+                        {modelList.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      {startFrom && (
+                        <span className="pm-startfrom-tag">from “{startFrom.poseName}”</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="pm-viewer-section">
+                    <EmbeddedModelViewer
+                      key={`${selectedModel?.value || baseSkinId || 'default'}|${startFrom?.poseName || 'new'}`}
+                      ref={viewerRef}
+                      character={character}
+                      skinId={selectedModel ? (selectedModel.skinId || undefined) : (baseSkinId || undefined)}
+                      costumeCode={selectedModel
+                        ? (selectedModel.skinId ? undefined : selectedModel.costumeCode)
+                        : (baseSkinId ? undefined : getDefaultCostumeCode(character))}
+                      overrideSceneFile={startFrom?.sceneFile || null}
+                      startAnimSymbol={startFrom?.animSymbol || null}
+                      startFrame={startFrom?.frame || 0}
+                      onClose={onClose}
+                      inline={true}
+                      cspMode={true}
+                      showGrid={false}
+                      showBackground={false}
+                    />
                   </div>
-                )}
-                <div className="pm-viewer-section">
-                  <EmbeddedModelViewer
-                    key={`${selectedModel?.value || baseSkinId || 'default'}|${startFrom?.poseName || 'new'}`}
-                    ref={viewerRef}
-                    character={character}
-                    skinId={selectedModel ? (selectedModel.skinId || undefined) : (baseSkinId || undefined)}
-                    costumeCode={selectedModel
-                      ? (selectedModel.skinId ? undefined : selectedModel.costumeCode)
-                      : (baseSkinId ? undefined : getDefaultCostumeCode(character))}
-                    overrideSceneFile={startFrom?.sceneFile || null}
-                    startAnimSymbol={startFrom?.animSymbol || null}
-                    startFrame={startFrom?.frame || 0}
-                    onClose={onClose}
-                    inline={true}
-                    cspMode={true}
-                    showGrid={false}
-                    showBackground={false}
-                  />
                 </div>
 
                 {/* Category buttons below viewer */}

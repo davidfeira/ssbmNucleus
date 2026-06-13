@@ -306,16 +306,30 @@ export const POSE_MANAGER_STYLES = `
           color: white;
         }
 
-        .pm-model-select {
+        /* Row holding the left model picker + the viewer */
+        .pm-create-row {
+          flex: 1;
           display: flex;
-          align-items: center;
           gap: var(--space-2);
-          padding: var(--space-1) 0 var(--space-2);
+          min-height: 0;
+          align-items: stretch;
+        }
+
+        /* Left column. The native HSD render window overlays the viewport, so
+           the dropdown must open to the LEFT of it, never over it. */
+        .pm-model-select {
+          flex: 0 0 150px;
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 4px;
+          padding-top: var(--space-1);
           font-size: 13px;
           color: var(--color-text-secondary);
         }
 
         .pm-model-select select {
+          width: 100%;
           background: var(--color-bg-elevated, rgba(6, 12, 20, 0.8));
           border: 1px solid var(--color-border-subtle);
           border-radius: var(--radius-sm);
@@ -635,6 +649,15 @@ export const POSE_MANAGER_STYLES = `
           }
 
           .pm-left-section {
+            flex: 0 0 auto;
+          }
+
+          /* No native overlay on mobile/browser — stack the picker above. */
+          .pm-create-row {
+            flex-direction: column;
+          }
+
+          .pm-model-select {
             flex: 0 0 auto;
           }
 
