@@ -58,16 +58,25 @@ MAX_ENTRIES = 150
 ENGINE_REGION_SIZE = TABLE_FILE_OFFSET - ENGINE_FILE_OFFSET  # 0x100
 TABLE_REGION_SIZE = MAX_ENTRIES * ENTRY_SIZE  # 1200 bytes
 
-# Magus420's FSM engine, verbatim from Crazy Hand's injectCode()
+# Magus420's FSM engine from Crazy Hand's injectCode(), with one change for
+# Slippi-rollback safety: the original used `stfd f1, 0(r2)` as float->int
+# conversion scratch, writing 8 bytes/frame at 0x804DF9E0 -- PAST the end of
+# .sdata2, in BSS we don't own. This build redirects the scratch to
+# 0x8040B9A8 (the table-base pointer target inside OUR region; the scan
+# reads table entries from +8 onward, so those 8 bytes are never read).
+# Inserted `lis/ori r29` + rebased stfd/lwz; all internal branches are
+# relative so the 8-byte shift is safe; the final branch-back is re-encoded
+# for the new tail position (verified by _check_engine_integrity).
 # (position-dependent: must live at ENGINE_RAM, table at TABLE_RAM).
 ENGINE_CODE = bytes.fromhex(
     "7F63DB788BE3006C3FA0804563BD30841FFF0E907FFDFA14809F00008BFF0008"
     "2C0400134182001C2C04001240A200202C1F000140A200183880001348000010"
-    "2C1F000140A2000838800012C03E0894FC20081ED822000080A2000480C30070"
-    "80E3007460E780003FE0804063FFB9A887BF00082C1D00004182006057BC463E"
-    "2C1C00FF418200147C1C20004182000C418100484BFFFFDC57BC863E7C1C2800"
-    "41A1FFD057BC043E7C1C30004182000C7C1C38004082FFBC839F00042C1CFFFF"
-    "41820018C03F00043FE0800663FFF1907FE803A64E800021BB6100144BC679B0"
+    "2C1F000140A2000838800012C03E0894FC20081E3FA0804063BDB9A8D83D0000"
+    "80BD000480C3007080E3007460E780003FE0804063FFB9A887BF00082C1D0000"
+    "4182006057BC463E2C1C00FF418200147C1C20004182000C418100484BFFFFDC"
+    "57BC863E7C1C280041A1FFD057BC043E7C1C30004182000C7C1C38004082FFBC"
+    "839F00042C1CFFFF41820018C03F00043FE0800663FFF1907FE803A64E800021"
+    "BB6100144BC679A8"
 )
 
 SIDECAR_SUFFIX = ".fsm_orig.bin"
@@ -84,12 +93,17 @@ def _check_engine_integrity():
     li = int.from_bytes(HOOK_PATCHED, "big") & 0x03FFFFFC
     assert HOOK_RAM + li == ENGINE_RAM, "hook branch target mismatch"
     # return branch: engine ends with displaced instr + b back to HOOK_RAM+4
-    assert ENGINE_CODE.endswith(HOOK_VANILLA + bytes.fromhex("4BC679B0"))
+    assert ENGINE_CODE.endswith(HOOK_VANILLA + bytes.fromhex("4BC679A8"))
     ret_at = ENGINE_RAM + len(ENGINE_CODE) - 4
-    ret_li = 0x4BC679B0 & 0x03FFFFFC
+    ret_li = 0x4BC679A8 & 0x03FFFFFC
     if ret_li & 0x02000000:
         ret_li -= 0x04000000
     assert ret_at + ret_li == HOOK_RAM + 4, "return branch target mismatch"
+    # scratch redirect: the engine must reference its in-region scratch slot
+    # (lis r29, 0x8040 / ori r29, 0xB9A8 = TABLE_RAM - 8, never read by the
+    # entry scan which starts at TABLE_RAM via lwzu +8)
+    assert bytes.fromhex("3FA0804063BDB9A8") in ENGINE_CODE, "scratch redirect missing"
+    assert bytes.fromhex("D8220000") not in ENGINE_CODE, "r2 scratch write still present"
 
 
 _check_engine_integrity()

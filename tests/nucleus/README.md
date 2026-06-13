@@ -6,6 +6,32 @@ report whether the mod loaded or crashed**. It pairs the Nucleus backend API
 with the Dolphin pipe-input harness in [`../dolphin`](../dolphin) and a
 memory-feedback observer.
 
+> ## ⚡ PREFERRED: in-app engine (`backend/ingame/`) for getting into a match
+>
+> For "boot the ISO and get a specific character into a match" — probes, FSM
+> checks, screenshot/diagnostic work — **do NOT drive the CSS cursor or add a
+> CPU**. Use the in-app ingame engine's memory-loading path, which is faster and
+> far more reliable:
+>
+> 1. `DolphinBoot` (isolated throwaway User dir) → `nav.nav_to_css`
+> 2. `match_setup.patch_one_player` + `force_time_infinite` → **solo match,
+>    no CPU**
+> 3. `match_setup.write_solo_player(d, ckind, color)` +
+>    `warp_to_stage_select(d)` — writes the player block directly
+>    (ckind = CSS external id; first added m-ex fighter = 0x1A) and warps
+>    CSS→SSS with **no cursor movement at all**
+> 4. `StageCursor.force_select(INTERNAL_STAGE_ID["finaldestination"])` —
+>    direct stage-id write, no SSS cursor
+>
+> Template: [`backend/fsm_crash_probe.py`](../../backend/fsm_crash_probe.py) or
+> `backend/zs_mismatch_probe.py` (run from `backend/` with plain `python`).
+> A solo match also removes the CPU as a confound (nothing attacks you or
+> moves the camera).
+>
+> The cursor-driving path below (`run-modded-match.js --closed-loop`) is only
+> needed when the CSS/SSS **UI itself** is under test (icon placement, grid
+> layout, menu mods).
+
 ## Pipeline
 
 ```
