@@ -31,3 +31,22 @@ test ISOs, `rigkits/` (per-character SMD exports + pose dumps, regenerate via
 forensics. `make_staircase.py` / `make_bonemap.py` build diagnostic costumes
 (per-DObj placement / per-bone ownership). `viz_group.py` renders one mesh
 group; `crop_shots.py` crops captures around the character.
+
+## Low-poly shadows / magnifier (custom characters)
+
+Melee renders the drop-shadow **and** the off-screen magnifier from a costume's
+**low-poly** model. Custom characters often have empty low-poly DObjs → no shadow
++ empty magnifier. Full guide (cause, decomp proof, both fixes, gotchas):
+**[`docs/LOWPOLY_SHADOWS.md`](../docs/LOWPOLY_SHADOWS.md)**.
+
+- `build_lowpoly_smd.py <export.smd> <out.smd> [tris]` — decimate a costume's high
+  mesh to a ~420-tri low-poly SMD (costume skeleton + weights + 1 textured group).
+- `inject_lowpoly_to_vault.py <slug> <ftCode> <jointSym> <lowpoly.smd> <src.zip>`
+  — inject the low-poly into every color of a vault `fighter.zip` + apply to the
+  live vault. Uses HSDRawViewer `--inject-lowpoly` (surgical: fills the empty low
+  DObj, remaps envelopes onto the real skeleton, preserves DObj count). **Main fix.**
+- `apply_repoint_to_vault.py` / `repoint_lowpoly.py` — the quick alternative:
+  repoint the low table at the high model (shadow works but redraws the full high
+  model each frame = heavier). In-place ftData byte edit, reversible.
+- `build_custom_iso_from_zip.py <out.iso> <fighter.zip>...` — test ISO from
+  arbitrary fighter.zip(s), without touching the live vault.
