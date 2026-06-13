@@ -620,6 +620,10 @@ button.canvas-float-btn svg {
   flex-direction: column;
 }
 
+.skin-creator-select-content > .back-button {
+  align-self: flex-start;
+}
+
 .skin-creator-select p {
   color: var(--color-text-tertiary);
   margin: 0 0 var(--space-6) 0;

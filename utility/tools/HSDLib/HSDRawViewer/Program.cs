@@ -188,6 +188,46 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Inject a real decimated low-poly mesh into an EXISTING costume's
+            // empty LowPoly DObj slot (so the shadow + magnifier render cheaply,
+            // like vanilla). The high model is byte-preserved.
+            if (args.Length >= 1 && args[0] == "--inject-lowpoly")
+            {
+                RunInjectLowpoly(args);
+                return;
+            }
+
+            // List each DObj of a model with its envelope bone set + vertex
+            // count (identify which DObjs are hair/cloth before extraction).
+            if (args.Length >= 1 && args[0] == "--dobj-info")
+            {
+                RunDObjInfo(args);
+                return;
+            }
+
+            // Surgically unlink specific DObjs (by --dobj-info index) from a
+            // model, leaving every other DObj byte-intact (no lossy re-import).
+            if (args.Length >= 1 && args[0] == "--remove-dobjs")
+            {
+                RunRemoveDObjs(args);
+                return;
+            }
+
+            // Within one DObj, delete triangles weighted to given cloth bones and
+            // re-encode the survivors losslessly (vertex colors preserved).
+            if (args.Length >= 1 && args[0] == "--remove-tris-by-bone")
+            {
+                RunRemoveTrisByBone(args);
+                return;
+            }
+
+            // Drop (or with "invert", isolate) triangles by their decoded index.
+            if (args.Length >= 1 && args[0] == "--remove-tris-by-index")
+            {
+                RunRemoveTrisByIndex(args);
+                return;
+            }
+
             Console.WriteLine("Starting normal GUI mode");
             // Normal GUI mode
             Application.EnableVisualStyles();
@@ -1320,6 +1360,122 @@ namespace HSDRawViewer
         /// frame as JSON. Usage:
         ///   --dump-pose <costume.dat> <PlXxAJ.dat> <animSubstring> <out.json> [frame]
         /// </summary>
+        // --inject-lowpoly <costume.dat> <jointSymbol> <lowpoly.smd> <lowDObjIndex> <out.dat>
+        // Fill an EXISTING costume's empty LowPoly DObj slot with a real
+        // decimated low-poly mesh, so Melee's drop-shadow + off-screen magnifier
+        // (which render the LOW-poly model) are cheap like vanilla instead of
+        // re-drawing the full high model. The high model is untouched and the
+        // DObj count/indices stay valid (we fill an already-present empty slot,
+        // never add one). ImportModelHeadless gives the low-poly a SEPARATE
+        // joint tree (matching structure, copied transforms), so its envelope /
+        // single-bound joint references are remapped onto the costume's real
+        // joints (by tree index, keyed on the shared HSDStruct) — otherwise the
+        // shadow would freeze at bind pose instead of following the body.
+        static void RunInjectLowpoly(string[] args)
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            if (args.Length < 6)
+            {
+                Console.WriteLine("Usage: --inject-lowpoly <costume.dat> <jointSymbol> <lowpoly.smd> <lowDObjIndex> <out.dat>");
+                return;
+            }
+            try
+            {
+                string datFile = args[1], jobjPath = args[2], modelFile = args[3];
+                int lowIdx = int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture);
+                string outFile = args[5];
+
+                var rawFile = new HSDRawFile(datFile);
+                var nav = NavigateToJOBJWithParent(rawFile, jobjPath);
+                if (nav.jobj == null)
+                {
+                    Console.WriteLine($"FAILED: could not find JOBJ at {jobjPath}");
+                    Environment.Exit(1);
+                    return;
+                }
+                HSD_JOBJ costumeRoot = nav.jobj;
+
+                HSD_JOBJ lowRoot = ImportModelHeadless(modelFile, costumeRoot);
+                if (lowRoot == null)
+                {
+                    Console.WriteLine("FAILED: low-poly import returned null");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                // map imported-joint struct -> costume joint (by tree index)
+                var costumeJoints = costumeRoot.TreeList;
+                var lowJoints = lowRoot.TreeList;
+                var jmap = new Dictionary<HSDStruct, HSD_JOBJ>();
+                int n = Math.Min(costumeJoints.Count, lowJoints.Count);
+                for (int i = 0; i < n; i++)
+                    jmap[lowJoints[i]._s] = costumeJoints[i];
+                Console.WriteLine($"Joint map: {jmap.Count} (costume {costumeJoints.Count}, low {lowJoints.Count})");
+
+                HSD_JOBJ Remap(HSD_JOBJ j)
+                {
+                    if (j == null) return null;
+                    return jmap.TryGetValue(j._s, out var cj) ? cj : j;
+                }
+
+                // harvest the low-poly POBJs, remapping joints onto the costume
+                var pobjs = new List<HSD_POBJ>();
+                HSD_MOBJ mobj = null;
+                foreach (var j in lowRoot.TreeList)
+                {
+                    for (var d = j.Dobj; d != null; d = d.Next)
+                    {
+                        if (mobj == null && d.Mobj != null) mobj = d.Mobj;
+                        for (var p = d.Pobj; p != null; p = p.Next)
+                        {
+                            if (p.SingleBoundJOBJ != null)
+                                p.SingleBoundJOBJ = Remap(p.SingleBoundJOBJ);
+                            var env = p.EnvelopeWeights;
+                            if (env != null)
+                                foreach (var e in env)
+                                    for (int k = 0; k < e.EnvelopeCount; k++)
+                                        e.SetJOBJAt(k, Remap(e.GetJOBJAt(k)));
+                            pobjs.Add(p);
+                        }
+                    }
+                }
+                if (pobjs.Count == 0)
+                {
+                    Console.WriteLine("FAILED: imported low-poly has no POBJs");
+                    Environment.Exit(1);
+                    return;
+                }
+                for (int i = 0; i < pobjs.Count; i++)
+                    pobjs[i].Next = (i + 1 < pobjs.Count) ? pobjs[i + 1] : null;
+
+                // find the costume DObj at lowIdx (tree order) and fill it
+                var costumeDObjs = new List<HSD_DOBJ>();
+                foreach (var j in costumeRoot.TreeList)
+                    for (var d = j.Dobj; d != null; d = d.Next) costumeDObjs.Add(d);
+                Console.WriteLine($"Costume DObjs: {costumeDObjs.Count}; injecting {pobjs.Count} pobj at index {lowIdx}");
+                if (lowIdx < 0 || lowIdx >= costumeDObjs.Count)
+                {
+                    Console.WriteLine($"FAILED: index {lowIdx} out of range");
+                    Environment.Exit(1);
+                    return;
+                }
+                var target = costumeDObjs[lowIdx];
+                if (target.Pobj != null)
+                    Console.WriteLine($"NOTE: DObj {lowIdx} already had geometry; replacing");
+                target.Pobj = pobjs[0];
+                if (mobj != null) target.Mobj = mobj;
+
+                rawFile.Save(outFile);
+                Console.WriteLine($"SUCCESS: injected low-poly into DObj {lowIdx}, saved {outFile}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: inject-lowpoly failed: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                Environment.Exit(1);
+            }
+        }
+
         // --accessory <costume.dat> <accessory.smd> <attachBone> <dynamics.json> <out.dat>
         // Adds a mexCostume physics accessory (akaneia m-ex wiki): the model
         // gets its own joint chains, attaches to AttachBone at runtime, and
@@ -1444,6 +1600,318 @@ namespace HSDRawViewer
                 Console.WriteLine($"FAILED: {ex.Message}");
                 Console.WriteLine(ex.StackTrace);
             }
+        }
+
+        // --dobj-info <dat> <jobjPath>
+        // Emits JSON: one entry per DObj (in tree DObj order) with the set of
+        // skeleton bone indices its POBJ envelopes / single-bind reference, plus
+        // a vertex count. Used to locate hair/cloth geometry for extraction.
+        static void RunDObjInfo(string[] args)
+        {
+            if (args.Length < 3)
+            {
+                Console.WriteLine("Usage: --dobj-info <dat> <jobjPath>");
+                return;
+            }
+            var file = new HSDRawFile(args[1]);
+            HSD_JOBJ root = NavigateToJOBJ(file, args[2]);
+            if (root == null) { Console.WriteLine("ERROR: jobj not found"); return; }
+
+            var bones = root.TreeList;
+            var idx = new Dictionary<HSD_JOBJ, int>();
+            for (int i = 0; i < bones.Count; i++) idx[bones[i]] = i;
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("[");
+            bool first = true;
+            int di = 0;
+            foreach (var jobj in bones)
+            {
+                if (jobj.Dobj == null) continue;
+                int owner = idx[jobj];
+                foreach (var dobj in jobj.Dobj.List)
+                {
+                    var boneSet = new SortedSet<int>();
+                    int vtx = 0;
+                    if (dobj.Pobj != null)
+                    {
+                        foreach (var pobj in dobj.Pobj.List)
+                        {
+                            if (pobj.SingleBoundJOBJ != null && idx.ContainsKey(pobj.SingleBoundJOBJ))
+                                boneSet.Add(idx[pobj.SingleBoundJOBJ]);
+                            var envs = pobj.EnvelopeWeights;
+                            if (envs != null)
+                                foreach (var env in envs)
+                                    if (env != null)
+                                        foreach (var j in env.JOBJs)
+                                            if (j != null && idx.ContainsKey(j)) boneSet.Add(idx[j]);
+                            try { vtx += pobj.ToDisplayList().Vertices.Count; } catch { }
+                        }
+                    }
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append($"{{\"dobj\":{di},\"owner\":{owner},\"verts\":{vtx},\"bones\":[{string.Join(",", boneSet)}]}}");
+                    di++;
+                }
+            }
+            sb.Append("]");
+            Console.WriteLine(sb.ToString());
+        }
+
+        // --remove-dobjs <dat> <jobjPath> <comma,indices> <out.dat>
+        // Unlinks the named DObjs (by --dobj-info index) from their owner JOBJ's
+        // DObj list and re-links the survivors, then saves. Every kept DObj is
+        // byte-preserved (no decode/re-encode), so textures/materials are intact.
+        static void RunRemoveDObjs(string[] args)
+        {
+            if (args.Length < 5)
+            {
+                Console.WriteLine("Usage: --remove-dobjs <dat> <jobjPath> <i,j,..> <out.dat>");
+                return;
+            }
+            var file = new HSDRawFile(args[1]);
+            HSD_JOBJ root = NavigateToJOBJ(file, args[2]);
+            if (root == null) { Console.WriteLine("ERROR: jobj not found"); return; }
+            var remove = new HashSet<int>(args[3].Split(',').Where(s => s.Length > 0).Select(int.Parse));
+
+            int di = 0, removed = 0;
+            foreach (var jobj in root.TreeList)
+            {
+                if (jobj.Dobj == null) continue;
+                var keep = new List<HSD_DOBJ>();
+                foreach (var dobj in jobj.Dobj.List)
+                {
+                    if (remove.Contains(di)) removed++;
+                    else keep.Add(dobj);
+                    di++;
+                }
+                for (int i = 0; i < keep.Count; i++)
+                    keep[i].Next = (i + 1 < keep.Count) ? keep[i + 1] : null;
+                jobj.Dobj = keep.Count > 0 ? keep[0] : null;
+            }
+            file.Save(args[4]);
+            Console.WriteLine($"SUCCESS: removed {removed} dobjs -> {args[4]}");
+        }
+
+        // --remove-tris-by-bone <dat> <jobjPath> <dobjIndex> <clothBonesCSV> <out.dat>
+        // Within ONE DObj, drop every triangle whose majority vertices are
+        // primarily weighted to a "cloth" bone, then re-encode the survivors
+        // natively (GX_Vertex kept intact => CLR0 / normals / UVs preserved,
+        // unlike the SMD round-trip). Every OTHER DObj is byte-untouched.
+        static void RunRemoveTrisByBone(string[] args)
+        {
+            if (args.Length < 6)
+            {
+                Console.WriteLine("Usage: --remove-tris-by-bone <dat> <jobjPath> <dobjIndex> <bonesCSV> <out.dat>");
+                return;
+            }
+            var file = new HSDRawFile(args[1]);
+            HSD_JOBJ root = NavigateToJOBJ(file, args[2]);
+            if (root == null) { Console.WriteLine("ERROR: jobj not found"); return; }
+            int targetDobj = int.Parse(args[3]);
+            var clothBones = new HashSet<int>(args[4].Split(',').Where(s => s.Length > 0).Select(int.Parse));
+
+            var bones = root.TreeList;
+            var idx = new Dictionary<HSD_JOBJ, int>();
+            for (int i = 0; i < bones.Count; i++) idx[bones[i]] = i;
+
+            int di = 0, keptTris = 0, removedTris = 0;
+            foreach (var ownerJobj in bones)
+            {
+                if (ownerJobj.Dobj == null) continue;
+                foreach (var dobj in ownerJobj.Dobj.List)
+                {
+                    if (di++ != targetDobj) continue;
+
+                    var gen = new HSDRaw.Tools.POBJ_Generator();
+                    var newPobjs = new List<HSD_POBJ>();
+                    foreach (var pobj in dobj.Pobj.List)
+                    {
+                        var gxAttrs = pobj.ToGXAttributes();
+                        foreach (var a in gxAttrs)
+                            if (a.AttributeName == HSDRaw.GX.GXAttribName.GX_VA_CLR0)
+                                gen.VertexColorFormat = a.CompType;
+                        var attrNames = gxAttrs
+                            .Where(a => a.AttributeName != HSDRaw.GX.GXAttribName.GX_VA_NULL)
+                            .Select(a => a.AttributeName).ToArray();
+
+                        var dl = pobj.ToDisplayList();
+                        var envs = pobj.EnvelopeWeights;
+                        bool hasEnv = pobj.HasAttribute(HSDRaw.GX.GXAttribName.GX_VA_PNMTXIDX);
+                        var singleBind = pobj.SingleBoundJOBJ;
+
+                        // flatten primitives -> raw triangle vertex list
+                        var flat = new List<HSDRaw.GX.GX_Vertex>();
+                        int off = 0;
+                        foreach (var prim in dl.Primitives)
+                        {
+                            var verts = dl.Vertices.GetRange(off, prim.Count);
+                            off += prim.Count;
+                            switch (prim.PrimitiveType)
+                            {
+                                case HSDRaw.GX.GXPrimitiveType.Quads:
+                                    verts = HSDRawViewer.Tools.TriangleConverter.QuadToList(verts); break;
+                                case HSDRaw.GX.GXPrimitiveType.TriangleStrip:
+                                    verts = HSDRawViewer.Tools.TriangleConverter.StripToList(verts); break;
+                                case HSDRaw.GX.GXPrimitiveType.Triangles:
+                                    break;
+                                default: break;
+                            }
+                            flat.AddRange(verts);
+                        }
+
+                        (HSD_JOBJ[] bn, float[] wt, int prim) Resolve(HSDRaw.GX.GX_Vertex v)
+                        {
+                            HSD_JOBJ[] bn; float[] wt;
+                            if (hasEnv && envs != null) { var en = envs[v.PNMTXIDX / 3]; bn = en.JOBJs; wt = en.Weights; }
+                            else if (singleBind != null) { bn = new[] { singleBind }; wt = new[] { 1f }; }
+                            else { bn = new[] { ownerJobj }; wt = new[] { 1f }; }
+                            int pb = -1; float best = -1f;
+                            for (int k = 0; k < bn.Length; k++)
+                                if (bn[k] != null && idx.ContainsKey(bn[k]) && wt[k] > best) { best = wt[k]; pb = idx[bn[k]]; }
+                            return (bn, wt, pb);
+                        }
+
+                        var keepV = new List<HSDRaw.GX.GX_Vertex>();
+                        var keepB = new List<HSD_JOBJ[]>();
+                        var keepW = new List<float[]>();
+                        for (int t = 0; t + 2 < flat.Count; t += 3)
+                        {
+                            var r0 = Resolve(flat[t]); var r1 = Resolve(flat[t + 1]); var r2 = Resolve(flat[t + 2]);
+                            int c = (clothBones.Contains(r0.prim) ? 1 : 0)
+                                  + (clothBones.Contains(r1.prim) ? 1 : 0)
+                                  + (clothBones.Contains(r2.prim) ? 1 : 0);
+                            if (c >= 2) { removedTris++; continue; }
+                            keptTris++;
+                            keepV.Add(flat[t]); keepB.Add(r0.bn); keepW.Add(r0.wt);
+                            keepV.Add(flat[t + 1]); keepB.Add(r1.bn); keepW.Add(r1.wt);
+                            keepV.Add(flat[t + 2]); keepB.Add(r2.bn); keepW.Add(r2.wt);
+                        }
+                        if (keepV.Count == 0) continue;
+
+                        HSD_POBJ np = hasEnv
+                            ? gen.CreatePOBJsFromTriangleList(keepV, attrNames, keepB, keepW)
+                            : gen.CreatePOBJsFromTriangleList(keepV, attrNames, null);
+                        newPobjs.Add(np);
+                    }
+                    gen.SaveChanges();
+
+                    HSD_POBJ head = null, tail = null;
+                    foreach (var np in newPobjs)
+                    {
+                        if (head == null) head = np;
+                        else tail.Add(np);
+                        tail = np;
+                        while (tail.Next != null) tail = tail.Next;
+                    }
+                    dobj.Pobj = head;
+                }
+            }
+            file.Save(args[5]);
+            Console.WriteLine($"SUCCESS: kept {keptTris} tris, removed {removedTris} tris -> {args[5]}");
+        }
+
+        // --remove-tris-by-index <dat> <jobjPath> <dobjIdx> <indicesCSV> <out.dat> [invert]
+        // Drop triangles by their position in the dobj's decoded triangle order
+        // (same order as --model export / the SMD, per-dobj). "invert" keeps ONLY
+        // the listed triangles (for isolating/visualizing a selection). Lossless
+        // native re-encode (vertex colors preserved); other dobjs byte-untouched.
+        static void RunRemoveTrisByIndex(string[] args)
+        {
+            if (args.Length < 6)
+            {
+                Console.WriteLine("Usage: --remove-tris-by-index <dat> <jobjPath> <dobjIdx> <i,j,..> <out.dat> [invert]");
+                return;
+            }
+            var file = new HSDRawFile(args[1]);
+            HSD_JOBJ root = NavigateToJOBJ(file, args[2]);
+            if (root == null) { Console.WriteLine("ERROR: jobj not found"); return; }
+            int targetDobj = int.Parse(args[3]);
+            var sel = new HashSet<int>(args[4].Split(',').Where(s => s.Length > 0).Select(int.Parse));
+            bool invert = args.Length > 6 && args[6] == "invert";
+
+            int di = 0, keptTris = 0, removedTris = 0;
+            foreach (var ownerJobj in root.TreeList)
+            {
+                if (ownerJobj.Dobj == null) continue;
+                foreach (var dobj in ownerJobj.Dobj.List)
+                {
+                    if (di++ != targetDobj) continue;
+                    var gen = new HSDRaw.Tools.POBJ_Generator();
+                    var newPobjs = new List<HSD_POBJ>();
+                    int triIndex = 0;   // index across all pobjs of this dobj
+                    foreach (var pobj in dobj.Pobj.List)
+                    {
+                        var gxAttrs = pobj.ToGXAttributes();
+                        foreach (var a in gxAttrs)
+                            if (a.AttributeName == HSDRaw.GX.GXAttribName.GX_VA_CLR0)
+                                gen.VertexColorFormat = a.CompType;
+                        var attrNames = gxAttrs
+                            .Where(a => a.AttributeName != HSDRaw.GX.GXAttribName.GX_VA_NULL)
+                            .Select(a => a.AttributeName).ToArray();
+                        var dl = pobj.ToDisplayList();
+                        var envs = pobj.EnvelopeWeights;
+                        bool hasEnv = pobj.HasAttribute(HSDRaw.GX.GXAttribName.GX_VA_PNMTXIDX);
+                        var singleBind = pobj.SingleBoundJOBJ;
+
+                        var flat = new List<HSDRaw.GX.GX_Vertex>();
+                        int off = 0;
+                        foreach (var prim in dl.Primitives)
+                        {
+                            var verts = dl.Vertices.GetRange(off, prim.Count);
+                            off += prim.Count;
+                            switch (prim.PrimitiveType)
+                            {
+                                case HSDRaw.GX.GXPrimitiveType.Quads:
+                                    verts = HSDRawViewer.Tools.TriangleConverter.QuadToList(verts); break;
+                                case HSDRaw.GX.GXPrimitiveType.TriangleStrip:
+                                    verts = HSDRawViewer.Tools.TriangleConverter.StripToList(verts); break;
+                                case HSDRaw.GX.GXPrimitiveType.Triangles: break;
+                                default: break;
+                            }
+                            flat.AddRange(verts);
+                        }
+
+                        (HSD_JOBJ[] bn, float[] wt) Resolve(HSDRaw.GX.GX_Vertex v)
+                        {
+                            if (hasEnv && envs != null) { var en = envs[v.PNMTXIDX / 3]; return (en.JOBJs, en.Weights); }
+                            if (singleBind != null) return (new[] { singleBind }, new[] { 1f });
+                            return (new[] { ownerJobj }, new[] { 1f });
+                        }
+
+                        var keepV = new List<HSDRaw.GX.GX_Vertex>();
+                        var keepB = new List<HSD_JOBJ[]>();
+                        var keepW = new List<float[]>();
+                        for (int t = 0; t + 2 < flat.Count; t += 3, triIndex++)
+                        {
+                            bool listed = sel.Contains(triIndex);
+                            bool remove = invert ? !listed : listed;
+                            if (remove) { removedTris++; continue; }
+                            keptTris++;
+                            foreach (int o in new[] { 0, 1, 2 })
+                            {
+                                var r = Resolve(flat[t + o]);
+                                keepV.Add(flat[t + o]); keepB.Add(r.bn); keepW.Add(r.wt);
+                            }
+                        }
+                        if (keepV.Count == 0) continue;
+                        HSD_POBJ np = hasEnv
+                            ? gen.CreatePOBJsFromTriangleList(keepV, attrNames, keepB, keepW)
+                            : gen.CreatePOBJsFromTriangleList(keepV, attrNames, null);
+                        newPobjs.Add(np);
+                    }
+                    gen.SaveChanges();
+                    HSD_POBJ head = null, tail = null;
+                    foreach (var np in newPobjs)
+                    {
+                        if (head == null) head = np; else tail.Add(np);
+                        tail = np; while (tail.Next != null) tail = tail.Next;
+                    }
+                    dobj.Pobj = head;
+                }
+            }
+            file.Save(args[5]);
+            Console.WriteLine($"SUCCESS: kept {keptTris} tris, removed {removedTris} tris -> {args[5]}");
         }
 
         static void RunDumpPose(string[] args)

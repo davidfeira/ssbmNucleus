@@ -594,6 +594,34 @@ def list_custom_characters():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@custom_characters_bp.route('/api/mex/custom-characters/reorder', methods=['POST'])
+def reorder_custom_characters():
+    """Move a custom character to a new position. The grid renders the
+    metadata list in order, so reordering is just splicing that list."""
+    try:
+        data = request.json or {}
+        from_index = data.get('fromIndex')
+        to_index = data.get('toIndex')
+        if not isinstance(from_index, int) or not isinstance(to_index, int):
+            return jsonify({'success': False, 'error': 'fromIndex and toIndex must be integers'}), 400
+
+        metadata = _read_metadata()
+        chars = metadata.get('custom_characters', [])
+        n = len(chars)
+        if not (0 <= from_index < n) or not (0 <= to_index < n):
+            return jsonify({'success': False, 'error': 'Index out of range'}), 400
+
+        moved = chars.pop(from_index)
+        chars.insert(to_index, moved)
+        _write_metadata(metadata)
+
+        logger.info(f"[OK] Reordered custom character '{moved['slug']}' {from_index} -> {to_index}")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Reorder custom characters error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def import_custom_character_zip_bytes(zip_data, fallback_name):
     """Import a custom character fighter package (zip bytes) into the vault.
     Returns the metadata entry. Raises ValueError on an invalid package.

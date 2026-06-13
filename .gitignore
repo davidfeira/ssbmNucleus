@@ -105,3 +105,4 @@ releases/
 /modellab/shots/
 /modellab/__pycache__/
 /modellab/roundtrip/
+/modellab/vault_lowpoly/

@@ -4,8 +4,9 @@ import { playSound } from '../../utils/sounds'
 /**
  * IconReorderList - the icon list in the CSS/SSS layout editor right panel.
  *
- * Rows show a thumbnail + label, support click / shift-click selection,
- * right-click for the properties popup, and drag-and-drop reordering
+ * Rows show a thumbnail + label, support standard click selection
+ * (plain = select one, ctrl/cmd-click = toggle, shift-click = range from the
+ * anchor), right-click for the properties popup, and drag-and-drop reordering
  * (identity moves between slots; the editors re-zip the slot layout fields).
  *
  * When several rows are shift-selected and one of them is dragged, the whole
@@ -23,15 +24,39 @@ export default function IconReorderList({
 }) {
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
+  // Anchor row for shift-click range selection (the last row clicked without
+  // shift). Defaults to the current primary selection so the first shift-click
+  // has something to range from.
+  const [anchorIdx, setAnchorIdx] = useState(null)
 
   const handleClick = (e, idx) => {
     playSound('boop')
+    const ctrl = e.ctrlKey || e.metaKey
     if (e.shiftKey) {
+      // Range select from the anchor to the clicked row.
+      const from = anchorIdx ?? (selectedIndices.length ? selectedIndices[0] : idx)
+      const lo = Math.min(from, idx)
+      const hi = Math.max(from, idx)
+      const range = []
+      for (let i = lo; i <= hi; i++) range.push(i)
+      if (ctrl) {
+        // Ctrl+Shift: add the range to the existing selection.
+        const s = new Set(selectedIndices)
+        range.forEach(i => s.add(i))
+        onSelect([...s])
+      } else {
+        onSelect(range)
+      }
+      // The anchor stays put across shift-clicks (standard behavior).
+    } else if (ctrl) {
+      // Toggle this row in/out of the selection.
       const s = new Set(selectedIndices)
       if (s.has(idx)) s.delete(idx); else s.add(idx)
       onSelect([...s])
+      setAnchorIdx(idx)
     } else {
       onSelect([idx])
+      setAnchorIdx(idx)
     }
   }
 

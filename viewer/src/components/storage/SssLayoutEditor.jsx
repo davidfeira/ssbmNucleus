@@ -8,6 +8,34 @@ import { API_URL } from '../../config'
 
 const STATUS_LABELS = ['Hidden', 'Locked', 'Unlocked', 'Random', 'Decoration']
 
+// Per-slot layout fields: these stay with the slot position when icon
+// identities are reordered/swapped within the list
+const SSS_SLOT_FIELDS = ['x', 'y', 'z', 'scaleX', 'scaleY', 'width', 'height', 'group']
+
+// Grid spacing (game units) used by the "Columns" auto-layout
+const SSS_GRID_GAP_X = 6.6
+const SSS_GRID_GAP_Y = 5.6
+const SSS_TEMPLATE_ASPECT = 28.59 / 23.50
+// Center the auto grid on the template's bright select frame (game origin),
+// not high up near the top edge.
+const SSS_GRID_CENTER_X = 0
+const SSS_GRID_CENTER_Y = 0
+
+// Pick the column count whose grid aspect best matches the stage-select
+// template, so "Auto" lands on a balanced layout for any icon count.
+function pickSssAutoColumns(count) {
+  if (count <= 0) return 6
+  let bestCols = Math.min(count, 6)
+  let bestErr = Infinity
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols)
+    const aspect = (cols * SSS_GRID_GAP_X) / (rows * SSS_GRID_GAP_Y)
+    const err = Math.abs(Math.log(aspect / SSS_TEMPLATE_ASPECT))
+    if (err < bestErr) { bestErr = err; bestCols = cols }
+  }
+  return bestCols
+}
+
 const VANILLA_PLACEMENTS = [
   { group: 0, width: 3.1, height: 2.7, x: -16.498047, y: 15.699995, z: 1, scaleX: 1, scaleY: 1 },
   { group: 0, width: 3.1, height: 2.7, x: -16.498047, y: 10.099995, z: 0.5, scaleX: 1, scaleY: 1 },
@@ -90,7 +118,11 @@ export default function SssLayoutEditor() {
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [showCollision, setShowCollision] = useState(true)
   const [showOverscan, setShowOverscan] = useState(false)
-  const [useTemplate, setUseTemplate] = useState(false)
+  // Canvas drag behavior: 'move' (free positioning), 'swap' (exchange two
+  // icons), or 'reorder' (insert an icon at another slot, shifting the rest).
+  // Swap and reorder both snap to the grid template.
+  const [gridMode, setGridMode] = useState('move')
+  const useTemplate = gridMode !== 'move'
   const [editingPageName, setEditingPageName] = useState(null)
   const [pageNameDraft, setPageNameDraft] = useState('')
   const [propsPopup, setPropsPopup] = useState(null) // { x, y }
@@ -174,9 +206,9 @@ export default function SssLayoutEditor() {
     return applyTemplate(icons, currentPage.template)
   }, [useTemplate, currentPage?.template])
 
-  const handleToggleTemplate = useCallback((on) => {
-    setUseTemplate(on)
-    if (on && currentPage?.template) {
+  const handleSetGridMode = useCallback((mode) => {
+    setGridMode(mode)
+    if (mode !== 'move' && currentPage?.template) {
       updateIcons(applyTemplate(currentIcons, currentPage.template))
     }
   }, [currentPage, currentIcons, updateIcons])
@@ -266,21 +298,57 @@ export default function SssLayoutEditor() {
     setSelectedIndices([primaryIdx + 1])
   }, [currentIcons, primaryIdx, updateIcons, maybeApplyTemplate, swapIcons])
 
-  // Drag-and-drop reorder: move the icon identity from one slot to another;
-  // the slot layout fields stay with their positions
+  // Reorder core: pull the icon identities at `indices` out of the list and
+  // re-insert them as a contiguous block before position `insertPos` in the
+  // remaining list. Slot layout fields stay with their positions (re-zipped),
+  // so reordering shuffles identities through fixed grid slots.
+  const reorderByInsertPos = useCallback((indices, insertPos) => {
+    const movingSet = new Set(indices)
+    const movingSorted = [...indices].sort((a, b) => a - b)
+    const moving = movingSorted.map(i => currentIcons[i])
+    const remaining = currentIcons.filter((_, i) => !movingSet.has(i))
+    const pos = Math.max(0, Math.min(insertPos, remaining.length))
+    remaining.splice(pos, 0, ...moving)
+    const slots = currentIcons.map(ic =>
+      Object.fromEntries(SSS_SLOT_FIELDS.map(f => [f, ic[f]]))
+    )
+    const rezipped = remaining.map((ic, i) => ({ ...ic, ...slots[i] }))
+    updateIcons(maybeApplyTemplate(rezipped))
+    setSelectedIndices(moving.map((_, k) => pos + k))
+  }, [currentIcons, updateIcons, maybeApplyTemplate])
+
+  // Convert a drop target row into an insert position, then reorder the block.
+  // Dragging downward drops after the target; upward drops before it.
+  const reorderToTarget = useCallback((indices, to) => {
+    const movingSet = new Set(indices)
+    if (movingSet.has(to)) return
+    const movingSorted = [...indices].sort((a, b) => a - b)
+    let insertPos = 0
+    for (let i = 0; i < to; i++) if (!movingSet.has(i)) insertPos++
+    if (movingSorted[0] < to) insertPos++
+    reorderByInsertPos(indices, insertPos)
+  }, [reorderByInsertPos])
+
+  // Drag-and-drop reorder: move one icon identity from one slot to another.
   const handleReorderIcon = useCallback((from, to) => {
     if (from === to) return
-    const SLOT_FIELDS = ['x', 'y', 'z', 'scaleX', 'scaleY', 'width', 'height', 'group']
-    const slots = currentIcons.map(ic =>
-      Object.fromEntries(SLOT_FIELDS.map(f => [f, ic[f]]))
-    )
-    const arr = [...currentIcons]
-    const [moved] = arr.splice(from, 1)
-    arr.splice(to, 0, moved)
-    const rezipped = arr.map((ic, i) => ({ ...ic, ...slots[i] }))
-    updateIcons(maybeApplyTemplate(rezipped))
-    setSelectedIndices([to])
-  }, [currentIcons, updateIcons, maybeApplyTemplate])
+    reorderToTarget([from], to)
+  }, [reorderToTarget])
+
+  // Bulk drag-and-drop reorder: move every selected identity as a block.
+  const handleReorderIcons = useCallback((indices, to) => {
+    reorderToTarget(indices, to)
+  }, [reorderToTarget])
+
+  const handleMoveIconsToTop = useCallback(() => {
+    if (selectedIndices.length === 0) return
+    reorderByInsertPos(selectedIndices, 0)
+  }, [selectedIndices, reorderByInsertPos])
+
+  const handleMoveIconsToBottom = useCallback(() => {
+    if (selectedIndices.length === 0) return
+    reorderByInsertPos(selectedIndices, currentIcons.length - selectedIndices.length)
+  }, [selectedIndices, currentIcons.length, reorderByInsertPos])
 
   // Page operations
   const handleAddPage = useCallback(() => {
@@ -368,17 +436,32 @@ export default function SssLayoutEditor() {
   const [gridCols, setGridCols] = useState(6)
 
   const handleApplyGrid = useCallback((cols) => {
+    if (cols <= 0) return
+    setGridCols(cols)
     const count = currentIcons.length
-    if (count === 0 || cols <= 0) return
+    if (count === 0) return
     const rows = Math.ceil(count / cols)
+
+    // Put the Random-select icon (if any) in the bottom-left slot, keeping the
+    // other icons in their existing relative order around it.
+    let ordered = currentIcons
+    const randomIdx = currentIcons.findIndex(ic => ic.status === 3)
+    if (randomIdx >= 0) {
+      const arr = [...currentIcons]
+      const [rnd] = arr.splice(randomIdx, 1)
+      const bottomLeft = Math.min((rows - 1) * cols, arr.length)
+      arr.splice(bottomLeft, 0, rnd)
+      ordered = arr
+    }
+
     const iconW = 3.1, iconH = 2.7
-    const gapX = 6.6, gapY = 5.6
+    const gapX = SSS_GRID_GAP_X, gapY = SSS_GRID_GAP_Y
     const totalW = (cols - 1) * gapX
     const totalH = (rows - 1) * gapY
-    const startX = -totalW / 2
-    const startY = 12 + totalH / 2
+    const startX = SSS_GRID_CENTER_X - totalW / 2
+    const startY = SSS_GRID_CENTER_Y + totalH / 2
 
-    const placements = currentIcons.map((icon, i) => {
+    const placements = ordered.map((icon, i) => {
       const col = i % cols
       const row = Math.floor(i / cols)
       return {
@@ -551,6 +634,7 @@ export default function SssLayoutEditor() {
           onMoveIcon={handleMoveIcon}
           onMoveIcons={handleMoveIcons}
           onSwapIcons={handleSwapIcons}
+          onReorderIcons={handleReorderIcon}
           onContextMenu={(x, y) => setPropsPopup({ x, y })}
           zoom={zoom}
           offset={offset}
@@ -558,8 +642,10 @@ export default function SssLayoutEditor() {
           onOffsetChange={setOffset}
           showCollision={showCollision}
           showOverscan={showOverscan}
-          swapMode={useTemplate}
+          swapMode={gridMode === 'swap'}
+          reorderMode={gridMode === 'reorder'}
           API_URL={API_URL}
+          fitToView
         />
 
         {/* Right panel: icon list only */}
@@ -577,9 +663,12 @@ export default function SssLayoutEditor() {
           <div className="sss-icon-list-header">
             <span>Icons ({currentIcons.length})</span>
             <div className="sss-reorder-btns">
+              <button onClick={handleMoveIconsToTop} title="Move to top" disabled={primaryIdx <= 0}>&#8607;</button>
               <button onClick={handleMoveIconUp} title="Move up" disabled={primaryIdx <= 0}>&#9650;</button>
               <button onClick={handleMoveIconDown} title="Move down"
                 disabled={primaryIdx < 0 || primaryIdx >= currentIcons.length - 1}>&#9660;</button>
+              <button onClick={handleMoveIconsToBottom} title="Move to bottom"
+                disabled={primaryIdx < 0 || primaryIdx >= currentIcons.length - 1}>&#8609;</button>
             </div>
           </div>
           <IconReorderList
@@ -588,6 +677,7 @@ export default function SssLayoutEditor() {
             onSelect={setSelectedIndices}
             onContextMenu={(x, y) => setPropsPopup({ x, y })}
             onReorder={handleReorderIcon}
+            onReorderBulk={handleReorderIcons}
             getLabel={(icon) => icon.stageName || STATUS_LABELS[icon.status] || '?'}
             getIconUrl={(icon) => icon.iconPath
               ? `${API_URL}/menus/sss/stage-icon?path=${encodeURIComponent(icon.iconPath)}`
@@ -610,6 +700,34 @@ export default function SssLayoutEditor() {
 
       {/* Bottom toolbar */}
       <div className="sss-bottom-bar">
+        {/* Columns is the primary control - big stepper, first in the bar */}
+        <div className="sss-grid-controls sss-grid-controls--primary">
+          <label>Columns</label>
+          <div className="sss-cols-stepper">
+            <button
+              onClick={() => { playSound('tick'); handleApplyGrid(Math.max(1, gridCols - 1)) }}
+              disabled={gridCols <= 1}
+              title="Fewer columns"
+            >−</button>
+            <input type="number" min={1} max={20}
+              value={gridCols}
+              onChange={(e) => handleApplyGrid(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))} />
+            <button
+              onClick={() => { playSound('tick'); handleApplyGrid(Math.min(20, gridCols + 1)) }}
+              disabled={gridCols >= 20}
+              title="More columns"
+            >+</button>
+          </div>
+          <span className="sss-grid-dim">
+            ({Math.ceil(currentIcons.length / gridCols)} rows)
+          </span>
+          <button
+            className="sss-tab-btn"
+            onClick={() => { playSound('boop'); handleApplyGrid(pickSssAutoColumns(currentIcons.length)) }}
+            title="Auto-fit columns and rows to the icon count"
+          >Auto</button>
+          <button className="sss-tab-btn" onClick={handleResetVanilla}>Reset</button>
+        </div>
         <div className="sss-bottom-group">
           <label>Zoom: {zoom}x</label>
           <input
@@ -626,20 +744,28 @@ export default function SssLayoutEditor() {
           <input type="checkbox" checked={showOverscan} onChange={(e) => setShowOverscan(e.target.checked)} />
           Overscan
         </label>
-        <label className="sss-checkbox">
-          <input type="checkbox" checked={useTemplate} onChange={(e) => handleToggleTemplate(e.target.checked)} />
-          Swap Mode
-        </label>
-        <div className="sss-grid-controls">
-          <label>Cols:</label>
-          <input type="number" min={1} max={20} value={gridCols}
-            onChange={(e) => setGridCols(Math.max(1, parseInt(e.target.value) || 1))}
-            style={{ width: '42px' }} />
-          <span className="sss-grid-dim">
-            ({Math.ceil(currentIcons.length / gridCols)} rows)
-          </span>
-          <button className="sss-tab-btn" onClick={() => handleApplyGrid(gridCols)}>Apply Grid</button>
-          <button className="sss-tab-btn" onClick={handleResetVanilla}>Reset</button>
+        <div className="sss-drag-mode">
+          <label>Drag</label>
+          <div className="sss-mode-seg">
+            <button
+              className={gridMode === 'move' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('move') }}
+              onMouseEnter={playHoverSound}
+              title="Drag icons to reposition them freely"
+            >Move</button>
+            <button
+              className={gridMode === 'swap' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('swap') }}
+              onMouseEnter={playHoverSound}
+              title="Drag an icon onto another to swap the two"
+            >Swap</button>
+            <button
+              className={gridMode === 'reorder' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('reorder') }}
+              onMouseEnter={playHoverSound}
+              title="Drag an icon onto a slot to insert it there, shifting the rest"
+            >Reorder</button>
+          </div>
         </div>
         <div className="sss-bottom-group" style={{ marginLeft: 'auto' }}>
           <button className="sss-tab-btn" onClick={handleImportTemplate} title="Import template JSON">Import</button>

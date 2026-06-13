@@ -699,19 +699,29 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           >
             ← Back to Custom Characters
           </button>
-          {!testActive && (
+          <div className="detail-top-actions">
             <button
-              className="ingame-test-cta"
+              className="manage-poses-cta"
               onMouseEnter={playHoverSound}
-              onClick={() => {
-                playSound('start')
-                inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })
-              }}
-              title="Build a one-mod test ISO and play a short match to verify it loads"
+              onClick={() => { playSound('boop'); setShowPoseManager(true) }}
+              title="Manage CSP / portrait poses for this character's costumes"
             >
-              🎮 Test in Game
+              🎭 Manage Poses
             </button>
-          )}
+            {!testActive && (
+              <button
+                className="ingame-test-cta"
+                onMouseEnter={playHoverSound}
+                onClick={() => {
+                  playSound('start')
+                  inGameTest.startCustomCharacterTest({ slug: character.slug, name: character.name })
+                }}
+                title="Build a one-mod test ISO and play a short match to verify it loads"
+              >
+                🎮 Test in Game
+              </button>
+            )}
+          </div>
         </div>
 
         {testActive && (

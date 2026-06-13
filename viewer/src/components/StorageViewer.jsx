@@ -1086,6 +1086,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           isLoading={isLoading}
           onSelectCharacter={setSelectedCustomCharacter}
           onBack={() => setShowCustomCharacters(false)}
+          onRefresh={fetchCustomCharacters}
         />
         {importFab}
         {importSlippiDialog}

@@ -28,6 +28,10 @@ namespace MexCLI
                         return Commands.OpenCommand.Execute(args);
                     case "list-fighters":
                         return Commands.ListFightersCommand.Execute(args);
+                    case "func-probe":
+                        return Commands.FuncProbeCommand.Execute(args);
+                    case "copy-root":
+                        return Commands.CopyRootCommand.Execute(args);
                     case "get-costumes":
                         return Commands.GetFighterCostumesCommand.Execute(args);
                     case "import-costume":
