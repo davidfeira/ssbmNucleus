@@ -27,6 +27,8 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [assetBust, setAssetBust] = useState(0)
   const [draggingCostume, setDraggingCostume] = useState(null)  // bundled costume index being dragged
   const [skinDropActive, setSkinDropActive] = useState(false)
+  const [draggingSkinId, setDraggingSkinId] = useState(null)    // added skin being reordered
+  const [skinDragOverId, setSkinDragOverId] = useState(null)    // added skin currently hovered
   const [renamingCostume, setRenamingCostume] = useState(null)  // { index, value }
   const [playingAudio, setPlayingAudio] = useState(null)        // 'victory' | 'announcer'
   const [skinCreatorCostume, setSkinCreatorCostume] = useState(null) // opens SkinCreator on this skin
@@ -560,6 +562,29 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     }
   }
 
+  // Reorder added skins by drag-and-drop: move draggedId to targetId's slot.
+  const handleSkinReorder = async (draggedId, targetId) => {
+    setSkinDragOverId(null)
+    if (!draggedId || draggedId === targetId) return
+    const order = addedSkins.map(s => s.id)
+    const from = order.indexOf(draggedId)
+    const to = order.indexOf(targetId)
+    if (from === -1 || to === -1) return
+    order.splice(to, 0, order.splice(from, 1)[0])
+    try {
+      const res = await fetch(`${API_URL}/custom-characters/${character.slug}/skins/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order })
+      })
+      const data = await res.json()
+      if (data.success) { playSound('boop'); await fetchDetail() }
+      else flashSkinMessage(`Reorder failed: ${data.error}`)
+    } catch (err) {
+      flashSkinMessage(`Reorder error: ${err.message}`)
+    }
+  }
+
   // stop audio when leaving the page
   useEffect(() => () => { audioRef.current?.pause() }, [])
 
@@ -988,9 +1013,14 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                   onClick={selectedTeamColor ? () => handleCostumeTeamAssign(costume.index) : undefined}
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move'
+                    // suppress the global "Drop to import" overlay for this in-app drag
+                    document.documentElement.dataset.nucInternalDrag = '1'
                     setDraggingCostume(costume.index)
                   }}
-                  onDragEnd={() => { setDraggingCostume(null); setSkinDropActive(false) }}
+                  onDragEnd={() => {
+                    delete document.documentElement.dataset.nucInternalDrag
+                    setDraggingCostume(null); setSkinDropActive(false)
+                  }}
                   title={selectedTeamColor
                     ? `Set as the ${selectedTeamColor} team costume`
                     : costumes.length > 1 ? 'Drag down into Custom Skins to make this a removable skin' : undefined}
@@ -999,6 +1029,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                     <img
                       src={`${costume.csp_url}?t=${cspManager.lastImageUpdate}`}
                       alt={costume.name}
+                      draggable={false}
                       className="custom-char-csp"
                     />
                   ) : (
@@ -1094,11 +1125,37 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           )}
           <div className="custom-char-costume-grid">
             {addedSkins.map((skin) => (
-              <div key={skin.id} className="custom-char-costume-card">
+              <div
+                key={skin.id}
+                className={`custom-char-costume-card${draggingSkinId === skin.id ? ' dragging' : ''}${skinDragOverId === skin.id ? ' drag-over' : ''}`}
+                draggable={addedSkins.length > 1}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  document.documentElement.dataset.nucInternalDrag = '1'
+                  setDraggingSkinId(skin.id)
+                }}
+                onDragEnd={() => {
+                  delete document.documentElement.dataset.nucInternalDrag
+                  setDraggingSkinId(null); setSkinDragOverId(null)
+                }}
+                onDragOver={(e) => {
+                  if (draggingSkinId && draggingSkinId !== skin.id) {
+                    e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+                    if (skinDragOverId !== skin.id) setSkinDragOverId(skin.id)
+                  }
+                }}
+                onDrop={(e) => {
+                  if (draggingSkinId && draggingSkinId !== skin.id) {
+                    e.preventDefault(); e.stopPropagation()
+                    handleSkinReorder(draggingSkinId, skin.id)
+                  }
+                }}
+              >
                 {skin.csp_url ? (
                   <img
                     src={`${BACKEND_BASE}${skin.csp_url}?t=${cspManager.lastImageUpdate}`}
                     alt={skin.name}
+                    draggable={false}
                     className="custom-char-csp"
                   />
                 ) : (
@@ -1159,8 +1216,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             className="intake-import-btn"
             onMouseEnter={playHoverSound}
             onClick={() => { playSound('boop'); handleExport() }}
-            disabled={character.source !== 'zip'}
-            title={character.source !== 'zip' ? 'Export only available for ZIP imports' : 'Download original ZIP'}
+            title="Download this character as a re-importable ZIP"
           >
             Export ZIP
           </button>

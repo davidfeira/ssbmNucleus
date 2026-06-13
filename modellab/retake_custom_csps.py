@@ -86,7 +86,8 @@ def render_pair(stem, src_zip, pose, aj):
     return sd.read_bytes(), hd.read_bytes()
 
 
-for slug, (pose, aj) in CONFIG.items():
+def retake_all():
+  for slug, (pose, aj) in CONFIG.items():
     vault = ROOT / "storage/custom_characters" / slug
     fighter = json.load(open(vault / "fighter.json", encoding="utf-8"))
     stems = [Path((c.get("file") or {}).get("fileName") or "").stem
@@ -126,5 +127,8 @@ for slug, (pose, aj) in CONFIG.items():
         (skins_dir / f"{skin_id}_csp_hd.png").write_bytes(hd_bytes)
         replace_in_zip(skin_zip, "csp.png", sd_bytes)
         print(f"  skin {skin_id} ({dat_stem}): SD+HD -> skins/")
+  print("done")
 
-print("done")
+
+if __name__ == "__main__":
+    retake_all()

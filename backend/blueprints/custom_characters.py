@@ -1514,6 +1514,38 @@ def remove_custom_character_skin(slug, skin_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@custom_characters_bp.route('/api/mex/custom-characters/<slug>/skins/reorder', methods=['POST'])
+def reorder_custom_character_skins(slug):
+    """Reorder a custom character's added skins. Body: {order: [skin_id, ...]}.
+    Ids not present in `order` (or unknown) keep their relative order at the end,
+    so a partial/stale list never drops skins."""
+    try:
+        order = (request.get_json(silent=True) or {}).get('order') or []
+        metadata = _read_metadata()
+        entry = _find_entry(metadata, slug)
+        if entry is None:
+            return jsonify({'success': False, 'error': 'Character not found'}), 404
+
+        skins = entry.get('added_skins', [])
+        by_id = {s.get('id'): s for s in skins}
+        seen = set()
+        new_list = []
+        for sid in order:
+            s = by_id.get(sid)
+            if s is not None and sid not in seen:
+                new_list.append(s)
+                seen.add(sid)
+        for s in skins:  # append any not named in `order`
+            if s.get('id') not in seen:
+                new_list.append(s)
+        entry['added_skins'] = new_list
+        _write_metadata(metadata)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Reorder custom skins error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/skins/<skin_id>/csp', methods=['GET'])
 def get_custom_character_skin_csp(slug, skin_id):
     p = CUSTOM_CHARACTERS_PATH / slug / 'skins' / f'{skin_id}_csp.png'

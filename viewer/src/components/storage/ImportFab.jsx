@@ -18,10 +18,14 @@ export default function ImportFab({ importing, importMessage, onImportFiles }) {
   const dragDepth = useRef(0)
 
   useEffect(() => {
-    // Only react to OS file drags — internal card-reorder drags carry
-    // text/plain, not Files.
-    const hasFiles = (e) =>
-      Array.from(e.dataTransfer?.types || []).includes('Files')
+    // Only react to OS file drags. Two guards: (1) an explicit flag set by
+    // internal card drags (reorder / costume-to-skin) — Electron sometimes
+    // reports 'Files' in dataTransfer.types even for in-app element drags, so
+    // the type check alone isn't enough; (2) the dataTransfer 'Files' type.
+    const hasFiles = (e) => {
+      if (document.documentElement.dataset.nucInternalDrag === '1') return false
+      return Array.from(e.dataTransfer?.types || []).includes('Files')
+    }
 
     const onDragEnter = (e) => {
       if (!hasFiles(e)) return

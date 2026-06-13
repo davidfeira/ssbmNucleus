@@ -8840,6 +8840,12 @@
   margin-left: 0;
 }
 
+/* Reorder drag feedback for added skins */
+.custom-char-costume-card.drag-over {
+  outline: 2px dashed var(--color-gold);
+  outline-offset: 2px;
+}
+
 .custom-char-costume-card.team-assignable {
   border-color: var(--color-gold);
   cursor: pointer;
