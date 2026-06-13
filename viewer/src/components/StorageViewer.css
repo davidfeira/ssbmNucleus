@@ -401,6 +401,41 @@
   margin: 0;
 }
 
+.detail-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.manage-poses-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-cyan);
+  background: rgba(125, 211, 232, 0.08);
+  border: 1px solid var(--color-cyan);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.manage-poses-cta:hover {
+  background: rgba(125, 211, 232, 0.16);
+  box-shadow: 0 0 14px rgba(125, 211, 232, 0.25);
+}
+
+.manage-poses-cta:active {
+  transform: scale(0.98);
+}
+
 .ingame-test-cta {
   display: inline-flex;
   align-items: center;
@@ -8728,8 +8763,11 @@
   padding: 12px 18px; border-top: 1px solid var(--color-border, #2a3245);
   display: flex; justify-content: flex-end; gap: 8px; flex: 0 0 auto;
 }
+/* Never scrolls while the embedded Dolphin floats on top (it wouldn't clip).
+   Fixed-height flex column: the `fill` embed takes whatever the text leaves. */
 .bulk-capture-progress-wrap {
-  padding: 28px 22px; text-align: center; overflow-y: auto; flex: 1;
+  padding: 28px 22px; text-align: center; flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
 }
 .bulk-capture-progress-bar {
   height: 10px; border-radius: 5px; overflow: hidden;

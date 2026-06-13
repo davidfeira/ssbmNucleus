@@ -137,8 +137,8 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
               <div className="bulk-capture-progress-fill"
                 style={{ width: `${progress?.percentage || 0}%` }} />
             </div>
-            <DolphinEmbedPanel active />
-            <p className="bulk-capture-muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+            <DolphinEmbedPanel active fill />
+            <p className="bulk-capture-muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem', flex: '0 0 auto' }}>
               {progress?.percentage || 0}% — your Slippi setup is untouched
             </p>
           </div>

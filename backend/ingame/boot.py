@@ -250,6 +250,34 @@ def _patch_dolphin_ini(user_dir, pipe_name):
     _write_ini(gc_path, mutate_gc)
 
 
+def _patch_hotkeys(user_dir):
+    """Neutralise the keyboard hotkeys that fire over BackgroundInput=True.
+
+    Because we run with background input on (so the pipe controller works while
+    the app -- not Dolphin -- has focus), Dolphin's keyboard hotkeys ALSO fire
+    while the user is interacting with our window. The worst offender is plain
+    `F` = Toggle Fullscreen (Slippi's default), which yanks the throwaway/embedded
+    Dolphin into fullscreen mid-run. We blank that and the other plain-key globals
+    a user could hit by accident while typing (Esc=Stop, Tab=speed limit,
+    Y=OSD chat, Enter=send chat). State-save F-keys keep their modifiers/Fn keys
+    and are left alone. This only touches the throwaway copy; the real config is
+    untouched."""
+    path = os.path.join(user_dir, "Config", "Hotkeys.ini")
+
+    def mutate(upsert, _replace):
+        s = "Hotkeys1"
+        for binding in (
+            "Toggle Fullscreen",
+            "Stop/Hide OSD chat",
+            "Toggle OSD chat",
+            "Send OSD chat message",
+            "Disable Emulation Speed Limit",
+        ):
+            upsert(s, f"Keys/{binding}", "")
+
+    _write_ini(path, mutate)
+
+
 def _patch_clean_osd(user_dir):
     """Turn off the emulator OSD overlays for a clean screenshot: Dolphin's FPS
     counter and Slippi's on-screen ping ("Delay: N"). Keys are written lowercase
@@ -390,6 +418,7 @@ class DolphinBoot:
         if self.pipe_index is None:
             self.pipe_index = pick_pipe_index()
         _patch_dolphin_ini(str(self.user_dir), f"slippibot{self.pipe_index}")
+        _patch_hotkeys(str(self.user_dir))
 
         if self.clean_osd:
             _patch_clean_osd(str(self.user_dir))
