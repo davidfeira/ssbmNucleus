@@ -927,6 +927,88 @@ def smooth_weights(pts: np.ndarray, weights: list[dict], iterations: int = 12):
     return [vw[corner_to_v[i]] for i in range(len(pts))]
 
 
+def consensus_snap(pts, out, max_weights, passes=2):
+    """Snap weight outliers to their spatial-neighbor consensus: a vert whose
+    primary bone is barely used by the verts around it is a transfer/parametric
+    glitch (the moment that bone moves, the lone vert spikes — the thigh shard).
+    Welded positions vote so a spike's duplicated corners can't vote for
+    themselves. (Same logic transfer_weights runs; the parametric path needs it
+    too — out is mutated in place.)"""
+    from scipy.spatial import cKDTree
+    height = float(pts[:, 1].max() - pts[:, 1].min()) or 1.0
+    pos_key = list(map(tuple, np.round(pts / 1e-3).astype(np.int64)))
+    uniq: dict = {}
+    for k, key in enumerate(pos_key):
+        uniq.setdefault(key, k)
+    u_ids = list(uniq.values())
+    utree = cKDTree(pts[u_ids])
+    NK = min(9, len(u_ids))
+    radius = max(1.2, 0.05 * height)
+    nd, nidx = utree.query(pts[u_ids], k=NK)
+    for _ in range(passes):
+        snap: dict = {}
+        for ui, k in enumerate(u_ids):
+            votes: dict = {}
+            n_nb = 0
+            for j, dist in zip(nidx[ui][1:], nd[ui][1:]):
+                if dist > radius:
+                    break
+                n_nb += 1
+                for b, w in out[u_ids[int(j)]]:
+                    votes[b] = votes.get(b, 0.0) + w
+            if n_nb < 3 or not votes:
+                continue
+            if votes.get(out[k][0][0], 0.0) >= 0.08 * max(votes.values()):
+                continue
+            top = sorted(votes.items(), key=lambda kv: -kv[1])[:max_weights]
+            tot = sum(w for _, w in top) or 1.0
+            snap[pos_key[k]] = [(b, w / tot) for b, w in top]
+        if not snap:
+            break
+        for k, key in enumerate(pos_key):
+            if key in snap:
+                out[k] = snap[key]
+    return out
+
+
+def drop_bridge_tris(foreign, weights, tgt_parts, log=print):
+    """Drop triangles that BRIDGE incompatible body parts (a corner on the
+    r_arm and a corner on the r_leg, etc.). In the A-pose the hands hang beside
+    the thighs, so decimation welds a few triangles across the gap; when the
+    limbs separate in motion those bridge-tris stretch into a giant shard. They
+    are decimation errors — the surfaces are genuinely separate — so removing
+    them leaves no real hole. Returns (foreign, weights)."""
+    from modellab.skeleton_parts import ALLOWED
+
+    def cpart(cw):
+        return tgt_parts.get(max(cw, key=lambda bw: bw[1])[0]) if cw else None
+
+    n_tri = len(foreign.tri_pos)
+    keep = np.ones(n_tri, dtype=bool)
+    for t in range(n_tri):
+        ps = [cpart(weights[t * 3 + c]) for c in range(3)]
+        for i in range(3):
+            for j in range(i + 1, 3):
+                a, b = ps[i], ps[j]
+                if a and b and a != b:
+                    aa, bb = ALLOWED.get(a), ALLOWED.get(b)
+                    if aa is not None and b not in aa and bb is not None \
+                            and a not in bb:
+                        keep[t] = False
+    dropped = int((~keep).sum())
+    if not dropped:
+        return foreign, weights
+    kc = np.repeat(keep, 3)
+    fm = ForeignMesh(
+        foreign.tri_pos[keep], foreign.tri_norm[keep], foreign.tri_uv[keep],
+        [m for t, m in enumerate(foreign.tri_mat) if keep[t]], foreign.textures,
+        [g for t, g in enumerate(foreign.tri_group) if keep[t]])
+    fm.group_names = foreign.group_names
+    weights = [w for i, w in enumerate(weights) if kc[i]]
+    log(f"dropped {dropped} cross-part bridge tris (hand-near-thigh decimation)")
+    return fm, weights
+
+
 def parametric_weights(pts, vert_parts, proxy_parts, proxy_parents, proxy_pos,
                        tgt_parts, tgt_parents, tgt_pos, log=print):
     """Weight each vert by its fraction ALONG ITS OWN LIMB, mapped onto the
@@ -2216,12 +2298,25 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
             pts_w, vert_parts, glb_proxy[0], glb_proxy[1], glb_proxy[2],
             tgt_parts, tgt_parents_map, joint_world_positions(rigkit), log=log)
         smoothed = smooth_weights(pts_w, raw, iterations=10)
+        from modellab.skeleton_parts import ALLOWED as _ALLOWED
         weights = []
-        for d in smoothed:
+        for k, d in enumerate(smoothed):
             top = sorted(d.items(), key=lambda kv: -kv[1])[:max_weights]
+            # PART GATE: smooth_weights diffuses with no part awareness, so a
+            # right-arm vert near the left arm picks up left-arm bones and
+            # spikes when that arm moves (the thigh/arm shard). Drop bones whose
+            # part isn't allowed for this vert's part.
+            allowed = _ALLOWED.get(vert_parts[k])
+            if allowed is not None:
+                kept = [(b, w) for b, w in top
+                        if tgt_parts.get(b) in allowed or tgt_parts.get(b) is None]
+                if kept:
+                    top = kept
             tot = sum(w for _, w in top) or 1.0
             weights.append([(int(b), w / tot) for b, w in top])
-        log(f"parametric skinning: {len(weights)} corners, smoothed")
+        consensus_snap(pts_w, weights, max_weights)
+        foreign, weights = drop_bridge_tris(foreign, weights, tgt_parts, log=log)
+        log(f"parametric skinning: {len(weights)} corners, smoothed + gated")
     else:
         weights = transfer_weights(rigkit, foreign, max_weights, surface=surface,
                                    surface_pts=surf_pts, bone_world=pose_world,
