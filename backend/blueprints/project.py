@@ -585,16 +585,25 @@ def get_fighter_costumes(fighter_name):
         result = mex._run_command("get-costumes", str(mex.project_path), fighter_name)
 
         # Add asset URLs to each costume (relative to /api/mex since frontend adds API_URL)
+        # URLs carry the file mtime so the browser refetches when an asset is
+        # replaced in place (e.g. by the apply-pose flow)
+        project_dir = get_current_project_path().parent if get_current_project_path() else None
+
+        def _asset_url(ref):
+            rel = ref.replace('\\', '/')
+            version = ''
+            if project_dir is not None:
+                asset_file = project_dir / 'assets' / f"{rel}.png"
+                if asset_file.exists():
+                    version = f"?v={int(asset_file.stat().st_mtime)}"
+            return f"/assets/{rel}.png{version}"
+
         costumes = result.get('costumes', [])
         for costume in costumes:
             if costume.get('csp'):
-                # Convert backslashes to forward slashes for URLs
-                csp_path = costume['csp'].replace('\\', '/')
-                costume['cspUrl'] = f"/assets/{csp_path}.png"
+                costume['cspUrl'] = _asset_url(costume['csp'])
             if costume.get('icon'):
-                # Convert backslashes to forward slashes for URLs
-                icon_path = costume['icon'].replace('\\', '/')
-                costume['iconUrl'] = f"/assets/{icon_path}.png"
+                costume['iconUrl'] = _asset_url(costume['icon'])
 
         return jsonify({
             'success': True,

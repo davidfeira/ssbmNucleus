@@ -776,6 +776,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
 
   return {
     mexCostumes,
+    refreshMexCostumes,
     loadingFighter,
     dataReady,
     importing,
