@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import StageAIStudioModal from './StageAIStudioModal'
+import SongPacksModal from './SongPacksModal'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
@@ -126,6 +127,9 @@ export default function StageDetailView({
   // In-game test (per stage skin / DAS variant)
   const inGameTest = useInGameTest()
 
+  // Song packs (alternate stage music playlists, installed per project)
+  const [showSongPacks, setShowSongPacks] = useState(false)
+
   // Smooth reorder animations
   const [animateRef] = useAutoAnimate({ duration: 200 })
 
@@ -139,12 +143,12 @@ export default function StageDetailView({
           ← Back to Stages
         </button>
 
-        {variants.length === 0 && !aiAvailable ? (
+        {variants.length === 0 && (
           <div className="no-skins-message">
             <p>No stage variants yet. Add some to your storage!</p>
           </div>
-        ) : (
-          <div className="skins-grid" ref={animateRef}>
+        )}
+        <div className="skins-grid" ref={animateRef}>
             {(previewOrder || variants).map((variant, idx) => {
               const isDragging = draggedItem && variant.id === draggedItem.id
               return (
@@ -226,14 +230,33 @@ export default function StageDetailView({
               </div>
             </div>
           )}
+          <div
+            className="create-mod-card sounds-card"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); setShowSongPacks(true); }}
+            title="Build alternate music playlists for this stage — installed per project"
+          >
+            <div className="create-mod-image-area">
+              <span className="create-mod-icon">🎵</span>
+            </div>
+            <div className="create-mod-info">
+              <span className="create-mod-label">Songs</span>
+            </div>
           </div>
-        )}
+        </div>
       </div>
       <StageAIStudioModal
         show={showAiStudio}
         stage={selectedStage}
         onClose={() => setShowAiStudio(false)}
         onSaved={onRefresh}
+      />
+      <SongPacksModal
+        show={showSongPacks}
+        stage={selectedStage.code}
+        displayName={selectedStage.name}
+        API_URL={API_URL}
+        onClose={() => setShowSongPacks(false)}
       />
       <EditModal
         show={showEditModal}

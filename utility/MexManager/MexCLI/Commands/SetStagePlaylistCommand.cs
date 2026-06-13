@@ -45,15 +45,9 @@ namespace MexCLI.Commands
                         ChanceToPlay = (byte)(e.TryGetProperty("chance", out JsonElement c) ? c.GetInt32() : 50),
                     });
                 }
-                if (entries.Count == 0)
-                {
-                    Console.WriteLine(JsonSerializer.Serialize(new
-                    {
-                        success = false,
-                        error = "No playlist entries provided"
-                    }, new JsonSerializerOptions { WriteIndented = true }));
-                    return 1;
-                }
+                // an empty array is valid: it clears the playlist, restoring
+                // the stage's vanilla default music (vanilla stage playlists
+                // are empty in project data)
 
                 bool success = MexWorkspace.TryOpenWorkspace(projectPath, out MexWorkspace? workspace, out string error, out bool isoMissing);
                 if (!success || workspace == null)

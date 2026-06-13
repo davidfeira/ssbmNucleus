@@ -2724,6 +2724,53 @@
   box-shadow: 0 0 12px var(--token-color);
 }
 
+/* Middle action group in the "In ISO" header: Extras / Pose / Sounds —
+   centered between the title and the team color tokens (which carry
+   margin-left: auto, so this group must absorb the free space itself) */
+.iso-mod-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.iso-mod-actions .btn-pose-all {
+  margin-left: 0;
+}
+
+/* Apply-pose-to-all button (sits with the team color tokens) */
+.btn-pose-all {
+  width: 24px;
+  height: 24px;
+  margin-left: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.btn-pose-all:hover:not(:disabled) {
+  color: var(--color-cyan);
+  border-color: var(--color-cyan);
+  transform: scale(1.1);
+  box-shadow: var(--glow-cyan-sm);
+}
+
+.btn-pose-all:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Team Color Badges on Cards */
 .team-color-badges {
   position: absolute;

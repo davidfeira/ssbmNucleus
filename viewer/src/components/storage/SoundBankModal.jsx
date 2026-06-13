@@ -6,13 +6,16 @@ import { playSound, playHoverSound } from '../../utils/sounds'
 import { toUploadableAudio } from '../../utils/audioConvert'
 
 /**
- * Sound Bank browser for custom characters: lists every sound in the
- * fighter's SSM bank with play / download / replace / revert per sound.
- * Replacements are folded back into fighter.zip by the backend, so they
- * survive export and install into future builds. The pristine bank is
+ * Sound Bank browser: lists every sound in a fighter's SSM bank with
+ * play / download / replace / revert per sound. The pristine bank is
  * kept server-side for lossless revert.
+ *
+ * Default endpoints target custom characters (`slug`), where edits are
+ * folded back into fighter.zip. Pass `endpoint` (path after API_URL) to
+ * point it elsewhere — e.g. vanilla-character vault sound packs
+ * (`storage/characters/<name>/audio`), which install at ISO export.
  */
-export default function SoundBankModal({ show, slug, displayName, API_URL, onClose }) {
+export default function SoundBankModal({ show, slug, displayName, API_URL, onClose, endpoint, hint }) {
   const [sounds, setSounds] = useState([])
   const [hasBackup, setHasBackup] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -26,7 +29,7 @@ export default function SoundBankModal({ show, slug, displayName, API_URL, onClo
   const replaceTargetRef = useRef(null)
   const messageTimerRef = useRef(null)
 
-  const base = `${API_URL}/custom-characters/${slug}/audio`
+  const base = `${API_URL}/${endpoint || `custom-characters/${slug}/audio`}`
 
   const fetchSounds = useCallback(async () => {
     setLoading(true)
@@ -224,8 +227,8 @@ export default function SoundBankModal({ show, slug, displayName, API_URL, onClo
         </div>
 
         <div className="sb-hint">
-          Replace any sound with a WAV/MP3 — edits are saved into the character
-          and used the next time it's installed into a build.
+          {hint || `Replace any sound with a WAV/MP3 — edits are saved into the
+          character and used the next time it's installed into a build.`}
         </div>
 
         {message && <div className="sb-message">{message}</div>}

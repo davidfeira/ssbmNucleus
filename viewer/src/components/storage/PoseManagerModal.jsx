@@ -36,6 +36,9 @@ export default function PoseManagerModal({
   onClose,
   onRefresh,
   onCostumesUpdated,
+  // When set, clicking a library pose calls this instead of opening the
+  // batch skin selector (used by the install page's apply-to-all flow)
+  onSelectPose,
   API_URL
 }) {
   const viewerRef = useRef(null)
@@ -128,7 +131,9 @@ export default function PoseManagerModal({
           /* Library view: saved poses grid + create card */
           <div className="pm-library">
             <div className="pm-library-hint">
-              Click a pose to render portraits from it, or create a new one.
+              {onSelectPose
+                ? 'Click a pose to apply it to all installed costumes, or create a new one.'
+                : 'Click a pose to render portraits from it, or create a new one.'}
             </div>
             {saveSuccess && (
               <div className="pm-message pm-success">Pose saved!</div>
@@ -141,6 +146,16 @@ export default function PoseManagerModal({
                 <span className="pm-create-icon">+</span>
                 <span>Create New Pose</span>
               </div>
+              {onSelectPose && (
+                <div
+                  className="pm-create-card pm-original-card"
+                  onClick={() => { playSound('boop'); onSelectPose({ name: '__original__', isOriginal: true }); }}
+                  title="Put every installed costume's portrait back to its original CSP"
+                >
+                  <span className="pm-create-icon">↩</span>
+                  <span>Original Portraits</span>
+                </div>
+              )}
               {loadingPoses ? (
                 <div className="pm-library-empty">Loading poses…</div>
               ) : (
@@ -150,7 +165,10 @@ export default function PoseManagerModal({
                     pose={pose}
                     character={character}
                     onDelete={handleDeletePose}
-                    onClick={() => { playSound('boop'); setSelectedPose(pose); }}
+                    onClick={() => {
+                      if (onSelectPose) { onSelectPose(pose); return }
+                      playSound('boop'); setSelectedPose(pose)
+                    }}
                     API_URL={API_URL}
                   />
                 ))

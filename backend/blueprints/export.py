@@ -183,6 +183,9 @@ def start_export():
 
                 # Note: Extras are patched immediately on import, not at export time
 
+                # Note: character sound packs are installed per-project from
+                # the Sounds menu (character_sounds.py), not at export time
+
                 # Bake Frame Speed Modifier data (fsm.txt) for installed
                 # custom characters into the project's main.dol
                 try:

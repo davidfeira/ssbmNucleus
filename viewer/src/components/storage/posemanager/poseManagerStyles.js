@@ -195,6 +195,17 @@ export const POSE_MANAGER_STYLES = `
           font-weight: var(--font-regular);
         }
 
+        /* "Original Portraits" card (selection mode only) — restores the
+           default CSPs after a pose has been applied */
+        .pm-original-card {
+          border-style: solid;
+        }
+
+        .pm-original-card:hover {
+          border-color: var(--color-teal);
+          color: var(--color-teal);
+        }
+
         /* Pose cards (shared by the library grid) */
         .pm-pose-card {
           display: flex;

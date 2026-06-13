@@ -17,9 +17,11 @@
  */
 import ConfirmDialog from '../shared/ConfirmDialog'
 import HexagonLoader from '../shared/HexagonLoader'
+import PoseManagerModal from '../storage/PoseManagerModal'
 import useCostumes from './charactermode/useCostumes'
 import useExtras from './charactermode/useExtras'
 import useCustomCharacters from './charactermode/useCustomCharacters'
+import useApplyPose from './charactermode/useApplyPose'
 import FighterList from './charactermode/FighterList'
 import CostumesPanel from './charactermode/CostumesPanel'
 import AddCharacterModal from './charactermode/AddCharacterModal'
@@ -39,6 +41,11 @@ export default function CharacterMode({
   const cm = useCostumes({ API_URL, fighters, storageCostumes, selectedFighter, onRefresh })
   const extras = useExtras({ API_URL, selectedFighter })
   const cc = useCustomCharacters({ API_URL, onRefresh })
+  const ap = useApplyPose({
+    API_URL,
+    selectedFighter,
+    refreshCostumes: () => selectedFighter ? cm.refreshMexCostumes(selectedFighter.name) : Promise.resolve()
+  })
 
   // Extras mode UI
   if (extras.extrasMode && selectedFighter) {
@@ -74,6 +81,18 @@ export default function CharacterMode({
         cm={cm}
         API_URL={API_URL}
         onEnterExtras={() => extras.setExtrasMode(true)}
+        onApplyPose={cm.isZeldaSheik ? null : ap.openPoseModal}
+      />
+
+      {/* Pose picker for "apply pose to all installed costumes" */}
+      <PoseManagerModal
+        show={ap.showPoseModal}
+        character={ap.poseCharacter || selectedFighter?.name}
+        displayName={selectedFighter?.name}
+        baseSkinId={ap.poseBaseSkinId || undefined}
+        onSelectPose={ap.handlePoseSelected}
+        onClose={() => ap.setShowPoseModal(false)}
+        API_URL={API_URL}
       />
 
       {/* Import Loading Overlay */}
@@ -92,6 +111,44 @@ export default function CharacterMode({
           </div>
         </div>
       )}
+
+      {/* Apply-pose progress overlay */}
+      {ap.applying && (
+        <div className="import-overlay">
+          <div className="import-modal import-modal--hexagon">
+            <HexagonLoader
+              className="import-loader"
+              size={112}
+              label={ap.applyingPose?.isOriginal ? 'Restoring portraits' : 'Applying pose'}
+              progress={ap.applyProgress.total > 0
+                ? ((ap.applyProgress.current - 1) / ap.applyProgress.total) * 100
+                : null}
+              minimumVisibleProgress={6}
+            />
+            <h3>{ap.applyingPose?.isOriginal ? 'Restoring Portraits...' : 'Applying Pose...'}</h3>
+            <p className="import-status">
+              {ap.applyProgress.total > 0
+                ? (ap.applyingPose?.isOriginal
+                    ? `${ap.applyProgress.current} / ${ap.applyProgress.total}`
+                    : `${ap.applyProgress.current} / ${ap.applyProgress.total} — missing portraits are rendered and saved to the vault`)
+                : 'Matching costumes to vault skins...'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        show={!!ap.pendingPose}
+        title={ap.pendingPose?.isOriginal ? 'Restore Original Portraits' : 'Apply Pose'}
+        message={ap.pendingPose
+          ? (ap.pendingPose.isOriginal
+              ? `Restore the original portraits for all ${cm.mexCostumes.length} ${selectedFighter?.name || ''} costumes? Each one goes back to its vault skin's main CSP (or the vanilla portrait).`
+              : `Apply pose "${ap.pendingPose.name}" to all ${cm.mexCostumes.length} ${selectedFighter?.name || ''} portraits? Costumes without this pose will be rendered and the renders added to the vault.`)
+          : ''}
+        confirmText={ap.pendingPose?.isOriginal ? 'Restore' : 'Apply'}
+        onConfirm={ap.confirmApplyPose}
+        onCancel={() => ap.setPendingPose(null)}
+      />
 
       {cc.removingFighter && (
         <div className="import-overlay">

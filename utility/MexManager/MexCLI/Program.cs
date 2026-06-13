@@ -88,6 +88,8 @@ namespace MexCLI
                         return Commands.AudioCommands.AudioToHps(args);
                     case "sem-resolve":
                         return Commands.AudioCommands.SemResolve(args);
+                    case "import-ssm":
+                        return Commands.ImportSsmCommand.Execute(args);
                     case "remove-fighter":
                         return Commands.RemoveFighterCommand.Execute(args);
                     case "add-stage":

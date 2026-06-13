@@ -5,15 +5,44 @@
  *
  * Receives the useCostumes hook result as `cm` (costume manager).
  */
+import { useState } from 'react'
 import { hasExtras } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import HexagonLoader from '../../shared/HexagonLoader'
 import PaginationBar from '../../shared/PaginationBar'
 import usePagination from '../../shared/usePagination'
+import SoundPacksModal from '../../storage/SoundPacksModal'
 import ZeldaSheikPanel from './ZeldaSheikPanel'
 import { isZeldaSheikName } from './useCostumes'
 
-export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL, onEnterExtras }) {
+const PoseIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+)
+
+const SoundIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+  </svg>
+)
+
+// vanilla characters with a vault sound pack (fighter SSM bank); custom
+// fighters edit their bank from the custom character detail page instead
+const SOUND_PACK_CHARS = new Set([
+  'bowser', 'c. falcon', 'captain falcon', 'dk', 'donkey kong', 'dr. mario',
+  'falco', 'fox', 'ganondorf', 'ice climbers', 'jigglypuff', 'kirby', 'link',
+  'luigi', 'mario', 'marth', 'mewtwo', 'mr. game & watch', 'game & watch',
+  'ness', 'peach', 'pichu', 'pikachu', 'roy', 'samus', 'sheik', 'yoshi',
+  'young link', 'zelda',
+])
+
+export const hasSoundPack = (name) => SOUND_PACK_CHARS.has((name || '').toLowerCase())
+
+export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL, onEnterExtras, onApplyPose }) {
   const {
     mexCostumes,
     loadingFighter,
@@ -44,6 +73,10 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     clearSelection
   } = cm
 
+  // Sound pack browser (vanilla character SSM bank, stored in the vault and
+  // installed into the ISO at export)
+  const [showSoundBank, setShowSoundBank] = useState(false)
+
   // Zelda and Sheik share their in-game costume slots (transform pairing), so
   // selecting EITHER shows the combined slot-paired panel instead. The check
   // lives BELOW the pagination hooks so the hook order is stable across renders.
@@ -65,6 +98,38 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
           <div className="costumes-section">
             <div className="costumes-section-header">
               <h3>In ISO ({dataReady ? mexCostumes.length : 'Loading...'})</h3>
+              <div className="iso-mod-actions">
+                {hasExtras(selectedFighter.name) && (
+                  <button
+                    className="btn-extras-mode"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); onEnterExtras(); }}
+                  >
+                    Extras
+                  </button>
+                )}
+                {onApplyPose && (
+                  <button
+                    className="btn-pose-all"
+                    onClick={() => { playSound('boop'); onApplyPose(); }}
+                    onMouseEnter={playHoverSound}
+                    disabled={!dataReady || mexCostumes.length === 0}
+                    title="Apply a pose to all portraits"
+                  >
+                    <PoseIcon />
+                  </button>
+                )}
+                {hasSoundPack(selectedFighter.name) && (
+                  <button
+                    className="btn-pose-all btn-sound-pack"
+                    onClick={() => { playSound('boop'); setShowSoundBank(true); }}
+                    onMouseEnter={playHoverSound}
+                    title="Sound packs — choose which voice/SFX pack this project uses"
+                  >
+                    <SoundIcon />
+                  </button>
+                )}
+              </div>
               <div className="team-color-tokens">
                 {[
                   { id: 'red', label: 'R', color: '#ff4757' },
@@ -209,15 +274,6 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     </button>
                   </>
                 )}
-                {hasExtras(selectedFighter.name) && (
-                  <button
-                    className="btn-extras-mode"
-                    onMouseEnter={playHoverSound}
-                    onClick={() => { playSound('boop'); onEnterExtras(); }}
-                  >
-                    Extras
-                  </button>
-                )}
               </div>
             </div>
             <div className={`costume-list ${loadingFighter ? 'processing' : ''}`} ref={availableListRef}>
@@ -276,6 +332,15 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
             </div>
             <PaginationBar pager={availPager} />
           </div>
+
+          <SoundPacksModal
+            show={showSoundBank}
+            character={selectedFighter.name}
+            displayName={selectedFighter.name}
+            installMode
+            API_URL={API_URL}
+            onClose={() => setShowSoundBank(false)}
+          />
         </>
       ) : (
         <div className="no-selection">

@@ -325,13 +325,7 @@
    CUSTOM CHARACTERS SUB-PAGE GRID
    ───────────────────────────────────────── */
 
-.custom-characters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: var(--space-3);
-  width: 100%;
-}
-
+/* Layout comes from .characters-grid; custom icons are low-res CSS rips */
 .custom-characters-grid .character-icon,
 .custom-characters-grid .character-css-icon {
   image-rendering: pixelated;
@@ -728,6 +722,7 @@
   border: 1px solid var(--color-accent);
   border-radius: 999px;
   width: fit-content;
+  white-space: nowrap;
   cursor: help;
 }
 
@@ -5901,6 +5896,15 @@
   color: var(--color-cyan);
 }
 
+/* Sounds (sound pack) card — create-mod-card variant */
+.sounds-card .create-mod-icon {
+  font-size: 1.5rem;
+}
+
+.sounds-card::after {
+  background: linear-gradient(90deg, var(--color-teal) 0%, var(--color-cyan) 100%);
+}
+
 /* Edit Textures button in edit modal */
 .edit-modal-skincreator-btn {
   width: 100%;
@@ -7957,6 +7961,62 @@
 .pause-editor-chip-meta {
   font-size: 0.65rem;
   color: var(--color-text-muted);
+}
+
+/* Percent font editor: one large tile per glyph (0-9, %, HP) */
+.percent-editor-glyphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.percent-editor-glyph {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.percent-editor-glyph .pause-editor-chip-info {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.percent-editor-glyph-preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-deep);
+  border: 1px dashed rgba(125, 211, 232, 0.35);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.percent-editor-glyph-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.percent-editor-glyph-preview:hover {
+  border-color: var(--color-cyan);
+  border-style: solid;
+  background: rgba(125, 211, 232, 0.08);
+}
+
+.percent-editor-glyph.replaced .percent-editor-glyph-preview {
+  border-color: rgba(125, 211, 232, 0.7);
+  border-style: solid;
+}
+
+.percent-editor-glyph-preview.busy {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 /* ===== AI Skin Studio modal ===== */

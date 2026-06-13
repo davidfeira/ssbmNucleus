@@ -3,16 +3,30 @@
  * variants in the ISO (with button token assignment/removal) and storage
  * variants available to import (with batch controls).
  */
+import { useState } from 'react'
 import { playSound, playHoverSound } from '../../../utils/sounds'
-import { BACKEND_URL } from '../../../config'
+import { BACKEND_URL, API_URL } from '../../../config'
 import PaginationBar from '../../shared/PaginationBar'
 import usePagination from '../../shared/usePagination'
+import SongPacksModal from '../../storage/SongPacksModal'
+
+const MusicIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 18V5l12-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="18" cy="16" r="3" />
+  </svg>
+)
 
 export default function VariantsPanel({ sm }) {
   const { selectedStage, mexVariants, dataReady } = sm
   const availableVariants = sm.getVariantsForStage(selectedStage.code)
   const inIsoPager = usePagination(mexVariants.length, `${selectedStage.code}-iso`)
   const availPager = usePagination(availableVariants.length, `${selectedStage.code}-avail`)
+
+  // Song pack browser (stage music playlists, stored in the vault and
+  // installed into the project explicitly)
+  const [showSongPacks, setShowSongPacks] = useState(false)
 
   // Button Tokens Component
   const ButtonTokens = () => {
@@ -39,6 +53,16 @@ export default function VariantsPanel({ sm }) {
       <div className="costumes-section">
         <div className="costumes-section-header">
           <h3>In ISO ({dataReady ? mexVariants.length : 'Loading...'})</h3>
+          <div className="iso-mod-actions">
+            <button
+              className="btn-pose-all btn-sound-pack"
+              onClick={() => { playSound('boop'); setShowSongPacks(true); }}
+              onMouseEnter={playHoverSound}
+              title="Song packs — choose which music this stage plays in this project"
+            >
+              <MusicIcon />
+            </button>
+          </div>
           <ButtonTokens />
         </div>
         <div className="costume-list existing">
@@ -201,6 +225,15 @@ export default function VariantsPanel({ sm }) {
         </div>
         <PaginationBar pager={availPager} />
       </div>
+
+      <SongPacksModal
+        show={showSongPacks}
+        stage={selectedStage.code}
+        displayName={selectedStage.name}
+        installMode
+        API_URL={API_URL}
+        onClose={() => setShowSongPacks(false)}
+      />
     </>
   )
 }

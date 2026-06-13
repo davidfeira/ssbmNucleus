@@ -9,6 +9,7 @@ import re
 import json
 import time
 import shutil
+import hashlib
 import zipfile
 import tempfile
 import logging
@@ -20,6 +21,7 @@ from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR
 from core.constants import CHAR_PREFIXES
 from core.costume_files import find_extracted_costume_archive
 from core.metadata import load_metadata, save_metadata, get_char_data, custom_character_slug
+from core.state import get_mex_manager, reload_mex_manager
 from generate_csp import generate_single_csp_internal, apply_character_specific_layers
 
 logger = logging.getLogger(__name__)
@@ -311,6 +313,89 @@ def delete_pose():
         }), 500
 
 
+def _generate_pose_csps_for_skin(character, skin, pose_name, pose_path, aj_file, hd_scale):
+    """Render alternate CSPs for one vault skin using a pose.
+
+    Generates the SD portrait (and an HD one when hd_scale > 1) and appends
+    alternate_csps entries to `skin` IN PLACE — the caller must
+    save_metadata(). Returns a per-skin result dict matching the
+    batch-generate-csp response shape.
+    """
+    skin_id = skin.get('id')
+    zip_path = STORAGE_PATH / character / skin.get('filename', '')
+    if not zip_path.exists():
+        return {'skinId': skin_id, 'success': False, 'error': 'ZIP file not found'}
+
+    temp_dir = None
+    try:
+        temp_dir = tempfile.mkdtemp(prefix='csp_batch_')
+        logger.info(f"Extracting {zip_path} to {temp_dir}")
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(temp_dir)
+
+        dat_file = find_extracted_costume_archive(Path(temp_dir))
+
+        if not dat_file or not dat_file.exists():
+            return {'skinId': skin_id, 'success': False,
+                    'error': 'No costume archive found in ZIP'}
+
+        # When HD resolution specified, generate BOTH normal and HD versions
+        scales_to_generate = [(hd_scale, True), (1, False)] if hd_scale > 1 else [(1, False)]
+        alt_num = len(skin.get('alternate_csps', [])) + 1
+        skin_generated = False
+
+        for gen_scale, is_hd in scales_to_generate:
+            logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={gen_scale}x)")
+
+            csp_path = generate_single_csp_internal(
+                str(dat_file),
+                character,
+                str(pose_path),
+                str(aj_file) if aj_file and Path(aj_file).exists() else None,
+                gen_scale
+            )
+
+            if csp_path and Path(csp_path).exists():
+                # Apply character-specific layers (Fox gun, Ness flip, etc.)
+                apply_character_specific_layers(csp_path, character, gen_scale)
+
+                suffix = '_hd' if is_hd else ''
+                alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"
+                alt_path = STORAGE_PATH / character / alt_filename
+
+                shutil.move(csp_path, alt_path)
+                logger.info(f"[OK] Saved alternate CSP: {alt_path}")
+
+                skin.setdefault('alternate_csps', []).append({
+                    'id': f"alt_{int(time.time())}_{alt_num}{'_hd' if is_hd else ''}",
+                    'filename': alt_filename,
+                    'pose_name': pose_name,
+                    'is_hd': is_hd,
+                    'timestamp': datetime.now().isoformat()
+                })
+
+                skin_generated = True
+            else:
+                logger.warning(f"Failed to generate {gen_scale}x CSP for {skin_id}")
+
+        if skin_generated:
+            return {'skinId': skin_id, 'success': True,
+                    'altCspPath': f"/storage/{character}/{skin_id}_csp_alt_{alt_num}.png"}
+        return {'skinId': skin_id, 'success': False, 'error': 'CSP generation failed'}
+
+    except Exception as skin_err:
+        logger.error(f"Error generating CSP for {skin_id}: {skin_err}", exc_info=True)
+        return {'skinId': skin_id, 'success': False, 'error': str(skin_err)}
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+                logger.info(f"Cleaned up temp dir: {temp_dir}")
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to cleanup temp dir: {cleanup_err}")
+
+
 @poses_bp.route('/api/mex/storage/poses/batch-generate-csp', methods=['POST'])
 def batch_generate_pose_csps():
     """Generate CSPs for multiple skins using a saved pose.
@@ -389,119 +474,13 @@ def batch_generate_pose_csps():
                 failed += 1
                 continue
 
-            zip_path = STORAGE_PATH / character / skin.get('filename', '')
-            if not zip_path.exists():
-                results.append({
-                    'skinId': skin_id,
-                    'success': False,
-                    'error': 'ZIP file not found'
-                })
+            result = _generate_pose_csps_for_skin(
+                character, skin, pose_name, pose_path, aj_file, hd_scale)
+            results.append(result)
+            if result.get('success'):
+                generated += 1
+            else:
                 failed += 1
-                continue
-
-            # Extract DAT from ZIP to temp directory
-            temp_dir = None
-            try:
-                temp_dir = tempfile.mkdtemp(prefix='csp_batch_')
-                logger.info(f"Extracting {zip_path} to {temp_dir}")
-
-                with zipfile.ZipFile(zip_path, 'r') as zf:
-                    zf.extractall(temp_dir)
-
-                dat_file = find_extracted_costume_archive(Path(temp_dir))
-
-                if not dat_file or not dat_file.exists():
-                    results.append({
-                        'skinId': skin_id,
-                        'success': False,
-                        'error': 'No costume archive found in ZIP'
-                    })
-                    failed += 1
-                    continue
-
-                # When HD resolution specified, generate BOTH normal and HD versions
-                scales_to_generate = [(hd_scale, True), (1, False)] if hd_scale > 1 else [(1, False)]
-                existing_alts = skin.get('alternate_csps', [])
-                alt_num = len(existing_alts) + 1
-                skin_generated = False
-
-                for gen_scale, is_hd in scales_to_generate:
-                    logger.info(f"Generating CSP for {skin_id} using pose {pose_name} (scale={gen_scale}x)")
-
-                    # Generate CSP
-                    csp_path = generate_single_csp_internal(
-                        str(dat_file),
-                        character,
-                        str(pose_path),
-                        str(aj_file) if aj_file and Path(aj_file).exists() else None,
-                        gen_scale
-                    )
-
-                    if csp_path and Path(csp_path).exists():
-                        # Apply character-specific layers (Fox gun, Ness flip, etc.)
-                        apply_character_specific_layers(csp_path, character, gen_scale)
-
-                        # Determine alternate CSP filename
-                        suffix = '_hd' if is_hd else ''
-                        alt_filename = f"{skin_id}_csp_alt_{alt_num}{suffix}.png"
-                        alt_path = STORAGE_PATH / character / alt_filename
-
-                        # Move generated CSP to storage
-                        shutil.move(csp_path, alt_path)
-                        logger.info(f"[OK] Saved alternate CSP: {alt_path}")
-
-                        # Update skin metadata with alternate CSP info
-                        alt_entry = {
-                            'id': f"alt_{int(time.time())}_{alt_num}{'_hd' if is_hd else ''}",
-                            'filename': alt_filename,
-                            'pose_name': pose_name,
-                            'is_hd': is_hd,
-                            'timestamp': datetime.now().isoformat()
-                        }
-
-                        # Find and update skin in metadata
-                        for s in skins:
-                            if s.get('id') == skin_id:
-                                if 'alternate_csps' not in s:
-                                    s['alternate_csps'] = []
-                                s['alternate_csps'].append(alt_entry)
-                                break
-
-                        skin_generated = True
-                    else:
-                        logger.warning(f"Failed to generate {gen_scale}x CSP for {skin_id}")
-
-                if skin_generated:
-                    results.append({
-                        'skinId': skin_id,
-                        'success': True,
-                        'altCspPath': f"/storage/{character}/{skin_id}_csp_alt_{alt_num}.png"
-                    })
-                    generated += 1
-                else:
-                    results.append({
-                        'skinId': skin_id,
-                        'success': False,
-                        'error': 'CSP generation failed'
-                    })
-                    failed += 1
-
-            except Exception as skin_err:
-                logger.error(f"Error generating CSP for {skin_id}: {skin_err}", exc_info=True)
-                results.append({
-                    'skinId': skin_id,
-                    'success': False,
-                    'error': str(skin_err)
-                })
-                failed += 1
-            finally:
-                # Cleanup temp directory
-                if temp_dir and os.path.exists(temp_dir):
-                    try:
-                        shutil.rmtree(temp_dir)
-                        logger.info(f"Cleaned up temp dir: {temp_dir}")
-                    except Exception as cleanup_err:
-                        logger.warning(f"Failed to cleanup temp dir: {cleanup_err}")
 
         # Save updated metadata
         save_metadata(metadata)
@@ -521,3 +500,368 @@ def batch_generate_pose_csps():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# ============= Apply a pose to the open project's installed costumes =======
+#
+# "Pose" button on the install page (CharacterMode): replaces the portraits
+# of a fighter's in-ISO costumes with renders of one pose. Vault skins that
+# already have that pose as an alternate CSP are reused; missing ones are
+# rendered on the fly (and saved to the vault as alternates).
+#
+# Flow (frontend drives it for per-costume progress):
+#   1. POST project-costume-map  -> match each in-ISO costume to a vault skin
+#   2. POST apply-to-costume     -> per costume: ensure pose render, overwrite
+#                                   the project's CSP asset PNG
+#   3. POST apply-finish         -> recompile-csps (regenerates the .tex
+#                                   files the ISO export actually reads)
+
+# Vanilla CSP texture size (must match storage_costumes.CSP_SD_SIZE)
+_CSP_SD_SIZE = (136, 188)
+
+# Sentinel pose name: restore each costume's ORIGINAL portrait (the vault
+# skin's main CSP / the shipped vanilla CSP) instead of a pose render
+ORIGINAL_POSE_NAME = '__original__'
+
+
+def _vault_character_keys(metadata, fighter_name, explicit_character=None):
+    """Vault skin-container keys to search for a MEX fighter's costumes.
+
+    Canonical fighters map to their own key; custom characters expose two
+    pseudo keys (bundled costumes + added skins). `explicit_character` is
+    whatever key the frontend already resolved (canonical name or either
+    pseudo key).
+    """
+    if explicit_character:
+        slug = custom_character_slug(explicit_character)
+        if slug:
+            return [f'custom_characters/{slug}/costumes',
+                    f'custom_characters/{slug}/skins']
+        return [explicit_character]
+    if fighter_name in metadata.get('characters', {}):
+        return [fighter_name]
+    for entry in metadata.get('custom_characters', []):
+        if (entry.get('name') or '').lower() == fighter_name.lower():
+            slug = entry.get('slug')
+            if slug:
+                return [f'custom_characters/{slug}/costumes',
+                        f'custom_characters/{slug}/skins']
+    return []
+
+
+def _build_skin_index(metadata, char_keys):
+    """[(char_key, skin, zip path, dat stems)] for every existing vault skin
+    zip under the given keys. Stems come from the zip namelist only (cheap)."""
+    index = []
+    for key in char_keys:
+        char_data = get_char_data(metadata, key) or {}
+        for skin in char_data.get('skins', []):
+            if skin.get('type') == 'folder':
+                continue
+            zip_path = STORAGE_PATH / key / skin.get('filename', '')
+            if not skin.get('filename') or not zip_path.exists():
+                continue
+            try:
+                with zipfile.ZipFile(zip_path) as zf:
+                    stems = {Path(n).stem.lower() for n in zf.namelist()
+                             if n.lower().endswith(('.dat', '.usd')) and not n.endswith('/')}
+            except Exception as e:
+                logger.warning(f"Unreadable skin zip {zip_path}: {e}")
+                continue
+            if stems:
+                index.append({'key': key, 'skin': skin, 'zip': zip_path, 'stems': stems})
+    return index
+
+
+def _match_costume_to_skin(file_name, skin_index, project_dir):
+    """Match one in-ISO costume DAT to a vault skin.
+
+    Primary match is the DAT stem (imports keep the vault DAT's name, with a
+    _NNN suffix when a same-named file already existed in the project).
+    Recolors often share a stem (several skins all carry PlFxNr.dat), so
+    stem collisions are disambiguated by comparing the project DAT's bytes
+    against each candidate zip's DAT — imports copy the file verbatim.
+    """
+    # Region-resolved names have no extension and a trailing dot (Red
+    # Falcon is 'PlCaRe.' — the game appends usd/dat by region)
+    stem = Path(file_name).stem.lower().rstrip('.')
+    base = re.sub(r'_\d+$', '', stem)
+    candidates = [e for e in skin_index if stem in e['stems'] or base in e['stems']]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    dat_path = project_dir / 'files' / file_name
+    if dat_path.exists():
+        want = hashlib.sha1(dat_path.read_bytes()).hexdigest()
+        for entry in candidates:
+            try:
+                with zipfile.ZipFile(entry['zip']) as zf:
+                    for n in zf.namelist():
+                        if not n.lower().endswith(('.dat', '.usd')) or n.endswith('/'):
+                            continue
+                        if Path(n).stem.lower() in (stem, base):
+                            if hashlib.sha1(zf.read(n)).hexdigest() == want:
+                                return entry
+            except Exception:
+                continue
+    # Ambiguous (or project DAT missing): fall back to the first stem match
+    return candidates[0]
+
+
+@poses_bp.route('/api/mex/storage/poses/project-costume-map', methods=['POST'])
+def project_costume_map():
+    """Match a fighter's in-ISO costumes to vault skins.
+
+    Body: { "fighter": "Fox", "character": "Fox" (optional vault key) }
+    Returns per-costume entries with the matched skin id + vault key and the
+    costume's CSP asset path (needed by apply-to-costume).
+    """
+    try:
+        data = request.json or {}
+        fighter = (data.get('fighter') or '').strip()
+        if not fighter:
+            return jsonify({'success': False, 'error': 'Missing fighter parameter'}), 400
+
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        result = mex._run_command('get-costumes', str(mex.project_path), fighter)
+        if not result.get('success', True) and 'costumes' not in result:
+            return jsonify({'success': False,
+                            'error': result.get('error', 'Failed to list costumes')}), 500
+
+        metadata = load_metadata() or {}
+        char_keys = _vault_character_keys(metadata, fighter, data.get('character'))
+        skin_index = _build_skin_index(metadata, char_keys)
+        project_dir = mex.project_path.parent
+
+        # Vanilla costumes are not vault skins — they fall back to the
+        # shipped vanilla assets (utility/assets/vanilla/<char>/<code>/)
+        explicit = data.get('character')
+        vanilla_char = None if custom_character_slug(explicit or '') else (explicit or fighter)
+
+        costumes = []
+        for costume in result.get('costumes', []):
+            file_name = costume.get('fileName') or ''
+            match = _match_costume_to_skin(file_name, skin_index, project_dir)
+            vanilla_code = None
+            if match is None and vanilla_char:
+                # trailing dot = region-resolved name (Red Falcon 'PlCaRe.')
+                stem = Path(file_name).stem.rstrip('.')
+                for code in (stem, re.sub(r'_\d+$', '', stem)):
+                    cdir = VANILLA_ASSETS_DIR / vanilla_char / code
+                    # csp.png alone still counts: PlCaRe (Red Falcon, the
+                    # one .usd costume) ships without its model — renders
+                    # fall back to the project's installed file
+                    if ((cdir / f'{code}.dat').exists()
+                            or (cdir / f'{code}.usd').exists()
+                            or (cdir / 'csp.png').exists()):
+                        vanilla_code = code
+                        break
+            costumes.append({
+                'index': costume.get('index'),
+                'name': costume.get('name'),
+                'fileName': file_name,
+                'cspAsset': costume.get('csp'),
+                'skinId': match['skin'].get('id') if match else None,
+                'skinCharacter': match['key'] if match else (vanilla_char if vanilla_code else None),
+                'vanillaCode': vanilla_code
+            })
+
+        return jsonify({'success': True, 'fighter': fighter, 'costumes': costumes})
+    except Exception as e:
+        logger.error(f"Project costume map error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@poses_bp.route('/api/mex/storage/poses/apply-to-costume', methods=['POST'])
+def apply_pose_to_costume():
+    """Apply a pose render to ONE installed costume's project CSP asset.
+
+    Body: { "character": <vault key>, "skinId" OR "vanillaCode",
+            "poseName", "cspAsset" }
+    Vault skins reuse their existing alternate CSP for the pose when present,
+    otherwise it is rendered now (saving SD+HD alternates to the vault).
+    Vanilla costumes render from the shipped vanilla DAT, cached under the
+    pose's renders/ directory. The project PNG is overwritten in place; call
+    apply-finish afterwards to recompile the .tex files.
+    """
+    try:
+        from io import BytesIO
+        from PIL import Image
+
+        data = request.json or {}
+        character = data.get('character')
+        skin_id = data.get('skinId')
+        vanilla_code = data.get('vanillaCode')
+        pose_name = data.get('poseName')
+        csp_asset = data.get('cspAsset')
+        file_name = data.get('fileName')  # installed costume file (model fallback)
+
+        if not character or not pose_name or not (skin_id or vanilla_code):
+            return jsonify({'success': False,
+                            'error': 'Missing character, skinId/vanillaCode, or poseName parameter'}), 400
+        if not csp_asset:
+            # Costume has no portrait asset to replace (never happens for
+            # imported costumes) — report as skipped, not an error.
+            return jsonify({'success': True, 'status': 'no_csp_asset'})
+
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        # The asset path comes from project-costume-map (MexCLI output); keep
+        # writes pinned inside the project's assets directory anyway.
+        assets_dir = (mex.project_path.parent / 'assets').resolve()
+        target = (assets_dir / (csp_asset.replace('\\', '/') + '.png')).resolve()
+        if not str(target).startswith(str(assets_dir)):
+            return jsonify({'success': False, 'error': 'Invalid CSP asset path'}), 403
+
+        pose_path = _poses_dir(character) / f"{pose_name}.yml"
+        generated = False
+        restore_original = pose_name == ORIGINAL_POSE_NAME
+
+        if vanilla_code:
+            # Vanilla costume: render from the shipped vanilla DAT, cached in
+            # the pose's renders/ directory so re-applies are instant
+            safe_code = re.sub(r'[^A-Za-z0-9_]', '', vanilla_code)
+            costume_dir = VANILLA_ASSETS_DIR / character / safe_code
+            if restore_original:
+                # the shipped vanilla portrait IS the original
+                src_path = costume_dir / 'csp.png'
+                if not src_path.exists():
+                    return jsonify({'success': False,
+                                    'error': f'No vanilla portrait for {vanilla_code}'}), 404
+            else:
+                dat_path = costume_dir / f'{safe_code}.dat'
+                if not dat_path.exists():
+                    dat_path = costume_dir / f'{safe_code}.usd'
+                if not dat_path.exists() and file_name:
+                    # PlCaRe (Red Falcon) has no model in the shipped vanilla
+                    # assets — render from the project's own installed file.
+                    # Its fileName is region-resolved ('PlCaRe.', no
+                    # extension): the US ISO ships PlCaRe.usd, so probe that
+                    # first, then .dat.
+                    files_dir = (mex.project_path.parent / 'files').resolve()
+                    fname = file_name.replace('\\', '/').rstrip('.')
+                    names = [fname] if Path(fname).suffix else [f'{fname}.usd', f'{fname}.dat']
+                    for name in names:
+                        candidate = (files_dir / name).resolve()
+                        if str(candidate).startswith(str(files_dir)) and candidate.exists():
+                            dat_path = candidate
+                            break
+                if not dat_path.exists():
+                    return jsonify({'success': False,
+                                    'error': f'Vanilla costume not found: {vanilla_code}'}), 404
+
+                renders_dir = _poses_dir(character) / 'renders'
+                src_path = renders_dir / f'{safe_code}__{pose_name}.png'
+                if not src_path.exists():
+                    if not pose_path.exists():
+                        return jsonify({'success': False,
+                                        'error': f'Pose {pose_name} not found'}), 404
+                    aj_file = _character_aj_file(character)
+                    csp_path = generate_single_csp_internal(
+                        str(dat_path), character, str(pose_path),
+                        str(aj_file) if aj_file and Path(aj_file).exists() else None, 1)
+                    if not csp_path or not Path(csp_path).exists():
+                        return jsonify({'success': False,
+                                        'error': 'CSP generation failed'}), 500
+                    apply_character_specific_layers(csp_path, character, 1)
+                    renders_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.move(csp_path, src_path)
+                    generated = True
+        else:
+            metadata = load_metadata()
+            if metadata is None:
+                return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+            char_data = get_char_data(metadata, character) or {}
+            skin = next((s for s in char_data.get('skins', [])
+                         if s.get('type') != 'folder' and s.get('id') == skin_id), None)
+            if skin is None:
+                return jsonify({'success': False, 'error': f'Skin not found: {skin_id}'}), 404
+
+            if restore_original:
+                # the vault skin's main portrait is the original; skins
+                # without one are skipped (nothing to restore to)
+                src_path = STORAGE_PATH / character / f'{skin_id}_csp.png'
+                if not src_path.exists():
+                    return jsonify({'success': True, 'status': 'no_csp_asset'})
+            else:
+                def _find_pose_alt(s):
+                    alts = [a for a in s.get('alternate_csps', [])
+                            if a.get('pose_name') == pose_name and not a.get('is_hd')]
+                    return alts[-1] if alts else None
+
+                # Reuse an existing render of this pose, or generate one now
+                alt = _find_pose_alt(skin)
+                if alt is None:
+                    if not pose_path.exists():
+                        return jsonify({'success': False,
+                                        'error': f'Pose {pose_name} not found'}), 404
+                    aj_file = _character_aj_file(character)
+                    gen_result = _generate_pose_csps_for_skin(
+                        character, skin, pose_name, pose_path, aj_file, 4)
+                    save_metadata(metadata)
+                    if not gen_result.get('success'):
+                        return jsonify({'success': False,
+                                        'error': gen_result.get('error', 'CSP generation failed')}), 500
+                    generated = True
+                    alt = _find_pose_alt(skin)
+                    if alt is None:
+                        return jsonify({'success': False,
+                                        'error': 'Generated CSP not found in metadata'}), 500
+
+                src_path = STORAGE_PATH / character / alt.get('filename', '')
+                if not src_path.exists():
+                    return jsonify({'success': False,
+                                    'error': f"Alternate CSP file missing: {alt.get('filename')}"}), 404
+
+        # Normalize to the vanilla portrait size (generator output already is)
+        with Image.open(src_path) as src:
+            img = src.convert('RGBA')
+        if img.size[0] > _CSP_SD_SIZE[0] or img.size[1] > _CSP_SD_SIZE[1]:
+            img.thumbnail(_CSP_SD_SIZE, Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(buf.getvalue())
+
+        logger.info(f"[OK] Applied pose '{pose_name}' to project CSP {target.name} "
+                    f"({'vanilla ' + vanilla_code if vanilla_code else 'skin ' + str(skin_id)}"
+                    f"{', generated' if generated else ''})")
+        return jsonify({'success': True,
+                        'status': 'generated' if generated else 'applied',
+                        'generated': generated})
+    except Exception as e:
+        logger.error(f"Apply pose to costume error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@poses_bp.route('/api/mex/storage/poses/apply-finish', methods=['POST'])
+def apply_pose_finish():
+    """Recompile project CSP textures after apply-to-costume calls.
+
+    The ISO export reads the pre-encoded .tex next to each CSP PNG, so the
+    overwritten PNGs must be recompiled before they show up in a build.
+    """
+    try:
+        mex = get_mex_manager()
+        if mex is None:
+            return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
+
+        result = mex._run_command('recompile-csps', str(mex.project_path))
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        if not result.get('success'):
+            return jsonify({'success': False,
+                            'error': result.get('error', 'Recompile failed')}), 500
+        return jsonify({'success': True,
+                        'recompiled': result.get('recompiledCount', 0)})
+    except Exception as e:
+        logger.error(f"Apply pose finish error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500

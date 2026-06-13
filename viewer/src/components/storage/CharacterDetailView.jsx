@@ -27,6 +27,7 @@ import AIStudioModal from './AIStudioModal'
 import AIModelStudioModal from './AIModelStudioModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import PoseManagerModal from './PoseManagerModal'
+import SoundPacksModal from './SoundPacksModal'
 import ExtrasPageView from './ExtrasPageView'
 import { hasExtras } from '../../config/extraTypes'
 
@@ -225,6 +226,10 @@ export default function CharacterDetailView({
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
 
+  // Sound pack (vanilla character sound bank) state
+  const [showSoundBank, setShowSoundBank] = useState(false)
+  const isSharedSoundBank = selectedCharacter === 'Zelda' || selectedCharacter === 'Sheik'
+
   // Extras page state
   const [showExtrasPage, setShowExtrasPage] = useState(false)
 
@@ -367,6 +372,19 @@ export default function CharacterDetailView({
               <span className="create-mod-label">Create New Mod</span>
             </div>
           </div>
+          <div
+            className="create-mod-card sounds-card"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('start'); setShowSoundBank(true); }}
+            title="Customize this character's voice and sound effects — installed into every ISO you export"
+          >
+            <div className="create-mod-image-area">
+              <span className="create-mod-icon">🔊</span>
+            </div>
+            <div className="create-mod-info">
+              <span className="create-mod-label">Sounds</span>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -499,6 +517,13 @@ export default function CharacterDetailView({
         onRefresh={onRefresh}
         onCostumesUpdated={onCostumesUpdated}
         API_URL={API_URL}
+      />
+      <SoundPacksModal
+        show={showSoundBank}
+        character={selectedCharacter}
+        displayName={isSharedSoundBank ? 'Zelda / Sheik' : selectedCharacter}
+        API_URL={API_URL}
+        onClose={() => setShowSoundBank(false)}
       />
     </div>
   )

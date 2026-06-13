@@ -65,6 +65,8 @@ from blueprints import (
     menus_bp,
     custom_stages_bp,
     custom_characters_bp,
+    character_sounds_bp,
+    stage_song_packs_bp,
     test_in_game_bp,
 )
 from blueprints.skin_lab import skin_lab_bp
@@ -137,6 +139,8 @@ app.register_blueprint(iso_scan_bp)
 app.register_blueprint(menus_bp)
 app.register_blueprint(custom_stages_bp)
 app.register_blueprint(custom_characters_bp)
+app.register_blueprint(character_sounds_bp)
+app.register_blueprint(stage_song_packs_bp)
 app.register_blueprint(test_in_game_bp)
 app.register_blueprint(skin_lab_bp)
 app.register_blueprint(skin_lab_ai_bp)
