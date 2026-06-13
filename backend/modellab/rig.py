@@ -501,7 +501,7 @@ def sane_surface(rigkit: smd.SMD):
 def transfer_weights(
     rigkit: smd.SMD, foreign: ForeignMesh, max_weights: int = MAX_WEIGHTS_DEFAULT,
     surface=None, surface_pts=None, bone_world=None, forbidden=None,
-    part_of=None, vert_parts=None,
+    part_of=None, vert_parts=None, match_pos=None,
 ) -> list[list[tuple[int, float]]]:
     """Per-corner weights for the foreign mesh, sampled from the rig-kit mesh.
 
@@ -575,10 +575,16 @@ def transfer_weights(
         if tot:
             anchors[i] /= tot
 
+    # match positions may differ from the real geometry: a tall source torso
+    # keeps its looks but BINDS as if compressed onto the target's hip->neck
+    # span (querying with the real positions handed upper-chest verts
+    # near-arbitrary torso bones — the run-pose garble)
+    mpts = np.asarray(match_pos).reshape(-1, 3) if match_pos is not None else pts
+
     tree = cKDTree(van_pts)
     K = min(24, len(van_pts))
-    d_geo, idx = tree.query(pts, k=K)
-    anchor_d = np.linalg.norm(pts[:, None, :] - anchors[idx], axis=2)
+    d_geo, idx = tree.query(mpts, k=K)
+    anchor_d = np.linalg.norm(mpts[:, None, :] - anchors[idx], axis=2)
     score = d_geo + 1.2 * anchor_d
 
     # semantic part constraint: a vert labeled with a body part may only
@@ -648,7 +654,7 @@ def transfer_weights(
     for k, acc in enumerate(smoothed):
         gated = {b: w for b, w in acc.items()
                  if b in world and
-                 float(np.linalg.norm(pts[k] - world[b])) <= max_reach}
+                 float(np.linalg.norm(mpts[k] - world[b])) <= max_reach}
         if not gated:
             # no held bone is near (crest tips, prop extremities): ride the
             # single nearest STABLE bone instead of a far-flung mixture —
@@ -670,7 +676,7 @@ def transfer_weights(
                     if sel:
                         cand_ids = [stable_ids[i] for i in sel]
                         cand_pos = stable_pos[sel]
-            nearest = cand_ids[int(np.linalg.norm(cand_pos - pts[k], axis=1).argmin())]
+            nearest = cand_ids[int(np.linalg.norm(cand_pos - mpts[k], axis=1).argmin())]
             gated = {nearest: 1.0}
         top = sorted(gated.items(), key=lambda kv: -kv[1])[:max_weights]
         total = sum(w for _, w in top) or 1.0
@@ -698,7 +704,7 @@ def transfer_weights(
                     else (b, w) for b, w in out[k]]
             spill = 1.0 - sum(w for _, w in kept)
             anchor = torso_ids[int(np.linalg.norm(
-                torso_pos - pts[k], axis=1).argmin())]
+                torso_pos - mpts[k], axis=1).argmin())]
             merged: dict = {}
             for b, w in kept:
                 merged[b] = merged.get(b, 0.0) + w
@@ -1460,7 +1466,13 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
             d_s_next = (s_anchor[j + 1] - s_anchor[j]) if 0 <= j < n_seg else v_s
             d_t_next = (t_anchor[j + 1] - t_anchor[j]) if 0 <= j < n_seg else v_t
             R = seg_frame(v_t, d_t_next) @ seg_frame(v_s, d_s_next).T
-            seg_affs.append((s * R, s_anchor[i], t_anchor[i]))
+            # anisotropic: length follows the joint anchors exactly, but
+            # thickness only DAMPED (s^0.4, capped) — uniform shrink made
+            # noodle limbs, measured radial ratios ballooned them
+            s_rad = float(np.clip(s ** 0.4, 0.8, 1.15))
+            u = v_s / ls
+            S = s * np.outer(u, u) + s_rad * (np.eye(3) - np.outer(u, u))
+            seg_affs.append((R @ S, s_anchor[i], t_anchor[i]))
         info.append(f"{part}:{len(seg_affs)}seg")
 
         # every part bone joins the segment its chain-fraction falls into
@@ -1483,16 +1495,22 @@ def segment_deform(foreign: ForeignMesh, src_parts, src_parents, src_pos,
     pts = foreign.tri_pos.reshape(-1, 3)
     wpp = [w for tw in foreign.tri_src_w for w in tw]
     out = np.empty_like(pts)
+    LIMB_SET = set(LIMBS)
     for k in range(len(pts)):
         # blend affines by the vert's source skin weights — shoulder/hip/elbow
-        # verts carry mixed weights and deform like skin instead of tearing
+        # verts carry mixed weights and deform like skin instead of tearing.
+        # WITHIN one limb, sharpen the blend (w^2): the upper/lower segment
+        # rotations diverge hard (straight human knee -> digitigrade fox) and
+        # a linear mix candy-wraps the knee; cross-part blends (shoulders)
+        # stay linear and smooth.
+        wl = [(b, w) for b, w in wpp[k] if b in bone_to_aff]
+        parts_here = {src_parts.get(b) for b, _ in wl}
+        if len(parts_here) == 1 and parts_here & LIMB_SET and len(wl) > 1:
+            wl = [(b, w * w) for b, w in wl]
         acc = np.zeros(3)
         tot = 0.0
-        for b, w in wpp[k]:
-            aff = bone_to_aff.get(b)
-            if aff is None:
-                continue
-            M, sp, tp = aff
+        for b, w in wl:
+            M, sp, tp = bone_to_aff[b]
             acc += w * (M @ (pts[k] - sp) + tp)
             tot += w
         if tot <= 1e-9:
@@ -1919,6 +1937,35 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
     if not deformed:
         scale, offset = align(foreign, target_pts, rot_y)
 
+    # MATCH-SPACE for binding: the deformed torso keeps the source's height
+    # (squashing it pancakes the look — tried), but then upper-chest verts sit
+    # far from the target's short torso bones and bind near-arbitrarily (the
+    # run-pose torso garble). Query the transfer with a torso band compressed
+    # onto the target's hip->neck span; the real geometry stays untouched.
+    match_pos = None
+    if deformed and vert_parts is not None:
+        t_tor_chain = _part_chain(
+            "torso", tgt_parts,
+            {b.id: b.parent for b in rigkit.bones
+             if b.name.startswith("JOBJ_")}, pose_world)
+        pts_now = foreign.tri_pos.reshape(-1, 3)
+        torso_mask = np.array([vp == "torso" for vp in vert_parts])
+        if torso_mask.sum() > 50 and t_tor_chain:
+            tys = pts_now[torso_mask][:, 1]
+            s_lo, s_hi = np.percentile(tys, 5), np.percentile(tys, 95)
+            t_lo = pose_world[t_tor_chain[0]][1]
+            t_hi = pose_world[t_tor_chain[-1]][1]
+            pad = 0.25 * max(t_hi - t_lo, 1e-6)
+            t_lo, t_hi = t_lo - pad, t_hi + pad
+            if s_hi - s_lo > 1e-6 and t_hi > t_lo:
+                f = (t_hi - t_lo) / (s_hi - s_lo)
+                if f < 0.95:        # only when the source torso is taller
+                    match_pos = pts_now.copy()
+                    match_pos[torso_mask, 1] = (
+                        t_lo + (pts_now[torso_mask, 1] - s_lo) * f)
+                    log(f"match-space torso band: x{f:.2f} "
+                        f"({s_lo:.1f}..{s_hi:.1f} -> {t_lo:.1f}..{t_hi:.1f})")
+
     if rigid_bone is not None:
         # debug/prop mode: the whole mesh rides one bone
         weights = [[(int(rigid_bone), 1.0)]] * (len(foreign.tri_pos) * 3)
@@ -1929,7 +1976,8 @@ def rig_mesh(rigkit_path, mesh_path, out_path, rot_y=0.0,
                                    forbidden=forbidden, part_of=tgt_parts,
                                    vert_parts=(vert_part_sets
                                                if vert_parts is not None
-                                               else None))
+                                               else None),
+                                   match_pos=match_pos)
 
     if tgt_skin is not None:
         # un-pose: store verts so target LBS at rest pose lands them exactly
