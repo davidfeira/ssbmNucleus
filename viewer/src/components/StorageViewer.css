@@ -1922,7 +1922,9 @@
 }
 
 .skin-card:hover .btn-edit,
-.character-card:hover .btn-edit {
+.character-card:hover .btn-edit,
+.mmod-card:hover .btn-edit,
+.cover-card:hover .btn-edit {
   opacity: 1;
   transform: scale(1);
 }
@@ -2249,8 +2251,11 @@
 /* Import file button container */
 .import-file-container {
   position: fixed;
-  bottom: var(--space-8);
-  right: var(--space-8);
+  /* Stack above the global "+ Import" FAB (which sits at bottom/right
+     --space-6 and is ~56px tall) so the two fixed buttons never overlap.
+     Right edge is aligned to the FAB's for a clean vertical stack. */
+  bottom: calc(var(--space-6) + 56px + var(--space-3));
+  right: var(--space-6);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2811,48 +2816,61 @@
   margin-top: var(--space-2);
 }
 
+/* Primary Play button — the app's cyan brand CTA (matches .btn-build-iso /
+   the Save action), not the old off-brand teal. */
 .cover-play {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border: none;
   border-radius: var(--radius-md);
-  background: var(--gradient-teal, linear-gradient(135deg, #00d4aa, #00b894));
+  background: var(--gradient-cyan);
   color: var(--color-bg-deep, #0a1420);
   font-family: var(--font-display);
   font-weight: var(--font-bold);
   font-size: var(--text-sm);
+  letter-spacing: var(--tracking-tight);
   cursor: pointer;
   transition: filter var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .cover-play:hover:not(:disabled) {
-  filter: brightness(1.1);
-  box-shadow: var(--glow-teal-sm);
+  filter: brightness(1.08);
+  box-shadow: var(--glow-cyan-sm);
 }
 
 .cover-play:active:not(:disabled) { transform: scale(0.97); }
 .cover-play:disabled { cursor: progress; }
 
+/* Secondary Export action — a clean bordered button sized to match Play,
+   consistent with the app's secondary button treatment. */
 .cover-secondary {
   flex-shrink: 0;
-  padding: var(--space-2);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.2));
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(8, 14, 24, 0.55);
+  backdrop-filter: blur(6px);
+  color: var(--color-text-primary, #f5f5f5);
   font-family: var(--font-display);
   font-weight: var(--font-semibold);
-  font-size: 0.62rem;
-  letter-spacing: var(--tracking-wide);
+  font-size: var(--text-sm);
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.cover-secondary:hover { background: var(--color-cyan, #7dd3e8); color: var(--color-bg-deep, #0a1420); border-color: transparent; }
+.cover-secondary:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-cyan, #7dd3e8);
+  border-color: var(--color-cyan, #7dd3e8);
+}
 
 /* --- create-new tile --- */
 .cover-create {
@@ -4147,9 +4165,9 @@
     from var(--border-angle, 0deg),
     transparent 0%,
     transparent 25%,
-    rgba(245, 158, 11, 0.9) 30%,
-    #f59e0b 35%,
-    rgba(245, 158, 11, 0.9) 40%,
+    rgba(125, 211, 232, 0.9) 30%,
+    var(--color-cyan) 35%,
+    rgba(125, 211, 232, 0.9) 40%,
     transparent 45%,
     transparent 100%
   );
@@ -4176,8 +4194,8 @@
   transform: perspective(1000px) translateY(-8px) scale(1.02);
   box-shadow:
     0 20px 40px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.5);
+    0 0 30px rgba(125, 211, 232, 0.15);
+  border-color: rgba(125, 211, 232, 0.5);
 }
 
 .extra-type-page-icon {
@@ -4189,13 +4207,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #f59e0b;
+  color: var(--color-cyan);
   transition: all 0.3s ease;
 }
 
 .extra-type-page-card:hover .extra-type-page-icon {
-  border-color: #f59e0b;
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+  border-color: var(--color-cyan);
+  box-shadow: 0 0 20px rgba(125, 211, 232, 0.3);
   transform: scale(1.1);
 }
 
@@ -4213,8 +4231,8 @@
 
 .extra-type-page-count {
   font-size: var(--text-xs);
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-cyan);
+  background: rgba(125, 211, 232, 0.1);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
 }
@@ -4327,9 +4345,9 @@
     from var(--border-angle, 0deg),
     transparent 0%,
     transparent 25%,
-    rgba(245, 158, 11, 0.9) 30%,
-    #f59e0b 35%,
-    rgba(245, 158, 11, 0.9) 40%,
+    rgba(125, 211, 232, 0.9) 30%,
+    var(--color-cyan) 35%,
+    rgba(125, 211, 232, 0.9) 40%,
     transparent 45%,
     transparent 100%
   );
@@ -4356,8 +4374,8 @@
   transform: perspective(1000px) translateY(-8px) scale(1.02);
   box-shadow:
     0 20px 40px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.5);
+    0 0 30px rgba(125, 211, 232, 0.15);
+  border-color: rgba(125, 211, 232, 0.5);
 }
 
 .extra-mod-image-container {
@@ -4460,12 +4478,12 @@
 
 .create-extra-mod-card:hover {
   border-style: solid;
-  border-color: #f59e0b;
+  border-color: var(--color-cyan);
 }
 
 .create-extra-mod-card.expanded {
   border-style: solid;
-  border-color: #f59e0b;
+  border-color: var(--color-cyan);
 }
 
 .create-extra-mod-placeholder {
@@ -4489,8 +4507,8 @@
 }
 
 .create-extra-mod-card:hover .create-extra-mod-icon {
-  color: #f59e0b;
-  border-color: #f59e0b;
+  color: var(--color-cyan);
+  border-color: var(--color-cyan);
 }
 
 .create-extra-mod-options {
@@ -4518,9 +4536,9 @@
 }
 
 .create-extra-mod-option:hover {
-  border-color: #f59e0b;
+  border-color: var(--color-cyan);
   color: #fff;
-  background: rgba(245, 158, 11, 0.1);
+  background: rgba(125, 211, 232, 0.1);
 }
 
 .create-extra-mod-cancel {
@@ -4542,7 +4560,7 @@
   width: 20px;
   height: 20px;
   border: 2px solid var(--color-border);
-  border-top-color: #f59e0b;
+  border-top-color: var(--color-cyan);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -4945,8 +4963,8 @@
 }
 
 .create-extra-option-import:hover {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--color-cyan);
+  background: rgba(125, 211, 232, 0.1);
 }
 
 .create-extra-cancel {
@@ -7454,6 +7472,47 @@
   accent-color: var(--color-cyan);
 }
 
+.sss-drag-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.sss-mode-seg {
+  display: flex;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.sss-mode-seg button {
+  padding: 0.2rem 0.5rem;
+  font-size: var(--text-xs);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  border: none;
+  border-left: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sss-mode-seg button:first-child {
+  border-left: none;
+}
+
+.sss-mode-seg button:hover:not(.active) {
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+}
+
+.sss-mode-seg button.active {
+  background: var(--color-cyan);
+  color: var(--color-bg-deep);
+  font-weight: var(--font-semibold);
+}
+
 .sss-grid-controls {
   display: flex;
   align-items: center;
@@ -7815,6 +7874,249 @@
 .mod-card-edit:hover {
   background: var(--color-cyan);
   color: var(--color-bg-deep);
+}
+
+/* ─────────────────────────────────────────
+   UNIFIED MENU / HUD MOD GRID (MenuModGrid)
+   Shares the stage-card shell so every CSS/SSS/HUD mod list matches the
+   Fighters and Stages grids. Cards carry both `.stage-card` (LED border,
+   hover lift, entrance) and `.mmod-card` (thumbnail + actions).
+   ───────────────────────────────────────── */
+
+/* The menu mod views render inside `.grid-wrapper` (a centered flex column)
+   via the `.icon-grid-mods` wrapper, which has no width of its own and so
+   shrink-wraps to its content. That collapsed the grid below into a single
+   column because its `width: min(100%, …)` resolved against a zero-ish parent.
+   Force the wrapper to fill the available width so the grid lays out in
+   multiple columns like the Fighters / Stages grids. */
+.icon-grid-mods {
+  width: 100%;
+}
+
+.mmod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+  width: min(100%, 56rem);
+  margin: 0 auto;
+  align-items: start;
+}
+
+/* Non-navigating cards shouldn't imply the whole tile is clickable
+   (stage-card defaults to a pointer cursor). */
+.mmod-card:not(.mmod-card--clickable):not(.mmod-card--create) {
+  cursor: default;
+}
+
+/* Framed thumbnail — mirrors .stage-icon-container */
+.mmod-thumb {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-deep);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+}
+
+.mmod-thumb--wide { aspect-ratio: 4 / 3; }
+.mmod-thumb--square { aspect-ratio: 1 / 1; }
+/* Doors are a tall 128x200 texture */
+.mmod-thumb--tall { aspect-ratio: 128 / 200; }
+
+.mmod-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
+}
+
+.mmod-card:hover .mmod-thumb img {
+  transform: scale(1.06);
+  filter: brightness(1.05);
+}
+
+/* How the texture fills its frame.
+   - fill: stretch to the frame, exactly how the game maps a door onto its
+           128x200 texture (the import resizes/stretches to those dimensions).
+   - cover: crop to fill (screenshots / backgrounds).
+   - contain: letterbox the whole image (glyph sheets, transparent art). */
+.mmod-thumb--fit-fill img { object-fit: fill; image-rendering: pixelated; }
+.mmod-thumb--fit-cover img { object-fit: cover; }
+.mmod-thumb--fit-contain img { object-fit: contain; }
+
+.mmod-monogram {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.mmod-monogram--plus {
+  font-size: var(--text-3xl);
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.mmod-card--create {
+  border-style: dashed;
+}
+
+.mmod-card--create:hover .mmod-monogram--plus {
+  color: var(--color-cyan);
+}
+
+/* Hover-reveal edit (pencil) button, top-right of the thumbnail */
+.mmod-edit {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.mmod-card:hover .mmod-edit {
+  opacity: 1;
+}
+
+.mmod-edit:hover {
+  background: var(--color-cyan);
+  color: var(--color-bg-deep);
+}
+
+/* Hover-reveal action row, anchored to the bottom of the thumbnail so the
+   card stays as clean as a stage tile until you mouse over it. */
+.mmod-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  justify-content: center;
+  padding: var(--space-2) var(--space-1);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.mmod-card:hover .mmod-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mmod-action-btn {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.mmod-action-btn:hover:not(:disabled) {
+  border-color: var(--color-cyan);
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.mmod-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inline body control (e.g. background "Include Scene Settings") */
+.mmod-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.mmod-toggle input {
+  accent-color: var(--color-cyan);
+}
+
+.mmod-card--skeleton {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.mmod-card--skeleton .mmod-thumb {
+  border: none;
+}
+
+/* ── MenuModEditModal (pencil → edit modal) ─────────────────────────────── */
+
+/* Preview inside the modal reuses .mmod-thumb but needs a sensible cap so a
+   tall door or wide screenshot doesn't dominate the dialog. */
+.mmod-modal-thumb {
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.mmod-thumb--tall.mmod-modal-thumb {
+  max-width: 200px;
+}
+
+/* Stacked action buttons (Edit Textures / Capture / Manage Icons…) — the
+   buttons themselves are styled by .edit-modal-view3d-btn. */
+.mmod-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.mmod-modal-extra {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.mmod-modal-extra .mmod-toggle {
+  justify-content: flex-start;
 }
 
 /* ── Pause texture editor ──────────────────────────────────────────────── */

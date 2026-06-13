@@ -6,6 +6,7 @@ for stored stage variants.
 """
 
 import re
+import uuid
 import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify
@@ -21,6 +22,14 @@ storage_stages_bp = Blueprint('storage_stages', __name__)
 def sanitize_filename(name):
     """Sanitize filename by removing/replacing invalid characters."""
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+
+def find_folder_in_variants(variants, folder_id):
+    """Find a folder by ID in a stage's variants list."""
+    for i, item in enumerate(variants):
+        if item.get('type') == 'folder' and item.get('id') == folder_id:
+            return item, i
+    return None, -1
 
 
 @storage_stages_bp.route('/api/mex/storage/stages/delete', methods=['POST'])
@@ -341,4 +350,200 @@ def move_stage_to_bottom():
         return jsonify({'success': True, 'variants': variants})
     except Exception as e:
         logger.error(f"Move stage to bottom error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage variant folders — mirrors the costume folder system. Folder entries live
+# inline in metadata['stages'][folder]['variants'] as {'type':'folder', ...};
+# variants carry a 'folder_id'. The das variants endpoint emits both so the
+# frontend can render the same folder UI it uses for character skins.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@storage_stages_bp.route('/api/mex/storage/stage-folders/create', methods=['POST'])
+def create_stage_folder():
+    """Create a new folder for organizing a stage's variants."""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        name = data.get('name', 'New Folder')
+
+        if not stage_folder:
+            return jsonify({'success': False, 'error': 'Missing stageFolder parameter'}), 400
+
+        STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+        metadata = load_metadata(default={'stages': {}})
+
+        stages = metadata.setdefault('stages', {})
+        stage_data = stages.setdefault(stage_folder, {})
+        variants = stage_data.setdefault('variants', [])
+
+        folder_id = f"folder_{uuid.uuid4().hex[:8]}"
+        new_folder = {'type': 'folder', 'id': folder_id, 'name': name, 'expanded': True}
+
+        variants.append(new_folder)
+
+        save_metadata(metadata)
+
+        logger.info(f"[OK] Created stage folder '{name}' for {stage_folder}")
+        return jsonify({'success': True, 'folder': new_folder, 'variants': variants})
+    except Exception as e:
+        logger.error(f"Create stage folder error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@storage_stages_bp.route('/api/mex/storage/stage-folders/rename', methods=['POST'])
+def rename_stage_folder():
+    """Rename a stage folder."""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        folder_id = data.get('folderId')
+        new_name = data.get('newName')
+
+        if not stage_folder or not folder_id or not new_name:
+            return jsonify({'success': False, 'error': 'Missing stageFolder, folderId, or newName parameter'}), 400
+
+        metadata = load_metadata()
+        if metadata is None:
+            return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
+
+        variants = metadata['stages'][stage_folder].get('variants', [])
+
+        folder, idx = find_folder_in_variants(variants, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        folder['name'] = new_name
+
+        save_metadata(metadata)
+
+        logger.info(f"[OK] Renamed stage folder {folder_id} to '{new_name}'")
+        return jsonify({'success': True, 'variants': variants})
+    except Exception as e:
+        logger.error(f"Rename stage folder error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@storage_stages_bp.route('/api/mex/storage/stage-folders/delete', methods=['POST'])
+def delete_stage_folder():
+    """Delete a stage folder. Does NOT delete the variants themselves."""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        folder_id = data.get('folderId')
+
+        if not stage_folder or not folder_id:
+            return jsonify({'success': False, 'error': 'Missing stageFolder or folderId parameter'}), 400
+
+        metadata = load_metadata()
+        if metadata is None:
+            return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
+
+        variants = metadata['stages'][stage_folder].get('variants', [])
+
+        folder, folder_idx = find_folder_in_variants(variants, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        for variant in variants:
+            if variant.get('folder_id') == folder_id:
+                del variant['folder_id']
+
+        variants.pop(folder_idx)
+
+        save_metadata(metadata)
+
+        logger.info(f"[OK] Deleted stage folder {folder_id}")
+        return jsonify({'success': True, 'variants': variants})
+    except Exception as e:
+        logger.error(f"Delete stage folder error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@storage_stages_bp.route('/api/mex/storage/stage-folders/toggle', methods=['POST'])
+def toggle_stage_folder():
+    """Toggle a stage folder's expanded state."""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        folder_id = data.get('folderId')
+
+        if not stage_folder or not folder_id:
+            return jsonify({'success': False, 'error': 'Missing stageFolder or folderId parameter'}), 400
+
+        metadata = load_metadata()
+        if metadata is None:
+            return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
+
+        variants = metadata['stages'][stage_folder].get('variants', [])
+
+        folder, idx = find_folder_in_variants(variants, folder_id)
+        if not folder:
+            return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+
+        folder['expanded'] = not folder.get('expanded', True)
+
+        save_metadata(metadata)
+
+        logger.info(f"[OK] Toggled stage folder {folder_id} expanded: {folder['expanded']}")
+        return jsonify({'success': True, 'expanded': folder['expanded'], 'variants': variants})
+    except Exception as e:
+        logger.error(f"Toggle stage folder error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@storage_stages_bp.route('/api/mex/storage/stage-variants/set-folder', methods=['POST'])
+def set_stage_variant_folder():
+    """Assign or unassign a stage variant to a folder."""
+    try:
+        data = request.json
+        stage_folder = data.get('stageFolder')
+        variant_id = data.get('variantId')
+        folder_id = data.get('folderId')
+
+        if not stage_folder or not variant_id:
+            return jsonify({'success': False, 'error': 'Missing stageFolder or variantId parameter'}), 400
+
+        metadata = load_metadata()
+        if metadata is None:
+            return jsonify({'success': False, 'error': 'Metadata file not found'}), 404
+
+        if stage_folder not in metadata.get('stages', {}):
+            return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
+
+        variants = metadata['stages'][stage_folder].get('variants', [])
+
+        variant = None
+        for v in variants:
+            if v.get('id') == variant_id and v.get('type') != 'folder':
+                variant = v
+                break
+
+        if not variant:
+            return jsonify({'success': False, 'error': f'Variant {variant_id} not found'}), 404
+
+        if folder_id:
+            folder, _ = find_folder_in_variants(variants, folder_id)
+            if not folder:
+                return jsonify({'success': False, 'error': f'Folder {folder_id} not found'}), 404
+            variant['folder_id'] = folder_id
+        elif 'folder_id' in variant:
+            del variant['folder_id']
+
+        save_metadata(metadata)
+
+        logger.info(f"[OK] Set stage variant {variant_id} folder to {folder_id}")
+        return jsonify({'success': True, 'variants': variants})
+    except Exception as e:
+        logger.error(f"Set stage variant folder error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

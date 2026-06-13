@@ -47,6 +47,7 @@ export default function SssCanvas({
   onMoveIcon,
   onMoveIcons,
   onSwapIcons,
+  onReorderIcons,
   onContextMenu,
   zoom = 8,
   offset = { x: 0, y: 0 },
@@ -55,6 +56,7 @@ export default function SssCanvas({
   showCollision = true,
   showOverscan = false,
   swapMode = true,
+  reorderMode = false,
   API_URL,
   iconBaseWidth = SSS_BASE_WIDTH,
   iconBaseHeight = SSS_BASE_HEIGHT,
@@ -62,12 +64,14 @@ export default function SssCanvas({
   templateHeight = SSS_TEMPLATE_HEIGHT,
   templateSrc = '/sss_template.png',
   getCollisionRect,
-  iconEndpoint = '/menus/sss/stage-icon'
+  iconEndpoint = '/menus/sss/stage-icon',
+  fitToView = false
 }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const imgCache = useRef({})
   const templateImg = useRef(null)
+  const didFit = useRef(false)
   const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 })
   const [imgVersion, setImgVersion] = useState(0)
 
@@ -112,13 +116,30 @@ export default function SssCanvas({
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    const measure = (width, height) => {
+      if (width <= 0 || height <= 0) return
+      const w = Math.floor(width), h = Math.floor(height)
+      setCanvasSize({ w, h })
+      // On the first real measurement, pick a zoom that fits the template to
+      // ~90% of the canvas so it doesn't start tiny on large displays.
+      if (fitToView && !didFit.current) {
+        didFit.current = true
+        const fill = 0.9
+        const fitZoom = Math.min((w * fill) / (templateWidth * 2), (h * fill) / (templateHeight * 2))
+        onZoomChange?.(Math.max(4, Math.min(20, Math.round(fitZoom))))
+      }
+    }
+    // Measure once up front — the ResizeObserver's initial callback isn't
+    // always delivered, so don't depend on it for the starting size/zoom.
+    const rect = el.getBoundingClientRect()
+    measure(rect.width, rect.height)
     const obs = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect
-      if (width > 0 && height > 0) setCanvasSize({ w: Math.floor(width), h: Math.floor(height) })
+      measure(width, height)
     })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [])
+  }, [fitToView, templateWidth, templateHeight, onZoomChange])
 
   const getImg = (icon) => {
     if (!icon.iconPath) return null
@@ -126,6 +147,10 @@ export default function SssCanvas({
   }
 
   const selSet = new Set(selectedIndices)
+
+  // Swap and reorder both drag a ghost icon and drop onto a target slot;
+  // they only differ in what happens on drop. Free-move drags the icon itself.
+  const ghostDrag = swapMode || reorderMode
 
   // ── Render ──
   useEffect(() => {
@@ -146,7 +171,7 @@ export default function SssCanvas({
     icons.forEach((icon, idx) => {
       if (icon.status === 0) return
       let ix = icon.x, iy = icon.y
-      if (_d && !swapMode && (_d.idx === idx || (_d.multi && selSet.has(idx)))) { ix += _d.dx; iy += _d.dy }
+      if (_d && !ghostDrag && (_d.idx === idx || (_d.multi && selSet.has(idx)))) { ix += _d.dx; iy += _d.dy }
 
       const iw = iconBaseWidth * icon.scaleX
       const ih = iconBaseHeight * icon.scaleY
@@ -166,7 +191,7 @@ export default function SssCanvas({
     })
 
     // Ghost
-    if (_d && swapMode) {
+    if (_d && ghostDrag) {
       const icon = icons[_d.idx]
       if (icon) {
         const r = transformRect(_d.ghostX, _d.ghostY, iconBaseWidth * icon.scaleX, iconBaseHeight * icon.scaleY, zoom, offset.x, offset.y, cw, ch)
@@ -183,7 +208,7 @@ export default function SssCanvas({
     icons.forEach((icon, idx) => {
       if (!_sel.has(idx) || icon.status === 0) return
       let ix = icon.x, iy = icon.y
-      if (_d && !swapMode && (_d.idx === idx || (_d.multi && _sel.has(idx)))) { ix += _d.dx; iy += _d.dy }
+      if (_d && !ghostDrag && (_d.idx === idx || (_d.multi && _sel.has(idx)))) { ix += _d.dx; iy += _d.dy }
       const col = getCollisionRect
         ? getCollisionRect(icon)
         : { ox: 0, oy: 0, w: icon.width * icon.scaleX, h: icon.height * icon.scaleY }
@@ -212,7 +237,7 @@ export default function SssCanvas({
       ctx.strokeStyle = 'rgba(100, 150, 255, 0.8)'; ctx.lineWidth = 1; ctx.strokeRect(br.x, br.y, br.width, br.height)
       ctx.fillStyle = 'rgba(100, 150, 255, 0.15)'; ctx.fillRect(br.x, br.y, br.width, br.height)
     }
-  }, [icons, selectedIndices, zoom, offset, showCollision, showOverscan, swapMode, canvasSize, imgVersion, renderTick, iconBaseWidth, iconBaseHeight, templateWidth, templateHeight, getCollisionRect])
+  }, [icons, selectedIndices, zoom, offset, showCollision, showOverscan, ghostDrag, canvasSize, imgVersion, renderTick, iconBaseWidth, iconBaseHeight, templateWidth, templateHeight, getCollisionRect])
 
   // ── Pointer handlers ──
   const handlePointerDown = useCallback((e) => {
@@ -288,11 +313,11 @@ export default function SssCanvas({
     if (drag.current && (e.buttons & 1)) {
       const gx = dx / zoom
       const gy = -dy / zoom
-      if (swapMode) { drag.current.ghostX += gx; drag.current.ghostY += gy }
+      if (ghostDrag) { drag.current.ghostX += gx; drag.current.ghostY += gy }
       else { drag.current.dx += gx; drag.current.dy += gy }
       scheduleRepaint()
     }
-  }, [zoom, offset, swapMode, onOffsetChange, scheduleRepaint])
+  }, [zoom, offset, ghostDrag, onOffsetChange, scheduleRepaint])
 
   const handlePointerUp = useCallback((e) => {
     if (panning.current) { panning.current = false; return }
@@ -328,14 +353,17 @@ export default function SssCanvas({
     const d = drag.current
     if (!d) return
 
-    if (swapMode) {
+    if (ghostDrag) {
       const canvas = canvasRef.current
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
         const sx = (e.clientX - rect.left) * (canvas.width / rect.width)
         const sy = (e.clientY - rect.top) * (canvas.height / rect.height)
         const target = hitTest(sx, sy, icons, zoom, offset.x, offset.y, canvas.width, canvas.height, null, iconBaseWidth, iconBaseHeight)
-        if (target >= 0 && target !== d.idx) onSwapIcons?.(d.idx, target)
+        if (target >= 0 && target !== d.idx) {
+          if (reorderMode) onReorderIcons?.(d.idx, target)
+          else onSwapIcons?.(d.idx, target)
+        }
       }
     } else if (Math.abs(d.dx) > 0.001 || Math.abs(d.dy) > 0.001) {
       if (d.multi && selectedIndices.length > 1) {
@@ -347,7 +375,7 @@ export default function SssCanvas({
 
     drag.current = null
     scheduleRepaint()
-  }, [icons, zoom, offset, swapMode, onSwapIcons, onMoveIcon, onMoveIcons, scheduleRepaint, selectedIndices, onSelectionChange, iconBaseWidth, iconBaseHeight])
+  }, [icons, zoom, offset, ghostDrag, reorderMode, onSwapIcons, onReorderIcons, onMoveIcon, onMoveIcons, scheduleRepaint, selectedIndices, onSelectionChange, iconBaseWidth, iconBaseHeight])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()

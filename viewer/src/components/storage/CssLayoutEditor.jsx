@@ -38,7 +38,11 @@ export default function CssLayoutEditor() {
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [showCollision, setShowCollision] = useState(true)
   const [showOverscan, setShowOverscan] = useState(false)
-  const [useTemplate, setUseTemplate] = useState(false)
+  // Canvas drag behavior: 'move' (free positioning), 'swap' (exchange two
+  // icons), or 'reorder' (insert an icon at another slot, shifting the rest).
+  // Swap and reorder both snap to the grid template.
+  const [gridMode, setGridMode] = useState('move')
+  const useTemplate = gridMode !== 'move'
 
   useEffect(() => { fetchLayout() }, [])
 
@@ -102,9 +106,9 @@ export default function CssLayoutEditor() {
     return applyCssTemplate(icns, layout.template)
   }, [useTemplate, layout?.template])
 
-  const handleToggleTemplate = useCallback((on) => {
-    setUseTemplate(on)
-    if (on && layout?.template) {
+  const handleSetGridMode = useCallback((mode) => {
+    setGridMode(mode)
+    if (mode !== 'move' && layout?.template) {
       updateIcons(applyCssTemplate(icons, layout.template))
     }
   }, [layout, icons, updateIcons])
@@ -191,20 +195,57 @@ export default function CssLayoutEditor() {
     setSelectedIndices([primaryIdx + 1])
   }, [icons, primaryIdx, updateIcons, maybeApplyTemplate])
 
-  // Drag-and-drop reorder: move the icon identity from one slot to another;
-  // the slot layout fields stay with their positions
-  const handleReorderIcon = useCallback((from, to) => {
-    if (from === to) return
+  // Reorder core: pull the icon identities at `indices` out of the list and
+  // re-insert them as a contiguous block before position `insertPos` in the
+  // remaining list. Slot layout fields stay with their positions (re-zipped),
+  // so reordering shuffles identities through fixed grid slots.
+  const reorderByInsertPos = useCallback((indices, insertPos) => {
+    const movingSet = new Set(indices)
+    const movingSorted = [...indices].sort((a, b) => a - b)
+    const moving = movingSorted.map(i => icons[i])
+    const remaining = icons.filter((_, i) => !movingSet.has(i))
+    const pos = Math.max(0, Math.min(insertPos, remaining.length))
+    remaining.splice(pos, 0, ...moving)
     const slots = icons.map(ic =>
       Object.fromEntries(CSS_SLOT_FIELDS.map(f => [f, ic[f]]))
     )
-    const arr = [...icons]
-    const [moved] = arr.splice(from, 1)
-    arr.splice(to, 0, moved)
-    const rezipped = arr.map((ic, i) => ({ ...ic, ...slots[i] }))
+    const rezipped = remaining.map((ic, i) => ({ ...ic, ...slots[i] }))
     updateIcons(maybeApplyTemplate(rezipped))
-    setSelectedIndices([to])
+    setSelectedIndices(moving.map((_, k) => pos + k))
   }, [icons, updateIcons, maybeApplyTemplate])
+
+  // Convert a drop target row into an insert position, then reorder the block.
+  // Dragging downward drops after the target; upward drops before it.
+  const reorderToTarget = useCallback((indices, to) => {
+    const movingSet = new Set(indices)
+    if (movingSet.has(to)) return
+    const movingSorted = [...indices].sort((a, b) => a - b)
+    let insertPos = 0
+    for (let i = 0; i < to; i++) if (!movingSet.has(i)) insertPos++
+    if (movingSorted[0] < to) insertPos++
+    reorderByInsertPos(indices, insertPos)
+  }, [reorderByInsertPos])
+
+  // Drag-and-drop reorder: move one icon identity from one slot to another.
+  const handleReorderIcon = useCallback((from, to) => {
+    if (from === to) return
+    reorderToTarget([from], to)
+  }, [reorderToTarget])
+
+  // Bulk drag-and-drop reorder: move every selected identity as a block.
+  const handleReorderIcons = useCallback((indices, to) => {
+    reorderToTarget(indices, to)
+  }, [reorderToTarget])
+
+  const handleMoveIconsToTop = useCallback(() => {
+    if (selectedIndices.length === 0) return
+    reorderByInsertPos(selectedIndices, 0)
+  }, [selectedIndices, reorderByInsertPos])
+
+  const handleMoveIconsToBottom = useCallback(() => {
+    if (selectedIndices.length === 0) return
+    reorderByInsertPos(selectedIndices, icons.length - selectedIndices.length)
+  }, [selectedIndices, icons.length, reorderByInsertPos])
 
   const handleApplyTemplate = useCallback(() => {
     if (!layout?.template) return
@@ -264,6 +305,7 @@ export default function CssLayoutEditor() {
           onMoveIcon={handleMoveIcon}
           onMoveIcons={handleMoveIcons}
           onSwapIcons={handleSwapIcons}
+          onReorderIcons={handleReorderIcon}
           onContextMenu={(x, y) => setPropsPopup({ x, y })}
           zoom={zoom}
           offset={offset}
@@ -271,7 +313,8 @@ export default function CssLayoutEditor() {
           onOffsetChange={setOffset}
           showCollision={showCollision}
           showOverscan={showOverscan}
-          swapMode={useTemplate}
+          swapMode={gridMode === 'swap'}
+          reorderMode={gridMode === 'reorder'}
           API_URL={API_URL}
           iconBaseWidth={CSS_BASE_WIDTH}
           iconBaseHeight={CSS_BASE_HEIGHT}
@@ -280,6 +323,7 @@ export default function CssLayoutEditor() {
           templateSrc="/css_template.png"
           getCollisionRect={getCssCollisionRect}
           iconEndpoint="/menus/css/fighter-icon"
+          fitToView
         />
 
         <div className="sss-right-panel">
@@ -296,9 +340,12 @@ export default function CssLayoutEditor() {
           <div className="sss-icon-list-header">
             <span>Icons ({icons.length})</span>
             <div className="sss-reorder-btns">
+              <button onClick={handleMoveIconsToTop} title="Move to top" disabled={primaryIdx <= 0}>&#8607;</button>
               <button onClick={handleMoveIconUp} title="Move up" disabled={primaryIdx <= 0}>&#9650;</button>
               <button onClick={handleMoveIconDown} title="Move down"
                 disabled={primaryIdx < 0 || primaryIdx >= icons.length - 1}>&#9660;</button>
+              <button onClick={handleMoveIconsToBottom} title="Move to bottom"
+                disabled={primaryIdx < 0 || primaryIdx >= icons.length - 1}>&#8609;</button>
             </div>
           </div>
           <IconReorderList
@@ -307,6 +354,7 @@ export default function CssLayoutEditor() {
             onSelect={setSelectedIndices}
             onContextMenu={(x, y) => setPropsPopup({ x, y })}
             onReorder={handleReorderIcon}
+            onReorderBulk={handleReorderIcons}
             getLabel={(icon) => icon.fighterName || `Fighter ${icon.fighter}`}
             getIconUrl={(icon) => icon.iconPath
               ? `${API_URL}/menus/css/fighter-icon?path=${encodeURIComponent(icon.iconPath)}`
@@ -369,10 +417,29 @@ export default function CssLayoutEditor() {
           <input type="checkbox" checked={showOverscan} onChange={(e) => setShowOverscan(e.target.checked)} />
           Overscan
         </label>
-        <label className="sss-checkbox">
-          <input type="checkbox" checked={useTemplate} onChange={(e) => handleToggleTemplate(e.target.checked)} />
-          Swap Mode
-        </label>
+        <div className="sss-drag-mode">
+          <label>Drag</label>
+          <div className="sss-mode-seg">
+            <button
+              className={gridMode === 'move' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('move') }}
+              onMouseEnter={playHoverSound}
+              title="Drag icons to reposition them freely"
+            >Move</button>
+            <button
+              className={gridMode === 'swap' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('swap') }}
+              onMouseEnter={playHoverSound}
+              title="Drag an icon onto another to swap the two"
+            >Swap</button>
+            <button
+              className={gridMode === 'reorder' ? 'active' : ''}
+              onClick={() => { playSound('boop'); handleSetGridMode('reorder') }}
+              onMouseEnter={playHoverSound}
+              title="Drag an icon onto a slot to insert it there, shifting the rest"
+            >Reorder</button>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -1,12 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
+import MenuModGrid from './MenuModGrid'
+import MenuModEditModal from './MenuModEditModal'
+import useMenuModEdit from './useMenuModEdit'
 
 export default function DoorModsView() {
   const [mods, setMods] = useState([])
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
+  const edit = useMenuModEdit()
 
   const fetchMods = useCallback(async () => {
     setLoading(true)
@@ -56,19 +60,64 @@ export default function DoorModsView() {
     }
   }
 
+  const handleSave = async () => {
+    const mod = edit.editing
+    if (!mod) return
+    edit.setSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/menus/css/doors/rename/${mod.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: edit.editName }),
+      })
+      const data = await res.json()
+      if (!data.success) { alert(`Save failed: ${data.error}`); edit.setSaving(false); return }
+
+      if (edit.newImage) {
+        const fd = new FormData()
+        fd.append('screenshot', edit.newImage)
+        const ir = await fetch(`${API_URL}/menus/css/doors/${mod.id}/screenshot`, { method: 'POST', body: fd })
+        const idata = await ir.json()
+        if (!idata.success) { alert(`Image upload failed: ${idata.error}`); edit.setSaving(false); return }
+      }
+
+      playSound('boop')
+      edit.bumpCache()
+      await fetchMods()
+      edit.close()
+    } catch (err) {
+      alert(`Save error: ${err.message}`)
+      edit.setSaving(false)
+    }
+  }
+
+  const handleExport = (mod) => {
+    if (!mod) return
+    const a = document.createElement('a')
+    a.href = `${API_URL}/menus/css/doors/${mod.id}/export`
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
   const handleDelete = async (mod) => {
     if (!window.confirm(`Delete "${mod.name}"?`)) return
+    edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/css/doors/delete/${mod.id}`, { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         playSound('boop')
         await fetchMods()
+        edit.close()
       } else {
         alert(`Delete failed: ${data.error}`)
+        edit.setDeleting(false)
       }
     } catch (err) {
       alert(`Delete error: ${err.message}`)
+      edit.setDeleting(false)
     }
   }
 
@@ -96,38 +145,37 @@ export default function DoorModsView() {
         )}
       </div>
 
-      {loading ? (
-        <div className="vault-empty">Loading...</div>
-      ) : mods.length === 0 ? (
-        <div className="vault-empty">
-          No door mods yet. Import a PNG image to use as the CSS character port door texture.
-          The image will be automatically resized and the alpha mask applied.
-        </div>
-      ) : (
-        <div className="mod-card-grid">
-          {mods.map((mod) => (
-            <div key={mod.id} className="mod-card mod-card--tall" onMouseEnter={playHoverSound}>
-              <div className="mod-card-preview">
-                {mod.imageUrl ? (
-                  <img src={`${BACKEND_URL}${mod.imageUrl}`} alt={mod.name} />
-                ) : (
-                  <span className="mod-card-monogram">{(mod.name || '?')[0]}</span>
-                )}
-              </div>
-              <div className="mod-card-footer">
-                <span className="mod-card-name" title={mod.name}>{mod.name}</span>
-                <button
-                  className="mod-card-btn"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); handleDelete(mod) }}
-                >
-                  Del
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <MenuModGrid
+        mods={mods}
+        loading={loading}
+        emptyText="No door mods yet. Import a PNG image to use as the CSS character port door texture. The image is stretched to the in-game 128×200 door and the original alpha mask is applied."
+        thumb="tall"
+        imgFit="fill"
+        cacheBust={edit.cacheBust}
+        onEditClick={edit.open}
+      />
+
+      <MenuModEditModal
+        show={!!edit.editing}
+        title="Edit Door"
+        previewUrl={edit.editing?.imageUrl ? `${BACKEND_URL}${edit.editing.imageUrl}?v=${edit.cacheBust}` : null}
+        thumb="tall"
+        imgFit="fill"
+        name={edit.editName}
+        onNameChange={edit.setEditName}
+        nameLabel="Door Name"
+        editableImage
+        imagePreview={edit.imagePreview}
+        onImageChange={edit.handleImageChange}
+        imageEditTitle="Replace the door texture"
+        saving={edit.saving}
+        deleting={edit.deleting}
+        exporting={edit.exporting}
+        onSave={handleSave}
+        onExport={() => handleExport(edit.editing)}
+        onDelete={() => handleDelete(edit.editing)}
+        onCancel={edit.close}
+      />
     </div>
   )
 }

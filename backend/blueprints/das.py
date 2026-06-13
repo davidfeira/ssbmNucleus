@@ -392,6 +392,18 @@ def das_list_storage_variants():
 
                 # First, add variants in metadata order (if they exist on disk)
                 for variant_meta in metadata_variants_list:
+                    # Folder entries are virtual (no zip on disk) — emit them inline
+                    # so the frontend can render the folder organization UI.
+                    if variant_meta.get('type') == 'folder':
+                        variants.append({
+                            'type': 'folder',
+                            'stageCode': code,
+                            'id': variant_meta['id'],
+                            'name': variant_meta.get('name', 'Folder'),
+                            'expanded': variant_meta.get('expanded', True)
+                        })
+                        continue
+
                     variant_id = variant_meta['id']
                     zip_file = zip_files.get(variant_id)
 
@@ -407,6 +419,7 @@ def das_list_storage_variants():
                             'stageName': stage_info['name'],
                             'id': variant_id,
                             'name': variant_name,
+                            'folder_id': variant_meta.get('folder_id'),
                             'zipPath': str(zip_file.relative_to(PROJECT_ROOT)),
                             'hasScreenshot': has_screenshot,
                             'screenshotUrl': f"/storage/das/{stage_info['folder']}/{variant_id}_screenshot{screenshot_ext}" if has_screenshot else None,

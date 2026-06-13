@@ -13,6 +13,9 @@ import { API_URL, BACKEND_URL } from '../../config'
 import { useInGameTest } from '../../hooks/useInGameTest'
 import InGameTestPanel from '../shared/InGameTestPanel'
 import PauseTextureEditor from './PauseTextureEditor'
+import MenuModGrid from './MenuModGrid'
+import MenuModEditModal from './MenuModEditModal'
+import useMenuModEdit from './useMenuModEdit'
 
 export default function PauseModsView({ onDetailChange }) {
   const [mods, setMods] = useState([])
@@ -21,8 +24,10 @@ export default function PauseModsView({ onDetailChange }) {
   const [importMessage, setImportMessage] = useState('')
   const [captureTarget, setCaptureTarget] = useState(null)  // mod being captured
   const [editingMod, setEditingMod] = useState(null)        // mod open in the texture editor
+  const [draftMode, setDraftMode] = useState(false)         // editor is on an uncommitted draft
   const [cacheBust, setCacheBust] = useState(0)
   const test = useInGameTest()
+  const edit = useMenuModEdit()
 
   const fetchMods = useCallback(async () => {
     setLoading(true)
@@ -87,19 +92,20 @@ export default function PauseModsView({ onDetailChange }) {
     }
   }
 
+  // "New" creates an uncommitted DRAFT (not in the vault) and drops straight
+  // into the editor. It only lands in the vault when the user saves it.
   const handleCreate = async () => {
     try {
       const res = await fetch(`${API_URL}/menus/pause/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ draft: true }),
       })
       const data = await res.json()
       if (data.success) {
         playSound('newSkin')
-        await fetchMods()
-        // Drop straight into the texture editor on the fresh mod
         setEditingMod(data.mod)
+        setDraftMode(true)
         onDetailChange?.(true)
       } else {
         setImportMessage(`Create failed: ${data.error}`)
@@ -111,32 +117,110 @@ export default function PauseModsView({ onDetailChange }) {
     }
   }
 
+  const closeEditor = () => {
+    setEditingMod(null)
+    setDraftMode(false)
+    onDetailChange?.(false)
+    setCacheBust(Date.now())
+    fetchMods()
+  }
+
+  const commitDraft = async () => {
+    const mod = editingMod
+    if (!mod) return
+    const name = window.prompt('Name this pause mod:', mod.name || 'New Pause Mod')
+    if (name === null) return  // cancelled — stay in the editor
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/${mod.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() || mod.name }),
+      })
+      const data = await res.json()
+      if (data.success) { playSound('newSkin'); closeEditor() }
+      else alert(`Save failed: ${data.error}`)
+    } catch (err) {
+      alert(`Save error: ${err.message}`)
+    }
+  }
+
+  const discardDraft = async () => {
+    const mod = editingMod
+    if (!mod) return
+    if (!window.confirm('Discard this unsaved pause mod?')) return
+    try {
+      await fetch(`${API_URL}/menus/pause/${mod.id}/discard`, { method: 'POST' })
+    } catch { /* best effort */ }
+    playSound('back')
+    closeEditor()
+  }
+
+  // Rename / save an existing mod from the edit modal.
+  const handleSave = async () => {
+    const mod = edit.editing
+    if (!mod) return
+    edit.setSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/menus/pause/${mod.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: edit.editName }),
+      })
+      const data = await res.json()
+      if (!data.success) { alert(`Save failed: ${data.error}`); edit.setSaving(false); return }
+
+      if (edit.newImage) {
+        const fd = new FormData()
+        fd.append('screenshot', edit.newImage)
+        const ir = await fetch(`${API_URL}/menus/pause/${mod.id}/screenshot`, { method: 'POST', body: fd })
+        const idata = await ir.json()
+        if (!idata.success) { alert(`Image upload failed: ${idata.error}`); edit.setSaving(false); return }
+      }
+
+      playSound('boop'); edit.bumpCache(); await fetchMods(); edit.close()
+    } catch (err) {
+      alert(`Save error: ${err.message}`); edit.setSaving(false)
+    }
+  }
+
+  const handleExport = (mod) => {
+    if (!mod) return
+    const a = document.createElement('a')
+    a.href = `${API_URL}/menus/pause/${mod.id}/export`
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
   const handleDelete = async (mod) => {
     if (!window.confirm(`Delete "${mod.name}"?`)) return
+    edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/pause/delete/${mod.id}`, { method: 'POST' })
       const data = await res.json()
-      if (data.success) {
-        playSound('boop')
-        await fetchMods()
-      } else {
-        alert(`Delete failed: ${data.error}`)
-      }
+      if (data.success) { playSound('boop'); await fetchMods(); edit.close() }
+      else { alert(`Delete failed: ${data.error}`); edit.setDeleting(false) }
     } catch (err) {
-      alert(`Delete error: ${err.message}`)
+      alert(`Delete error: ${err.message}`); edit.setDeleting(false)
     }
+  }
+
+  const openTextureEditor = (mod) => {
+    edit.close()
+    setEditingMod(mod)
+    setDraftMode(false)
+    onDetailChange?.(true)
   }
 
   if (editingMod) {
     return (
       <PauseTextureEditor
         mod={editingMod}
-        onBack={() => {
-          setEditingMod(null)
-          onDetailChange?.(false)
-          setCacheBust(Date.now())
-          fetchMods()
-        }}
+        isDraft={draftMode}
+        onSaveDraft={commitDraft}
+        onDiscardDraft={discardDraft}
+        onBack={closeEditor}
       />
     )
   }
@@ -175,75 +259,69 @@ export default function PauseModsView({ onDetailChange }) {
         </div>
       )}
 
-      {loading ? (
-        <div className="vault-empty">Loading...</div>
-      ) : (
-        <>
-        {mods.length === 0 && (
-          <div className="vault-empty">
-            No pause screen mods yet. Import a GmPause mod (.zip/.dat/.usd), upload a
-            picture for the central pause graphic, or create one from scratch below.
-          </div>
-        )}
-        <div className="mod-card-grid">
-          {mods.map((mod) => (
-            <div key={mod.id} className="mod-card" onMouseEnter={playHoverSound}>
-              <div className="mod-card-preview">
-                {mod.imageUrl ? (
-                  <img
-                    src={`${BACKEND_URL}${mod.imageUrl}${cacheBust ? `?v=${cacheBust}` : ''}`}
-                    alt={mod.name}
-                    onError={(e) => { e.target.style.display = 'none' }}
-                  />
-                ) : (
-                  <span className="mod-card-monogram">{(mod.name || '?')[0]}</span>
-                )}
-                <button
-                  className="mod-card-edit"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); setEditingMod(mod); onDetailChange?.(true) }}
-                  title="Edit individual pause screen textures"
-                >
-                  ✎
-                </button>
-              </div>
-              <div className="mod-card-footer">
-                <span className="mod-card-name" title={mod.name}>{mod.name}</span>
-                <button
-                  className="mod-card-btn"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { if (!test.testingInGame) { playSound('boop'); handleCapture(mod) } }}
-                  disabled={test.testingInGame}
-                  title="Capture a live in-game pause screenshot as this mod's preview"
-                >
-                  📸
-                </button>
-                <button
-                  className="mod-card-btn"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); handleDelete(mod) }}
-                >
-                  Del
-                </button>
-              </div>
-            </div>
-          ))}
-          <div
-            className="mod-card mod-card--create"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); handleCreate() }}
-            title="Start from the vanilla pause screen and edit each texture"
-          >
-            <div className="mod-card-preview">
-              <span className="mod-card-monogram">+</span>
-            </div>
-            <div className="mod-card-footer">
-              <span className="mod-card-name">New Pause Mod</span>
-            </div>
-          </div>
-        </div>
-        </>
-      )}
+      <MenuModGrid
+        mods={mods}
+        loading={loading}
+        emptyText="No pause screen mods yet. Import a GmPause mod (.zip/.dat/.usd), upload a picture for the central pause graphic, or create one from scratch below."
+        thumb="wide"
+        imgFit="contain"
+        cacheBust={`${cacheBust}-${edit.cacheBust}`}
+        onEditClick={edit.open}
+        createCard={{
+          label: 'New Pause Mod',
+          title: 'Start from the vanilla pause screen and edit each texture',
+          onClick: handleCreate,
+        }}
+      />
+
+      <MenuModEditModal
+        show={!!edit.editing}
+        title="Edit Pause Mod"
+        previewUrl={edit.editing?.imageUrl ? `${BACKEND_URL}${edit.editing.imageUrl}?v=${cacheBust}-${edit.cacheBust}` : null}
+        thumb="wide"
+        imgFit="contain"
+        name={edit.editName}
+        onNameChange={edit.setEditName}
+        nameLabel="Pause Mod Name"
+        editableImage
+        imagePreview={edit.imagePreview}
+        onImageChange={edit.handleImageChange}
+        imageEditTitle="Upload a custom preview screenshot"
+        saving={edit.saving}
+        deleting={edit.deleting}
+        exporting={edit.exporting}
+        onSave={handleSave}
+        onExport={() => handleExport(edit.editing)}
+        onDelete={() => handleDelete(edit.editing)}
+        onCancel={edit.close}
+        actions={[
+          {
+            key: 'edit',
+            label: 'Edit Textures',
+            title: 'Edit individual pause screen textures',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            ),
+            onClick: () => openTextureEditor(edit.editing),
+          },
+          {
+            key: 'capture',
+            label: 'Capture Screenshot',
+            title: "Capture a live in-game pause screenshot as this mod's preview",
+            disabled: test.testingInGame,
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+            ),
+            onClick: () => { const m = edit.editing; edit.close(); handleCapture(m) },
+          },
+        ]}
+      />
     </div>
   )
 }

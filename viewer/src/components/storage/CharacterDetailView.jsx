@@ -280,6 +280,14 @@ export default function CharacterDetailView({
             &larr; Back to Characters
           </button>
           <div className="character-header-actions">
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowSoundBank(true); }}
+              title="Customize this character's voice and sound effects — installed into every ISO you export"
+            >
+              🔊 Sounds
+            </button>
             {hasCharacterExtras && (
               <button
                 className="character-action-button character-action-button--extras"
@@ -370,19 +378,6 @@ export default function CharacterDetailView({
             </div>
             <div className="create-mod-info">
               <span className="create-mod-label">Create New Mod</span>
-            </div>
-          </div>
-          <div
-            className="create-mod-card sounds-card"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('start'); setShowSoundBank(true); }}
-            title="Customize this character's voice and sound effects — installed into every ISO you export"
-          >
-            <div className="create-mod-image-area">
-              <span className="create-mod-icon">🔊</span>
-            </div>
-            <div className="create-mod-info">
-              <span className="create-mod-label">Sounds</span>
             </div>
           </div>
         </div>

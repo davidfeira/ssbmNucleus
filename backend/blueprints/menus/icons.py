@@ -39,7 +39,7 @@ from .helpers import (
     ICON_GRID_PATH, ICON_GRID_METADATA, SCREENSHOT_CANDIDATES,
     load_catalog, save_catalog, load_mod_json, save_mod_json,
     _stem_to_character, _safe_filename, _safe_extract_zip, _find_screenshot,
-    _run_hsd_cli,
+    _run_hsd_cli, send_mod_zip,
 )
 
 logger = logging.getLogger(__name__)
@@ -687,6 +687,51 @@ def update_icon_grid_mod(mod_id):
         return jsonify({'success': True, 'mod': _attach_urls(mod)})
     except Exception as e:
         logger.error(f'Update icon grid mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/<mod_id>/screenshot', methods=['POST'])
+def set_icon_grid_image(mod_id):
+    """Replace an icon grid mod's preview screenshot with an uploaded image."""
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        f = request.files.get('screenshot') or request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'No image uploaded'}), 400
+
+        mod_dir = ICON_GRID_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+        f.save(str(mod_dir / 'screenshot.png'))
+        mod['screenshot'] = 'screenshot.png'
+        _save_mod_json(mod_id, mod)
+
+        # The list reads the catalog entry's screenshot name for the static URL.
+        catalog = _load_catalog()
+        for entry in catalog.get('mods', []):
+            if entry.get('id') == mod_id:
+                entry['screenshot'] = 'screenshot.png'
+                break
+        _save_catalog(catalog)
+
+        return jsonify({'success': True,
+                        'screenshotUrl': f'/storage/menus/css/icon_grid/{mod_id}/screenshot.png'})
+    except Exception as e:
+        logger.error(f'Set icon grid image error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/icon_grid/<mod_id>/export', methods=['GET'])
+def export_icon_grid_mod(mod_id):
+    """Download an icon grid mod's files as a zip."""
+    try:
+        mod = _load_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        return send_mod_zip(ICON_GRID_PATH / mod_id, mod.get('name') or mod_id)
+    except Exception as e:
+        logger.error(f'Export icon grid mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

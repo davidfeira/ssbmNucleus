@@ -28,16 +28,26 @@ export default function CostumeSelectStep({
           <span>Loading skin editor...</span>
         </div>
       ) : (
-      <div className="skin-creator-select-content">
-        <div className="skin-creator-select-header">
+      <>
+        {/* Sticky header bar — without it the select view has no header and
+            the content jolts when the overlay opens. Mirrors the editor step's
+            header for consistency. */}
+        <div className="skin-creator-select-topbar">
           <button
             className="back-button"
+            onMouseEnter={playHoverSound}
             onClick={onBack}
           >
             ← Back
           </button>
+          <h2>Select a base costume</h2>
+          {selectedCharacter && (
+            <span className="skin-creator-character">{selectedCharacter}</span>
+          )}
         </div>
-        <h2>Select a base costume</h2>
+
+        <div className="skin-creator-select-scroll">
+        <div className="skin-creator-select-content">
         <p>Choose a starting point</p>
 
       {loading && (
@@ -103,7 +113,9 @@ export default function CostumeSelectStep({
           </div>
         )}
       </div>
-      </div>
+        </div>
+        </div>
+      </>
       )}
     </div>
   )

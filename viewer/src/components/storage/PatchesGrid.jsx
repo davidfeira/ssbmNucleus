@@ -49,7 +49,7 @@ function CoverCard({
 
       {onEdit && (
         <button
-          className="cover-edit"
+          className="btn-edit"
           onMouseEnter={playHoverSound}
           onClick={(e) => { e.stopPropagation(); playSound('boop'); onEdit() }}
           title="Edit"

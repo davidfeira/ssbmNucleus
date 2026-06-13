@@ -40,7 +40,7 @@ const hiddenMainSlots = (textures) => {
 
 const pct = (v, ref) => `${(v / ref) * 100}%`
 
-export default function PauseTextureEditor({ mod, onBack }) {
+export default function PauseTextureEditor({ mod, onBack, isDraft = false, onSaveDraft, onDiscardDraft }) {
   const [textures, setTextures] = useState([])
   const [error, setError] = useState('')
   const [busySlot, setBusySlot] = useState(null)
@@ -143,12 +143,26 @@ export default function PauseTextureEditor({ mod, onBack }) {
         <button
           className="mode-btn"
           onMouseEnter={playHoverSound}
-          onClick={() => { playSound('back'); onBack() }}
+          onClick={() => {
+            playSound('back')
+            if (isDraft) { onDiscardDraft?.() } else { onBack() }
+          }}
         >
-          ← Back
+          {isDraft ? '✕ Discard' : '← Back'}
         </button>
-        <h3 className="pause-editor-title">{mod.name}</h3>
-        <span className="pause-editor-hint">Click a texture to replace it</span>
+        <h3 className="pause-editor-title">{isDraft ? 'New Pause Mod (draft)' : mod.name}</h3>
+        {isDraft ? (
+          <button
+            className="btn-build-iso"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); onSaveDraft?.() }}
+            title="Save this mod to your vault"
+          >
+            Save to Vault
+          </button>
+        ) : (
+          <span className="pause-editor-hint">Click a texture to replace it</span>
+        )}
       </div>
 
       {error && <div className="import-message error">{error}</div>}

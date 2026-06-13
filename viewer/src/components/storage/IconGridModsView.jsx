@@ -9,6 +9,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
 import IconGridDetailView from './IconGridDetailView'
+import MenuModGrid from './MenuModGrid'
+import MenuModEditModal from './MenuModEditModal'
+import useMenuModEdit from './useMenuModEdit'
 
 export default function IconGridModsView({ onDetailChange }) {
   const [mods, setMods] = useState([])
@@ -16,6 +19,7 @@ export default function IconGridModsView({ onDetailChange }) {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
   const [selectedModId, setSelectedModId] = useState(null)
+  const edit = useMenuModEdit()
 
   const fetchMods = useCallback(async () => {
     setLoading(true)
@@ -77,10 +81,52 @@ export default function IconGridModsView({ onDetailChange }) {
     }
   }
 
+  const handleSave = async () => {
+    const mod = edit.editing
+    if (!mod) return
+    edit.setSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/menus/css/icon_grid/update/${mod.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: edit.editName }),
+      })
+      const data = await res.json()
+      if (!data.success) { alert(`Save failed: ${data.error}`); edit.setSaving(false); return }
+
+      if (edit.newImage) {
+        const fd = new FormData()
+        fd.append('screenshot', edit.newImage)
+        const ir = await fetch(`${API_URL}/menus/css/icon_grid/${mod.id}/screenshot`, { method: 'POST', body: fd })
+        const idata = await ir.json()
+        if (!idata.success) { alert(`Image upload failed: ${idata.error}`); edit.setSaving(false); return }
+      }
+
+      playSound('boop')
+      edit.bumpCache()
+      await fetchMods()
+      edit.close()
+    } catch (err) {
+      alert(`Save error: ${err.message}`)
+      edit.setSaving(false)
+    }
+  }
+
+  const handleExport = (mod) => {
+    if (!mod) return
+    const a = document.createElement('a')
+    a.href = `${API_URL}/menus/css/icon_grid/${mod.id}/export`
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
   const handleDelete = async (mod) => {
     if (!window.confirm(`Delete "${mod.name}"? This removes its files from your vault.`)) {
       return
     }
+    edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/css/icon_grid/delete/${mod.id}`, {
         method: 'POST'
@@ -89,12 +135,21 @@ export default function IconGridModsView({ onDetailChange }) {
       if (data.success) {
         playSound('boop')
         await fetchMods()
+        edit.close()
       } else {
         alert(`Delete failed: ${data.error}`)
+        edit.setDeleting(false)
       }
     } catch (err) {
       alert(`Delete error: ${err.message}`)
+      edit.setDeleting(false)
     }
+  }
+
+  const openDetail = (mod) => {
+    edit.close()
+    setSelectedModId(mod.id)
+    onDetailChange?.(true)
   }
 
   if (selectedModId) {
@@ -133,57 +188,55 @@ export default function IconGridModsView({ onDetailChange }) {
         )}
       </div>
 
-      <div className="patches-list">
-        {loading ? (
-          <div className="vault-empty">Loading...</div>
-        ) : mods.length === 0 ? (
-          <div className="vault-empty">
-            No icon grid mods yet. Import a .zip to get started.
-          </div>
-        ) : (
-          mods.map((mod) => (
-            <div
-              key={mod.id}
-              className="patch-row clickable"
-              onMouseEnter={playHoverSound}
-              onClick={() => { playSound('boop'); setSelectedModId(mod.id); onDetailChange?.(true) }}
-            >
-              <div className="patch-row-image">
-                {mod.screenshotUrl ? (
-                  <img
-                    src={`${BACKEND_URL}${mod.screenshotUrl}`}
-                    alt={mod.name}
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                      e.target.nextSibling.style.display = 'flex'
-                    }}
-                  />
-                ) : null}
-                <div className="patch-row-placeholder" style={{ display: mod.screenshotUrl ? 'none' : 'flex' }}>
-                  {(mod.name || '?')[0]}
-                </div>
-              </div>
+      <MenuModGrid
+        mods={mods}
+        loading={loading}
+        emptyText="No icon grid mods yet. Import a .zip to get started."
+        thumb="wide"
+        imgFit="cover"
+        getImageUrl={(mod) => mod.screenshotUrl || null}
+        getMeta={(mod) => mod.description || null}
+        cacheBust={edit.cacheBust}
+        onCardClick={(mod) => { setSelectedModId(mod.id); onDetailChange?.(true) }}
+        onEditClick={edit.open}
+      />
 
-              <div className="patch-row-info">
-                <h4 className="patch-row-name">{mod.name}</h4>
-                {mod.description && (
-                  <p className="patch-row-description">{mod.description}</p>
-                )}
-              </div>
-
-              <div className="patch-row-actions">
-                <button
-                  className="btn-build-iso btn-quiet"
-                  onMouseEnter={playHoverSound}
-                  onClick={(e) => { e.stopPropagation(); playSound('boop'); handleDelete(mod) }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      <MenuModEditModal
+        show={!!edit.editing}
+        title="Edit Icon Grid"
+        previewUrl={edit.editing?.screenshotUrl ? `${BACKEND_URL}${edit.editing.screenshotUrl}?v=${edit.cacheBust}` : null}
+        thumb="wide"
+        imgFit="cover"
+        name={edit.editName}
+        onNameChange={edit.setEditName}
+        nameLabel="Mod Name"
+        editableImage
+        imagePreview={edit.imagePreview}
+        onImageChange={edit.handleImageChange}
+        imageEditTitle="Replace the preview screenshot"
+        saving={edit.saving}
+        deleting={edit.deleting}
+        exporting={edit.exporting}
+        onSave={handleSave}
+        onExport={() => handleExport(edit.editing)}
+        onDelete={() => handleDelete(edit.editing)}
+        onCancel={edit.close}
+        actions={[
+          {
+            key: 'icons',
+            label: 'Manage Icons',
+            title: 'Open the per-character icon editor',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            ),
+            onClick: () => openDetail(edit.editing),
+          },
+        ]}
+      />
     </div>
   )
 }

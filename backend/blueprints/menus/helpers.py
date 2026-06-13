@@ -7,12 +7,15 @@ extraction, screenshot discovery, the HSDRawViewer CLI wrapper, and the
 parameterized catalog / mod.json persistence helpers.
 """
 
+import io
 import re
 import shutil
 import subprocess
 import zipfile
 import logging
 from pathlib import Path
+
+from flask import send_file
 
 from core.config import STORAGE_PATH, HSDRAW_EXE, get_subprocess_args
 from core.metadata import load_metadata, save_metadata
@@ -143,6 +146,22 @@ def _safe_extract_zip(zip_path, dest_dir):
             target.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(member) as src, open(target, 'wb') as dst:
                 shutil.copyfileobj(src, dst)
+
+
+def send_mod_zip(mod_dir, name):
+    """Zip every file in a mod's folder in-memory and return it as a download
+    attachment named after the mod. Shared by the menu mods' Export action."""
+    mod_dir = Path(mod_dir)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        if mod_dir.exists():
+            for p in sorted(mod_dir.rglob('*')):
+                if p.is_file() and p.name != 'mod.json':
+                    zf.write(str(p), str(p.relative_to(mod_dir)))
+    buf.seek(0)
+    safe = re.sub(r'[^\w\-. ]+', '_', str(name)).strip() or 'mod'
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name=f'{safe}.zip', max_age=0)
 
 
 def _find_screenshot(directory):

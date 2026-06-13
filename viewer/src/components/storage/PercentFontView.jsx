@@ -13,6 +13,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
 import { API_URL, BACKEND_URL } from '../../config'
 import PercentFontEditor from './PercentFontEditor'
+import MenuModGrid from './MenuModGrid'
+import MenuModEditModal from './MenuModEditModal'
+import useMenuModEdit from './useMenuModEdit'
 
 export default function PercentFontView({ onDetailChange, category = 'percent' }) {
   const isWords = category === 'readygo'
@@ -22,7 +25,9 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
   const [editingMod, setEditingMod] = useState(null)   // mod open in the glyph editor
+  const [draftMode, setDraftMode] = useState(false)    // editor is on an uncommitted draft
   const [cacheBust, setCacheBust] = useState(0)
+  const edit = useMenuModEdit()
 
   const fetchMods = useCallback(async () => {
     setLoading(true)
@@ -73,19 +78,20 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
     }
   }
 
+  // "New" creates an uncommitted DRAFT (not in the vault) and drops straight
+  // into the editor. It only lands in the vault when the user saves it.
   const handleCreate = async () => {
     try {
       const res = await fetch(`${API_URL}/menus/percent/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category }),
+        body: JSON.stringify({ category, draft: true }),
       })
       const data = await res.json()
       if (data.success) {
         playSound('newSkin')
-        await fetchMods()
-        // Drop straight into the glyph editor on the fresh mod
         setEditingMod(data.mod)
+        setDraftMode(true)
         onDetailChange?.(true)
       } else {
         setImportMessage(`Create failed: ${data.error}`)
@@ -97,20 +103,99 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
     }
   }
 
+  const closeEditor = () => {
+    setEditingMod(null)
+    setDraftMode(false)
+    onDetailChange?.(false)
+    setCacheBust(Date.now())
+    fetchMods()
+  }
+
+  const commitDraft = async () => {
+    const mod = editingMod
+    if (!mod) return
+    const name = window.prompt(`Name this ${noun.toLowerCase()}:`, mod.name || `New ${noun}`)
+    if (name === null) return
+    try {
+      const res = await fetch(`${API_URL}/menus/percent/${mod.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() || mod.name }),
+      })
+      const data = await res.json()
+      if (data.success) { playSound('newSkin'); closeEditor() }
+      else alert(`Save failed: ${data.error}`)
+    } catch (err) {
+      alert(`Save error: ${err.message}`)
+    }
+  }
+
+  const discardDraft = async () => {
+    const mod = editingMod
+    if (!mod) return
+    if (!window.confirm(`Discard this unsaved ${noun.toLowerCase()}?`)) return
+    try {
+      await fetch(`${API_URL}/menus/percent/${mod.id}/discard`, { method: 'POST' })
+    } catch { /* best effort */ }
+    playSound('back')
+    closeEditor()
+  }
+
+  const handleSave = async () => {
+    const mod = edit.editing
+    if (!mod) return
+    edit.setSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/menus/percent/${mod.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: edit.editName }),
+      })
+      const data = await res.json()
+      if (!data.success) { alert(`Save failed: ${data.error}`); edit.setSaving(false); return }
+
+      if (edit.newImage) {
+        const fd = new FormData()
+        fd.append('screenshot', edit.newImage)
+        const ir = await fetch(`${API_URL}/menus/percent/${mod.id}/screenshot`, { method: 'POST', body: fd })
+        const idata = await ir.json()
+        if (!idata.success) { alert(`Image upload failed: ${idata.error}`); edit.setSaving(false); return }
+      }
+
+      playSound('boop'); edit.bumpCache(); await fetchMods(); edit.close()
+    } catch (err) {
+      alert(`Save error: ${err.message}`); edit.setSaving(false)
+    }
+  }
+
+  const handleExport = (mod) => {
+    if (!mod) return
+    const a = document.createElement('a')
+    a.href = `${API_URL}/menus/percent/${mod.id}/export`
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
   const handleDelete = async (mod) => {
     if (!window.confirm(`Delete "${mod.name}"?`)) return
+    edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/percent/delete/${mod.id}`, { method: 'POST' })
       const data = await res.json()
-      if (data.success) {
-        playSound('boop')
-        await fetchMods()
-      } else {
-        alert(`Delete failed: ${data.error}`)
-      }
+      if (data.success) { playSound('boop'); await fetchMods(); edit.close() }
+      else { alert(`Delete failed: ${data.error}`); edit.setDeleting(false) }
     } catch (err) {
-      alert(`Delete error: ${err.message}`)
+      alert(`Delete error: ${err.message}`); edit.setDeleting(false)
     }
+  }
+
+  const openGlyphEditor = (mod) => {
+    edit.close()
+    setEditingMod(mod)
+    setDraftMode(false)
+    onDetailChange?.(true)
   }
 
   if (editingMod) {
@@ -118,12 +203,10 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
       <PercentFontEditor
         mod={editingMod}
         mode={isWords ? 'words' : 'glyphs'}
-        onBack={() => {
-          setEditingMod(null)
-          onDetailChange?.(false)
-          setCacheBust(Date.now())
-          fetchMods()
-        }}
+        isDraft={draftMode}
+        onSaveDraft={commitDraft}
+        onDiscardDraft={discardDraft}
+        onBack={closeEditor}
       />
     )
   }
@@ -152,69 +235,60 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
         )}
       </div>
 
-      {loading ? (
-        <div className="vault-empty">Loading...</div>
-      ) : (
-        <>
-        {mods.length === 0 && (
-          <div className="vault-empty">
-            {isWords
-              ? 'No Ready/Go/Game packs yet. Import an IfAll mod (.zip/.dat/.usd), a zip of banner images (ready/go/game...), or create one from scratch below.'
-              : 'No percent font mods yet. Import an IfAll mod (.zip/.dat/.usd), a zip of digit images (0-9 + percent), or create one from scratch below.'}
-          </div>
-        )}
-        <div className="mod-card-grid">
-          {mods.map((mod) => (
-            <div key={mod.id} className="mod-card" onMouseEnter={playHoverSound}>
-              <div className="mod-card-preview">
-                {mod.imageUrl ? (
-                  <img
-                    src={`${BACKEND_URL}${mod.imageUrl}${cacheBust ? `?v=${cacheBust}` : ''}`}
-                    alt={mod.name}
-                    onError={(e) => { e.target.style.display = 'none' }}
-                  />
-                ) : (
-                  <span className="mod-card-monogram">{(mod.name || '?')[0]}</span>
-                )}
-                <button
-                  className="mod-card-edit"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); setEditingMod(mod); onDetailChange?.(true) }}
-                  title={isWords ? 'Edit individual banners (Ready, Go!, Game!...)' : 'Edit individual glyphs (digits, %, HP)'}
-                >
-                  ✎
-                </button>
-              </div>
-              <div className="mod-card-footer">
-                <span className="mod-card-name" title={mod.name}>{mod.name}</span>
-                <button
-                  className="mod-card-btn"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); handleDelete(mod) }}
-                >
-                  Del
-                </button>
-              </div>
-            </div>
-          ))}
-          <div
-            className="mod-card mod-card--create"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('boop'); handleCreate() }}
-            title={isWords
-              ? 'Start from the vanilla banners and edit each one'
-              : 'Start from the vanilla percent font and edit each glyph'}
-          >
-            <div className="mod-card-preview">
-              <span className="mod-card-monogram">+</span>
-            </div>
-            <div className="mod-card-footer">
-              <span className="mod-card-name">New {noun}</span>
-            </div>
-          </div>
-        </div>
-        </>
-      )}
+      <MenuModGrid
+        mods={mods}
+        loading={loading}
+        emptyText={isWords
+          ? 'No Ready/Go/Game packs yet. Import an IfAll mod (.zip/.dat/.usd), a zip of banner images (ready/go/game...), or create one from scratch below.'
+          : 'No percent font mods yet. Import an IfAll mod (.zip/.dat/.usd), a zip of digit images (0-9 + percent), or create one from scratch below.'}
+        thumb="wide"
+        imgFit="contain"
+        cacheBust={`${cacheBust}-${edit.cacheBust}`}
+        onEditClick={edit.open}
+        createCard={{
+          label: `New ${noun}`,
+          title: isWords
+            ? 'Start from the vanilla banners and edit each one'
+            : 'Start from the vanilla percent font and edit each glyph',
+          onClick: handleCreate,
+        }}
+      />
+
+      <MenuModEditModal
+        show={!!edit.editing}
+        title={`Edit ${noun}`}
+        previewUrl={edit.editing?.imageUrl ? `${BACKEND_URL}${edit.editing.imageUrl}?v=${cacheBust}-${edit.cacheBust}` : null}
+        thumb="wide"
+        imgFit="contain"
+        name={edit.editName}
+        onNameChange={edit.setEditName}
+        nameLabel={`${noun} Name`}
+        editableImage
+        imagePreview={edit.imagePreview}
+        onImageChange={edit.handleImageChange}
+        imageEditTitle="Upload a custom preview screenshot"
+        saving={edit.saving}
+        deleting={edit.deleting}
+        exporting={edit.exporting}
+        onSave={handleSave}
+        onExport={() => handleExport(edit.editing)}
+        onDelete={() => handleDelete(edit.editing)}
+        onCancel={edit.close}
+        actions={[
+          {
+            key: 'edit',
+            label: isWords ? 'Edit Banners' : 'Edit Glyphs',
+            title: isWords ? 'Edit individual banners (Ready, Go!, Game!...)' : 'Edit individual glyphs (digits, %, HP)',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            ),
+            onClick: () => openGlyphEditor(edit.editing),
+          },
+        ]}
+      />
     </div>
   )
 }

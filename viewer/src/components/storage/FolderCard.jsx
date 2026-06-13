@@ -35,7 +35,9 @@ export default function FolderCard({
   onCancelEdit,
   onStartEditing,
   onDelete,
-  justDraggedRef
+  justDraggedRef,
+  // Label noun for the count, e.g. "skin" (characters) or "variant" (stages)
+  itemNoun = 'skin'
 }) {
   // True when the click's mousedown happened while the rename input was open —
   // that mousedown blurs the input (saving the name), and the resulting click
@@ -92,7 +94,7 @@ export default function FolderCard({
         ) : (
           <span className="folder-name">{folder.name}</span>
         )}
-        <span className="folder-count">{folderSkinCount} skin{folderSkinCount !== 1 ? 's' : ''}</span>
+        <span className="folder-count">{folderSkinCount} {itemNoun}{folderSkinCount !== 1 ? 's' : ''}</span>
         <span className="folder-chevron">▼</span>
       </div>
       <div className="folder-actions">

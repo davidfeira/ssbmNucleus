@@ -41,7 +41,7 @@ from . import menus_bp
 from .helpers import (
     PAUSE_PATH, PAUSE_METADATA,
     load_catalog, save_catalog, load_mod_json, save_mod_json,
-    _run_hsd_cli, _safe_extract_zip, _find_screenshot,
+    _run_hsd_cli, _safe_extract_zip, _find_screenshot, send_mod_zip,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,10 +320,15 @@ def import_pause_mod():
 @menus_bp.route('/api/mex/menus/pause/create', methods=['POST'])
 def create_pause_mod():
     """Create a fresh pause mod seeded with the vanilla textures — a blank
-    canvas for the per-texture editor. Body: {name?}."""
+    canvas for the per-texture editor. Body: {name?, draft?}.
+
+    When `draft` is true the mod folder is created and seeded but NOT added to
+    the catalog, so it stays invisible in the vault until the editor commits it
+    via /save. Leaving the editor calls /discard to clean it up."""
     try:
         payload = request.get_json(silent=True) or {}
         name = (payload.get('name') or '').strip() or 'New Pause Mod'
+        is_draft = bool(payload.get('draft'))
 
         mod_id = str(uuid.uuid4())[:8]
         mod = {
@@ -333,6 +338,8 @@ def create_pause_mod():
             'source': 'custom',
             'created': datetime.now().isoformat(),
         }
+        if is_draft:
+            mod['draft'] = True
         save_mod_json(PAUSE_PATH, mod_id, mod)
         try:
             mod = _ensure_textures(mod)   # seed the full vanilla set
@@ -340,20 +347,80 @@ def create_pause_mod():
             shutil.rmtree(str(PAUSE_PATH / mod_id), ignore_errors=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
-        catalog = _load_pause_catalog()
-        catalog.setdefault('mods', []).append({
-            'id': mod_id,
-            'name': name,
-            'description': '',
-            'source': 'custom',
-            'created': mod['created'],
-        })
-        _save_pause_catalog(catalog)
+        if not is_draft:
+            catalog = _load_pause_catalog()
+            catalog.setdefault('mods', []).append({
+                'id': mod_id,
+                'name': name,
+                'description': '',
+                'source': 'custom',
+                'created': mod['created'],
+            })
+            _save_pause_catalog(catalog)
 
-        logger.info(f'[OK] Created blank pause mod: {name} ({mod_id})')
-        return jsonify({'success': True, 'mod': _attach_pause_urls(mod)})
+        logger.info(f'[OK] Created {"draft " if is_draft else ""}pause mod: {name} ({mod_id})')
+        return jsonify({'success': True, 'mod': _attach_pause_urls(mod), 'draft': is_draft})
     except Exception as e:
         logger.error(f'Create pause mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/pause/<mod_id>/save', methods=['POST'])
+def save_pause_mod(mod_id):
+    """Commit a draft to the vault and/or rename a mod. Body: {name?}.
+
+    Used by the edit modal's Save: for a draft it adds the catalog entry (the
+    edits already live in the mod folder); for an existing mod it just updates
+    the name."""
+    try:
+        mod = load_mod_json(PAUSE_PATH, mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        payload = request.get_json(silent=True) or {}
+        name = (payload.get('name') or '').strip()
+        if name:
+            mod['name'] = name
+        mod.pop('draft', None)
+        save_mod_json(PAUSE_PATH, mod_id, mod)
+
+        catalog = _load_pause_catalog()
+        mods = catalog.setdefault('mods', [])
+        entry = next((m for m in mods if m.get('id') == mod_id), None)
+        if entry is None:
+            mods.append({
+                'id': mod_id,
+                'name': mod['name'],
+                'description': mod.get('description', ''),
+                'source': mod.get('source', 'custom'),
+                'created': mod.get('created'),
+            })
+        else:
+            entry['name'] = mod['name']
+        _save_pause_catalog(catalog)
+
+        logger.info(f'[OK] Saved pause mod: {mod["name"]} ({mod_id})')
+        return jsonify({'success': True, 'mod': _attach_pause_urls(mod)})
+    except Exception as e:
+        logger.error(f'Save pause mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/pause/<mod_id>/discard', methods=['POST'])
+def discard_pause_draft(mod_id):
+    """Discard an uncommitted draft (delete its folder). No-op for mods that
+    are already in the catalog, so it's safe to call on editor exit."""
+    try:
+        catalog = _load_pause_catalog()
+        if any(m.get('id') == mod_id for m in catalog.get('mods', [])):
+            return jsonify({'success': True, 'committed': True})
+        mod_dir = PAUSE_PATH / mod_id
+        if mod_dir.exists():
+            shutil.rmtree(str(mod_dir), ignore_errors=True)
+        logger.info(f'[OK] Discarded pause draft: {mod_id}')
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f'Discard pause draft error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -522,6 +589,35 @@ def delete_pause_mod(mod_id):
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f'Delete pause mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/pause/<mod_id>/screenshot', methods=['POST'])
+def upload_pause_screenshot(mod_id):
+    """Replace a pause mod's preview screenshot with an uploaded image."""
+    try:
+        if not load_mod_json(PAUSE_PATH, mod_id):
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        f = request.files.get('screenshot') or request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'No image uploaded'}), 400
+        set_mod_screenshot(mod_id, f.read())
+        return jsonify({'success': True, 'imageUrl': f'/api/mex/menus/pause/image/{mod_id}'})
+    except Exception as e:
+        logger.error(f'Upload pause screenshot error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/pause/<mod_id>/export', methods=['GET'])
+def export_pause_mod(mod_id):
+    """Download a pause mod's files as a zip."""
+    try:
+        mod = load_mod_json(PAUSE_PATH, mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        return send_mod_zip(PAUSE_PATH / mod_id, mod.get('name') or mod_id)
+    except Exception as e:
+        logger.error(f'Export pause mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

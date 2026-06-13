@@ -215,9 +215,55 @@ export function useDragAndDrop({
     setPreviewOrder(null)
   }
 
+  // Drop a stage variant onto a folder card — assign it to that folder
+  const handleVariantDropIntoFolder = async (folderId) => {
+    if (!draggedItem || !selectedStage) {
+      clearDragState()
+      return
+    }
+    dropInProgressRef.current = true
+    setReordering(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/stage-variants/set-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageFolder: selectedStage.folder,
+          variantId: draggedItem.id,
+          folderId
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('boop')
+        const droppedId = draggedItem.id
+        setJustDroppedId(droppedId)
+        setTimeout(() => setJustDroppedId(null), 400)
+        await fetchStageVariants()
+        await onRefresh()
+        requestAnimationFrame(clearDragState)
+        return
+      } else {
+        alert(`Move to folder failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Move variant to folder error:', err)
+      alert(`Move to folder error: ${err.message}`)
+    }
+    clearDragState()
+  }
+
   const handleVariantDrop = async (e) => {
     e.preventDefault()
-    if (!draggedItem || dragOverIndexRef.current === null) return
+    if (!draggedItem) return
+
+    // Dropping on a highlighted folder = move into that folder
+    if (dragTargetFolder) {
+      await handleVariantDropIntoFolder(dragTargetFolder)
+      return
+    }
+
+    if (dragOverIndexRef.current === null) return
 
     dropInProgressRef.current = true // Mark drop as in progress before dragEnd fires
 

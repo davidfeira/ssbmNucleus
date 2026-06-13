@@ -53,7 +53,7 @@ from . import menus_bp
 from .helpers import (
     PERCENT_PATH, PERCENT_METADATA,
     load_catalog, save_catalog, load_mod_json, save_mod_json,
-    _run_hsd_cli, _safe_extract_zip, _find_screenshot,
+    _run_hsd_cli, _safe_extract_zip, _find_screenshot, send_mod_zip,
 )
 
 logger = logging.getLogger(__name__)
@@ -692,7 +692,10 @@ def import_percent_mod():
 def create_percent_mod():
     """Create a fresh HUD typeface mod — a blank canvas for the glyph/word
     editor. Starts with no slots (= vanilla everywhere); edits add slots.
-    Body: {name?, category?: 'percent'|'readygo'}."""
+    Body: {name?, category?: 'percent'|'readygo', draft?}.
+
+    When `draft` is true the mod folder is created but NOT added to the catalog,
+    so it stays invisible in the vault until the editor commits it via /save."""
     try:
         payload = request.get_json(silent=True) or {}
         category = (payload.get('category') or 'percent').strip().lower()
@@ -700,6 +703,7 @@ def create_percent_mod():
             category = 'percent'
         default_name = 'New Ready/Go Pack' if category == 'readygo' else 'New Percent Font'
         name = (payload.get('name') or '').strip() or default_name
+        is_draft = bool(payload.get('draft'))
 
         mod_id = str(uuid.uuid4())[:8]
         mod = {
@@ -712,22 +716,81 @@ def create_percent_mod():
             'slots': [],
             'created': datetime.now().isoformat(),
         }
+        if is_draft:
+            mod['draft'] = True
         save_mod_json(PERCENT_PATH, mod_id, mod)
-        catalog = _load_percent_catalog()
-        catalog.setdefault('mods', []).append({
-            'id': mod_id,
-            'name': name,
-            'description': '',
-            'source': 'custom',
-            'categories': [category],
-            'created': mod['created'],
-        })
-        _save_percent_catalog(catalog)
+        if not is_draft:
+            catalog = _load_percent_catalog()
+            catalog.setdefault('mods', []).append({
+                'id': mod_id,
+                'name': name,
+                'description': '',
+                'source': 'custom',
+                'categories': [category],
+                'created': mod['created'],
+            })
+            _save_percent_catalog(catalog)
 
-        logger.info(f'[OK] Created blank percent font mod: {name} ({mod_id})')
-        return jsonify({'success': True, 'mod': _attach_percent_urls(mod)})
+        logger.info(f'[OK] Created {"draft " if is_draft else ""}percent font mod: {name} ({mod_id})')
+        return jsonify({'success': True, 'mod': _attach_percent_urls(mod), 'draft': is_draft})
     except Exception as e:
         logger.error(f'Create percent mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/percent/<mod_id>/save', methods=['POST'])
+def save_percent_mod(mod_id):
+    """Commit a draft to the vault and/or rename a mod. Body: {name?}."""
+    try:
+        mod = load_mod_json(PERCENT_PATH, mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+
+        payload = request.get_json(silent=True) or {}
+        name = (payload.get('name') or '').strip()
+        if name:
+            mod['name'] = name
+        mod.pop('draft', None)
+        save_mod_json(PERCENT_PATH, mod_id, mod)
+
+        category = mod.get('origin_category', 'percent')
+        catalog = _load_percent_catalog()
+        mods = catalog.setdefault('mods', [])
+        entry = next((m for m in mods if m.get('id') == mod_id), None)
+        if entry is None:
+            mods.append({
+                'id': mod_id,
+                'name': mod['name'],
+                'description': mod.get('description', ''),
+                'source': mod.get('source', 'custom'),
+                'categories': [category],
+                'created': mod.get('created'),
+            })
+        else:
+            entry['name'] = mod['name']
+        _save_percent_catalog(catalog)
+
+        logger.info(f'[OK] Saved percent font mod: {mod["name"]} ({mod_id})')
+        return jsonify({'success': True, 'mod': _attach_percent_urls(mod)})
+    except Exception as e:
+        logger.error(f'Save percent mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/percent/<mod_id>/discard', methods=['POST'])
+def discard_percent_draft(mod_id):
+    """Discard an uncommitted draft (delete its folder). No-op once committed."""
+    try:
+        catalog = _load_percent_catalog()
+        if any(m.get('id') == mod_id for m in catalog.get('mods', [])):
+            return jsonify({'success': True, 'committed': True})
+        mod_dir = PERCENT_PATH / mod_id
+        if mod_dir.exists():
+            shutil.rmtree(str(mod_dir), ignore_errors=True)
+        logger.info(f'[OK] Discarded percent draft: {mod_id}')
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f'Discard percent draft error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -876,6 +939,41 @@ def replace_percent_glyph(mod_id):
                         'url': f'/api/mex/menus/percent/glyph/{mod_id}/{key}'})
     except Exception as e:
         logger.error(f'Replace percent glyph error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/percent/<mod_id>/screenshot', methods=['POST'])
+def upload_percent_screenshot(mod_id):
+    """Replace a percent mod's preview screenshot with an uploaded image."""
+    try:
+        mod = load_mod_json(PERCENT_PATH, mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        f = request.files.get('screenshot') or request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'No image uploaded'}), 400
+
+        mod_dir = PERCENT_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+        f.save(str(mod_dir / 'screenshot.png'))
+        mod['screenshot'] = 'screenshot.png'   # get_percent_image prefers this
+        save_mod_json(PERCENT_PATH, mod_id, mod)
+        return jsonify({'success': True, 'imageUrl': f'/api/mex/menus/percent/image/{mod_id}'})
+    except Exception as e:
+        logger.error(f'Upload percent screenshot error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/percent/<mod_id>/export', methods=['GET'])
+def export_percent_mod(mod_id):
+    """Download a percent mod's files as a zip."""
+    try:
+        mod = load_mod_json(PERCENT_PATH, mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        return send_mod_zip(PERCENT_PATH / mod_id, mod.get('name') or mod_id)
+    except Exception as e:
+        logger.error(f'Export percent mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

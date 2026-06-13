@@ -33,7 +33,7 @@ from . import menus_bp
 from .helpers import (
     BG_PATH, BG_METADATA,
     load_catalog, save_catalog, load_mod_json, save_mod_json,
-    _safe_extract_zip, _find_screenshot, _run_hsd_cli,
+    _safe_extract_zip, _find_screenshot, _run_hsd_cli, send_mod_zip,
 )
 
 logger = logging.getLogger(__name__)
@@ -374,11 +374,70 @@ def update_bg_mod_settings(mod_id):
         data = request.get_json(silent=True) or {}
         if 'includeScene' in data:
             mod['includeScene'] = bool(data['includeScene'])
+        renamed = False
+        if 'name' in data and data['name'] is not None:
+            new_name = str(data['name']).strip()
+            if new_name:
+                mod['name'] = new_name
+                renamed = True
 
         _save_bg_mod_json(mod_id, mod)
+
+        # Keep the catalog summary (what `list` reads) in sync on rename.
+        if renamed:
+            catalog = _load_bg_catalog()
+            entry = next((m for m in catalog.get('mods', []) if m.get('id') == mod_id), None)
+            if entry is not None:
+                entry['name'] = mod['name']
+                _save_bg_catalog(catalog)
+
         return jsonify({'success': True, 'mod': _attach_bg_urls(mod)})
     except Exception as e:
         logger.error(f'Update bg mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/background/<mod_id>/screenshot', methods=['POST'])
+def set_bg_image(mod_id):
+    """Replace a background mod's preview screenshot with an uploaded image."""
+    try:
+        mod = _load_bg_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        f = request.files.get('screenshot') or request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'No image uploaded'}), 400
+
+        mod_dir = BG_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+        f.save(str(mod_dir / 'screenshot.png'))
+        mod['screenshot'] = 'screenshot.png'
+        _save_bg_mod_json(mod_id, mod)
+
+        # The list reads the catalog entry's screenshot name for the static URL.
+        catalog = _load_bg_catalog()
+        entry = next((m for m in catalog.get('mods', []) if m.get('id') == mod_id), None)
+        if entry is not None:
+            entry['screenshot'] = 'screenshot.png'
+            _save_bg_catalog(catalog)
+
+        return jsonify({'success': True,
+                        'screenshotUrl': f'/storage/menus/css/background/{mod_id}/screenshot.png'})
+    except Exception as e:
+        logger.error(f'Set bg image error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/background/<mod_id>/export', methods=['GET'])
+def export_bg_mod(mod_id):
+    """Download a background mod's files as a zip."""
+    try:
+        mod = _load_bg_mod_json(mod_id)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        return send_mod_zip(BG_PATH / mod_id, mod.get('name') or mod_id)
+    except Exception as e:
+        logger.error(f'Export bg mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

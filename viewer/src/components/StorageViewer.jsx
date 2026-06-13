@@ -1167,11 +1167,19 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
         stageVariants={stageVariants}
         onBack={() => setSelectedStage(null)}
         onRefresh={onRefresh}
+        onRefreshVariants={fetchStageVariants}
+        // Folder expansion state (persists here across stage navigation)
+        expandedFolders={expandedFolders}
+        setExpandedFolders={setExpandedFolders}
         // Drag and drop
         draggedItem={draggedItem}
         dragOverIndex={dragOverIndex}
         previewOrder={previewOrder}
         reordering={reordering}
+        isDraggingActive={isDraggingActive}
+        justDroppedId={justDroppedId}
+        justDraggedRef={justDraggedRef}
+        dragTargetFolder={dragTargetFolder}
         handleDragStart={handleDragStart}
         handleDragOver={handleDragOver}
         handleDragEnter={handleDragEnter}

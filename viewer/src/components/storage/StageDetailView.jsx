@@ -10,8 +10,11 @@
 import { useEffect, useState } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { useFolderManagement } from '../../hooks/useFolderManagement'
+import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import StageAIStudioModal from './StageAIStudioModal'
 import SongPacksModal from './SongPacksModal'
+import FolderCard from './FolderCard'
 import EditModal from './EditModal'
 import CspManagerModal from './CspManagerModal'
 import SlippiSafetyDialog from '../shared/SlippiSafetyDialog'
@@ -20,15 +23,31 @@ import ContextMenu from './ContextMenu'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import { useInGameTest } from '../../hooks/useInGameTest'
 
+// Stage variant folders reuse the costume folder UI/hook against the stage
+// folder endpoints (see storage_stages.py).
+const STAGE_FOLDER_ROUTES = {
+  create: '/storage/stage-folders/create',
+  rename: '/storage/stage-folders/rename',
+  delete: '/storage/stage-folders/delete',
+  toggle: '/storage/stage-folders/toggle'
+}
+
 export default function StageDetailView({
   selectedStage,
   stageVariants,
   onBack,
+  // Folder expansion state (owned by StorageViewer so it persists across nav)
+  expandedFolders,
+  setExpandedFolders,
   // Drag and drop
   draggedItem,
   dragOverIndex,
   previewOrder,
   reordering,
+  isDraggingActive,
+  justDroppedId,
+  justDraggedRef,
+  dragTargetFolder,
   handleDragStart,
   handleDragOver,
   handleDragEnter,
@@ -101,11 +120,68 @@ export default function StageDetailView({
   cancelDelete,
   // Refresh after AI Studio saves a variant
   onRefresh,
+  // Refresh the stage variants list (folder ops change it, not metadata alone)
+  onRefreshVariants,
   // API
   API_URL
 }) {
+  // Folder ops and reorders need the variants list refetched AND metadata
+  // refreshed; bundle both so the folder hook and delete handler stay in sync.
+  const refreshAll = async () => {
+    if (onRefreshVariants) await onRefreshVariants()
+    if (onRefresh) await onRefresh()
+  }
   const stageInfo = selectedStage
+  // `variants` now includes inline folder entries (type:'folder') emitted by the
+  // das variants endpoint, in metadata order — same shape as character skins.
   const variants = stageVariants[selectedStage.code] || []
+  const variantCount = variants.filter(v => v.type !== 'folder').length
+
+  // Folder management — stage routes, keyed by the stage's storage folder.
+  const {
+    editingFolderId,
+    setEditingFolderId,
+    editingFolderName,
+    setEditingFolderName,
+    toggleFolder,
+    handleCreateFolder,
+    startEditingFolder,
+    saveFolderName
+  } = useFolderManagement({
+    idField: 'stageFolder',
+    idValue: selectedStage.folder,
+    routes: STAGE_FOLDER_ROUTES,
+    API_URL,
+    onRefresh: refreshAll,
+    expandedFolders,
+    setExpandedFolders
+  })
+
+  // Use previewOrder during drag for live reordering visual
+  const itemsForDisplay = previewOrder || variants
+  const displayList = buildDisplayList(itemsForDisplay, expandedFolders || {})
+
+  const handleDeleteFolder = async (folderId) => {
+    try {
+      const response = await fetch(`${API_URL}/storage/stage-folders/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stageFolder: selectedStage.folder,
+          folderId
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        await refreshAll()
+      } else {
+        alert(`Failed to delete folder: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Delete folder error:', err)
+      alert(`Error deleting folder: ${err.message}`)
+    }
+  }
 
   // AI Stage Studio (gated by backend probe + per-stage region map; greyed
   // until setup — an OpenRouter key or a local model — is complete)
@@ -136,20 +212,73 @@ export default function StageDetailView({
   return (
     <div className="storage-viewer">
       <div className="character-detail">
-        <button
-          onClick={() => { playSound('back'); onBack(); }}
-          className="back-button"
-        >
-          ← Back to Stages
-        </button>
+        <div className="character-header">
+          <button
+            onClick={() => { playSound('back'); onBack(); }}
+            className="back-button"
+          >
+            ← Back to Stages
+          </button>
+          <div className="character-header-actions">
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowSongPacks(true); }}
+              title="Build alternate music playlists for this stage — installed per project"
+            >
+              🎵 Songs
+            </button>
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); handleCreateFolder(); }}
+            >
+              New Folder
+            </button>
+          </div>
+        </div>
 
-        {variants.length === 0 && (
+        {variantCount === 0 && (
           <div className="no-skins-message">
             <p>No stage variants yet. Add some to your storage!</p>
           </div>
         )}
-        <div className="skins-grid" ref={animateRef}>
-            {(previewOrder || variants).map((variant, idx) => {
+        <div className={`skins-grid${isDraggingActive ? ' is-dragging' : ''}`} ref={animateRef}>
+            {displayList.map((item, idx) => {
+              if (item.type === 'folder') {
+                const folderId = item.folder.id
+                return (
+                  <FolderCard
+                    key={folderId}
+                    folder={item.folder}
+                    isExpanded={item.isExpanded}
+                    displayIdx={idx}
+                    arrayIdx={item.arrayIndex}
+                    isDragging={draggedItem && draggedItem.id === folderId}
+                    isDropTarget={dragTargetFolder === folderId}
+                    isJustDropped={justDroppedId === folderId}
+                    isEditing={editingFolderId === folderId}
+                    editingFolderName={editingFolderName}
+                    folderSkinCount={countSkinsInFolder(folderId, variants)}
+                    reordering={reordering}
+                    onToggle={toggleFolder}
+                    onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
+                    onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === folderId), itemsForDisplay)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleVariantDrop}
+                    onDragEnd={handleDragEnd}
+                    onEditingFolderNameChange={setEditingFolderName}
+                    onSaveFolderName={saveFolderName}
+                    onCancelEdit={() => setEditingFolderId(null)}
+                    onStartEditing={startEditingFolder}
+                    onDelete={handleDeleteFolder}
+                    justDraggedRef={justDraggedRef}
+                    itemNoun="variant"
+                  />
+                )
+              }
+              const variant = item.skin
               const isDragging = draggedItem && variant.id === draggedItem.id
               return (
                 <div
@@ -157,9 +286,9 @@ export default function StageDetailView({
                   className={`skin-card ${isDragging ? 'dragging' : ''}`}
                   draggable={!reordering}
                   onMouseEnter={playHoverSound}
-                  onDragStart={(e) => handleDragStart(e, variants.findIndex(v => v.id === variant.id), variants)}
+                  onDragStart={(e) => handleDragStart(e, itemsForDisplay.findIndex(s => s.id === variant.id), itemsForDisplay)}
                   onDragOver={handleDragOver}
-                  onDragEnter={(e) => handleDragEnter(e, idx, previewOrder || variants)}
+                  onDragEnter={(e) => handleDragEnter(e, itemsForDisplay.findIndex(s => s.id === variant.id), itemsForDisplay)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleVariantDrop(e)}
                   onDragEnd={handleDragEnd}
@@ -230,19 +359,6 @@ export default function StageDetailView({
               </div>
             </div>
           )}
-          <div
-            className="create-mod-card sounds-card"
-            onMouseEnter={playHoverSound}
-            onClick={() => { playSound('start'); setShowSongPacks(true); }}
-            title="Build alternate music playlists for this stage — installed per project"
-          >
-            <div className="create-mod-image-area">
-              <span className="create-mod-icon">🎵</span>
-            </div>
-            <div className="create-mod-info">
-              <span className="create-mod-label">Songs</span>
-            </div>
-          </div>
         </div>
       </div>
       <StageAIStudioModal

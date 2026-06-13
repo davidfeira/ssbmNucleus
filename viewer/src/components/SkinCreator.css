@@ -578,10 +578,39 @@ button.canvas-float-btn svg {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* Full-width sticky header bar for the costume-select step (matches the
+   editor step's header so the view doesn't open headerless / jolt). */
+.skin-creator-select-topbar {
+  display: flex;
   align-items: center;
-  padding: var(--space-6);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-deep);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.skin-creator-select-topbar h2 {
+  font-size: 1.125rem;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.skin-creator-select-topbar .skin-creator-character {
+  margin-left: auto;
+}
+
+.skin-creator-select-scroll {
+  flex: 1;
   overflow-y: auto;
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .skin-creator-select-content {
@@ -589,16 +618,6 @@ button.canvas-float-btn svg {
   max-width: 800px;
   display: flex;
   flex-direction: column;
-}
-
-.skin-creator-select-header {
-  margin-bottom: var(--space-4);
-}
-
-.skin-creator-select h2 {
-  font-size: 1.5rem;
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-2) 0;
 }
 
 .skin-creator-select p {

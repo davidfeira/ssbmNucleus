@@ -23,7 +23,7 @@ from core.config import HSDRAW_EXE
 from core.state import get_project_files_dir, get_current_project_path
 
 from . import menus_bp
-from .helpers import DOORS_PATH, DOORS_METADATA, _run_hsd_cli
+from .helpers import DOORS_PATH, DOORS_METADATA, _run_hsd_cli, send_mod_zip
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,61 @@ def delete_door_mod(mod_id):
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f'Delete door mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/rename/<mod_id>', methods=['POST'])
+def rename_door_mod(mod_id):
+    """Rename a door mod. Body: {name}."""
+    try:
+        mods = _load_doors_metadata()
+        mod = next((m for m in mods if m['id'] == mod_id), None)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        payload = request.get_json(silent=True) or {}
+        name = (payload.get('name') or '').strip()
+        if name:
+            mod['name'] = name
+        _save_doors_metadata(mods)
+        mod['imageUrl'] = f'/api/mex/menus/css/doors/image/{mod_id}'
+        return jsonify({'success': True, 'mod': mod})
+    except Exception as e:
+        logger.error(f'Rename door mod error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/<mod_id>/screenshot', methods=['POST'])
+def set_door_image(mod_id):
+    """Replace a door mod's texture (door.png) with an uploaded image. For doors
+    the preview IS the texture, so editing the image edits the door itself."""
+    try:
+        mods = _load_doors_metadata()
+        mod = next((m for m in mods if m['id'] == mod_id), None)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        f = request.files.get('screenshot') or request.files.get('file')
+        if not f or not f.filename:
+            return jsonify({'success': False, 'error': 'No image uploaded'}), 400
+        mod_dir = DOORS_PATH / mod_id
+        mod_dir.mkdir(parents=True, exist_ok=True)
+        f.save(str(mod_dir / 'door.png'))
+        return jsonify({'success': True, 'imageUrl': f'/api/mex/menus/css/doors/image/{mod_id}'})
+    except Exception as e:
+        logger.error(f'Set door image error: {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@menus_bp.route('/api/mex/menus/css/doors/<mod_id>/export', methods=['GET'])
+def export_door_mod(mod_id):
+    """Download a door mod's files as a zip."""
+    try:
+        mods = _load_doors_metadata()
+        mod = next((m for m in mods if m['id'] == mod_id), None)
+        if not mod:
+            return jsonify({'success': False, 'error': 'Mod not found'}), 404
+        return send_mod_zip(DOORS_PATH / mod_id, mod.get('name') or mod_id)
+    except Exception as e:
+        logger.error(f'Export door mod error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

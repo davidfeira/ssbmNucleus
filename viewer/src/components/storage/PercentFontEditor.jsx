@@ -27,7 +27,7 @@ const GLYPH_LABELS = {
 
 // mode 'glyphs' = percent digits / % / HP; mode 'words' = the READY / GO! /
 // GAME! banner set. Same backend mod, different slot groups.
-export default function PercentFontEditor({ mod, onBack, mode = 'glyphs' }) {
+export default function PercentFontEditor({ mod, onBack, mode = 'glyphs', isDraft = false, onSaveDraft, onDiscardDraft }) {
   const [glyphs, setGlyphs] = useState([])
   const [error, setError] = useState('')
   const [busyKey, setBusyKey] = useState(null)
@@ -130,12 +130,26 @@ export default function PercentFontEditor({ mod, onBack, mode = 'glyphs' }) {
         <button
           className="mode-btn"
           onMouseEnter={playHoverSound}
-          onClick={() => { playSound('back'); onBack() }}
+          onClick={() => {
+            playSound('back')
+            if (isDraft) { onDiscardDraft?.() } else { onBack() }
+          }}
         >
-          ← Back
+          {isDraft ? '✕ Discard' : '← Back'}
         </button>
-        <h3 className="pause-editor-title">{mod.name}</h3>
-        <span className="pause-editor-hint">Click a glyph to replace it</span>
+        <h3 className="pause-editor-title">{isDraft ? `New ${mode === 'words' ? 'Ready/Go Pack' : 'Percent Font'} (draft)` : mod.name}</h3>
+        {isDraft ? (
+          <button
+            className="btn-build-iso"
+            onMouseEnter={playHoverSound}
+            onClick={() => { playSound('boop'); onSaveDraft?.() }}
+            title="Save this mod to your vault"
+          >
+            Save to Vault
+          </button>
+        ) : (
+          <span className="pause-editor-hint">Click a glyph to replace it</span>
+        )}
       </div>
 
       {error && <div className="import-message error">{error}</div>}

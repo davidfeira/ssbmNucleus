@@ -5,19 +5,37 @@
  * - Creating, renaming, deleting folders
  * - Toggling folder expand/collapse state
  * - Edit state for folder rename UI
+ *
+ * Works for both character skin folders and DAS stage variant folders. The
+ * caller selects which by passing `idField` ('character' or 'stageFolder'),
+ * `idValue`, and the matching `routes` group. Defaults target character skins.
  */
 
 import { useState } from 'react'
 
+const CHARACTER_ROUTES = {
+  create: '/storage/folders/create',
+  rename: '/storage/folders/rename',
+  delete: '/storage/folders/delete',
+  toggle: '/storage/folders/toggle'
+}
+
 export function useFolderManagement({
+  // Identity of the thing the folders belong to. `idField` is the body key the
+  // backend expects ('character' for skins, 'stageFolder' for stage variants).
+  idField = 'character',
+  idValue,
+  // Back-compat alias used by the character detail view.
   selectedCharacter,
+  routes = CHARACTER_ROUTES,
   API_URL,
   onRefresh,
   // Optional externally-owned expansion state. StorageViewer owns this so it
-  // persists when CharacterDetailView (which calls this hook) unmounts on Back.
+  // persists when the detail view (which calls this hook) unmounts on Back.
   expandedFolders: externalExpandedFolders,
   setExpandedFolders: externalSetExpandedFolders
 }) {
+  const ownerId = idValue !== undefined ? idValue : selectedCharacter
   // Folder state
   const [internalExpandedFolders, setInternalExpandedFolders] = useState({}) // { folderId: true/false }
   const expandedFolders = externalExpandedFolders !== undefined ? externalExpandedFolders : internalExpandedFolders
@@ -38,11 +56,11 @@ export function useFolderManagement({
 
     // Also persist to backend
     try {
-      await fetch(`${API_URL}/storage/folders/toggle`, {
+      await fetch(`${API_URL}${routes.toggle}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: selectedCharacter,
+          [idField]: ownerId,
           folderId
         })
       })
@@ -54,11 +72,11 @@ export function useFolderManagement({
   // Create new folder
   const handleCreateFolder = async () => {
     try {
-      const response = await fetch(`${API_URL}/storage/folders/create`, {
+      const response = await fetch(`${API_URL}${routes.create}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: selectedCharacter,
+          [idField]: ownerId,
           name: 'New Folder'
         })
       })
@@ -93,11 +111,11 @@ export function useFolderManagement({
     }
 
     try {
-      const response = await fetch(`${API_URL}/storage/folders/rename`, {
+      const response = await fetch(`${API_URL}${routes.rename}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: selectedCharacter,
+          [idField]: ownerId,
           folderId,
           newName: editingFolderName.trim()
         })
@@ -126,11 +144,11 @@ export function useFolderManagement({
     }
 
     try {
-      const response = await fetch(`${API_URL}/storage/folders/delete`, {
+      const response = await fetch(`${API_URL}${routes.delete}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character: selectedCharacter,
+          [idField]: ownerId,
           folderId
         })
       })
