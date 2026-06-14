@@ -175,6 +175,42 @@ def list_storage_costumes():
                     }
                     costumes.append(costume_data)
 
+        # Custom-character added skins surface here too, so an installed custom
+        # fighter shows its extra skins in the same "Available to Import" list
+        # as vanilla characters (chosen per-skin instead of force-installed).
+        custom_root = STORAGE_PATH / 'custom_characters'
+        for cc in metadata.get('custom_characters', []):
+            cc_name = cc.get('name')
+            cc_slug = cc.get('slug')
+            if character and character not in (cc_name, cc_slug):
+                continue
+            skins_dir = custom_root / cc_slug / 'skins'
+            for skin in cc.get('added_skins', []):
+                sid = skin.get('id')
+                zp = skins_dir / skin.get('filename', f"{sid}.zip")
+                if not zp.exists():
+                    continue
+                costumes.append({
+                    'character': cc_name,
+                    'name': f"{cc_name} - {skin.get('color') or skin.get('name') or 'Custom Skin'}",
+                    'folder': sid,
+                    'costumeCode': '',
+                    'zipPath': str(zp.relative_to(PROJECT_ROOT)),
+                    'cspUrl': f"/api/mex/custom-characters/{cc_slug}/skins/{sid}/csp" if skin.get('has_csp') else None,
+                    'stockUrl': f"/api/mex/custom-characters/{cc_slug}/skins/{sid}/stock" if skin.get('has_stock') else None,
+                    'alternateCsps': [],
+                    'isPopo': False,
+                    'isNana': False,
+                    'pairedNanaId': None,
+                    'pairedPopoId': None,
+                    'slippiSafe': False,
+                    # routing markers: these import via MexCLI import-costume,
+                    # not the vanilla /import path
+                    'isCustomCharSkin': True,
+                    'customSlug': cc_slug,
+                    'skinId': sid,
+                })
+
         return jsonify({'success': True, 'costumes': costumes})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

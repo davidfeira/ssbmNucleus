@@ -76,6 +76,8 @@ namespace MexCLI
                         return Commands.AddMusicCommand.Execute(args);
                     case "set-fighter-music":
                         return Commands.SetFighterMusicCommand.Execute(args);
+                    case "set-fighter-announcer":
+                        return Commands.SetFighterAnnouncerCommand.Execute(args);
                     case "set-stage-playlist":
                         return Commands.SetStagePlaylistCommand.Execute(args);
                     case "hps-to-wav":

@@ -1288,26 +1288,12 @@ def install_custom_character():
         cli_output = _parse_cli_json(result.stdout)
         fighter_name = cli_output.get('name', slug)
 
-        # Bring along any custom skins added to this character in the vault
-        skins_dir = CUSTOM_CHARACTERS_PATH / slug / 'skins'
+        # Custom skins are intentionally NOT force-installed here. They appear
+        # in the costume "Available to Import" list (via /storage/costumes) so
+        # the user chooses which to import per-skin, like a vanilla character's
+        # vault skins. See install_custom_character_skin / the install-skin route.
         skins_installed = 0
         skin_warnings = []
-        for skin in entry.get('added_skins', []):
-            skin_zip = skins_dir / skin['filename']
-            if not skin_zip.exists():
-                skin_warnings.append(f"Skin '{skin.get('color') or skin.get('name')}' file missing, skipped")
-                continue
-            skin_cmd = [mexcli_path, 'import-costume', str(project_path), fighter_name, str(skin_zip)]
-            skin_result = subprocess.run(
-                skin_cmd, capture_output=True, text=True,
-                cwd=str(PROJECT_ROOT), **get_subprocess_args()
-            )
-            if skin_result.returncode == 0:
-                skins_installed += 1
-            else:
-                err = skin_result.stderr or skin_result.stdout or 'unknown error'
-                logger.warning(f"import-costume failed for skin '{skin.get('color') or skin.get('name')}': {err}")
-                skin_warnings.append(f"Skin '{skin.get('color') or skin.get('name')}' failed to import")
 
         # Port the victory theme: add the track to the target project (or
         # reuse a same-named one) and point the fighter at it — add-fighter
@@ -1328,6 +1314,25 @@ def install_custom_character():
                 logger.info(f"Ported victory theme '{vt_meta['name']}' "
                             f"(musicId {music_out['musicId']}) for {fighter_name}")
 
+        # Port the announcer name-call: add-fighter resets announcerCall to a
+        # placeholder (540000 -> a voice bank, not the narrator), and the
+        # vault's call index only resolves against the build it was ripped
+        # from, so the game announces imports as a generic "bonus character".
+        # Append the vault's announcer.wav as a fresh narrator entry instead.
+        announcer_ported = False
+        announcer_wav = char_dir / 'announcer.wav'
+        if announcer_wav.exists():
+            ann_out = _run_mexcli('set-fighter-announcer', project_path,
+                                  fighter_name, announcer_wav)
+            announcer_ported = bool(ann_out.get('success'))
+            if announcer_ported:
+                logger.info(f"Ported announcer call (announcerCall "
+                            f"{ann_out.get('announcerCall')}) for {fighter_name}")
+            else:
+                skin_warnings.append("Announcer name-call could not be ported")
+                logger.warning(f"Announcer port failed for {slug}: "
+                               f"{ann_out.get('error')}")
+
         import time
         time.sleep(0.15)
         reload_mex_manager()
@@ -1347,6 +1352,7 @@ def install_custom_character():
             'customSkinsInstalled': skins_installed,
             'seriesId': series_id,
             'victoryThemePorted': victory_ported,
+            'announcerPorted': announcer_ported,
             'warnings': series_warnings + skin_warnings,
         })
     except Exception as e:
@@ -1355,6 +1361,59 @@ def install_custom_character():
     finally:
         if temp_zip is not None and temp_zip.exists():
             temp_zip.unlink()
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/install-skin', methods=['POST'])
+def install_custom_character_skin():
+    """Install ONE of a custom character's added skins into the open project.
+
+    Custom-char skins are no longer force-installed with the fighter; they
+    surface in the costume "Available to Import" list and the user imports
+    them per-skin through this endpoint (MexCLI import-costume), exactly like
+    a vanilla character's vault skins.
+    """
+    try:
+        data = request.json or {}
+        slug = (data.get('slug') or '').strip()
+        skin_id = (data.get('skinId') or '').strip()
+        fighter_name = (data.get('fighterName') or '').strip()
+        if not slug or not skin_id or not fighter_name:
+            return jsonify({'success': False, 'error': 'Missing slug, skinId, or fighterName'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded.'}), 400
+
+        mexcli_path = str(MEXCLI_PATH)
+        metadata = _read_metadata()
+        entry = _find_entry(metadata, slug) or {}
+        skin = next((s for s in entry.get('added_skins', []) if s.get('id') == skin_id), None)
+        if not skin:
+            return jsonify({'success': False, 'error': f'Skin "{skin_id}" not found for "{slug}"'}), 404
+
+        skin_zip = CUSTOM_CHARACTERS_PATH / slug / 'skins' / skin['filename']
+        if not skin_zip.exists():
+            return jsonify({'success': False, 'error': 'Skin file missing'}), 404
+
+        cmd = [mexcli_path, 'import-costume', str(project_path), fighter_name, str(skin_zip)]
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+        if result.returncode != 0:
+            err = result.stderr or result.stdout or 'unknown error'
+            logger.warning(f"import-costume failed for skin '{skin_id}' of '{slug}': {err}")
+            return jsonify({'success': False, 'error': f'Failed to import skin: {err}'}), 500
+
+        reload_mex_manager()
+        return jsonify({
+            'success': True,
+            'message': f"Imported skin into {fighter_name}",
+            'name': skin.get('color') or skin.get('name') or 'Custom Skin',
+        })
+    except Exception as e:
+        logger.error(f"Install custom skin error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @custom_characters_bp.route('/api/mex/custom-characters/remove-from-project', methods=['POST'])

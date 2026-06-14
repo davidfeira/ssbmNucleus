@@ -250,6 +250,28 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     setImportingCostume(costume.zipPath)
 
     try {
+      // Custom-character added skin: route through the dedicated MexCLI
+      // import-costume path instead of the vanilla /import endpoint
+      if (costume.isCustomCharSkin) {
+        const response = await fetch(`${API_URL}/custom-characters/install-skin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slug: costume.customSlug,
+            skinId: costume.skinId,
+            fighterName: costume.character,
+          })
+        })
+        const data = await response.json()
+        if (data.success) {
+          await onRefresh()
+          await refreshMexCostumes(costume.character)
+        } else {
+          alert(`Import failed: ${data.error}`)
+        }
+        return
+      }
+
       // Ice Climbers: Auto-import paired Nana when Popo is selected
       if (costume.isPopo && costume.pairedNanaId) {
         console.log('Ice Climbers Popo detected - will auto-import paired Nana')
@@ -493,6 +515,27 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
       }
 
       try {
+        // Custom-character added skin: route through import-costume
+        if (costume.isCustomCharSkin) {
+          const response = await fetch(`${API_URL}/custom-characters/install-skin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              slug: costume.customSlug,
+              skinId: costume.skinId,
+              fighterName: costume.character,
+            })
+          })
+          const data = await response.json()
+          if (data.success) {
+            successCount++
+          } else {
+            console.error(`Import failed for ${costume.name}:`, data.error)
+            failCount++
+          }
+          continue  // loop's finally marks this step complete
+        }
+
         // Ice Climbers: Auto-import paired Nana when Popo is selected
         if (costume.isPopo && costume.pairedNanaId) {
           console.log('Ice Climbers Popo detected in batch - will auto-import paired Nana')
