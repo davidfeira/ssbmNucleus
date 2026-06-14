@@ -8850,7 +8850,8 @@
   cursor: pointer;
 }
 
-.default-pose-select:disabled { opacity: 0.6; cursor: wait; }
+.default-pose-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.default-pose-select.is-applying:disabled { cursor: wait; }
 
 /* Reorder feedback: insert-before line indicator + dragged-card dim */
 .custom-char-costume-card.drop-before {

@@ -818,22 +818,26 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             >
               🎭 Manage Poses
             </button>
-            {poseList.length > 0 && (
-              <select
-                className="default-pose-select"
-                value={detail?.default_pose || ''}
-                disabled={applyingDefaultPose}
-                onChange={(e) => handleSetDefaultPose(e.target.value)}
-                title="Re-render every costume + skin CSP in this pose and remember it as the default"
-              >
-                <option value="" disabled>
-                  {applyingDefaultPose ? 'Applying…' : 'Default pose…'}
-                </option>
-                {poseList.map(p => (
-                  <option key={p.name} value={p.name}>{p.name}</option>
-                ))}
-              </select>
-            )}
+            <select
+              className={`default-pose-select${applyingDefaultPose ? ' is-applying' : ''}`}
+              value={detail?.default_pose || ''}
+              disabled={applyingDefaultPose || poseList.length === 0}
+              onChange={(e) => handleSetDefaultPose(e.target.value)}
+              title={poseList.length === 0
+                ? 'Create a pose in Manage Poses first, then pick it here to re-render every costume + skin CSP in it'
+                : 'Re-render every costume + skin CSP in this pose and remember it as the default'}
+            >
+              <option value="" disabled>
+                {applyingDefaultPose
+                  ? 'Applying…'
+                  : poseList.length === 0
+                    ? 'Default pose (create one in Manage Poses)'
+                    : 'Default pose…'}
+              </option>
+              {poseList.map(p => (
+                <option key={p.name} value={p.name}>{p.name}</option>
+              ))}
+            </select>
             {!testActive && (
               <button
                 className="ingame-test-cta"

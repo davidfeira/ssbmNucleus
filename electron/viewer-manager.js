@@ -84,11 +84,16 @@ class ViewerManager {
     this.pipeName = this.generatePipeName();
     console.log('[ViewerManager] Pipe name:', this.pipeName);
 
-    // Build command arguments
-    const args = ['--embedded', this.pipeName, datFile];
-    if (logsPath) args.push(logsPath);
-    if (sceneFile) args.push(sceneFile);
-    if (ajFile) args.push(ajFile);
+    // Build command arguments.
+    // The C# side reads these POSITIONALLY: args[3]=logsPath, args[4]=sceneFile,
+    // args[5]=ajFile. Pushing optionals conditionally would shift a later value
+    // into an earlier slot whenever an earlier one is missing — e.g. a custom
+    // character with no donor scene (sceneFile null) but a valid ajFile would
+    // land the AJ in the scene slot, so the viewer parses the AJ as scene YAML
+    // and loads zero animations. Always emit all three slots; the C# guards
+    // (string.IsNullOrEmpty) treat '' as absent.
+    const args = ['--embedded', this.pipeName, datFile,
+                  logsPath || '', sceneFile || '', ajFile || ''];
 
     console.log('[ViewerManager] Starting viewer with args:', args);
 
