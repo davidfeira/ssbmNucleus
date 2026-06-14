@@ -614,15 +614,62 @@ namespace mexLib.Types
 
                 if (entry != null)
                 {
-                    using MemoryStream ms = new(entry.Extract());
-                    MexSoundGroup.FromPackage(workspace, ms, out MexSoundGroup? group);
-                    if (group != null)
+                    byte[] soundZipBytes = entry.Extract();
+
+                    // A reskin/clone ships a copy of its donor's bank (e.g.
+                    // captain.ssm for Blood Falcon). Adding it as a new bank
+                    // produces "captain_001.ssm", which the cloned fighter's
+                    // sound wiring doesn't resolve to in-game → silent. If the
+                    // project already has a bank with that exact filename,
+                    // reuse it (the donor's voice) instead of duplicating.
+                    int existing = -1;
+                    try
                     {
-                        fighter.SoundBank = workspace.Project.AddSoundGroup(group);
+                        using MemoryStream peek = new(soundZipBytes);
+                        using ZipArchive innerZip = new(peek);
+                        ZipArchiveEntry? gj = innerZip.GetEntry("group.json");
+                        if (gj != null)
+                        {
+                            MexSoundGroup? meta = MexJsonSerializer.Deserialize<MexSoundGroup>(gj.Extract());
+                            string? origName = meta?.FileName;
+                            if (!string.IsNullOrEmpty(origName))
+                            {
+                                for (int i = 0; i < workspace.Project.SoundGroups.Count; i++)
+                                {
+                                    if (string.Equals(workspace.Project.SoundGroups[i].FileName, origName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        existing = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { /* fall through to normal import */ }
+
+                    if (existing >= 0)
+                    {
+                        fighter.SoundBank = existing;
                     }
                     else
                     {
-                        fighter.SoundBank = 55;
+                        using MemoryStream ms = new(soundZipBytes);
+                        MexSoundGroup.FromPackage(workspace, ms, out MexSoundGroup? group);
+                        fighter.SoundBank = group != null
+                            ? workspace.Project.AddSoundGroup(group)
+                            : 55;
+                    }
+
+                    // Load the fighter's OWN bank in-game. fighter.json carries
+                    // the donor's SSM load bitfield (a clone of Ganondorf loads
+                    // ganon.ssm), so without this the new bank never reaches
+                    // audio memory and the fighter is silent. Vanilla fighters
+                    // load exactly their own bank — match that.
+                    int sb = fighter.SoundBank;
+                    if (sb >= 0 && sb < 64 && sb != 55)
+                    {
+                        if (sb < 32) { fighter.SSMBitfield1 = 0; fighter.SSMBitfield2 = 1u << sb; }
+                        else { fighter.SSMBitfield1 = 1u << (sb - 32); fighter.SSMBitfield2 = 0; }
                     }
                 }
                 else
