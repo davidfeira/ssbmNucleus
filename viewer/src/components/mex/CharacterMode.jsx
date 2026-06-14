@@ -67,7 +67,7 @@ export default function CharacterMode({
   // Character mode UI (default)
   // Hide non-playable characters
   const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag', 'NONE']
-  const playableFighters = fighters.filter(f => !hiddenCharacters.includes(f.name))
+  const playableFighters = fighters.filter(f => f.isMexFighter || !hiddenCharacters.includes(f.name))
   const batchImportProgress = cm.batchImporting && cm.batchProgress.total > 0
     ? (cm.batchProgress.current / cm.batchProgress.total) * 100
     : null

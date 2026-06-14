@@ -59,6 +59,8 @@ Mod types and how each is triggered in-game (all end in PASS/FAIL):
 | `das` | stage skins (Dynamic Alternate Stages) | hold X/Y/Z on stage-select; many per ISO |
 | `effect` | blaster/laser/sword model | select fighter, perform the move (neutral-B) |
 | `menu` | CSS background / icon grid / doors | reach the CSS (boot-health + screenshot) |
+| `modpack` | one representative of every mod type | smart two-match plan in `backend/ingame/runner.py` |
+| `stress` | many vault costumes for CSP/compression testing | boot-health / online-CSS memory checks |
 
 ```sh
 # Build a modded ISO by type (no game):
@@ -68,6 +70,9 @@ node tests/nucleus/build-modded-iso.js --type stage --mod "Hyrule Castle 64"
 node tests/nucleus/build-modded-iso.js --type das --variants-per-stage 3   # up to 18 skins/ISO
 node tests/nucleus/build-modded-iso.js --type effect --fighter Fox --extra gun
 node tests/nucleus/build-modded-iso.js --type menu --menu icon_grid   # or background / doors
+node tests/nucleus/build-modded-iso.js --type modpack
+node tests/nucleus/build-modded-iso.js --type stress --count 250 --compression 0.55
+node tests/nucleus/build-modded-iso.js --texture-pack --type stress --count 250
 
 # Build AND run a crash-test match, ending in PASS/FAIL:
 node tests/nucleus/run-modded-match.js --build
@@ -81,7 +86,33 @@ node tests/nucleus/run-modded-match.js
 # Robust path: select the character AND stage by memory feedback (default BF):
 node tests/nucleus/run-modded-match.js --closed-loop
 node tests/nucleus/run-modded-match.js --closed-loop --stage dreamland
+node tests/nucleus/run-modded-match.js --iso output/harness-test.iso --char Fox --color 4 --no-cpu
 ```
+
+Common `build-modded-iso.js` flags:
+
+- `--backend <url>` uses an already-running backend; otherwise the harness
+  spawns `tests/nucleus/_run_backend.py`.
+- `--keep-backend` leaves a spawned backend alive after the build.
+- `--keep-project` reuses an existing project directory instead of deleting it.
+- `--export-only` opens an existing project and re-exports without reinstalling
+  content; useful with `--compression`.
+- `--compression <ratio>` overrides the recommended CSP compression ratio.
+- `--color-smash` exports with color-smash enabled.
+- `--texture-pack` exports placeholder CSPs plus a texture mapping JSON for the
+  texture-pack harvest/offline naming flow.
+- `--slippi <path>` sets the Dolphin/Slippi path used by texture-pack export.
+
+Common `run-modded-match.js` flags:
+
+- `--build` runs `build-modded-iso.js` first and forwards build flags.
+- `--iso <path>` boots a specific ISO.
+- `--char <fighter>` / `--color <slot>` selects a vanilla fighter and costume.
+- `--closed-loop` uses `cl_match.py` for RAM-feedback character and stage
+  selection.
+- `--stage <name>` chooses the target stage for the closed-loop path.
+- `--no-cpu` requests a one-player timing path for the legacy non-closed-loop
+  runner.
 
 `--closed-loop` does the discrete steps (menu nav, port-2 CPU) via the per-frame
 pipe, then a single memory-feedback process (`cl_match.py`) that **selects the
@@ -169,6 +200,44 @@ Two complementary desync localizers, both decoupled from libmelee's live stream:
   `pipe.js --port 2`) both attach + drive, and the RNG canary flags divergence.
   The remaining piece for a synced live pair is the netplay connection (needs a
   2nd Slippi account / design call); the read+diff foundation is done.
+
+## Texture-pack harvest (`run-texture-harvest.js`)
+
+Automates the texture-pack export flow for CSP replacement packs:
+
+1. `build-modded-iso.js --texture-pack` exports an ISO with encoded 16x16
+   placeholder CSPs and `output/<buildId>_texture_mapping.json`.
+2. `control.js` boots that ISO in the fixed texture-pack run directory with
+   `--texture-dump`.
+3. The backend watcher decodes dumped placeholders and maps each global CSP
+   index to Dolphin's real dumped filename.
+4. `tex_scroll.py` sweeps the CSS so every placeholder is rendered.
+5. The final table is merged into
+   `tests/artifacts/nucleus/texture_filename_table.json`.
+
+Usage:
+
+```sh
+node tests/nucleus/run-texture-harvest.js --type stress --count 250
+node tests/nucleus/run-texture-harvest.js --offline --compute --type stress --count 250
+node tests/nucleus/run-texture-harvest.js --sheik
+```
+
+`--offline` skips Dolphin and names the pack from a harvested table. Adding
+`--compute` generates the index-to-filename table by computation instead of a
+prior harvest. `--sheik` performs the short, guarded online-CSS Sheik pass used
+when that cell cannot be rendered through the offline CSS.
+
+## Online CSS memory check
+
+The online CSS loads more CSP memory than the offline VS CSS. For compression
+and CSP stress work, `online_test_iso.sh` boots an ISO, enters the Slippi
+unranked CSS briefly, watches RAM/process health with `online_css_test.py`, and
+holds B out before matchmaking can pair anyone.
+
+```sh
+tests/nucleus/online_test_iso.sh output/harness-test.iso
+```
 
 ## How it drives the app
 

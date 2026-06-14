@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using mexLib;
@@ -44,6 +45,90 @@ namespace MexCLI.Commands
             FileInfo fa = new(a), fb = new(b);
             if (fa.Length != fb.Length) return false;
             return File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));
+        }
+
+        private static int ReadUInt32BE(byte[] data, int offset)
+        {
+            return data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3];
+        }
+
+        private static void WriteUInt32BE(byte[] data, int offset, int value)
+        {
+            data[offset] = (byte)(value >> 24);
+            data[offset + 1] = (byte)(value >> 16);
+            data[offset + 2] = (byte)(value >> 8);
+            data[offset + 3] = (byte)value;
+        }
+
+        private static int RetargetEmbeddedSemCallsInFile(string filePath, int sourceBank, int targetBank, int scriptLimit)
+        {
+            if (!File.Exists(filePath) || sourceBank < 0 || targetBank < 0 || sourceBank == targetBank || scriptLimit <= 0)
+                return 0;
+
+            byte[] data = File.ReadAllBytes(filePath);
+            int sourceBase = sourceBank * 10000;
+            int targetBase = targetBank * 10000;
+            int changed = 0;
+
+            for (int offset = 0; offset <= data.Length - 4; offset += 4)
+            {
+                int value = ReadUInt32BE(data, offset);
+                int script = value - sourceBase;
+                if (script >= 0 && script < scriptLimit)
+                {
+                    WriteUInt32BE(data, offset, targetBase + script);
+                    changed++;
+                }
+            }
+
+            if (changed > 0)
+                File.WriteAllBytes(filePath, data);
+
+            return changed;
+        }
+
+        private static int RetargetCloneSoundCalls(MexWorkspace workspace, MexFighter fighter)
+        {
+            if (string.IsNullOrEmpty(fighter.Files.FighterDataSymbol))
+                return 0;
+
+            int sourceBank = -1;
+            foreach (MexFighter existing in workspace.Project.Fighters)
+            {
+                if (existing.SoundBank == fighter.SoundBank)
+                    continue;
+                if (existing.SoundBank < 0 || existing.SoundBank >= workspace.Project.SoundGroups.Count)
+                    continue;
+                if (string.Equals(existing.Files.FighterDataSymbol, fighter.Files.FighterDataSymbol, StringComparison.OrdinalIgnoreCase))
+                {
+                    sourceBank = existing.SoundBank;
+                    break;
+                }
+            }
+            if (sourceBank < 0 || fighter.SoundBank < 0 || fighter.SoundBank >= workspace.Project.SoundGroups.Count)
+                return 0;
+
+            int sourceScripts = workspace.Project.SoundGroups[sourceBank].Scripts?.Count ?? 0;
+            int targetScripts = workspace.Project.SoundGroups[fighter.SoundBank].Scripts?.Count ?? 0;
+            int scriptLimit = Math.Min(sourceScripts, targetScripts);
+            if (scriptLimit <= 0)
+                return 0;
+
+            HashSet<string> files = new(StringComparer.OrdinalIgnoreCase)
+            {
+                fighter.Files.FighterDataPath,
+                fighter.Files.AnimFile,
+            };
+
+            int changed = 0;
+            foreach (string path in files)
+            {
+                if (string.IsNullOrEmpty(path))
+                    continue;
+                changed += RetargetEmbeddedSemCallsInFile(
+                    workspace.GetFilePath(path), sourceBank, fighter.SoundBank, scriptLimit);
+            }
+            return changed;
         }
 
         public static int Execute(string[] args)
@@ -127,6 +212,7 @@ namespace MexCLI.Commands
                 FixSharedFile(workspace, fighter.Files, f => f.EffectFile, (f, v) => f.EffectFile = v);
                 FixSharedFile(workspace, fighter.Files, f => f.KirbyEffectFile, (f, v) => f.KirbyEffectFile = v);
                 FixSharedFile(workspace, fighter.Files, f => f.KirbyCapFileName, (f, v) => f.KirbyCapFileName = v);
+                int soundCallsRetargeted = RetargetCloneSoundCalls(workspace, fighter);
 
                 // Internal index 34 is a broken slot in m-ex — insert a NONE placeholder
                 // if this addition would land there, then add the real fighter after it.
@@ -158,7 +244,8 @@ namespace MexCLI.Commands
                     name = fighter.Name,
                     internalId = internalId,
                     externalId = externalId,
-                    costumeCount = fighter.Costumes.Count
+                    costumeCount = fighter.Costumes.Count,
+                    soundCallsRetargeted = soundCallsRetargeted
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 return 0;
             }

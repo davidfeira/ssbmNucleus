@@ -316,9 +316,11 @@ export const POSE_MANAGER_STYLES = `
         }
 
         /* Left column. The native HSD render window overlays the viewport, so
-           the dropdown must open to the LEFT of it, never over it. */
+           the model popup stays to the LEFT of it, never over it. */
         .pm-model-select {
-          flex: 0 0 150px;
+          position: relative;
+          flex: 0 0 220px;
+          align-self: flex-start;
           display: flex;
           flex-direction: column;
           align-items: stretch;
@@ -328,13 +330,113 @@ export const POSE_MANAGER_STYLES = `
           color: var(--color-text-secondary);
         }
 
-        .pm-model-select select {
+        .pm-model-menu-btn {
           width: 100%;
           background: var(--color-bg-elevated, rgba(6, 12, 20, 0.8));
           border: 1px solid var(--color-border-subtle);
           border-radius: var(--radius-sm);
           color: var(--color-text-primary);
-          padding: 2px 6px;
+          padding: 5px 8px;
+          text-align: left;
+          cursor: pointer;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          transition:
+            border-color var(--transition-fast),
+            color var(--transition-fast);
+        }
+
+        .pm-model-menu-btn:hover,
+        .pm-model-menu-btn.active {
+          border-color: var(--color-accent, #4a9eff);
+          color: var(--color-accent, #4a9eff);
+        }
+
+        .pm-model-popover {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          z-index: 70;
+          width: 100%;
+          max-height: min(420px, 62vh);
+          overflow: auto;
+          padding: 8px;
+          background: var(--color-bg-deep, #090d13);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-md);
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+        }
+
+        .pm-model-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+        }
+
+        .pm-model-card {
+          min-width: 0;
+          overflow: hidden;
+          padding: 0;
+          background: var(--color-bg-elevated, rgba(6, 12, 20, 0.8));
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-sm);
+          color: var(--color-text-primary);
+          cursor: pointer;
+          text-align: left;
+          transition:
+            border-color var(--transition-fast),
+            transform var(--transition-fast);
+        }
+
+        .pm-model-card:hover,
+        .pm-model-card.active {
+          border-color: var(--color-accent, #4a9eff);
+        }
+
+        .pm-model-card:hover {
+          transform: translateY(-1px);
+        }
+
+        .pm-model-card-image {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          aspect-ratio: 136 / 188;
+          background: var(--color-bg-deep);
+          color: var(--color-text-tertiary);
+          font-size: 20px;
+          font-weight: 700;
+        }
+
+        .pm-model-card-image img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          image-rendering: pixelated;
+        }
+
+        .pm-model-card-info {
+          display: flex;
+          align-items: center;
+          min-width: 0;
+          gap: 4px;
+          padding: 5px;
+          color: var(--color-text-secondary);
+          font-size: 11px;
+        }
+
+        .pm-model-card-info span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .pm-model-stock {
+          width: 18px;
+          height: 18px;
+          flex-shrink: 0;
+          image-rendering: pixelated;
         }
 
         .pm-startfrom-tag {
@@ -659,6 +761,7 @@ export const POSE_MANAGER_STYLES = `
 
           .pm-model-select {
             flex: 0 0 auto;
+            align-self: stretch;
           }
 
           .pm-viewer-section {

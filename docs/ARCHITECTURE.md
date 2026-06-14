@@ -107,16 +107,23 @@ the user's Dolphin config, so their real Slippi setup is never touched — and
 drives it to a real offline match using RAM feedback:
 
 - `boot.py` — locate Slippi Dolphin, build the temp User dir, launch the ISO
-- `nav.py` / `melee_css.py` / `melee_sss.py` — navigate menus and select the
-  modded character/stage closed-loop via the named pipe controller + RAM reads
+- `nav.py` / `melee_css.py` / `char_select.py` / `melee_sss.py` — navigate
+  menus and select the modded character/stage closed-loop via the named pipe
+  controller + RAM reads
 - `melee_mem.py` / `melee_pipe.py` — read emulated RAM, write Dolphin's pipe
+- `match_setup.py` — RAM-patch solo starts, time rules, player slots, and
+  CSS-to-SSS warps for cursor-free loading
 - `observe.py` — crash/hang detection (PASS / CRASH / HUNG verdicts)
-- `screenshot.py` / `capture.py` — capture screenshots (e.g. stage previews)
+- `screenshot.py` / `capture.py` — capture screenshots for stages, DAS batches,
+  and pause-screen previews
+- `embed.py` — position/park the active throwaway Dolphin render window over
+  the frontend preview panel
 - `runner.py` — orchestrator; public entry point `ingame.run_test(...)`
 
 It never enters online play (aborts on the online scene). Consumers:
-the `test_in_game` blueprint (all test/capture endpoints) and the `bundles` and
-`xdelta` blueprints (launching builds in the user's real Slippi via
+the `test_in_game` blueprint (test, capture, status, and preview-window
+endpoints) and the `bundles` and `xdelta` blueprints (launching builds in the
+user's real Slippi via
 `ingame.boot.launch_real`). See [INGAME_TESTING.md](INGAME_TESTING.md).
 
 ### Backend State Management

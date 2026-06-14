@@ -1145,29 +1145,87 @@ Remove a custom character from the open project.
 
 Boots a freshly-built ISO in an isolated throwaway Dolphin and drives it to a
 real offline match (see [INGAME_TESTING.md](INGAME_TESTING.md)). All start
-endpoints run in a background thread; only one test at a time. Progress is
-streamed over WebSocket: `test_progress`, `test_complete`, `test_error`.
+endpoints run in a background thread; only one test/capture job at a time.
+Test progress is streamed over WebSocket as `test_progress`, `test_complete`,
+and `test_error`. Capture progress uses `capture_progress`, `capture_complete`
+or `capture_batch_complete`, and `capture_error`.
 
 ### POST /api/mex/test-in-game/start
 Start a full build test from a build manifest (smart plan covering all mod types in the build).
 
+**Body:**
+```json
+{
+  "isoPath": "C:/path/to/build.iso",
+  "slippiDolphinPath": "C:/path/to/Slippi Dolphin",
+  "manifest": { "costume": { "fighter": "Fox", "colorIndex": 4 } },
+  "manifestPath": "C:/path/to/manifest.json",
+  "observeSeconds": 9,
+  "hiresTextures": false,
+  "loadSeed": "C:/path/to/Load/Textures"
+}
+```
+
+`manifest` or `manifestPath` is optional; without one the engine performs a
+boot-health check at the offline CSS.
+
 ### POST /api/mex/test-in-game/costume
 Test a single vault costume (builds a minimal ISO, selects the costume, watches for crash/hang).
+
+**Fields:** `character`, `skinId`, `vanillaIsoPath`, `slippiDolphinPath`; optional `colorName`, `observeSeconds`.
 
 ### POST /api/mex/test-in-game/custom-character
 Test a vault custom character in-game.
 
+**Fields:** `slug`, `vanillaIsoPath`, `slippiDolphinPath`; optional `name`, `observeSeconds`.
+
+### POST /api/mex/test-in-game/custom-character-skin
+Test one skin or bundled costume slot of a vault custom character.
+
+**Fields:** `slug`, `vanillaIsoPath`, `slippiDolphinPath`, plus either `skinId` or `costumeIndex`; optional `colorName`, `observeSeconds`.
+
 ### POST /api/mex/test-in-game/custom-stage
 Test a vault custom stage in-game.
+
+**Fields:** `slug`, `vanillaIsoPath`, `slippiDolphinPath`; optional `name`, `observeSeconds`.
 
 ### POST /api/mex/test-in-game/stage-skin
 Test a DAS stage skin in-game.
 
+**Fields:** `stageCode`, `stageFolder`, `variantId`, `vanillaIsoPath`, `slippiDolphinPath`; optional `name`, `button`, `observeSeconds`.
+
 ### POST /api/mex/test-in-game/capture-stage-screenshot
-Boot a match on a stage and capture a screenshot (used for stage previews).
+Boot a match on one DAS stage variant and return a clean live screenshot for preview review.
+
+**Fields:** `stageCode`, `stageFolder`, `variantId`, `vanillaIsoPath`, `slippiDolphinPath`; optional `button`.
+
+### POST /api/mex/test-in-game/capture-pause-screenshot
+Boot a pause-screen mod, pause a live match, save the live pause preview, and return it.
+
+**Fields:** `modId`, `vanillaIsoPath`, `slippiDolphinPath`.
 
 ### POST /api/mex/test-in-game/capture-stage-batch
 Capture screenshots for multiple stages in one Dolphin session.
+
+**Body:**
+```json
+{
+  "variants": [
+    { "stageCode": "GrNBa", "stageFolder": "battlefield", "variantId": "abc123", "name": "Variant name" }
+  ],
+  "vanillaIsoPath": "C:/path/to/vanilla.iso",
+  "slippiDolphinPath": "C:/path/to/Slippi Dolphin"
+}
+```
+
+### POST /api/mex/test-in-game/window/position
+Pin the active throwaway Dolphin render window over the frontend preview
+placeholder. Coordinates are physical screen pixels.
+
+**Body:** `{ "x": 100, "y": 100, "width": 640, "height": 480 }`
+
+### POST /api/mex/test-in-game/window/park
+Move the active throwaway Dolphin render window offscreen.
 
 ### GET /api/mex/test-in-game/status
 Get whether a test is currently running.
@@ -1260,3 +1318,7 @@ Serve project assets.
 | `test_progress` | Test In Game | `{ stage, percentage, message }` |
 | `test_complete` | Test In Game | result with verdict + screenshots |
 | `test_error` | Test In Game | `{ error }` |
+| `capture_progress` | Test In Game Capture | `{ stage, percentage, message }` |
+| `capture_complete` | Test In Game Capture | `{ success, screenshot, ...identity }` |
+| `capture_batch_complete` | Test In Game Capture | `{ success, results, captured, total }` |
+| `capture_error` | Test In Game Capture | `{ error }` |

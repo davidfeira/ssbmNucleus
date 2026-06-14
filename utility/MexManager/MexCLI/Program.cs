@@ -78,6 +78,8 @@ namespace MexCLI
                         return Commands.SetFighterMusicCommand.Execute(args);
                     case "set-fighter-announcer":
                         return Commands.SetFighterAnnouncerCommand.Execute(args);
+                    case "set-fighter-announcer-id":
+                        return Commands.SetFighterAnnouncerIdCommand.Execute(args);
                     case "dedup-sound-banks":
                         return Commands.DedupSoundBanksCommand.Execute(args);
                     case "set-stage-playlist":

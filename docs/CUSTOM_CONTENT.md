@@ -27,7 +27,9 @@ Tracked in `storage/metadata.json` under `custom_characters`. Operations:
 list, detail, rename, delete, export (download original ZIP), serve
 icon/CSP/stock images, and install into / remove from the open MEX project
 (via MexCLI). Installed characters can be smoke-tested in-game via
-`POST /api/mex/test-in-game/custom-character` (see
+`POST /api/mex/test-in-game/custom-character`; a specific custom-character skin
+or bundled costume slot can be tested with
+`POST /api/mex/test-in-game/custom-character-skin` (see
 [INGAME_TESTING.md](INGAME_TESTING.md)).
 
 ---
@@ -57,7 +59,10 @@ rename, delete, export, serve icon/banner, install into / remove from the
 open project, list stages currently in the project (`/in-project`), reorder,
 and vault folder management (create/rename/delete/toggle — same model as
 costume folders). In-game smoke test:
-`POST /api/mex/test-in-game/custom-stage`.
+`POST /api/mex/test-in-game/custom-stage`. DAS stage skins use
+`POST /api/mex/test-in-game/stage-skin`; their live preview captures use
+`POST /api/mex/test-in-game/capture-stage-screenshot` or
+`POST /api/mex/test-in-game/capture-stage-batch`.
 
 ---
 

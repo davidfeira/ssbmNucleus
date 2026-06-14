@@ -11,6 +11,49 @@ import PoseManagerModal from './PoseManagerModal'
 import SoundBankModal from './SoundBankModal'
 import EmbeddedModelViewer from '../EmbeddedModelViewer'
 import SkinCreator from '../SkinCreator'
+import { DEFAULT_CHARACTERS } from '../../defaultCharacters'
+
+const BASE_CHARACTER_ALIASES = {
+  captain: 'C. Falcon',
+  captainfalcon: 'C. Falcon',
+  falcon: 'C. Falcon',
+  clink: 'Young Link',
+  donkey: 'DK',
+  donkeykong: 'DK',
+  dk: 'DK',
+  drmario: 'Dr. Mario',
+  doc: 'Dr. Mario',
+  emblem: 'Roy',
+  'game&watch': 'Mr. Game & Watch',
+  gamewatch: 'Mr. Game & Watch',
+  gameandwatch: 'Mr. Game & Watch',
+  'g&w': 'Mr. Game & Watch',
+  gw: 'Mr. Game & Watch',
+  ganon: 'Ganondorf',
+  koopa: 'Bowser',
+  mars: 'Marth',
+  nana: 'Ice Climbers',
+  popo: 'Ice Climbers',
+  purin: 'Jigglypuff',
+  seak: 'Sheik'
+}
+
+const normalizeCharacterName = (name) => (
+  (name || '').toLowerCase().replace(/\band\b/g, '&').replace(/[^a-z0-9&]/g, '')
+)
+
+const resolveBaseCharacter = (name) => {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return null
+  if (DEFAULT_CHARACTERS[trimmed]) return trimmed
+
+  const key = normalizeCharacterName(trimmed)
+  if (BASE_CHARACTER_ALIASES[key]) return BASE_CHARACTER_ALIASES[key]
+
+  return Object.keys(DEFAULT_CHARACTERS).find(
+    charName => normalizeCharacterName(charName) === key
+  ) || null
+}
 
 export default function CustomCharacterDetailView({ character, onBack, onDelete, onRename, API_URL }) {
   const [editingName, setEditingName] = useState(false)
@@ -39,12 +82,19 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const [showPoseManager, setShowPoseManager] = useState(false)
   const [showSoundBank, setShowSoundBank] = useState(false)
   const [selectedTeamColor, setSelectedTeamColor] = useState(null)   // armed team token ('red'|'blue'|'green')
+  const [baseSkinPool, setBaseSkinPool] = useState([])
+  const [baseSkinLoading, setBaseSkinLoading] = useState(false)
+  const [showBaseSkinMenu, setShowBaseSkinMenu] = useState(false)
+  const [copyingBaseSkin, setCopyingBaseSkin] = useState(false)
+  const [showDefaultPoseMenu, setShowDefaultPoseMenu] = useState(false)
   const audioRef = useRef(null)
   const skinFileRef = useRef(null)
   const seriesFileRef = useRef(null)
   const iconFileRef = useRef(null)
   const bannerBigRef = useRef(null)
   const bannerSmallRef = useRef(null)
+  const baseSkinMenuRef = useRef(null)
+  const defaultPoseMenuRef = useRef(null)
   const inGameTest = useInGameTest()
 
   const fetchDetail = useCallback(async () => {
@@ -58,6 +108,60 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   }, [character.slug, API_URL])
 
   useEffect(() => { fetchDetail() }, [fetchDetail])
+
+  const baseCharacter = resolveBaseCharacter(detail?.based_on)
+
+  useEffect(() => {
+    let cancelled = false
+
+    setBaseSkinPool([])
+    setShowBaseSkinMenu(false)
+    if (!baseCharacter) {
+      setBaseSkinLoading(false)
+      return () => { cancelled = true }
+    }
+
+    setBaseSkinLoading(true)
+    fetch(`${API_URL}/storage/costumes?character=${encodeURIComponent(baseCharacter)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return
+        const pool = (data.success ? data.costumes || [] : [])
+          .filter(skin => !skin.isNana)
+        setBaseSkinPool(pool)
+      })
+      .catch(err => {
+        if (!cancelled) {
+          console.error('Failed to fetch base character skins:', err)
+          setBaseSkinPool([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBaseSkinLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [API_URL, baseCharacter])
+
+  useEffect(() => {
+    if (!showBaseSkinMenu) return
+    const handlePointerDown = (event) => {
+      if (baseSkinMenuRef.current?.contains(event.target)) return
+      setShowBaseSkinMenu(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [showBaseSkinMenu])
+
+  useEffect(() => {
+    if (!showDefaultPoseMenu) return
+    const handlePointerDown = (event) => {
+      if (defaultPoseMenuRef.current?.contains(event.target)) return
+      setShowDefaultPoseMenu(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [showDefaultPoseMenu])
 
   // ── Shared skin-editing stack (same modal as canonical character skins).
   // Custom skins are exposed to it under a pseudo-character key whose
@@ -566,6 +670,32 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     }
   }
 
+  const handleCopyBaseSkin = async (skinId) => {
+    if (!baseCharacter || !skinId || copyingBaseSkin) return
+    const selected = baseSkinPool.find(skin => skin.folder === skinId)
+    setCopyingBaseSkin(true)
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/${character.slug}/skins/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: baseCharacter, skinId })
+      })
+      const data = await response.json()
+      if (data.success) {
+        playSound('newSkin')
+        setShowBaseSkinMenu(false)
+        flashSkinMessage(`Copied ${selected?.name || data.skin?.name || 'skin'} from ${baseCharacter}`)
+        await fetchDetail()
+      } else {
+        flashSkinMessage(`Copy failed: ${data.error}`)
+      }
+    } catch (err) {
+      flashSkinMessage(`Copy error: ${err.message}`)
+    } finally {
+      setCopyingBaseSkin(false)
+    }
+  }
+
   // Reorder added skins by drag-and-drop: move draggedId to targetId's slot.
   const handleSkinReorder = async (draggedId, targetId) => {
     setSkinDragOverId(null)
@@ -647,7 +777,8 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
 
   // Set the default CSP pose and re-render every costume + skin in it.
   const handleSetDefaultPose = async (poseName) => {
-    if (!poseName) return
+    if (!poseName || applyingDefaultPose) return
+    setShowDefaultPoseMenu(false)
     setApplyingDefaultPose(true)
     try {
       const res = await fetch(`${API_URL}/custom-characters/${character.slug}/default-pose`, {
@@ -700,6 +831,17 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
   const BACKEND_BASE = API_URL.replace('/api/mex', '')
   const bigBanner = detail?.zip_assets?.big_banner
   const smallBanner = detail?.zip_assets?.small_banner
+  const selectedDefaultPose = poseList.find(p => p.name === detail?.default_pose) || null
+  const defaultPoseButtonLabel = applyingDefaultPose
+    ? 'Applying...'
+    : selectedDefaultPose?.name || (poseList.length > 0
+      ? 'Default pose...'
+      : 'Default pose (create one in Manage Poses)')
+  const baseSkinLabel = (skin) => {
+    const name = skin.name || skin.costumeCode || skin.folder || 'Skin'
+    const prefix = `${baseCharacter} - `
+    return name.startsWith(prefix) ? name.slice(prefix.length) : name
+  }
 
   const customSeriesActive = detail?.custom_series?.active
 
@@ -781,9 +923,13 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
     },
   ].filter(Boolean) : []
 
+  const sourceLabel = character.source === 'zip'
+    ? 'Imported ZIP'
+    : (character.source === 'builtin' || character.builtin ? 'Built-in' : 'ISO Scan')
+
   // Read-only facts (compact strip)
   const infoPairs = detail ? [
-    ['Source', character.source === 'zip' ? 'Imported ZIP' : 'ISO Scan'],
+    ['Source', sourceLabel],
     ['Added', new Date(character.date_added).toLocaleDateString()],
     detail.based_on && ['Based On', detail.based_on],
     ['Costumes', `${costumes.length}${addedSkins.length ? ` + ${addedSkins.length} custom` : ''}`],
@@ -818,26 +964,54 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
             >
               🎭 Manage Poses
             </button>
-            <select
-              className={`default-pose-select${applyingDefaultPose ? ' is-applying' : ''}`}
-              value={detail?.default_pose || ''}
-              disabled={applyingDefaultPose || poseList.length === 0}
-              onChange={(e) => handleSetDefaultPose(e.target.value)}
-              title={poseList.length === 0
-                ? 'Create a pose in Manage Poses first, then pick it here to re-render every costume + skin CSP in it'
-                : 'Re-render every costume + skin CSP in this pose and remember it as the default'}
-            >
-              <option value="" disabled>
-                {applyingDefaultPose
-                  ? 'Applying…'
-                  : poseList.length === 0
-                    ? 'Default pose (create one in Manage Poses)'
-                    : 'Default pose…'}
-              </option>
-              {poseList.map(p => (
-                <option key={p.name} value={p.name}>{p.name}</option>
-              ))}
-            </select>
+            <div className="default-pose-picker" ref={defaultPoseMenuRef}>
+              <button
+                type="button"
+                className={`default-pose-menu-btn${showDefaultPoseMenu ? ' active' : ''}${applyingDefaultPose ? ' is-applying' : ''}`}
+                disabled={applyingDefaultPose || poseList.length === 0}
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); setShowDefaultPoseMenu(open => !open) }}
+                aria-haspopup="menu"
+                aria-expanded={showDefaultPoseMenu}
+                title={poseList.length === 0
+                  ? 'Create a pose in Manage Poses first, then pick it here to re-render every costume + skin CSP in it'
+                  : 'Re-render every costume + skin CSP in this pose and remember it as the default'}
+              >
+                {defaultPoseButtonLabel}
+              </button>
+              {showDefaultPoseMenu && (
+                <div className="default-pose-popover" role="menu" aria-label="Default pose">
+                  <div className="default-pose-popover-title">Default Pose</div>
+                  <div className="default-pose-grid">
+                    {poseList.map(pose => (
+                      <button
+                        key={pose.name}
+                        type="button"
+                        className={`default-pose-card${pose.name === detail?.default_pose ? ' active' : ''}`}
+                        onMouseEnter={playHoverSound}
+                        onClick={() => { playSound('boop'); handleSetDefaultPose(pose.name) }}
+                        disabled={applyingDefaultPose}
+                        role="menuitem"
+                        title={`Use ${pose.name} as the default pose`}
+                      >
+                        <div className="default-pose-card-image">
+                          {pose.hasThumbnail ? (
+                            <img
+                              src={`${BACKEND_BASE}${pose.thumbnailUrl}`}
+                              alt={pose.name}
+                              draggable={false}
+                            />
+                          ) : (
+                            <span>{pose.name.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <span className="default-pose-card-name">{pose.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             {!testActive && (
               <button
                 className="ingame-test-cta"
@@ -1247,7 +1421,70 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
           }}
           onDrop={(e) => { e.preventDefault(); handleCostumeToSkin(draggingCostume) }}
         >
-          <h3 className="custom-char-section-title">Custom Skins</h3>
+          <div className="custom-char-section-header custom-skin-section-header">
+            <h3 className="custom-char-section-title">Custom Skins</h3>
+            {baseCharacter && (
+              <div className="base-skin-copy-controls" ref={baseSkinMenuRef}>
+                <button
+                  type="button"
+                  className={`base-skin-menu-btn ${showBaseSkinMenu ? 'active' : ''}`}
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); setShowBaseSkinMenu(open => !open) }}
+                  disabled={copyingBaseSkin}
+                  title={`Open ${baseCharacter} vault skins to copy into this custom character`}
+                >
+                  {copyingBaseSkin ? 'Adding...' : `Add ${baseCharacter} Skin`}
+                </button>
+                {showBaseSkinMenu && (
+                  <div className="base-skin-popover" role="menu" aria-label={`${baseCharacter} skins`}>
+                    <div className="base-skin-popover-title">{baseCharacter} Skins</div>
+                    {baseSkinLoading ? (
+                      <div className="base-skin-popover-state">Loading...</div>
+                    ) : baseSkinPool.length === 0 ? (
+                      <div className="base-skin-popover-state">No skins in vault</div>
+                    ) : (
+                      <div className="base-skin-grid">
+                        {baseSkinPool.map(skin => (
+                          <button
+                            key={skin.folder}
+                            type="button"
+                            className="base-skin-card"
+                            onMouseEnter={playHoverSound}
+                            onClick={() => { playSound('boop'); handleCopyBaseSkin(skin.folder) }}
+                            disabled={copyingBaseSkin}
+                            title={`Copy ${baseSkinLabel(skin)} from ${baseCharacter}`}
+                          >
+                            <div className="base-skin-card-image">
+                              {skin.cspUrl ? (
+                                <img
+                                  src={`${BACKEND_BASE}${skin.cspUrl}`}
+                                  alt={baseSkinLabel(skin)}
+                                  draggable={false}
+                                />
+                              ) : (
+                                <span>{baseSkinLabel(skin)[0] || '?'}</span>
+                              )}
+                            </div>
+                            <div className="base-skin-card-info">
+                              {skin.stockUrl && (
+                                <img
+                                  src={`${BACKEND_BASE}${skin.stockUrl}`}
+                                  alt=""
+                                  className="base-skin-stock"
+                                  draggable={false}
+                                />
+                              )}
+                              <span>{baseSkinLabel(skin)}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {addedSkins.length === 0 && (
             <p className="custom-char-section-hint">
               Add extra skins for this character — import a costume zip/dat, drag a
@@ -1456,7 +1693,11 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         displayName={character.name}
         baseSkinId={detail?.costumes?.[0]?.id}
         models={(detail?.costumes || []).map(c => ({
-          value: c.id, label: c.color || c.id, skinId: c.id
+          value: c.id,
+          label: c.color || c.name || c.id,
+          skinId: c.id,
+          cspUrl: c.csp_url,
+          stockUrl: c.stock_url
         }))}
         onClose={() => setShowPoseManager(false)}
         onRefresh={fetchDetail}

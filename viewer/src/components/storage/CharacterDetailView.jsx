@@ -518,10 +518,19 @@ export default function CharacterDetailView({
         show={showPoseManager}
         character={selectedCharacter}
         models={(() => {
+          const backendBase = API_URL.replace('/api/mex', '')
           const def = getDefaultCostumeCode(selectedCharacter)
           const list = allSkins
             .filter(s => s.type !== 'folder')
-            .map(s => ({ value: s.id, label: s.color || s.id, skinId: s.id }))
+            .map(s => ({
+              value: s.id,
+              label: s.color || s.id,
+              skinId: s.id,
+              cspUrl: s.has_csp
+                ? `${backendBase}/storage/${selectedCharacter}/${s.csp_filename || `${s.id}_csp.png`}`
+                : null,
+              stockUrl: s.has_stock ? `${backendBase}/storage/${selectedCharacter}/${s.id}_stc.png` : null
+            }))
           return def ? [{ value: '__default__', label: 'Default', costumeCode: def }, ...list] : list
         })()}
         onClose={() => setShowPoseManager(false)}

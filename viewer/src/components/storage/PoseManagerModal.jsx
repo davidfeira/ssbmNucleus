@@ -46,9 +46,11 @@ export default function PoseManagerModal({
   API_URL
 }) {
   const viewerRef = useRef(null)
+  const modelMenuRef = useRef(null)
   const [mode, setMode] = useState('library') // 'library' | 'create'
   // Which model the create-view viewer loads (#2). null => default/baseSkinId.
   const [selectedModelValue, setSelectedModelValue] = useState(null)
+  const [showModelMenu, setShowModelMenu] = useState(false)
   // "Start from existing pose" (#3): {sceneFile, animSymbol, frame, poseName}.
   const [startFrom, setStartFrom] = useState(null)
 
@@ -57,6 +59,16 @@ export default function PoseManagerModal({
     modelList.find(m => m.value === selectedModelValue) ||
     modelList.find(m => m.skinId && m.skinId === baseSkinId) ||
     modelList[0] || null
+  const BACKEND_BASE = API_URL.replace('/api/mex', '')
+  const modelAssetUrl = (url) => {
+    if (!url) return null
+    return /^https?:\/\//.test(url) ? url : `${BACKEND_BASE}${url}`
+  }
+  const handleSelectModel = (value) => {
+    playSound('boop')
+    setSelectedModelValue(value)
+    setShowModelMenu(false)
+  }
 
   // Fetch a saved pose's viewer scene file + animation, then open the create
   // view starting from it.
@@ -96,6 +108,20 @@ export default function PoseManagerModal({
     if (show) { setMode('library'); setStartFrom(null); setSelectedModelValue(null) }
   }, [show])
 
+  useEffect(() => {
+    if (!showModelMenu) return
+    const handlePointerDown = (event) => {
+      if (modelMenuRef.current?.contains(event.target)) return
+      setShowModelMenu(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [showModelMenu])
+
+  useEffect(() => {
+    if (!show || mode !== 'create') setShowModelMenu(false)
+  }, [show, mode])
+
   // A successful save returns to the library, where the new pose now shows
   useEffect(() => {
     if (saveSuccess) { setMode('library'); setStartFrom(null) }
@@ -132,22 +158,61 @@ export default function PoseManagerModal({
             {/* Create view: viewer + animation browser */}
             <div className="pm-body">
               <div className="pm-left-section">
-                {/* Model picker sits in a LEFT column, not above the viewer:
-                    the native HSD render window is an OS-topmost overlay over
-                    the viewport, so a dropdown opening down over it would be
-                    occluded. Keeping it left of the viewport avoids that. */}
+                {/* Model picker sits in a LEFT column because the native HSD
+                    render window is an OS-topmost overlay over the viewport. */}
                 <div className="pm-create-row">
                   {modelList.length > 1 && (
-                    <div className="pm-model-select">
+                    <div className="pm-model-select" ref={modelMenuRef}>
                       <label>Model</label>
-                      <select
-                        value={selectedModel?.value ?? ''}
-                        onChange={(e) => { playSound('boop'); setSelectedModelValue(e.target.value) }}
+                      <button
+                        type="button"
+                        className={`pm-model-menu-btn${showModelMenu ? ' active' : ''}`}
+                        onClick={() => { playSound('boop'); setShowModelMenu(open => !open) }}
+                        aria-haspopup="menu"
+                        aria-expanded={showModelMenu}
+                        title="Choose the model to pose"
                       >
-                        {modelList.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
+                        {selectedModel?.label || 'Model'}
+                      </button>
+                      {showModelMenu && (
+                        <div className="pm-model-popover" role="menu" aria-label="Model">
+                          <div className="pm-model-grid">
+                            {modelList.map(model => {
+                              const cspUrl = modelAssetUrl(model.cspUrl || model.csp_url)
+                              const stockUrl = modelAssetUrl(model.stockUrl || model.stock_url)
+                              return (
+                                <button
+                                  key={model.value}
+                                  type="button"
+                                  className={`pm-model-card${model.value === selectedModel?.value ? ' active' : ''}`}
+                                  onClick={() => handleSelectModel(model.value)}
+                                  role="menuitem"
+                                  title={model.label}
+                                >
+                                  <div className="pm-model-card-image">
+                                    {cspUrl ? (
+                                      <img src={cspUrl} alt={model.label} draggable={false} />
+                                    ) : (
+                                      <span>{(model.label || 'M').charAt(0).toUpperCase()}</span>
+                                    )}
+                                  </div>
+                                  <div className="pm-model-card-info">
+                                    {stockUrl && (
+                                      <img
+                                        src={stockUrl}
+                                        alt=""
+                                        className="pm-model-stock"
+                                        draggable={false}
+                                      />
+                                    )}
+                                    <span>{model.label}</span>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                       {startFrom && (
                         <span className="pm-startfrom-tag">from “{startFrom.poseName}”</span>
                       )}

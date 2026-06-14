@@ -331,6 +331,32 @@ def _run_mexcli(*cli_args):
     return out
 
 
+def _find_existing_fighter_with_announcer_call(project_path, announcer_call, skip_internal_id=None):
+    """Return another project fighter using announcer_call, if one exists."""
+    fighters_dir = Path(project_path).parent / 'data' / 'fighters'
+    if not fighters_dir.exists():
+        return None
+
+    for fighter_json in sorted(fighters_dir.glob('*.json')):
+        try:
+            internal_id = int(fighter_json.stem)
+        except ValueError:
+            internal_id = None
+        if skip_internal_id is not None and internal_id == skip_internal_id:
+            continue
+
+        try:
+            with open(fighter_json, 'r', encoding='utf-8') as f:
+                fighter_data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if fighter_data.get('announcerCall') == announcer_call:
+            return fighter_data.get('name') or fighter_json.stem
+
+    return None
+
+
 def _build_ssm_index(project_dir):
     """Index every sound bank of a scanned build: [(ssm_path, startIndex,
     count)]. Built once per scan — announcer calls are absolute sound IDs
@@ -1237,6 +1263,17 @@ def install_custom_character():
 
         metadata = _read_metadata()
         entry = _find_entry(metadata, slug) or {}
+        source_announcer_call = None
+        fighter_json_path = char_dir / 'fighter.json'
+        if fighter_json_path.exists():
+            try:
+                with open(fighter_json_path, 'r', encoding='utf-8') as f:
+                    source_fighter_data = json.load(f)
+                call = source_fighter_data.get('announcerCall')
+                if isinstance(call, int):
+                    source_announcer_call = call
+            except (OSError, json.JSONDecodeError):
+                logger.warning(f"Could not read source announcerCall for {slug}")
 
         # Custom franchise: re-create the series in the target project (or
         # match an existing one by name) and point the fighter at it
@@ -1287,6 +1324,9 @@ def install_custom_character():
 
         cli_output = _parse_cli_json(result.stdout)
         fighter_name = cli_output.get('name', slug)
+        fighter_internal_id = cli_output.get('internalId')
+        if not isinstance(fighter_internal_id, int):
+            fighter_internal_id = None
 
         # Custom skins are intentionally NOT force-installed here. They appear
         # in the costume "Available to Import" list (via /storage/costumes) so
@@ -1320,6 +1360,7 @@ def install_custom_character():
         # from, so the game announces imports as a generic "bonus character".
         # Append the vault's announcer.wav as a fresh narrator entry instead.
         announcer_ported = False
+        announcer_reused = False
         announcer_wav = char_dir / 'announcer.wav'
         if announcer_wav.exists():
             ann_out = _run_mexcli('set-fighter-announcer', project_path,
@@ -1332,6 +1373,26 @@ def install_custom_character():
                 skin_warnings.append("Announcer name-call could not be ported")
                 logger.warning(f"Announcer port failed for {slug}: "
                                f"{ann_out.get('error')}")
+        if (not announcer_ported and isinstance(source_announcer_call, int)
+                and source_announcer_call != 540000):
+            matching_fighter = _find_existing_fighter_with_announcer_call(
+                project_path, source_announcer_call, fighter_internal_id)
+            if matching_fighter:
+                sem_path = Path(project_path).parent / 'files' / 'audio' / 'us' / 'smash2.sem'
+                resolved = _run_mexcli('sem-resolve', sem_path, source_announcer_call)
+                if resolved.get('success'):
+                    ann_out = _run_mexcli('set-fighter-announcer-id', project_path,
+                                          fighter_internal_id if fighter_internal_id is not None else fighter_name,
+                                          source_announcer_call)
+                    announcer_reused = bool(ann_out.get('success'))
+                    announcer_ported = announcer_reused
+                    if announcer_reused:
+                        logger.info(f"Reused announcer call {source_announcer_call} "
+                                    f"from {matching_fighter} for {fighter_name}")
+                    else:
+                        skin_warnings.append("Announcer name-call could not be reused")
+                        logger.warning(f"Announcer reuse failed for {slug}: "
+                                       f"{ann_out.get('error')}")
 
         import time
         time.sleep(0.15)
@@ -1353,6 +1414,7 @@ def install_custom_character():
             'seriesId': series_id,
             'victoryThemePorted': victory_ported,
             'announcerPorted': announcer_ported,
+            'announcerReused': announcer_reused,
             'warnings': series_warnings + skin_warnings,
         })
     except Exception as e:

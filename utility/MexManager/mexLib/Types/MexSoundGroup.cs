@@ -314,9 +314,14 @@ namespace mexLib.Types
             if (group == null)
                 return new MexInstallerError("Error parsing \"group.json\"");
 
+            string packageFileName = group.FileName;
+
             // load sounds
             {
-                ZipArchiveEntry? sound_entry = zip.GetEntry(group.FileName);
+                ZipArchiveEntry? sound_entry = zip.GetEntry(packageFileName);
+                sound_entry ??= zip.Entries.FirstOrDefault(e =>
+                    string.Equals(Path.GetFileName(e.FullName), Path.GetFileName(packageFileName),
+                        StringComparison.OrdinalIgnoreCase));
                 if (sound_entry != null)
                 {
                     SSM ssm = new();
@@ -370,6 +375,8 @@ namespace mexLib.Types
             }
 
             // create ssm path
+            if (!string.IsNullOrWhiteSpace(packageFileName))
+                group.FileName = Path.GetFileName(packageFileName).ToLowerInvariant();
             string ssmPath = workspace.FileManager.GetUniqueFilePath(workspace.GetFilePath($"audio/us/{group.FileName}"));
             group.FileName = Path.GetFileName(ssmPath);
 
