@@ -88,7 +88,16 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
   const availPager = usePagination(availableCostumes.length, `${selectedFighter?.name}-avail`)
 
   if (isZS) {
-    return <ZeldaSheikPanel refreshing={refreshing} cm={cm} API_URL={API_URL} />
+    return (
+      <ZeldaSheikPanel
+        refreshing={refreshing}
+        cm={cm}
+        API_URL={API_URL}
+        selectedFighter={selectedFighter}
+        onEnterExtras={onEnterExtras}
+        onApplyPose={onApplyPose}
+      />
+    )
   }
 
   return (

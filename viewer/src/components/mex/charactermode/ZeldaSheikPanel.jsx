@@ -13,12 +13,20 @@
  * Receives the useCostumes hook result as `cm` (same contract as CostumesPanel).
  */
 import { useState } from 'react'
+import { hasExtras } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
 import HexagonLoader from '../../shared/HexagonLoader'
 import PaginationBar from '../../shared/PaginationBar'
 import usePagination from '../../shared/usePagination'
 import SoundPacksModal from '../../storage/SoundPacksModal'
 import { ZS_PAIR } from './useCostumes'
+
+const PoseIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+)
 
 const SoundIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -28,7 +36,7 @@ const SoundIcon = () => (
   </svg>
 )
 
-export default function ZeldaSheikPanel({ refreshing, cm, API_URL }) {
+export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFighter, onEnterExtras, onApplyPose }) {
   const {
     pairCostumes,
     loadingFighter,
@@ -192,6 +200,38 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL }) {
             </span>
           )}
           <div className="iso-mod-actions">
+            {/* Extras (laser/sword/etc.) act on whichever half is selected.
+                Neither Zelda nor Sheik currently defines any, so this stays
+                hidden until one does — kept here so the split panel matches
+                the normal CostumesPanel action set. */}
+            {selectedFighter && onEnterExtras && hasExtras(selectedFighter.name) && (
+              <button
+                className="btn-extras-mode"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); onEnterExtras(); }}
+              >
+                Extras
+              </button>
+            )}
+            {/* Poses are per-fighter: Zelda's and Sheik's portraits use
+                different vault skins and pose libraries, so each half gets its
+                own button that poses just that half's in-ISO costumes. */}
+            {onApplyPose && ZS_PAIR.map((name) => {
+              const count = (pairCostumes[name] || []).length
+              return (
+                <button
+                  key={name}
+                  className={`btn-pose-all btn-pose-zs zs-${name.toLowerCase()}`}
+                  onClick={() => { playSound('boop'); onApplyPose({ name }); }}
+                  onMouseEnter={playHoverSound}
+                  disabled={!dataReady || count === 0}
+                  title={`Apply a pose to all ${name} portraits`}
+                >
+                  <PoseIcon />
+                  <span className="btn-pose-zs-label">{name}</span>
+                </button>
+              )
+            })}
             <button
               className="btn-pose-all btn-sound-pack"
               onClick={() => { playSound('boop'); setShowSoundBank(true); }}

@@ -44,8 +44,20 @@ export default function CharacterMode({
   const ap = useApplyPose({
     API_URL,
     selectedFighter,
-    refreshCostumes: () => selectedFighter ? cm.refreshMexCostumes(selectedFighter.name) : Promise.resolve()
+    // Pose can target a fighter other than the selected one (Zelda/Sheik split),
+    // so refresh whichever fighter was actually posed.
+    refreshCostumes: (name) => {
+      const fighterName = name || selectedFighter?.name
+      return fighterName ? cm.refreshMexCostumes(fighterName) : Promise.resolve()
+    }
   })
+
+  // The fighter a pose targets, and its in-ISO costume count, for the modal/
+  // confirm text. For Zelda/Sheik the count comes from that half's pair list.
+  const poseFighterName = ap.poseFighter?.name || selectedFighter?.name || ''
+  const poseCostumeCount = ap.poseFighter && cm.isZeldaSheik
+    ? (cm.pairCostumes[ap.poseFighter.name]?.length ?? 0)
+    : cm.mexCostumes.length
 
   // Extras mode UI
   if (extras.extrasMode && selectedFighter) {
@@ -81,14 +93,14 @@ export default function CharacterMode({
         cm={cm}
         API_URL={API_URL}
         onEnterExtras={() => extras.setExtrasMode(true)}
-        onApplyPose={cm.isZeldaSheik ? null : ap.openPoseModal}
+        onApplyPose={ap.openPoseModal}
       />
 
       {/* Pose picker for "apply pose to all installed costumes" */}
       <PoseManagerModal
         show={ap.showPoseModal}
-        character={ap.poseCharacter || selectedFighter?.name}
-        displayName={selectedFighter?.name}
+        character={ap.poseCharacter || poseFighterName}
+        displayName={poseFighterName}
         baseSkinId={ap.poseBaseSkinId || undefined}
         onSelectPose={ap.handlePoseSelected}
         onClose={() => ap.setShowPoseModal(false)}
@@ -142,8 +154,8 @@ export default function CharacterMode({
         title={ap.pendingPose?.isOriginal ? 'Restore Original Portraits' : 'Apply Pose'}
         message={ap.pendingPose
           ? (ap.pendingPose.isOriginal
-              ? `Restore the original portraits for all ${cm.mexCostumes.length} ${selectedFighter?.name || ''} costumes? Each one goes back to its vault skin's main CSP (or the vanilla portrait).`
-              : `Apply pose "${ap.pendingPose.name}" to all ${cm.mexCostumes.length} ${selectedFighter?.name || ''} portraits? Costumes without this pose will be rendered and the renders added to the vault.`)
+              ? `Restore the original portraits for all ${poseCostumeCount} ${poseFighterName} costumes? Each one goes back to its vault skin's main CSP (or the vanilla portrait).`
+              : `Apply pose "${ap.pendingPose.name}" to all ${poseCostumeCount} ${poseFighterName} portraits? Costumes without this pose will be rendered and the renders added to the vault.`)
           : ''}
         confirmText={ap.pendingPose?.isOriginal ? 'Restore' : 'Apply'}
         onConfirm={ap.confirmApplyPose}

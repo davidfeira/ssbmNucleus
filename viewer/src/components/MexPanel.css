@@ -2771,6 +2771,29 @@
   cursor: not-allowed;
 }
 
+/* Zelda/Sheik split: each half gets its own pose button, so they carry a
+   small fighter label and grow past the fixed 24px icon size. The label is
+   tinted to match the panel's per-fighter colors (Zelda pink, Sheik cyan). */
+.btn-pose-zs {
+  width: auto;
+  gap: 4px;
+  padding: 0 var(--space-2);
+}
+
+.btn-pose-zs-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.btn-pose-zs.zs-zelda .btn-pose-zs-label {
+  color: #f0a8e0;
+}
+
+.btn-pose-zs.zs-sheik .btn-pose-zs-label {
+  color: var(--color-cyan);
+}
+
 /* Team Color Badges on Cards */
 .team-color-badges {
   position: absolute;

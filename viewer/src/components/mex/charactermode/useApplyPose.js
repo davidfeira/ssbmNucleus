@@ -17,21 +17,26 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
   // canonical characters, the custom-character pseudo key otherwise
   const [poseCharacter, setPoseCharacter] = useState(null)
   const [poseBaseSkinId, setPoseBaseSkinId] = useState(null)
+  // The fighter the pose targets. Usually the selected fighter, but the
+  // Zelda/Sheik split panel poses one half at a time, so it passes the
+  // specific fighter to openPoseModal.
+  const [poseFighter, setPoseFighter] = useState(null)
   const [pendingPose, setPendingPose] = useState(null)
   const [applying, setApplying] = useState(false)
   const [applyingPose, setApplyingPose] = useState(null)
   const [applyProgress, setApplyProgress] = useState({ current: 0, total: 0 })
 
-  const openPoseModal = async () => {
-    if (!selectedFighter) return
-    let character = selectedFighter.name
+  const openPoseModal = async (fighterArg) => {
+    const fighter = fighterArg || selectedFighter
+    if (!fighter) return
+    let character = fighter.name
     let baseSkinId = null
     // Custom fighters keep their poses and skins under a pseudo vault key
-    if (selectedFighter.isMexFighter) {
+    if (fighter.isMexFighter) {
       try {
         const res = await fetch(`${API_URL}/custom-characters/list`)
         const data = await res.json()
-        const entry = (data.characters || []).find(c => c.name === selectedFighter.name)
+        const entry = (data.characters || []).find(c => c.name === fighter.name)
         if (entry) {
           character = `custom_characters/${entry.slug}/costumes`
           // The create-pose viewer needs a vault skin to load the model from
@@ -44,6 +49,7 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
         console.warn('Custom character lookup failed, using fighter name:', err)
       }
     }
+    setPoseFighter(fighter)
     setPoseCharacter(character)
     setPoseBaseSkinId(baseSkinId)
     setShowPoseModal(true)
@@ -58,8 +64,9 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
 
   const confirmApplyPose = async () => {
     const pose = pendingPose
+    const fighter = poseFighter || selectedFighter
     setPendingPose(null)
-    if (!pose || !selectedFighter) return
+    if (!pose || !fighter) return
 
     setApplying(true)
     setApplyingPose(pose)
@@ -75,7 +82,7 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fighter: selectedFighter.name,
+          fighter: fighter.name,
           character: poseCharacter
         })
       })
@@ -139,7 +146,7 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
           (failed > 0 ? `\n${failed} failed — see console.` : ''))
       }
 
-      await refreshCostumes()
+      await refreshCostumes(fighter.name)
     } catch (err) {
       console.error('Apply pose error:', err)
       playSound('error')
@@ -155,6 +162,7 @@ export default function useApplyPose({ API_URL, selectedFighter, refreshCostumes
     setShowPoseModal,
     poseCharacter,
     poseBaseSkinId,
+    poseFighter,
     pendingPose,
     setPendingPose,
     applying,
