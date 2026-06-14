@@ -50,6 +50,7 @@ CHARACTER_CODES = {
     'Mr. Game & Watch': 'Gw',
     'Kirby': 'Kb',
     'Bowser': 'Kp',
+    'Giga Bowser': 'Gk',
     'Link': 'Lk',
     'Luigi': 'Lg',
     'Mario': 'Mr',
@@ -99,6 +100,7 @@ CHARACTER_HEAD_BONES = {
     'Mr. Game & Watch': 20,
     'Kirby': 11,
     'Bowser': 51,
+    'Giga Bowser': 48,
     'Link': 40,
     'Luigi': 24,
     'Mario': 24,
@@ -137,6 +139,7 @@ CHARACTER_ARM_BONES = {
     'Mr. Game & Watch': (27, 12),
     'Kirby': (43, 38),
     'Bowser': (61, 34),
+    'Giga Bowser': (61, 34),
     'Link': (54, 22),
     'Luigi': (32, 9),
     'Mario': (32, 9),
@@ -176,6 +179,7 @@ SCENE_MODE_CHARACTERS = [
     'Captain Falcon',
     'Ness',
     'Bowser',
+    'Giga Bowser',
     'Dr. Mario',
     'Peach',
     'Mewtwo',
@@ -200,6 +204,10 @@ def find_character_assets(character_name, dat_filepath=None):
     # detect_character() says 'Mr. Game & Watch' but the asset folder is 'G&W'
     if character_name == 'Mr. Game & Watch':
         folder_name = 'G&W'
+    # Giga Bowser is an internal Melee fighter without CSP setup assets of his
+    # own. Pose him with Bowser's scene data while rendering the Giga model.
+    if character_name == 'Giga Bowser':
+        folder_name = 'Bowser'
 
     character_folder = os.path.join(CSP_BASE_PATH, folder_name)
 
@@ -542,6 +550,87 @@ def composite_ice_climbers_csp(nana_csp_path, popo_csp_path, output_path):
         logger.error(f"Failed to composite Ice Climbers CSP: {e}", exc_info=True)
         return None
 
+# --------------------------------------------------------------------------- #
+# Low-poly DObj hiding for portrait renders                                     #
+# --------------------------------------------------------------------------- #
+# Portrait renders (--csp / --head-shot) draw EVERY DObj, including the
+# off-screen low-poly (magnifier/shadow) mesh, which then pokes through the
+# image. Each fighter's ftData (Pl<XX>.dat) carries a visibility table whose
+# costume-0 LowPoly set is exactly that mesh — read it and pass --hide-dobjs.
+# This is the same DObj-index space the engine and HSDRawViewer use, and works
+# for ANY character (vanilla, recolor, custom) because each ships its own
+# Pl<XX>.dat. It beats the hand-authored per-scene `hiddenNodes`, which are
+# calibrated for one model and don't transfer to a borrowed scene (Giga Bowser
+# posed with Bowser's scene). See docs/CSP_LOWPOLY_HIDING.md.
+def _find_ftdata(dat_filepath, character):
+    """Locate the fighter ftData (Pl<XX>.dat) for a costume model dat: a sibling
+    Pl<XX>.dat next to the model, else the vanilla copy in test-base/files."""
+    p = Path(dat_filepath)
+    stem = p.stem
+    if len(stem) >= 6 and stem.startswith('Pl'):
+        cand = p.parent / f"{stem[:4]}.dat"
+        if cand.exists() and cand.resolve() != p.resolve():
+            return cand
+    code = CHARACTER_CODES.get(character)
+    if code:
+        vb = SCRIPT_DIR.parents[2] / "storage" / "test-base" / "files" / f"Pl{code}.dat"
+        if vb.exists():
+            return vb
+    return None
+
+
+def low_poly_dobjs(dat_filepath, character):
+    """Comma-joined costume-0 LowPoly DObj indices to hide in a portrait render,
+    or None if the visibility table can't be read (then the caller falls back to
+    whatever hiddenNodes the scene carries)."""
+    ft_dat = _find_ftdata(dat_filepath, character)
+    if not ft_dat:
+        logger.info(f"low-poly hide: no ftData found for {character}")
+        return None
+    try:
+        backend = str(SCRIPT_DIR.parents[2] / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        from skinlab.datprobe import DatFile
+
+        d = DatFile(str(ft_dat))
+        ft = next(o for n, o in d.roots if n.startswith('ftData'))
+        lookups = d.ptr(ft + 0x08)
+        if lookups is None:
+            return None
+
+        def rptr(off):
+            # a pointer only if the field is itself relocated (vanilla dats pad
+            # the lookup arrays with non-pointer garbage words)
+            return d.u32(off) if off in d.relocs else None
+
+        vis_arr = rptr(lookups + 0x04)
+        if vis_arr is None:
+            return None
+        table = rptr(vis_arr + 0x04)            # costume 0, LowPoly table
+        if table is None:
+            return None
+        count = d.u32(table + 0x00)
+        arr = rptr(table + 0x04)
+        if arr is None or count > 64:
+            return None
+        idx = set()
+        for i in range(count):
+            le = arr + i * 0x8
+            n = d.u32(le + 0x00)
+            data = rptr(le + 0x04)
+            if data is not None and n <= 256:
+                idx.update(d.raw[0x20 + data:0x20 + data + n])
+        if not idx:
+            return None
+        result = ",".join(str(i) for i in sorted(idx))
+        logger.info(f"low-poly hide for {character} ({Path(ft_dat).name}): {result}")
+        return result
+    except Exception as e:
+        logger.info(f"low-poly hide: derive failed for {character}: {e}")
+        return None
+
+
 def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False):
     """Internal function to generate a single CSP
 
@@ -592,6 +681,12 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     head_bone = CHARACTER_HEAD_BONES.get(character)
     if head_bone is not None:
         cmd.extend(["--head-bone", str(head_bone)])
+
+    # Hide the off-screen low-poly mesh (authoritative: overrides any scene
+    # hiddenNodes, so a borrowed scene's hand-list can't mis-hide this model).
+    hide = low_poly_dobjs(dat_filepath, character)
+    if hide:
+        cmd.extend(["--hide-dobjs", hide])
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -723,6 +818,11 @@ def generate_head_shot(dat_filepath):
     arm_bones = CHARACTER_ARM_BONES.get(character)
     if arm_bones:
         cmd.extend(["--collapse-bones", f"{arm_bones[0]},{arm_bones[1]}"])
+    # Hide the low-poly mesh so it can't bleed into the head crop (the head-shot
+    # has no scene yml, so this is the only way to hide it here).
+    hide = low_poly_dobjs(dat_filepath, character)
+    if hide:
+        cmd.extend(["--hide-dobjs", hide])
     if os.name != 'nt':
         cmd.insert(0, "wine")
 

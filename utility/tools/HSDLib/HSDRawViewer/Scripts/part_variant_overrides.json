@@ -1,0 +1,21 @@
+{
+  "_comment": "Curated per-animation model-part swaps for moves whose part change is driven by hardcoded special-move C code (NOT a subaction code-31 'Change Model State' event), so the auto path in StreamingServer can't see them. Keyed by the fighter-data ftData root name. Each entry: 'match' = substring of the animation symbol, 'slot'/'variant' = the HighPoly slot and option to select (variant 1 = the 'ball' form). Source: melee decomp ftParts_80074B0C calls. See docs/ANIMATION_PART_VISIBILITY.md.",
+
+  "ftDataKoopa": [
+    { "match": "SpecialHi", "slot": 0, "variant": 1, "note": "Whirling Fortress (up-B) -> shell, limbs tucked. The withdraw fn ftKp_SpecialN_80135780 (named for its address-range file SpecialN.c) is CALLED by ftKp_SpecialHi.c -> the swap belongs to up-B, not neutral-B (neutral-B = Fire Breath, no shell). Verified by decomp call-graph + render." },
+    { "match": "SpecialAirHi", "slot": 0, "variant": 1, "note": "aerial Whirling Fortress" }
+  ],
+
+  "ftDataGkoopa": [
+    { "match": "SpecialHi", "slot": 0, "variant": 1, "note": "Giga up-B withdraws too: ftGk_Init.c registers Bowser's ftKp_SpecialHi_* handlers, which call the same ftKp_SpecialN_80135780 shell withdraw. (Per-dir decomp scan misses this cross-char handler reuse; confirmed by ftGk_Init.c + in-game.) slot 0 var 1 = Giga shell, same as its code-31 aerials." },
+    { "match": "SpecialAirHi", "slot": 0, "variant": 1, "note": "aerial Whirling Fortress (shared ftKp_SpecialAirHi handlers)" }
+  ],
+
+  "ftDataYoshi": [
+    { "match": "SpecialS", "slot": 0, "variant": 1, "note": "Egg Roll (side-B) -> egg (ftYs_SpecialS, ftYs_Unk3 table)" },
+    { "match": "SpecialAirS", "slot": 0, "variant": 1, "note": "aerial Egg Roll" },
+    { "match": "GuardOn", "slot": 0, "variant": 1, "note": "Yoshi's shield IS his egg (ftYs_Guard)" },
+    { "match": "GuardReflect", "slot": 0, "variant": 1 },
+    { "match": "GuardDamage", "slot": 0, "variant": 1 }
+  ]
+}

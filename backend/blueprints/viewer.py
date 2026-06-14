@@ -78,6 +78,51 @@ def find_aj_file(character):
     return None
 
 
+def find_fighter_data_file(character):
+    """Find the fighter-data dat (Pl<XX>.dat) for a character. Unlike the model
+    costume dat, this holds ftData: the model-part visibility lookup table AND
+    the per-action subaction scripts that drive per-animation part swaps
+    (Bowser shell, Link's bow, Peach's f-smash weapon, ...).
+
+    NOTE: the vanilla-assets dir usually ships only costume dats + the AJ, NOT
+    the fighter-data dat, so the real source is the extracted base-game files
+    (same place generate_csp falls back to)."""
+    if character not in VIEWER_CHAR_PREFIXES:
+        return None
+    prefix = VIEWER_CHAR_PREFIXES[character]
+    for p in (VANILLA_ASSETS_DIR / character / f"{prefix}.dat",
+              STORAGE_PATH / "test-base" / "files" / f"{prefix}.dat"):
+        if p.exists():
+            return p
+    return None
+
+
+def extract_custom_character_data(slug):
+    """Get a custom character's fighter-data dat: extract files.fighterDataPath
+    from fighter.zip into the character dir (cached as data_cache.dat)."""
+    char_dir = STORAGE_PATH / 'custom_characters' / slug
+    cache = char_dir / 'data_cache.dat'
+    if cache.exists():
+        return cache
+    fighter_json = char_dir / 'fighter.json'
+    fighter_zip = char_dir / 'fighter.zip'
+    if not fighter_json.exists() or not fighter_zip.exists():
+        return None
+    try:
+        with open(fighter_json, 'r') as f:
+            data_file = (json.load(f).get('files') or {}).get('fighterDataPath')
+        if not data_file:
+            return None
+        with zipfile.ZipFile(fighter_zip) as zf:
+            for n in zf.namelist():
+                if n.split('/')[-1].lower() == data_file.lower():
+                    cache.write_bytes(zf.read(n))
+                    return cache
+    except Exception as e:
+        logger.warning(f"Failed to extract fighter data for custom character {slug}: {e}")
+    return None
+
+
 def extract_custom_character_aj(slug):
     """Get a custom character's animation archive: extract files.animFile
     from fighter.zip into the character dir (cached as aj_cache.dat)."""
@@ -297,6 +342,12 @@ def start_viewer():
             cmd.append('')  # Empty placeholder for scene file
         if aj_windows_path:
             cmd.append(aj_windows_path)
+            # fighter-data dat (ftData: model-part lookup table + subactions) ->
+            # per-animation mesh-part visibility (Bowser shell on up-B, etc.)
+            data_path = find_fighter_data_file(character) or (
+                extract_custom_character_data(slug) if slug else None)
+            if data_path:
+                cmd.append(to_windows_path(data_path))
 
         logger.info(f"Starting viewer: {' '.join(cmd)}")
 
@@ -400,11 +451,17 @@ def get_viewer_paths():
         scene_windows_path = to_windows_path(scene_path) if scene_path else None
         aj_windows_path = to_windows_path(aj_path) if aj_path else None
 
+        # fighter-data dat (ftData) -> per-animation mesh-part visibility
+        data_path = find_fighter_data_file(character) or (
+            extract_custom_character_data(slug) if slug else None)
+        data_windows_path = to_windows_path(data_path) if data_path else None
+
         return jsonify({
             'success': True,
             'datFile': dat_windows_path,
             'sceneFile': scene_windows_path,
             'ajFile': aj_windows_path,
+            'dataFile': data_windows_path,
             'logsPath': logs_windows_path,
             'tempDir': str(temp_dir)  # For cleanup later if needed
         })
@@ -440,11 +497,16 @@ def get_viewer_paths_vanilla():
         aj_path = find_aj_file(character)
         aj_windows_path = to_windows_path(aj_path) if aj_path else None
 
+        # fighter-data dat (ftData) -> per-animation mesh-part visibility
+        data_path = find_fighter_data_file(character)
+        data_windows_path = to_windows_path(data_path) if data_path else None
+
         return jsonify({
             'success': True,
             'datFile': dat_windows_path,
             'sceneFile': scene_windows_path,
             'ajFile': aj_windows_path,
+            'dataFile': data_windows_path,
             'logsPath': logs_windows_path
         })
 
@@ -501,11 +563,17 @@ def get_viewer_paths_vault():
         scene_windows_path = to_windows_path(scene_path) if scene_path else None
         aj_windows_path = to_windows_path(aj_path) if aj_path else None
 
+        # fighter-data dat (ftData) -> per-animation mesh-part visibility
+        data_path = find_fighter_data_file(character) or (
+            extract_custom_character_data(slug) if slug else None)
+        data_windows_path = to_windows_path(data_path) if data_path else None
+
         return jsonify({
             'success': True,
             'datFile': dat_windows_path,
             'sceneFile': scene_windows_path,
             'ajFile': aj_windows_path,
+            'dataFile': data_windows_path,
             'logsPath': logs_windows_path,
             'tempDir': str(temp_dir)
         })
@@ -563,6 +631,10 @@ def start_viewer_vanilla():
             cmd.append('')
         if aj_windows_path:
             cmd.append(aj_windows_path)
+            # fighter-data dat -> per-animation mesh-part visibility
+            data_path = find_fighter_data_file(character)
+            if data_path:
+                cmd.append(to_windows_path(data_path))
 
         logger.info(f"Starting vanilla viewer: {' '.join(cmd)}")
 
@@ -664,6 +736,11 @@ def start_viewer_vault():
             cmd.append('')
         if aj_windows_path:
             cmd.append(aj_windows_path)
+            # fighter-data dat -> per-animation mesh-part visibility
+            data_path = find_fighter_data_file(character) or (
+                extract_custom_character_data(slug) if slug else None)
+            if data_path:
+                cmd.append(to_windows_path(data_path))
 
         logger.info(f"Starting vault viewer: {' '.join(cmd)}")
 

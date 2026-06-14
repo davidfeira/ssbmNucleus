@@ -38,7 +38,7 @@ class ViewerSessionError(RuntimeError):
 
 class ViewerSession:
     def __init__(self, exe, port, dat_file, logs_path=None, scene_file=None,
-                 aj_file=None, subprocess_kwargs=None, frame_fps=10,
+                 aj_file=None, data_file=None, subprocess_kwargs=None, frame_fps=10,
                  startup_timeout=40.0):
         if websocket is None:
             raise ViewerSessionError(
@@ -63,6 +63,11 @@ class ViewerSession:
         cmd.append(str(scene_file) if scene_file else '')
         if aj_file:
             cmd.append(str(aj_file))
+            # fighter-data dat (ftData: model-part lookup table + subaction
+            # scripts) -> per-animation mesh-part visibility. Positional, so it
+            # only follows a present aj_file (and is useless without one).
+            if data_file:
+                cmd.append(str(data_file))
         self.process = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             **(subprocess_kwargs or {}))

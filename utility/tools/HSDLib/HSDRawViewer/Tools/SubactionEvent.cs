@@ -335,7 +335,10 @@ namespace HSDRawViewer.Tools
 
                 if (p.IsPointer)
                 {
-                    return ((CustomPointerValue)this[i].Value).Struct;
+                    // null when the pointer didn't resolve against the global
+                    // CustomPointerValue.Values list (e.g. headless callers that
+                    // don't populate it) -- don't NRE, just report no pointer.
+                    return (this[i].Value as CustomPointerValue)?.Struct;
                 }
             }
             return null;

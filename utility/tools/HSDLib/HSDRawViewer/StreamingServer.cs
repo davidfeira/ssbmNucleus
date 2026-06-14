@@ -12,8 +12,10 @@ using System.Windows.Forms;
 using HSDRaw;
 using HSDRaw.Common;
 using HSDRaw.Common.Animation;
+using HSDRaw.Melee.Pl;
 using HSDRaw.Tools.Melee;
 using HSDRawViewer.GUI;
+using HSDRawViewer.GUI.Plugins.SubactionEditor;
 using HSDRawViewer.Rendering;
 using HSDRawViewer.Rendering.Models;
 using SixLabors.ImageSharp;
@@ -53,6 +55,11 @@ namespace HSDRawViewer
 
         // Animation archive manager (for loading real Melee animations)
         private FighterAJManager _ajManager;
+
+        // Per-animation model-part visibility (Bowser shell, Link's bow, ...).
+        // Shared with EmbeddedServer via ModelPartVisibility. See
+        // docs/ANIMATION_PART_VISIBILITY.md.
+        private ModelPartVisibility _partVis;
 
         // Cached texture list (populated after first render to avoid Invoke deadlocks)
         private List<TextureInfo> _cachedTextureList = null;
@@ -127,7 +134,7 @@ namespace HSDRawViewer
             catch { /* Ignore logging errors */ }
         }
 
-        public async Task StartAsync(string datFilePath, string sceneFilePath = null, string ajFilePath = null)
+        public async Task StartAsync(string datFilePath, string sceneFilePath = null, string ajFilePath = null, string dataFilePath = null)
         {
             Log($"Starting streaming server on port {_port}...");
             Log($"Loading DAT file: {datFilePath}");
@@ -409,6 +416,10 @@ namespace HSDRawViewer
                 }
             }
 
+            // Per-animation model-part visibility (shared with EmbeddedServer)
+            _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
+            _partVis.LoadFighterData(dataFilePath);
+
             // Start HTTP/WebSocket listener
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add($"http://localhost:{_port}/");
@@ -541,6 +552,7 @@ namespace HSDRawViewer
                                         _animationFrame = _animationFrameCount - 1;
 
                                     _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
+                                    _partVis?.ApplyFrame(_animationFrame);
                                 }
 
                                 bitmap = _viewport.GenerateBitmap(_frameWidth, _frameHeight);
@@ -699,7 +711,10 @@ namespace HSDRawViewer
                             _animationFrame = (float)frameVal.GetDouble();
                             _animationFrame = Math.Clamp(_animationFrame, 0, Math.Max(0, _animationFrameCount - 1));
                             if (_renderJObj != null)
+                            {
                                 _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
+                                _partVis?.ApplyFrame(_animationFrame);
+                            }
                         }
                         break;
 
@@ -968,6 +983,8 @@ namespace HSDRawViewer
                                             _animationFrame = 0;
                                             _animationPlaying = true;
                                             _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
+                                            // arm/clear per-animation model-part visibility for this symbol
+                                            _partVis?.OnAnimationLoaded(symbol);
                                         }));
 
                                         Console.Error.WriteLine($"[ANIM] Loaded: {symbol}, {newFrameCount} frames");

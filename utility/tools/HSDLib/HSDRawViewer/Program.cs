@@ -249,8 +249,8 @@ namespace HSDRawViewer
             {
                 if (args.Length < 3)
                 {
-                    Console.WriteLine("Usage: HSDRawViewer.exe --stream <port> <dat_file> [logs_path] [scene_file] [aj_file]");
-                    Console.WriteLine("Example: HSDRawViewer.exe --stream 8765 PlFxNr.dat C:\\projects\\logs scene.yml PlFxAJ.dat");
+                    Console.WriteLine("Usage: HSDRawViewer.exe --stream <port> <dat_file> [logs_path] [scene_file] [aj_file] [data_file]");
+                    Console.WriteLine("Example: HSDRawViewer.exe --stream 8765 PlFxNr.dat C:\\projects\\logs scene.yml PlFxAJ.dat PlFx.dat");
                     return;
                 }
 
@@ -259,6 +259,7 @@ namespace HSDRawViewer
                 string logsPath = args.Length >= 4 ? args[3] : null;
                 string sceneFile = args.Length >= 5 ? args[4] : null;
                 string ajFile = args.Length >= 6 ? args[5] : null;
+                string dataFile = args.Length >= 7 ? args[6] : null;
 
                 Console.WriteLine($"Starting streaming server on port {port}...");
                 Console.WriteLine($"DAT file: {datFile}");
@@ -268,6 +269,8 @@ namespace HSDRawViewer
                     Console.WriteLine($"Scene file: {sceneFile}");
                 if (ajFile != null)
                     Console.WriteLine($"AJ file: {ajFile}");
+                if (dataFile != null)
+                    Console.WriteLine($"Data file: {dataFile}");
 
                 using var server = new StreamingServer(port, logsPath);
 
@@ -280,7 +283,7 @@ namespace HSDRawViewer
                 };
 
                 // Run server (blocking)
-                server.StartAsync(datFile, sceneFile, ajFile).GetAwaiter().GetResult();
+                server.StartAsync(datFile, sceneFile, ajFile, dataFile).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -296,8 +299,8 @@ namespace HSDRawViewer
             {
                 if (args.Length < 3)
                 {
-                    Console.WriteLine("Usage: HSDRawViewer.exe --embedded <pipe_name> <dat_file> [logs_path] [scene_file] [aj_file]");
-                    Console.WriteLine("Example: HSDRawViewer.exe --embedded HSDViewer_12345 PlFxNr.dat C:\\logs scene.yml PlFxAJ.dat");
+                    Console.WriteLine("Usage: HSDRawViewer.exe --embedded <pipe_name> <dat_file> [logs_path] [scene_file] [aj_file] [data_file]");
+                    Console.WriteLine("Example: HSDRawViewer.exe --embedded HSDViewer_12345 PlFxNr.dat C:\\logs scene.yml PlFxAJ.dat PlFx.dat");
                     return;
                 }
 
@@ -306,6 +309,7 @@ namespace HSDRawViewer
                 string logsPath = args.Length >= 4 ? args[3] : null;
                 string sceneFile = args.Length >= 5 ? args[4] : null;
                 string ajFile = args.Length >= 6 ? args[5] : null;
+                string dataFile = args.Length >= 7 ? args[6] : null;
 
                 Console.WriteLine($"Starting embedded server with pipe: {pipeName}");
                 Console.WriteLine($"DAT file: {datFile}");
@@ -315,6 +319,8 @@ namespace HSDRawViewer
                     Console.WriteLine($"Scene file: {sceneFile}");
                 if (ajFile != null)
                     Console.WriteLine($"AJ file: {ajFile}");
+                if (dataFile != null)
+                    Console.WriteLine($"Data file: {dataFile}");
 
                 using var server = new EmbeddedServer(pipeName, logsPath);
 
@@ -327,7 +333,7 @@ namespace HSDRawViewer
                 };
 
                 // Run server (blocking)
-                server.StartAsync(datFile, sceneFile, ajFile).GetAwaiter().GetResult();
+                server.StartAsync(datFile, sceneFile, ajFile, dataFile).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -442,6 +448,27 @@ namespace HSDRawViewer
                     argsList.RemoveAt(collapseArg);
                     args = argsList.ToArray();
                     Console.WriteLine($"Collapsing bone subtrees: {string.Join(",", collapseBones)}");
+                }
+
+                // --hide-dobjs a,b,c: hide these DOBJ indices (the costume's
+                // LowPoly / off-screen magnifier mesh) during the render. When
+                // present it is AUTHORITATIVE — it replaces any hiddenNodes from
+                // the scene yml, so a borrowed scene (e.g. Giga posed with
+                // Bowser's) can't apply a hand-list calibrated for a different
+                // model. Works in both the normal CSP and --head-shot paths.
+                // Derive the set from the fighter's ftData visibility table
+                // (costume-0 LowPoly set) — see docs/CSP_LOWPOLY_HIDING.md.
+                var hideDObjs = new List<int>();
+                int hideArg = argsList.IndexOf("--hide-dobjs");
+                if (hideArg >= 0 && hideArg + 1 < argsList.Count)
+                {
+                    foreach (var part in argsList[hideArg + 1].Split(','))
+                        if (int.TryParse(part.Trim(), out int dobj))
+                            hideDObjs.Add(dobj);
+                    argsList.RemoveAt(hideArg + 1);
+                    argsList.RemoveAt(hideArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Hide DObjs (overrides scene hiddenNodes): {string.Join(",", hideDObjs)}");
                 }
 
                 // Apply scale to CSP dimensions
@@ -1147,6 +1174,21 @@ namespace HSDRawViewer
                             viewport.Render();
                         }
 
+                        // --hide-dobjs (if given) is authoritative: replace any
+                        // scene-yml hiddenNodes with the explicit DObj set so a
+                        // borrowed scene's hand-list can't fight the derived one.
+                        // The scene may have ALREADY hidden its own nodes on the
+                        // renderJObj, so reset every DObj visible first — then
+                        // hiding only our set is a true replacement, not a union.
+                        if (hideDObjs.Count > 0)
+                        {
+                            hiddenNodes.Clear();
+                            hiddenNodes.AddRange(hideDObjs);
+                            if (renderJObj != null)
+                                for (int i = 0; i < renderJObj.DObjCount; i++)
+                                    renderJObj.SetDObjVisible(i, true);
+                        }
+
                         // Apply hidden nodes if any were specified (moved here after render)
                         if (hiddenNodes.Count > 0)
                         {
@@ -1304,6 +1346,11 @@ namespace HSDRawViewer
                     };
 
                     // Take screenshot using the EXACT same method as GUI
+                    if (renderJObj != null)
+                    {
+                        var atCap = renderJObj.GetHiddenDObjIndices();
+                        Console.WriteLine($"AT-CAPTURE hidden DObjs ({atCap.Length}): {string.Join(",", atCap)}");
+                    }
                     Console.WriteLine("Taking screenshot using native method...");
                     viewport.Screenshot();
 

@@ -217,6 +217,7 @@ const EmbeddedModelViewer = forwardRef(({
           datFile: data.datFile,
           sceneFile: data.sceneFile,
           ajFile: data.ajFile,
+          dataFile: data.dataFile,  // fighter-data dat -> per-animation mesh-part visibility
           logsPath: data.logsPath
         }
         console.log('[EmbeddedViewer] Got paths:', viewerPaths)
@@ -238,6 +239,7 @@ const EmbeddedModelViewer = forwardRef(({
           datFile: data.datFile,
           sceneFile: data.sceneFile,
           ajFile: data.ajFile,
+          dataFile: data.dataFile,  // fighter-data dat -> per-animation mesh-part visibility
           logsPath: data.logsPath
         }
         console.log('[EmbeddedViewer] Got vanilla paths:', viewerPaths)

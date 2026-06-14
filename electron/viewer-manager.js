@@ -57,11 +57,13 @@ class ViewerManager {
    * @param {string} options.datFile - Path to the DAT file
    * @param {string} [options.sceneFile] - Optional path to scene.yml
    * @param {string} [options.ajFile] - Optional path to AJ file for animations
+   * @param {string} [options.dataFile] - Optional fighter-data dat (ftData) for
+   *   per-animation mesh-part visibility (Bowser shell on up-B, etc.)
    * @param {string} [options.logsPath] - Optional path for logs
    * @param {boolean} options.isDev - Whether running in development mode
    */
   async start(options) {
-    const { datFile, sceneFile, ajFile, logsPath, isDev } = options;
+    const { datFile, sceneFile, ajFile, dataFile, logsPath, isDev } = options;
 
     // Stop any existing viewer
     if (this.process) {
@@ -92,8 +94,9 @@ class ViewerManager {
     // land the AJ in the scene slot, so the viewer parses the AJ as scene YAML
     // and loads zero animations. Always emit all three slots; the C# guards
     // (string.IsNullOrEmpty) treat '' as absent.
+    // args[6]=dataFile (fighter-data dat) -> per-animation mesh-part visibility.
     const args = ['--embedded', this.pipeName, datFile,
-                  logsPath || '', sceneFile || '', ajFile || ''];
+                  logsPath || '', sceneFile || '', ajFile || '', dataFile || ''];
 
     console.log('[ViewerManager] Starting viewer with args:', args);
 

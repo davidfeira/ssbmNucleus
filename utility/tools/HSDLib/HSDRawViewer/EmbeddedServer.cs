@@ -79,6 +79,10 @@ namespace HSDRawViewer
         // Animation archive manager
         private FighterAJManager _ajManager;
 
+        // Per-animation model-part visibility (Bowser shell, Link's bow, ...).
+        // Shared with StreamingServer via ModelPartVisibility.
+        private ModelPartVisibility _partVis;
+
         // Cached texture list
         private List<TextureInfo> _cachedTextureList = null;
 
@@ -147,7 +151,7 @@ namespace HSDRawViewer
             catch { }
         }
 
-        public async Task StartAsync(string datFilePath, string sceneFilePath = null, string ajFilePath = null)
+        public async Task StartAsync(string datFilePath, string sceneFilePath = null, string ajFilePath = null, string dataFilePath = null)
         {
             Log($"Starting embedded server with pipe: {_pipeName}");
             Log($"Loading DAT file: {datFilePath}");
@@ -370,6 +374,10 @@ namespace HSDRawViewer
                 }
             }
 
+            // Per-animation model-part visibility (shared with StreamingServer)
+            _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
+            _partVis.LoadFighterData(dataFilePath);
+
             // Signal to Electron that we're about to create the pipe
             Console.WriteLine("PIPE_READY");
             Console.Out.Flush();
@@ -444,6 +452,7 @@ namespace HSDRawViewer
                             _animationFrame = _animationFrameCount - 1;
 
                         _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
+                        _partVis?.ApplyFrame(_animationFrame);
 
                         // Send frame update to UI (throttled to every 3 frames for performance)
                         if ((int)_animationFrame % 3 == 0)
@@ -587,7 +596,10 @@ namespace HSDRawViewer
                             _animationFrame = (float)frameVal.GetDouble();
                             _animationFrame = Math.Clamp(_animationFrame, 0, Math.Max(0, _animationFrameCount - 1));
                             if (_renderJObj != null)
+                            {
                                 _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
+                                _partVis?.ApplyFrame(_animationFrame);
+                            }
                         }
                         break;
 
@@ -632,6 +644,7 @@ namespace HSDRawViewer
                                             _animationPlaying = true;
                                             _currentAnimSymbol = symbol;
                                             _renderJObj.RequestAnimationUpdate(FrameFlags.All, 0);
+                                            _partVis?.OnAnimationLoaded(symbol);
                                         }));
 
                                         await SendJsonAsync(new

@@ -77,6 +77,10 @@ difference is whether the low DObjs contain geometry.
 
 ## Background: the costume visibility table
 
+> The **same** LowPoly DObj set drives offline CSP/head-shot renders too — hide it
+> so the magnifier mesh doesn't poke through the portrait. That's a read-only use
+> of this table; see **[CSP_LOWPOLY_HIDING.md](CSP_LOWPOLY_HIDING.md)**.
+
 Each fighter's ftData (`Pl<XX>.dat`, e.g. `PlUu.dat`) holds a
 `SBM_PlayerModelLookupTables` at `ftData + 0x08`. Per costume it has four
 DObj-index lists (`SBM_CostumeLookupTable`):

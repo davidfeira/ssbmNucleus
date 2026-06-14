@@ -77,8 +77,10 @@ def _resolve_open_target(data):
     keys (custom_characters/<slug>/skins|costumes)."""
     from blueprints.viewer import (custom_character_based_on,
                                    extract_costume_archive,
-                                   extract_custom_character_aj, find_aj_file,
-                                   find_scene_file, find_vanilla_costume_file)
+                                   extract_custom_character_aj,
+                                   extract_custom_character_data, find_aj_file,
+                                   find_fighter_data_file, find_scene_file,
+                                   find_vanilla_costume_file)
     from core.metadata import custom_character_slug
 
     character = (data.get('character') or '').strip()
@@ -93,6 +95,7 @@ def _resolve_open_target(data):
             raise FileNotFoundError(f'DAT not found: {dat_path}')
         scene_path = find_scene_file(character) if character else None
         aj_path = find_aj_file(character) if character else None
+        data_path = find_fighter_data_file(character) if character else None
     elif character and skin_id:
         zip_path = STORAGE_PATH / character / f'{skin_id}.zip'
         if not zip_path.exists():
@@ -103,26 +106,30 @@ def _resolve_open_target(data):
             raise FileNotFoundError('No costume archive inside the vault zip')
         scene_path = find_scene_file(character)
         aj_path = find_aj_file(character)
+        data_path = find_fighter_data_file(character)
     elif character and costume_code:
         dat_path = find_vanilla_costume_file(character, costume_code)
         if not dat_path or not dat_path.exists():
             raise FileNotFoundError(f'Vanilla costume not found: {character} {costume_code}')
         scene_path = find_scene_file(character)
         aj_path = find_aj_file(character)
+        data_path = find_fighter_data_file(character)
     else:
         raise ValueError('Provide {character, skinId}, {character, costumeCode}, or {datPath}')
 
-    # custom characters: their own AJ + the donor skeleton's scene
+    # custom characters: their own AJ + fighter-data dat + the donor skeleton's scene
     slug = custom_character_slug(character) if character else None
     if slug:
         if aj_path is None:
             aj_path = extract_custom_character_aj(slug)
+        if data_path is None:
+            data_path = extract_custom_character_data(slug)
         if scene_path is None:
             based_on = custom_character_based_on(slug)
             if based_on:
                 scene_path = find_scene_file(based_on)
 
-    return dat_path, scene_path, aj_path, temp_dir, Path(dat_path).name
+    return dat_path, scene_path, aj_path, data_path, temp_dir, Path(dat_path).name
 
 
 @skin_lab_bp.route('/api/mex/skin-lab/open', methods=['POST'])
@@ -138,7 +145,7 @@ def open_session():
     with _lock:
         _close_session_locked()
         try:
-            dat_path, scene_path, aj_path, temp_dir, dat_name = _resolve_open_target(data)
+            dat_path, scene_path, aj_path, data_path, temp_dir, dat_name = _resolve_open_target(data)
         except (FileNotFoundError, ValueError) as e:
             return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -147,7 +154,7 @@ def open_session():
         try:
             _session = ViewerSession(
                 HSDRAW_EXE, port, dat_path, logs_path=LOGS_PATH,
-                scene_file=scene_path, aj_file=aj_path,
+                scene_file=scene_path, aj_file=aj_path, data_file=data_path,
                 subprocess_kwargs=get_subprocess_args())
         except Exception as e:
             if temp_dir:
