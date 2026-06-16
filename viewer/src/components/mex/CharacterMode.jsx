@@ -67,7 +67,11 @@ export default function CharacterMode({
   // Character mode UI (default)
   // Hide non-playable characters
   const hiddenCharacters = ['Nana', 'Master Hand', 'Crazy Hand', 'Wireframe Male', 'Wireframe Female', 'Giga Bowser', 'Sandbag', 'NONE']
-  const playableFighters = fighters.filter(f => f.isMexFighter || !hiddenCharacters.includes(f.name))
+  // NONE is a placeholder fighter that blocks a broken slot — it is technically a
+  // mex fighter but must never be shown, so hide it even when isMexFighter is true.
+  const alwaysHidden = ['NONE']
+  const playableFighters = fighters.filter(f =>
+    !alwaysHidden.includes(f.name) && (f.isMexFighter || !hiddenCharacters.includes(f.name)))
   const batchImportProgress = cm.batchImporting && cm.batchProgress.total > 0
     ? (cm.batchProgress.current / cm.batchProgress.total) * 100
     : null

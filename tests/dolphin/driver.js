@@ -23,6 +23,7 @@ Options:
   --scenario <path>           Scenario JSON. Default: tests/dolphin/scenarios/boot-and-hold-a.json
   --template-user-dir <path>  Template Dolphin User dir. Defaults to "<dolphin dir>\\User" when present.
   --run-dir <path>            Use an explicit artifact directory for this run.
+  --audio-dump                Dump Dolphin DSP audio into the isolated run dir.
   --keep-open                 Leave Dolphin running after the scenario finishes.
   --dry-run                   Build the isolated config and print the launch plan without starting Dolphin.
   --help                      Show this message.
@@ -58,6 +59,10 @@ function parseArgs(argv) {
     }
     if (token === '--texture-dump') {
       result['texture-dump'] = true;
+      continue;
+    }
+    if (token === '--audio-dump') {
+      result['audio-dump'] = true;
       continue;
     }
     if (!token.startsWith('--')) {
@@ -302,6 +307,16 @@ function patchGfxTextureSettings(userDir, { dump = true, hires = true } = {}) {
   });
 }
 
+function patchDspAudioDumpSettings(userDir, dumpDir) {
+  fs.mkdirSync(dumpDir, { recursive: true });
+  const dolphinIni = path.join(userDir, 'Config', 'Dolphin.ini');
+  writeIni(dolphinIni, (sections) => {
+    upsertIniValue(sections, 'General', 'DumpPath', dumpDir);
+    upsertIniValue(sections, 'DSP', 'DumpAudio', 'True');
+    upsertIniValue(sections, 'DSP', 'DumpAudioSilent', 'False');
+  });
+}
+
 function readScenario(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8');
   const data = JSON.parse(raw);
@@ -532,6 +547,10 @@ async function main() {
     patchGfxTextureSettings(userDir, { dump: true, hires: true });
     log('Texture dump + hires load enabled in GFX.ini (texture-pack mode).');
   }
+  if (args['audio-dump']) {
+    patchDspAudioDumpSettings(userDir, path.join(runDir, 'Dump'));
+    log('DSP audio dumping enabled in Dolphin.ini.');
+  }
 
   const metadata = {
     createdAt: new Date().toISOString(),
@@ -541,6 +560,7 @@ async function main() {
     templateUserDir,
     runDir,
     userDir,
+    audioDump: !!args['audio-dump'],
     dryRun: args.dryRun,
   };
 

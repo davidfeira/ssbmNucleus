@@ -130,6 +130,7 @@ namespace MexCLI.Commands
 
                 int announcerCall = narratorIndex * 10000 + scriptIndex;
                 fighter.AnnouncerCall = announcerCall;
+                int cssSfxId = FighterAudioHelpers.ApplyAnnouncerCallToCssIcons(workspace, fighter);
 
                 workspace.Save(null);
 
@@ -141,6 +142,7 @@ namespace MexCLI.Commands
                     narratorBank = narratorIndex,
                     scriptIndex,
                     soundIndex = soundRelIndex,
+                    cssSfxId,
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 return 0;
             }

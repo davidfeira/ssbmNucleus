@@ -107,9 +107,14 @@ namespace mexLib
                 ProjectFilePath = projectFile,
             };
 
-            // copy files from source
-            var fullPath = mexPath + "/";
-            if (!fullPath.Equals(workspace.FilePath))
+            // copy files from source. Normalize both sides to full paths before
+            // comparing: mexPath uses forward slashes while workspace.FilePath comes
+            // from Path.GetDirectoryName (backslashes on Windows), so a raw string
+            // compare wrongly treats the same directory as different and tries to
+            // File.Copy MxDt.dat onto itself ("file in use by another process").
+            string srcFull = Path.GetFullPath(mexPath).TrimEnd('/', '\\');
+            string dstFull = Path.GetFullPath(workspace.FilePath).TrimEnd('/', '\\');
+            if (!string.Equals(srcFull, dstFull, StringComparison.OrdinalIgnoreCase))
             {
                 File.Copy(Path.Combine(mexPath, "files/MxDt.dat"), workspace.GetFilePath("MxDt.dat"), overwrite: true);
                 File.Copy(Path.Combine(mexPath, "files/GmRst.usd"), workspace.GetFilePath("GmRst.usd"), overwrite: true);

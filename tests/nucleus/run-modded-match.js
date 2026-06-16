@@ -163,7 +163,9 @@ function main() {
     if (!variants.length) throw new Error(`no DAS variant for stage "${only}"`);
     log(`DAS: testing ${variants.length} stage skin(s) in one session (L+R+A+START reset between)`);
     try { node(CONTROL, ['kill']); } catch (e) { /* none */ }
-    node(CONTROL, ['launch', '--iso', iso]);
+    const launchArgs = ['launch', '--iso', iso];
+    if (flags['audio-dump']) launchArgs.push('--audio-dump');
+    node(CONTROL, launchArgs);
     if (!waitForPipeReady(PIPE_READY_TIMEOUT_MS)) throw new Error('input pipe never appeared');
     sleepSync(MENU_WAIT_MS);
     node(PIPE, ['gotocss']);   // a CLEAN CSS (fighter NOT yet locked) -- cl_das locks it
@@ -178,7 +180,9 @@ function main() {
   log('killing any running Dolphin');
   try { node(CONTROL, ['kill']); } catch (e) { /* none running */ }
   log('launching modded ISO');
-  node(CONTROL, ['launch', '--iso', iso]);
+  const launchArgs = ['launch', '--iso', iso];
+  if (flags['audio-dump']) launchArgs.push('--audio-dump');
+  node(CONTROL, launchArgs);
   log('waiting for Dolphin input pipe to come up...');
   if (!waitForPipeReady(PIPE_READY_TIMEOUT_MS)) {
     throw new Error('Dolphin input pipe never appeared (slippibot1); launch may have failed');

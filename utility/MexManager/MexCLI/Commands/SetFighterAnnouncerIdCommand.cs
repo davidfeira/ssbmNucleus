@@ -48,6 +48,7 @@ namespace MexCLI.Commands
                     return Fail($"Fighter not found: {fighterNameOrId}");
 
                 fighter.AnnouncerCall = announcerCall;
+                int cssSfxId = FighterAudioHelpers.ApplyAnnouncerCallToCssIcons(workspace, fighter);
                 workspace.Save(null);
 
                 Console.WriteLine(JsonSerializer.Serialize(new
@@ -55,6 +56,7 @@ namespace MexCLI.Commands
                     success = true,
                     fighter = fighter.Name,
                     announcerCall,
+                    cssSfxId,
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 return 0;
             }

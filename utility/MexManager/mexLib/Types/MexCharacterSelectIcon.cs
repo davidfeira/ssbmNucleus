@@ -50,7 +50,7 @@ namespace mexLib.Types
             return new MEX_CSSIcon()
             {
                 ExternalCharID = (byte)Fighter,
-                SFXID = (byte)SFXID,
+                SFXID = SFXID,
                 StatusID = Status.UnlockedAndVisible,
                 JointID = (byte)(index + 1),
                 UnkID = (byte)(index + 1),

@@ -247,6 +247,12 @@ async function startMatch(port, opts) {
 // Add a CPU on port 2 (its N/A door is just right of the port-1 spawn). A 2nd
 // player is REQUIRED before you can lock your character in. Used as a discrete
 // step so a closed-loop (memory-feedback) selector can do the character pick.
+//
+// ⚠️ For GAMEPLAY/crash testing do NOT use this CPU path — the CPU attacks you
+// and moves the camera, ruining move/crash repros. Use the solo, no-CPU engine
+// in backend/ingame/ (memory-loads the match alone; template
+// backend/fsm_crash_probe.py; docs backend/ingame/README.md). This CPU step is
+// only for testing the CSS/SSS UI itself.
 async function cpuStep(port) {
   await tiltHold(port, '1.0', '0.5', 150);
   await tapButton(port, 'A', CSS.A_HOLD);

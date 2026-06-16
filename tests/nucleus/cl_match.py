@@ -5,6 +5,17 @@ whole time, so there's no inter-process connection handoff -- which was racily
 dropping the character lock (the lock flag needs ~0.4s to settle, and a second
 process opening its own pipe read it before it had).
 
+================================================================================
+STOP if you are here to crash-test / move-test a fighter in-game. This path
+drives the CSS cursor and ADDS A CPU (see pipe.js cpustep) to satisfy Melee's
+2-player start gate. The CPU then attacks you and moves the camera, ruining
+move/crash repros, and the cursor sweep is slow + per-build fragile.
+
+Use the SOLO, no-CPU, no-cursor engine instead: backend/ingame/ (memory-loads
+the match alone). Template: backend/fsm_crash_probe.py. Docs:
+backend/ingame/README.md. This file is ONLY for testing the CSS/SSS UI itself.
+================================================================================
+
 Assumes the CSS already has a port-2 CPU (pipe.js cpustep) -- locking needs a
 2nd player. Steers by memory feedback (no timing): character cell + costume via
 melee_css.Cursor, stage via melee_sss.StageCursor.

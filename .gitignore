@@ -92,6 +92,7 @@ pytest-cache-files-*/
 /csp_test_out/
 /door_tex_dump/
 /parallel_test/
+tmp_retake/
 /*_test_out/
 
 # local release staging (release_to_r2.py)

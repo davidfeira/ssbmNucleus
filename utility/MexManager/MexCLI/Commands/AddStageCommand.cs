@@ -82,22 +82,23 @@ namespace MexCLI.Commands
                 int internalId = workspace.Project.AddStage(stage);
                 int externalId = MexStageIDConverter.ToExternalID(internalId);
 
-                // Find or create a "Custom" SSS page (page index 1+)
-                if (workspace.Project.StageSelects.Count < 2)
-                {
-                    workspace.Project.StageSelects.Add(new MexStageSelect
-                    {
-                        Name = "Custom",
-                    });
-                }
-
-                MexStageSelect customPage = workspace.Project.StageSelects[^1];
+                // Auto-place the new stage's icon on a "Custom" SSS page. Page 0 is
+                // the vanilla stage-select; custom stages live on pages 1+. A page can
+                // only show as many icons as its layout template has positioned slots
+                // (the default template = 30 vanilla placements), so once the current
+                // custom page is full we spill onto a fresh page rather than stacking
+                // the extra icons at the origin.
+                MexStageSelect customPage = GetOrCreateCustomStagePage(workspace.Project);
 
                 customPage.StageIcons.Add(new MexStageSelectIcon
                 {
                     StageID = externalId,
                     Status = MexStageSelectIcon.StageIconStatus.Unlocked,
                 });
+
+                // Lay the page out from its template grid so the new icon (and any
+                // others on the page) land in their slots instead of at (0, 0).
+                customPage.Template.ApplyTemplate(customPage.StageIcons);
 
                 workspace.Save(null);
 
@@ -120,6 +121,39 @@ namespace MexCLI.Commands
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// Returns the custom SSS page that should receive the next stage icon,
+        /// adding a new page when the current one is full. Page 0 is reserved for
+        /// the vanilla stage-select; custom stages start on page 1 ("Custom") and
+        /// overflow onto "Custom 2", "Custom 3", … as each page fills up. A page's
+        /// capacity is the number of positioned slots in its layout template
+        /// (30 for the default vanilla template).
+        /// </summary>
+        private static MexStageSelect GetOrCreateCustomStagePage(MexProject project)
+        {
+            // Reuse the most recent custom page while it still has a free slot. A
+            // template with no placements is treated as unbounded so we never spin
+            // up empty pages for it.
+            if (project.StageSelects.Count >= 2)
+            {
+                MexStageSelect last = project.StageSelects[^1];
+                int capacity = last.Template.IconPlacements.Count;
+                if (capacity <= 0 || last.StageIcons.Count < capacity)
+                    return last;
+            }
+
+            // Otherwise add a new page. The first custom page is "Custom"; later
+            // ones are numbered to match their position after the vanilla page
+            // ("Custom 2" is the 3rd page overall, "Custom 3" the 4th, and so on).
+            int pageNumber = Math.Max(1, project.StageSelects.Count);
+            MexStageSelect page = new()
+            {
+                Name = pageNumber == 1 ? "Custom" : $"Custom {pageNumber}",
+            };
+            project.StageSelects.Add(page);
+            return page;
         }
     }
 }
