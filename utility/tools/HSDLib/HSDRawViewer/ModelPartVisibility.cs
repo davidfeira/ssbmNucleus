@@ -231,6 +231,17 @@ namespace HSDRawViewer
         }
 
         /// <summary>
+        /// Apply the default in-game part visibility without requiring an
+        /// animation to be selected. This is the initial pose/editor baseline.
+        /// </summary>
+        public void ApplyDefaultState()
+        {
+            if (_lookupTable == null)
+                return;
+            ResetModelVis();
+        }
+
+        /// <summary>
         /// Prepare model-part visibility for a newly-loaded animation. Reverts to
         /// the default model, then arms a SubactionProcessor (auto code-31) or a
         /// curated static override. Must run on the render/UI thread.

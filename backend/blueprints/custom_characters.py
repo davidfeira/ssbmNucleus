@@ -199,13 +199,21 @@ def _rewrite_fighter_zip(char_dir, mutate_json=None, drop_entries=None, replace_
 
 
 def _replace_zip_member(zip_path, member, data):
-    """Replace one member in a zip (e.g. csp.png), preserving all other entries."""
+    """Replace or append one member in a zip, preserving all other entries."""
     import io
     src = zipfile.ZipFile(zip_path, 'r')
     buf = io.BytesIO()
+    replaced = False
+    wanted = member.lower()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
         for item in src.infolist():
-            dst.writestr(item, data if item.filename == member else src.read(item.filename))
+            if item.filename.lower() == wanted:
+                dst.writestr(item, data)
+                replaced = True
+            else:
+                dst.writestr(item, src.read(item.filename))
+        if not replaced:
+            dst.writestr(member, data)
     src.close()
     Path(zip_path).write_bytes(buf.getvalue())
 
@@ -243,6 +251,95 @@ FIGHTER_ASSET_SPECS = {
     'big_banner': ('big_banner.png', (256, 28)),
     'small_banner': ('small_banner.png', (120, 24)),
 }
+
+CSP_SD_SIZE = (136, 188)
+
+
+def _storage_url(path):
+    try:
+        return f"/storage/{Path(path).relative_to(STORAGE_PATH).as_posix()}"
+    except ValueError:
+        return None
+
+
+def _normalize_csp_png(raw):
+    """Return in-game-sized PNG bytes for a CSP source image."""
+    try:
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(raw)) as src:
+            img = src.convert('RGBA')
+        if img.size != CSP_SD_SIZE:
+            img.thumbnail(CSP_SD_SIZE, Image.LANCZOS)
+            canvas = Image.new('RGBA', CSP_SD_SIZE, (0, 0, 0, 0))
+            x = (CSP_SD_SIZE[0] - img.size[0]) // 2
+            y = (CSP_SD_SIZE[1] - img.size[1]) // 2
+            canvas.alpha_composite(img, (x, y))
+            img = canvas
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return buf.getvalue()
+    except Exception:
+        return raw
+
+
+def _active_csp_path_for_skin(storage_key, skin):
+    """Resolve a skin's active SD alternate CSP, if one is selected."""
+    active_id = skin.get('active_csp_id')
+    if not active_id:
+        return None
+
+    alts = skin.get('alternate_csps') or []
+    active = next((a for a in alts if a.get('id') == active_id), None)
+    if not active:
+        return None
+
+    # If the saved active id points at an HD companion, install/display the
+    # matching SD render instead. Game CSP slots expect the SD-sized asset.
+    if active.get('is_hd'):
+        pose_name = active.get('pose_name')
+        active = next((a for a in alts
+                       if a.get('pose_name') == pose_name and not a.get('is_hd')), active)
+        if active.get('is_hd'):
+            return None
+
+    filename = active.get('filename')
+    if not filename:
+        return None
+    path = STORAGE_PATH / storage_key / filename
+    return path if path.exists() else None
+
+
+def _display_csp_url(storage_key, skin, fallback_url):
+    active_path = _active_csp_path_for_skin(storage_key, skin)
+    return _storage_url(active_path) if active_path else fallback_url
+
+
+def _zip_bytes_with_csp(zip_path, csp_bytes):
+    """Return zip bytes with csp.png replaced or appended."""
+    import io
+    normalized = _normalize_csp_png(csp_bytes)
+    buf = io.BytesIO()
+    replaced = False
+    with zipfile.ZipFile(zip_path, 'r') as src, \
+            zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            basename = item.filename.split('/')[-1].lower()
+            if basename in ('csp.png', 'csp'):
+                dst.writestr(item, normalized)
+                replaced = True
+            else:
+                dst.writestr(item, src.read(item.filename))
+        if not replaced:
+            dst.writestr('csp.png', normalized)
+    return buf.getvalue()
+
+
+def _zip_bytes_with_active_csp(storage_key, skin, zip_path):
+    active_path = _active_csp_path_for_skin(storage_key, skin)
+    if active_path:
+        return _zip_bytes_with_csp(zip_path, active_path.read_bytes())
+    return Path(zip_path).read_bytes()
 
 
 def _sync_costume_meta(entry, char_dir, fighter_data):
@@ -616,6 +713,143 @@ def _extract_skin_previews(skins_dir, skin_id, zip_bytes):
                 (skins_dir / f'{skin_id}_stc.png').write_bytes(zf.read(n))
                 has_stock = True
     return has_csp, has_stock
+
+
+def _dat_from_zip_bytes(zip_bytes):
+    """Return (filename, bytes) for the first costume DAT/USD in a zip."""
+    import io
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        name = next((n for n in zf.namelist()
+                     if n.lower().endswith(('.dat', '.usd')) and not n.endswith('/')), None)
+        if not name:
+            return None, None
+        return Path(name).name, zf.read(name)
+
+
+def _custom_pose_render_bytes(slug, dat_bytes, dat_filename, pose_name, scales=(1, 4)):
+    """Render a custom character DAT in a saved pose. Returns {scale: png_bytes}."""
+    pose_name = (pose_name or '').strip()
+    if not pose_name or not dat_bytes:
+        return {}
+
+    from blueprints.poses import _poses_dir, _character_aj_file, _render_pose_csp
+
+    char_key = f'custom_characters/{slug}/costumes'
+    pose_path = _poses_dir(char_key) / f'{pose_name}.yml'
+    if not pose_path.exists():
+        logger.info(f"Default CSP pose '{pose_name}' does not exist for {slug}; skipping render")
+        return {}
+
+    tmp = tempfile.mkdtemp(prefix='custom_skin_csp_')
+    try:
+        dat_path = Path(tmp) / Path(dat_filename or 'costume.dat').name
+        dat_path.write_bytes(dat_bytes)
+        aj_file = _character_aj_file(char_key)
+        rendered = {}
+        for scale in scales:
+            csp_path = _render_pose_csp(str(dat_path), char_key, pose_path, aj_file, scale)
+            if csp_path and Path(csp_path).exists():
+                rendered[scale] = Path(csp_path).read_bytes()
+            elif scale == 1:
+                return {}
+        return rendered
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _main_csp_filename(skin):
+    return skin.get('csp_filename') or f"{skin.get('id')}_csp.png"
+
+
+def _main_hd_csp_filename(skin):
+    return skin.get('hd_csp_filename') or f"{skin.get('id')}_csp_hd.png"
+
+
+def _write_main_csp(storage_dir, skin, sd_bytes, hd_bytes=None, pose_name=None, source='generated'):
+    """Write a skin's main CSP files and tag their pose/source in metadata."""
+    if not skin.get('id') or not sd_bytes:
+        return False
+
+    csp_filename = _main_csp_filename(skin)
+    (storage_dir / csp_filename).write_bytes(sd_bytes)
+    skin['has_csp'] = True
+    skin['csp_filename'] = csp_filename
+    skin['csp_source'] = source
+    if pose_name:
+        skin['csp_pose_name'] = pose_name
+    else:
+        skin.pop('csp_pose_name', None)
+
+    if hd_bytes:
+        hd_filename = _main_hd_csp_filename(skin)
+        (storage_dir / hd_filename).write_bytes(hd_bytes)
+        skin['has_hd_csp'] = True
+        skin['hd_csp_filename'] = hd_filename
+        skin['hd_csp_source'] = source
+        skin['hd_csp_resolution'] = '4x'
+        skin['hd_csp_size'] = '544x752'
+
+    return True
+
+
+def _copy_existing_pose_alt_to_main(storage_dir, skin, pose_name):
+    """Use an existing alternate for pose_name as the main CSP without new alts."""
+    if not pose_name:
+        return False
+    alts = skin.get('alternate_csps') or []
+    sd_alt = next((a for a in alts if a.get('pose_name') == pose_name and not a.get('is_hd')), None)
+    if not sd_alt:
+        return False
+
+    sd_path = storage_dir / sd_alt.get('filename', '')
+    if not sd_path.exists():
+        return False
+
+    hd_alt = next((a for a in alts if a.get('pose_name') == pose_name and a.get('is_hd')), None)
+    hd_bytes = None
+    if hd_alt:
+        hd_path = storage_dir / hd_alt.get('filename', '')
+        if hd_path.exists():
+            hd_bytes = hd_path.read_bytes()
+
+    return _write_main_csp(
+        storage_dir,
+        skin,
+        sd_path.read_bytes(),
+        hd_bytes,
+        pose_name=pose_name,
+        source='alternate'
+    )
+
+
+def _ensure_custom_skin_main_csp(slug, storage_dir, skin, zip_path, zip_bytes, pose_name, replace_existing=False):
+    """Ensure a skin has a main CSP by copying a matching alt or rendering one."""
+    if not pose_name:
+        return {'filled': False, 'source': None}
+
+    main_path = storage_dir / _main_csp_filename(skin)
+    if not replace_existing and skin.get('has_csp') and main_path.exists():
+        return {'filled': False, 'source': 'existing'}
+
+    if _copy_existing_pose_alt_to_main(storage_dir, skin, pose_name):
+        _replace_zip_member(zip_path, 'csp.png', (storage_dir / _main_csp_filename(skin)).read_bytes())
+        return {'filled': True, 'source': 'alternate'}
+
+    dat_name, dat_bytes = _dat_from_zip_bytes(zip_bytes)
+    rendered = _custom_pose_render_bytes(slug, dat_bytes, dat_name, pose_name)
+    if not rendered.get(1):
+        return {'filled': False, 'source': None}
+
+    _write_main_csp(
+        storage_dir,
+        skin,
+        rendered[1],
+        rendered.get(4),
+        pose_name=pose_name,
+        source='generated'
+    )
+    _replace_zip_member(zip_path, 'csp.png', rendered[1])
+    return {'filled': True, 'source': 'generated'}
 
 
 @custom_characters_bp.route('/api/mex/custom-characters/list', methods=['GET'])
@@ -992,6 +1226,7 @@ def get_custom_character_detail(slug):
                 csp_url = f"/api/mex/custom-characters/{slug}/csp/{i}"
             else:
                 csp_url = None
+            csp_url = _display_csp_url(f'custom_characters/{slug}/costumes', meta, csp_url)
             if stem and (char_dir / 'costumes' / f'{stem}_stc.png').exists():
                 stock_url = f"/storage/custom_characters/{slug}/costumes/{stem}_stc.png"
             elif (char_dir / f'stock_{i}.png').exists():
@@ -1027,12 +1262,14 @@ def get_custom_character_detail(slug):
         added_skins = []
         for skin in entry.get('added_skins', []):
             sid = skin['id']
+            csp_url = f"/api/mex/custom-characters/{slug}/skins/{sid}/csp" if skin.get('has_csp') else None
+            csp_url = _display_csp_url(f'custom_characters/{slug}/skins', skin, csp_url)
             # full entry (canonical skin fields) so the shared EditModal /
             # CSP manager stack can drive it, plus display conveniences
             added_skins.append({
                 **skin,
                 'name': skin.get('color') or skin.get('name') or 'Custom Skin',
-                'csp_url': f"/api/mex/custom-characters/{slug}/skins/{sid}/csp" if skin.get('has_csp') else None,
+                'csp_url': csp_url,
                 'stock_url': f"/api/mex/custom-characters/{slug}/skins/{sid}/stock" if skin.get('has_stock') else None,
             })
 
@@ -1288,8 +1525,10 @@ def install_custom_character():
         replace_entries = {}
         if costumes_dir.exists():
             for f in costumes_dir.glob('*.zip'):
-                if Path(f.name).stem in meta_by_id:
-                    replace_entries[f.name] = f.read_bytes()
+                meta = meta_by_id.get(Path(f.name).stem)
+                if meta:
+                    replace_entries[f.name] = _zip_bytes_with_active_csp(
+                        f'custom_characters/{slug}/costumes', meta, f)
 
         def _mutate_install_json(meta):
             if series_id is not None:
@@ -1434,6 +1673,7 @@ def install_custom_character_skin():
     them per-skin through this endpoint (MexCLI import-costume), exactly like
     a vanilla character's vault skins.
     """
+    temp_zip = None
     try:
         data = request.json or {}
         slug = (data.get('slug') or '').strip()
@@ -1457,7 +1697,14 @@ def install_custom_character_skin():
         if not skin_zip.exists():
             return jsonify({'success': False, 'error': 'Skin file missing'}), 404
 
-        cmd = [mexcli_path, 'import-costume', str(project_path), fighter_name, str(skin_zip)]
+        install_zip = skin_zip
+        active_path = _active_csp_path_for_skin(f'custom_characters/{slug}/skins', skin)
+        if active_path:
+            temp_zip = Path(tempfile.mktemp(suffix='.zip', prefix='nucleus_skin_'))
+            temp_zip.write_bytes(_zip_bytes_with_csp(skin_zip, active_path.read_bytes()))
+            install_zip = temp_zip
+
+        cmd = [mexcli_path, 'import-costume', str(project_path), fighter_name, str(install_zip)]
         result = subprocess.run(
             cmd, capture_output=True, text=True,
             cwd=str(PROJECT_ROOT), **get_subprocess_args()
@@ -1476,6 +1723,9 @@ def install_custom_character_skin():
     except Exception as e:
         logger.error(f"Install custom skin error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if temp_zip is not None and temp_zip.exists():
+            temp_zip.unlink()
 
 
 @custom_characters_bp.route('/api/mex/custom-characters/remove-from-project', methods=['POST'])
@@ -1540,12 +1790,14 @@ def add_custom_character_skin(slug):
         skin_name = None
         source_character = None
         src_skin = None
+        requested_pose = ''
 
         if 'file' in request.files:
             uploaded = request.files['file']
             fname = (uploaded.filename or '').lower()
             raw = uploaded.read()
             skin_name = (request.form.get('name') or Path(uploaded.filename).stem).strip()
+            requested_pose = (request.form.get('poseName') or '').strip()
             if fname.endswith(('.dat', '.usd')):
                 # wrap a bare DAT into a costume zip
                 import io
@@ -1561,6 +1813,7 @@ def add_custom_character_skin(slug):
             data = request.get_json(silent=True) or {}
             source_character = (data.get('character') or '').strip()
             skin_id_src = (data.get('skinId') or '').strip()
+            requested_pose = (data.get('poseName') or '').strip()
             if not source_character or not skin_id_src:
                 return jsonify({'success': False, 'error': 'Provide a file or {character, skinId}'}), 400
 
@@ -1585,7 +1838,8 @@ def add_custom_character_skin(slug):
         skin_id = uuid.uuid4().hex[:8]
         skins_dir = char_dir / 'skins'
         skins_dir.mkdir(exist_ok=True)
-        (skins_dir / f'{skin_id}.zip').write_bytes(zip_bytes)
+        zip_path = skins_dir / f'{skin_id}.zip'
+        zip_path.write_bytes(zip_bytes)
         has_csp, has_stock = _extract_skin_previews(skins_dir, skin_id, zip_bytes)
 
         skin_entry = {
@@ -1599,11 +1853,21 @@ def add_custom_character_skin(slug):
             'source_character': source_character,
             'date_added': datetime.now().isoformat(),
         }
+        if has_csp:
+            skin_entry['csp_source'] = 'uploaded'
         if src_skin is not None:
             # carry slippi status over from the canonical source skin
             for field in ('slippi_safe', 'slippi_tested', 'slippi_test_date', 'slippi_manual_override'):
                 if field in src_skin:
                     skin_entry[field] = src_skin[field]
+        if not has_csp:
+            pose_name = requested_pose or entry.get('default_pose') or ''
+            csp_result = _ensure_custom_skin_main_csp(
+                slug, skins_dir, skin_entry, zip_path, zip_bytes, pose_name
+            )
+            if csp_result.get('filled'):
+                has_csp = True
+                skin_entry['has_csp'] = True
         entry.setdefault('added_skins', []).append(skin_entry)
         _write_metadata(metadata)
 
@@ -1682,6 +1946,14 @@ def reorder_custom_character_skins(slug):
 
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/skins/<skin_id>/csp', methods=['GET'])
 def get_custom_character_skin_csp(slug, skin_id):
+    metadata = _read_metadata()
+    entry = _find_entry(metadata, slug) or {}
+    skin = next((s for s in entry.get('added_skins', [])
+                 if s.get('id') == skin_id), None)
+    if skin:
+        active_path = _active_csp_path_for_skin(f'custom_characters/{slug}/skins', skin)
+        if active_path:
+            return send_file(active_path, mimetype='image/png')
     p = CUSTOM_CHARACTERS_PATH / slug / 'skins' / f'{skin_id}_csp.png'
     if p.exists():
         return send_file(p, mimetype='image/png')
@@ -1791,7 +2063,9 @@ def bundled_costume_to_skin(slug, index):
         dat_name = (costume.get('file') or {}).get('fileName', '')
         if not dat_name:
             return jsonify({'success': False, 'error': 'Costume has no DAT file'}), 400
-        inner_name = f"{Path(dat_name).stem}.zip"
+        stem = Path(dat_name).stem
+        inner_name = f"{stem}.zip"
+        costume_meta = next((m for m in entry.get('costume_meta', []) if m.get('id') == stem), None)
 
         zip_bytes = None
         with zipfile.ZipFile(char_dir / 'fighter.zip') as zf:
@@ -1821,6 +2095,11 @@ def bundled_costume_to_skin(slug, index):
         if not has_stock and (char_dir / f'stock_{index}.png').exists():
             shutil.copy2(char_dir / f'stock_{index}.png', skins_dir / f'{skin_id}_stc.png')
             has_stock = True
+        hd_src = char_dir / 'costumes' / f'{stem}_csp_hd.png'
+        has_hd_csp = False
+        if hd_src.exists():
+            shutil.copy2(hd_src, skins_dir / f'{skin_id}_csp_hd.png')
+            has_hd_csp = True
 
         skin_entry = {
             'id': skin_id,
@@ -1832,6 +2111,15 @@ def bundled_costume_to_skin(slug, index):
             'source_character': None,
             'date_added': datetime.now().isoformat(),
         }
+        if has_csp:
+            skin_entry['csp_source'] = (costume_meta or {}).get('csp_source') or 'uploaded'
+        if has_hd_csp:
+            skin_entry['has_hd_csp'] = True
+            skin_entry['hd_csp_source'] = (costume_meta or {}).get('hd_csp_source') or skin_entry.get('csp_source')
+            skin_entry['hd_csp_resolution'] = (costume_meta or {}).get('hd_csp_resolution') or '4x'
+            skin_entry['hd_csp_size'] = (costume_meta or {}).get('hd_csp_size') or '544x752'
+        if costume_meta and costume_meta.get('csp_pose_name'):
+            skin_entry['csp_pose_name'] = costume_meta['csp_pose_name']
 
         _drop_bundled_costume(char_dir, fighter_data, index)
 
@@ -2018,6 +2306,14 @@ def skin_to_bundled_costume(slug, skin_id):
         entry['added_skins'] = [s for s in skins if s.get('id') != skin_id]
         entry['costume_count'] = len(costumes)
         _sync_costume_meta(entry, char_dir, fighter_data)
+        new_meta = next((m for m in entry.get('costume_meta', []) if m.get('id') == stem), None)
+        if new_meta is not None:
+            for field in (
+                'csp_source', 'csp_pose_name', 'has_hd_csp',
+                'hd_csp_source', 'hd_csp_resolution', 'hd_csp_size'
+            ):
+                if field in skin:
+                    new_meta[field] = skin[field]
         _write_metadata(metadata)
 
         logger.info(f"[OK] Promoted skin {skin_id} ({dat_name}) of {slug} to bundled costume {new_index}")
@@ -2029,16 +2325,19 @@ def skin_to_bundled_costume(slug, skin_id):
 
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/default-pose', methods=['POST'])
 def set_custom_character_default_pose(slug):
-    """Set the character's default CSP pose and re-render every bundled costume
-    + added skin's main CSP (SD + HD) in it. Body: {poseName}. Stores
-    `default_pose` on the metadata entry. Pose must already exist in the char's
-    pose library."""
-    try:
-        import io
-        import tempfile
-        from blueprints.poses import _poses_dir, _character_aj_file, _render_pose_csp
+    """Set the character's default CSP pose.
 
-        pose_name = ((request.get_json(silent=True) or {}).get('poseName') or '').strip()
+    By default this fills only missing main CSPs. Existing portraits and active
+    alternates are left untouched so choosing a default cannot silently duplicate
+    an alternate or mismatch a user's selected portrait. Callers may pass
+    renderExisting=true to intentionally regenerate existing main CSPs.
+    """
+    try:
+        from blueprints.poses import _poses_dir
+
+        payload = request.get_json(silent=True) or {}
+        pose_name = (payload.get('poseName') or '').strip()
+        render_existing = bool(payload.get('renderExisting'))
         if not pose_name:
             return jsonify({'success': False, 'error': 'Missing poseName'}), 400
 
@@ -2054,57 +2353,57 @@ def set_custom_character_default_pose(slug):
         pose_path = _poses_dir(char_key) / f'{pose_name}.yml'
         if not pose_path.exists():
             return jsonify({'success': False, 'error': f'Pose {pose_name} not found'}), 404
-        aj_file = _character_aj_file(char_key)
 
         with open(char_dir / 'fighter.json', 'r', encoding='utf-8') as f:
             fighter_data = json.load(f)
         costumes_dir = char_dir / 'costumes'
         costumes_dir.mkdir(exist_ok=True)
         skins_dir = char_dir / 'skins'
-        rendered = 0
+        _sync_costume_meta(entry, char_dir, fighter_data)
+        meta_by_id = {m.get('id'): m for m in entry.get('costume_meta', [])}
+        filled = 0
+        generated = 0
+        copied = 0
+        skipped = 0
 
-        def _dat_from_zip(zbytes):
-            with zipfile.ZipFile(io.BytesIO(zbytes)) as zf:
-                n = next((x for x in zf.namelist()
-                          if x.lower().endswith(('.dat', '.usd')) and not x.endswith('/')), None)
-                return (n, zf.read(n)) if n else (None, None)
-
-        def _render(dat_bytes, dat_filename):
-            """Render SD+HD CSP for a DAT, return (sd_bytes, hd_bytes) or None."""
-            tmp = tempfile.mkdtemp(prefix='defpose_')
-            try:
-                dp = Path(tmp) / dat_filename
-                dp.write_bytes(dat_bytes)
-                out = {}
-                for scale in (1, 4):
-                    csp = _render_pose_csp(str(dp), char_key, pose_path, aj_file, scale)
-                    if not csp or not Path(csp).exists():
-                        return None
-                    out[scale] = Path(csp).read_bytes()
-                return out[1], out[4]
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+        def _count(result):
+            nonlocal filled, generated, copied, skipped
+            if result.get('filled'):
+                filled += 1
+                if result.get('source') == 'alternate':
+                    copied += 1
+                elif result.get('source') == 'generated':
+                    generated += 1
+            elif result.get('source') == 'existing':
+                skipped += 1
 
         # bundled costumes
         for i, costume in enumerate(fighter_data.get('costumes', [])):
             dat_name = (costume.get('file') or {}).get('fileName') or ''
             stem = Path(dat_name).stem
+            if not stem:
+                continue
+            meta = meta_by_id.get(stem)
+            if meta is None:
+                continue
             src = costumes_dir / f'{stem}.zip'
             if not src.exists():
                 continue
-            _, dat_bytes = _dat_from_zip(src.read_bytes())
-            if dat_bytes is None:
-                continue
-            res = _render(dat_bytes, dat_name)
-            if res is None:
-                continue
-            sd, hd = res
-            (costumes_dir / f'{stem}_csp.png').write_bytes(sd)
-            (costumes_dir / f'{stem}_csp_hd.png').write_bytes(hd)
-            (char_dir / f'csp_{i}.png').write_bytes(sd)
-            _replace_zip_member(costumes_dir / f'{stem}.zip', 'csp.png', sd)
-            _rewrite_fighter_zip(char_dir, replace_entries={f'{stem}.zip': (costumes_dir / f'{stem}.zip').read_bytes()})
-            rendered += 1
+            result = _ensure_custom_skin_main_csp(
+                slug,
+                costumes_dir,
+                meta,
+                src,
+                src.read_bytes(),
+                pose_name,
+                replace_existing=render_existing
+            )
+            _count(result)
+            if result.get('filled'):
+                main_path = costumes_dir / _main_csp_filename(meta)
+                if main_path.exists():
+                    (char_dir / f'csp_{i}.png').write_bytes(main_path.read_bytes())
+                _rewrite_fighter_zip(char_dir, replace_entries={f'{stem}.zip': src.read_bytes()})
 
         # added skins
         for skin in entry.get('added_skins', []):
@@ -2112,22 +2411,32 @@ def set_custom_character_default_pose(slug):
             src = skins_dir / skin.get('filename', f'{sid}.zip')
             if not src.exists():
                 continue
-            dat_name, dat_bytes = _dat_from_zip(src.read_bytes())
-            if dat_bytes is None:
-                continue
-            res = _render(dat_bytes, Path(dat_name).name)
-            if res is None:
-                continue
-            sd, hd = res
-            (skins_dir / f'{sid}_csp.png').write_bytes(sd)
-            (skins_dir / f'{sid}_csp_hd.png').write_bytes(hd)
-            _replace_zip_member(src, 'csp.png', sd)
-            rendered += 1
+            result = _ensure_custom_skin_main_csp(
+                slug,
+                skins_dir,
+                skin,
+                src,
+                src.read_bytes(),
+                pose_name,
+                replace_existing=render_existing
+            )
+            _count(result)
 
         entry['default_pose'] = pose_name
         _write_metadata(metadata)
-        logger.info(f"[OK] Set default pose '{pose_name}' for {slug}; re-rendered {rendered} CSPs")
-        return jsonify({'success': True, 'default_pose': pose_name, 'rendered': rendered})
+        logger.info(
+            f"[OK] Set default pose '{pose_name}' for {slug}; "
+            f"filled={filled} generated={generated} copied={copied} skipped={skipped}"
+        )
+        return jsonify({
+            'success': True,
+            'default_pose': pose_name,
+            'rendered': filled,
+            'filled': filled,
+            'generated': generated,
+            'copied': copied,
+            'skipped': skipped,
+        })
     except Exception as e:
         logger.error(f"Set default pose error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

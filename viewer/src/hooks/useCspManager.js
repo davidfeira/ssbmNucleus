@@ -59,6 +59,22 @@ export function useCspManager({
     alternateCsps: mapAlternateCsps(character, skin)
   })
 
+  const getManagedSkinFromMetadata = (metadata, character, skinId) => {
+    const canonical = metadata?.characters?.[character]?.skins || []
+    let skin = canonical.find(item => item.id === skinId && item.type !== 'folder')
+    if (skin) return skin
+
+    const customMatch = typeof character === 'string'
+      ? character.match(/^custom_characters\/([^/]+)\/(skins|costumes)$/)
+      : null
+    if (!customMatch) return null
+
+    const [, slug, bucket] = customMatch
+    const entry = (metadata?.custom_characters || []).find(item => item.slug === slug)
+    const list = bucket === 'costumes' ? entry?.costume_meta : entry?.added_skins
+    return (list || []).find(item => item.id === skinId && item.type !== 'folder') || null
+  }
+
   const refreshManagedSkinState = async (
     character = cspManagerSkin?.character,
     skinId = cspManagerSkin?.id,
@@ -76,8 +92,7 @@ export function useCspManager({
       throw new Error(data.error || 'Failed to refresh storage metadata')
     }
 
-    const skins = data.metadata?.characters?.[character]?.skins || []
-    const skin = skins.find(item => item.id === skinId && item.type !== 'folder')
+    const skin = getManagedSkinFromMetadata(data.metadata, character, skinId)
     if (!skin) {
       return null
     }

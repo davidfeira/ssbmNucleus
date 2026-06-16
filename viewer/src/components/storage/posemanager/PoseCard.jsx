@@ -2,8 +2,19 @@ import { useState } from 'react'
 import { TrashIcon } from '../../shared/Icons'
 
 // Pose Card Component
-export default function PoseCard({ pose, character, onDelete, onClick, onStartFrom, API_URL }) {
+export default function PoseCard({
+  pose,
+  character,
+  onDelete,
+  onClick,
+  onStartFrom,
+  defaultPoseName = '',
+  onSetDefaultPose,
+  settingDefaultPose = false,
+  API_URL
+}) {
   const [deleting, setDeleting] = useState(false)
+  const isDefaultPose = defaultPoseName && pose.name === defaultPoseName
 
   const handleDelete = async (e) => {
     e.stopPropagation()
@@ -28,7 +39,7 @@ export default function PoseCard({ pose, character, onDelete, onClick, onStartFr
   }
 
   return (
-    <div className="pm-pose-card" onClick={onClick} style={{ cursor: 'pointer' }}>
+    <div className={`pm-pose-card${isDefaultPose ? ' is-default' : ''}`} onClick={onClick} style={{ cursor: 'pointer' }}>
       <div className="pm-pose-image">
         {pose.hasThumbnail ? (
           <img
@@ -48,6 +59,19 @@ export default function PoseCard({ pose, character, onDelete, onClick, onStartFr
             title="Create a new pose starting from this one"
           >
             ✎
+          </button>
+        )}
+        {isDefaultPose && (
+          <span className="pm-pose-default">Default</span>
+        )}
+        {onSetDefaultPose && !isDefaultPose && (
+          <button
+            className="pm-pose-set-default"
+            onClick={(e) => { e.stopPropagation(); onSetDefaultPose(pose) }}
+            disabled={settingDefaultPose}
+            title="Use this for new and missing custom character CSPs"
+          >
+            Make Default
           </button>
         )}
         <button

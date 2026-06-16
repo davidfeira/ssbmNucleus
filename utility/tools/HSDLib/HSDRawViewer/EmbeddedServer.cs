@@ -343,6 +343,16 @@ namespace HSDRawViewer
             // Apply hidden nodes after render
             if (_renderJObj != null)
             {
+                // Per-animation model-part visibility (shared with StreamingServer).
+                // Apply the default state immediately so the first pose/editor
+                // frame starts with low-poly/alternate parts hidden.
+                _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
+                _partVis.LoadFighterData(dataFilePath);
+                _partVis.ApplyDefaultState();
+                Application.DoEvents();
+                _viewport.Render();
+                Application.DoEvents();
+
                 if (sceneSettings?.HiddenNodes != null && sceneSettings.HiddenNodes.Length > 0)
                 {
                     foreach (int dobjIndex in sceneSettings.HiddenNodes)
@@ -373,10 +383,6 @@ namespace HSDRawViewer
                     LogError("Failed to load AJ file", ex);
                 }
             }
-
-            // Per-animation model-part visibility (shared with StreamingServer)
-            _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
-            _partVis.LoadFighterData(dataFilePath);
 
             // Signal to Electron that we're about to create the pipe
             Console.WriteLine("PIPE_READY");

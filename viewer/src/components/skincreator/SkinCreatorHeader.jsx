@@ -3,10 +3,16 @@ export default function SkinCreatorHeader({
   selectedCharacter,
   selectedVanillaCostume,
   isDirty,
+  poseOptions = [],
+  selectedPoseName = '',
+  defaultPoseName = '',
+  onPoseChange,
   onSave,
   onDownload,
   onClose
 }) {
+  const showPosePicker = poseOptions.length > 0 || defaultPoseName
+
   return (
     <div className="skin-creator-header">
       <div className="skin-creator-title">
@@ -17,6 +23,30 @@ export default function SkinCreatorHeader({
         )}
         {isDirty && <span className="skin-creator-dirty">*</span>}
       </div>
+      {showPosePicker && (
+        <label className="skin-creator-pose-select">
+          <span>Pose</span>
+          <select
+            value={selectedPoseName || ''}
+            onChange={(e) => onPoseChange?.(e.target.value)}
+            title="Choose the pose used by the 3D preview"
+          >
+            <option value="">Base Scene</option>
+            {defaultPoseName && (
+              <option value={defaultPoseName}>
+                Default Pose ({defaultPoseName})
+              </option>
+            )}
+            {poseOptions
+              .filter(pose => pose.name !== defaultPoseName)
+              .map(pose => (
+                <option key={pose.name} value={pose.name}>
+                  {pose.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      )}
       <div className="skin-creator-header-buttons">
         <button
           className="skin-creator-save"

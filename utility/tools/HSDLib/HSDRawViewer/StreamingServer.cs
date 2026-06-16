@@ -348,6 +348,16 @@ namespace HSDRawViewer
             {
                 Log($"After first render - DOBJs: {_renderJObj.DObjCount}");
 
+                // Per-animation model-part visibility (shared with EmbeddedServer).
+                // Apply the default state immediately so the first frame starts
+                // with low-poly/alternate parts hidden.
+                _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
+                _partVis.LoadFighterData(dataFilePath);
+                _partVis.ApplyDefaultState();
+                Application.DoEvents();
+                _viewport.Render();
+                Application.DoEvents();
+
                 // Apply hidden nodes now that DOBJs are loaded
                 if (sceneSettings?.HiddenNodes != null && sceneSettings.HiddenNodes.Length > 0)
                 {
@@ -415,10 +425,6 @@ namespace HSDRawViewer
                     LogError("Failed to load AJ file", ex);
                 }
             }
-
-            // Per-animation model-part visibility (shared with EmbeddedServer)
-            _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
-            _partVis.LoadFighterData(dataFilePath);
 
             // Start HTTP/WebSocket listener
             _httpListener = new HttpListener();

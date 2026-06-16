@@ -23,10 +23,30 @@ export default function CostumeSelectStep({
   return (
     <div className="skin-creator-select">
       {initialCostume ? (
-        <div className="skin-creator-loading-edit">
-          <div className="loading-spinner"></div>
-          <span>Loading skin editor...</span>
-        </div>
+        <>
+          <div className="skin-creator-select-topbar">
+            {selectedCharacter && (
+              <span className="skin-creator-character">{selectedCharacter}</span>
+            )}
+          </div>
+          <div className="skin-creator-loading-edit">
+            <button
+              className="back-button"
+              onMouseEnter={playHoverSound}
+              onClick={onBack}
+            >
+              &larr; Back
+            </button>
+            {error && error !== 'closing' ? (
+              <div className="skin-creator-error">{error}</div>
+            ) : (
+              <>
+                <div className="loading-spinner"></div>
+                <span>Loading skin editor...</span>
+              </>
+            )}
+          </div>
+        </>
       ) : (
       <>
         {/* Sticky header bar — without it the select view has no header and

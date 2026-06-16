@@ -155,6 +155,15 @@ def list_storage_costumes():
                             'is_hd': alt.get('is_hd', False),
                             'timestamp': alt.get('timestamp')
                         })
+                    active_csp_id = skin.get('active_csp_id')
+                    active_alt = next((a for a in alternate_csps if a.get('id') == active_csp_id), None)
+                    if active_alt and active_alt.get('is_hd'):
+                        active_alt = next((a for a in alternate_csps
+                                           if a.get('pose_name') == active_alt.get('pose_name')
+                                           and not a.get('is_hd')), None)
+                    csp_url = f"/storage/{char_name}/{skin['id']}_csp.png" if skin.get('has_csp') else None
+                    if active_alt and active_alt.get('url'):
+                        csp_url = active_alt['url']
 
                     costume_data = {
                         'character': char_name,
@@ -164,9 +173,10 @@ def list_storage_costumes():
                         # to the DAT stem so the UI still shows something useful
                         'costumeCode': skin.get('costume_code') or Path(skin.get('dat_name', '')).stem,
                         'zipPath': str(zip_path.relative_to(PROJECT_ROOT)),
-                        'cspUrl': f"/storage/{char_name}/{skin['id']}_csp.png" if skin.get('has_csp') else None,
+                        'cspUrl': csp_url,
                         'stockUrl': f"/storage/{char_name}/{skin['id']}_stc.png" if skin.get('has_stock') else None,
                         'alternateCsps': alternate_csps,
+                        'activeCspId': skin.get('active_csp_id'),
                         'isPopo': skin.get('is_popo', False),
                         'isNana': skin.get('is_nana', False),
                         'pairedNanaId': skin.get('paired_nana_id'),
@@ -190,15 +200,34 @@ def list_storage_costumes():
                 zp = skins_dir / skin.get('filename', f"{sid}.zip")
                 if not zp.exists():
                     continue
+                alternate_csps = []
+                for alt in skin.get('alternate_csps', []):
+                    alternate_csps.append({
+                        'id': alt.get('id'),
+                        'url': f"/storage/custom_characters/{cc_slug}/skins/{alt.get('filename')}",
+                        'pose_name': alt.get('pose_name'),
+                        'is_hd': alt.get('is_hd', False),
+                        'timestamp': alt.get('timestamp')
+                    })
+                active_csp_id = skin.get('active_csp_id')
+                active_alt = next((a for a in alternate_csps if a.get('id') == active_csp_id), None)
+                if active_alt and active_alt.get('is_hd'):
+                    active_alt = next((a for a in alternate_csps
+                                       if a.get('pose_name') == active_alt.get('pose_name')
+                                       and not a.get('is_hd')), None)
+                csp_url = f"/api/mex/custom-characters/{cc_slug}/skins/{sid}/csp" if skin.get('has_csp') else None
+                if active_alt and active_alt.get('url'):
+                    csp_url = active_alt['url']
                 costumes.append({
                     'character': cc_name,
                     'name': f"{cc_name} - {skin.get('color') or skin.get('name') or 'Custom Skin'}",
                     'folder': sid,
                     'costumeCode': '',
                     'zipPath': str(zp.relative_to(PROJECT_ROOT)),
-                    'cspUrl': f"/api/mex/custom-characters/{cc_slug}/skins/{sid}/csp" if skin.get('has_csp') else None,
+                    'cspUrl': csp_url,
                     'stockUrl': f"/api/mex/custom-characters/{cc_slug}/skins/{sid}/stock" if skin.get('has_stock') else None,
-                    'alternateCsps': [],
+                    'alternateCsps': alternate_csps,
+                    'activeCspId': active_csp_id,
                     'isPopo': False,
                     'isNana': False,
                     'pairedNanaId': None,
@@ -394,6 +423,7 @@ def update_costume_csp():
                             skin['has_csp'] = True
                             skin['csp_source'] = 'custom'
                             skin['csp_filename'] = csp_filename
+                            skin.pop('csp_pose_name', None)
                             if hd_filename:
                                 skin['has_hd_csp'] = True
                                 skin['hd_csp_source'] = 'custom'
@@ -453,6 +483,7 @@ def update_costume_csp():
                             skin['has_csp'] = True
                             skin['csp_source'] = 'custom'
                             skin['csp_filename'] = csp_filename
+                            skin.pop('csp_pose_name', None)
                             break
 
                     save_metadata(metadata)

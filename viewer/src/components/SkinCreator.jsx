@@ -56,6 +56,10 @@ export default function SkinCreator({
   const [skinCreatorReconnectAttempts, setSkinCreatorReconnectAttempts] = useState(0)
   const skinCreatorReconnectTimeoutRef = useRef(null)
   const skinCreatorMaxReconnectAttempts = 3
+  const [poseOptions, setPoseOptions] = useState([])
+  const [selectedPoseName, setSelectedPoseName] = useState('')
+  const [defaultPoseName, setDefaultPoseName] = useState('')
+  const activeStartPoseRef = useRef(null)
 
   // Connection health and auto-refresh
   const autoRefreshIntervalRef = useRef(null)
@@ -79,6 +83,82 @@ export default function SkinCreator({
 
   // Check if Electron API is available
   const hasElectron = typeof window !== 'undefined' && window.electron?.viewerStart
+
+  const customCharacterSlugFromKey = (key) => {
+    const match = typeof key === 'string'
+      ? key.match(/^custom_characters\/([^/]+)\/(?:skins|costumes)$/)
+      : null
+    return match?.[1] || null
+  }
+
+  const getPoseCharacterKey = (key) => {
+    const slug = customCharacterSlugFromKey(key)
+    return slug ? `custom_characters/${slug}/costumes` : key
+  }
+
+  const resolveViewerPose = async (characterKey, requestedPoseName) => {
+    const slug = customCharacterSlugFromKey(characterKey)
+    if (!slug) {
+      activeStartPoseRef.current = null
+      setPoseOptions([])
+      setSelectedPoseName('')
+      setDefaultPoseName('')
+      return null
+    }
+
+    const poseCharacter = getPoseCharacterKey(characterKey)
+    let defaultPose = ''
+    let poses = []
+
+    try {
+      const [detailRes, posesRes] = await Promise.all([
+        fetch(`${API_URL}/custom-characters/${slug}/detail`),
+        fetch(`${API_URL}/storage/poses/list/${encodeURIComponent(poseCharacter)}`)
+      ])
+      const detailData = await detailRes.json()
+      const posesData = await posesRes.json()
+      defaultPose = detailData.success ? (detailData.detail?.default_pose || '') : ''
+      poses = posesData.success ? (posesData.poses || []) : []
+    } catch (err) {
+      console.error('[SkinCreator] Failed to load custom character poses:', err)
+    }
+
+    setDefaultPoseName(defaultPose)
+    setPoseOptions(poses)
+
+    const hasPose = (name) => Boolean(name) && poses.some(pose => pose.name === name)
+    const poseName = requestedPoseName !== undefined
+      ? requestedPoseName
+      : (hasPose(selectedPoseName) ? selectedPoseName : defaultPose)
+    setSelectedPoseName(poseName || '')
+
+    if (!poseName) {
+      activeStartPoseRef.current = null
+      return null
+    }
+
+    try {
+      const sceneRes = await fetch(
+        `${API_URL}/storage/poses/scene-file/${encodeURIComponent(poseCharacter)}/${encodeURIComponent(poseName)}`
+      )
+      const sceneData = await sceneRes.json()
+      if (!sceneData.success) {
+        throw new Error(sceneData.error || 'Failed to load pose scene')
+      }
+      const pose = {
+        name: poseName,
+        sceneFile: sceneData.sceneFile,
+        animSymbol: sceneData.animSymbol,
+        frame: sceneData.frame || 0
+      }
+      activeStartPoseRef.current = pose
+      return pose
+    } catch (err) {
+      console.error('[SkinCreator] Failed to apply pose:', err)
+      activeStartPoseRef.current = null
+      return null
+    }
+  }
 
   // Canvas container sizing for dynamic scaling
   const { canvasContainerRef, updateCanvasScale } = useCanvasScale({
@@ -254,6 +334,9 @@ export default function SkinCreator({
       window.electron.viewerSetBackground(true)
       // Request textures
       window.electron.viewerSend({ type: 'getTextures' })
+      if (activeStartPoseRef.current?.animSymbol) {
+        window.electron.viewerLoadAnim(activeStartPoseRef.current.animSymbol)
+      }
     } else if (msg.type === 'exportDat') {
       // Handle exportDat response for save/download operations
       if (exportDatResolverRef.current) {
@@ -264,11 +347,17 @@ export default function SkinCreator({
         }
         exportDatResolverRef.current = null
       }
+    } else if (msg.type === 'animLoaded') {
+      const pose = activeStartPoseRef.current
+      if (pose?.animSymbol && msg.symbol === pose.animSymbol) {
+        window.electron.viewerAnimSetFrame(pose.frame || 0)
+        window.electron.viewerAnimPause()
+      }
     }
   }
 
   // Start viewer with selected costume (Electron IPC)
-  const startSkinCreatorViewer = async (costume) => {
+  const startSkinCreatorViewer = async (costume, poseNameOverride) => {
     try {
       setSkinCreatorLoading(true)
       setSkinCreatorError(null)
@@ -293,6 +382,7 @@ export default function SkinCreator({
         throw new Error(data.error)
       }
       sourceDatNameRef.current = (data.datFile || '').split(/[\\/]/).pop() || null
+      const pose = await resolveViewerPose(selectedCharacter, poseNameOverride)
 
       // Set up message listener
       const cleanup = window.electron.onViewerMessage(handleViewerMessage)
@@ -301,8 +391,9 @@ export default function SkinCreator({
       // Start embedded viewer via Electron IPC
       await window.electron.viewerStart({
         datFile: data.datFile,
-        sceneFile: data.sceneFile,
+        sceneFile: pose?.sceneFile || data.sceneFile,
         ajFile: data.ajFile,
+        dataFile: data.dataFile,
         logsPath: data.logsPath
       })
 
@@ -328,7 +419,7 @@ export default function SkinCreator({
   }
 
   // Start from vault costume (for editing existing costumes) - Electron IPC
-  const startSkinCreatorFromVault = async (costume) => {
+  const startSkinCreatorFromVault = async (costume, poseNameOverride) => {
     console.log('[SkinCreator] startSkinCreatorFromVault called with:', costume)
     try {
       const character = costume.character || selectedCharacter
@@ -359,6 +450,7 @@ export default function SkinCreator({
         throw new Error(data.error)
       }
       sourceDatNameRef.current = (data.datFile || '').split(/[\\/]/).pop() || null
+      const pose = await resolveViewerPose(character, poseNameOverride)
 
       // Set up message listener
       console.log('[SkinCreator] Setting up message listener for vault...')
@@ -369,8 +461,9 @@ export default function SkinCreator({
       console.log('[SkinCreator] Calling viewerStart with paths:', data)
       const result = await window.electron.viewerStart({
         datFile: data.datFile,
-        sceneFile: data.sceneFile,
+        sceneFile: pose?.sceneFile || data.sceneFile,
         ajFile: data.ajFile,
+        dataFile: data.dataFile,
         logsPath: data.logsPath
       })
       console.log('[SkinCreator] viewerStart returned:', result)
@@ -485,6 +578,33 @@ export default function SkinCreator({
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
+    }
+  }
+
+  const cleanupViewerConnection = async () => {
+    clearAllIntervals()
+    if (viewerWs?.cleanup) {
+      viewerWs.cleanup()
+    }
+    setViewerWs(null)
+    if (hasElectron) {
+      try {
+        await window.electron.viewerStop()
+      } catch (e) {
+        // Ignore viewer restart cleanup errors
+      }
+    }
+  }
+
+  const handlePoseChange = async (poseName) => {
+    setSelectedPoseName(poseName)
+    await cleanupViewerConnection()
+    setSkinCreatorLoading(true)
+    setConnectionFailed(false)
+    if (initialCostume) {
+      await startSkinCreatorFromVault(initialCostume, poseName)
+    } else if (selectedVanillaCostume) {
+      await startSkinCreatorViewer(selectedVanillaCostume, poseName)
     }
   }
 
@@ -627,6 +747,9 @@ export default function SkinCreator({
       let saveUrl = `${API_URL}/import/file`
       if (customMatch) {
         formData.append('name', skinName.trim())
+        if (selectedPoseName) {
+          formData.append('poseName', selectedPoseName)
+        }
         saveUrl = `${API_URL}/custom-characters/${customMatch[1]}/skins/add`
       } else {
         formData.append('custom_title', skinName.trim())
@@ -700,6 +823,10 @@ export default function SkinCreator({
               selectedCharacter={selectedCharacter}
               selectedVanillaCostume={selectedVanillaCostume}
               isDirty={isDirty}
+              poseOptions={poseOptions}
+              selectedPoseName={selectedPoseName}
+              defaultPoseName={defaultPoseName}
+              onPoseChange={handlePoseChange}
               onSave={openSaveModal}
               onDownload={handleDownloadDat}
               onClose={() => closeSkinCreator()}

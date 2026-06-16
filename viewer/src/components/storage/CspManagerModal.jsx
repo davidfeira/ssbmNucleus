@@ -293,6 +293,7 @@ export default function CspManagerModal({
   const hasActiveHd = isAltActive
     ? !!activeGroup?.hd
     : hdCspInfo?.exists
+  const mainPoseName = !isAltActive ? cspManagerSkin.csp_pose_name : null
 
   const handleClose = () => {
     playSound('back')
@@ -327,6 +328,11 @@ export default function CspManagerModal({
               {isAltActive && activeGroup?.poseName && (
                 <span className="csp-manager-main-pose-badge">
                   {activeGroup.poseName}
+                </span>
+              )}
+              {mainPoseName && (
+                <span className="csp-manager-main-pose-badge">
+                  {mainPoseName}
                 </span>
               )}
               {hasActiveHd && (
@@ -449,7 +455,7 @@ export default function CspManagerModal({
                       <div className="csp-manager-alt-hd-badge">HD</div>
                     )}
                   </div>
-                  <div className="csp-manager-alt-pose-label">Original</div>
+                  <div className="csp-manager-alt-pose-label">{cspManagerSkin.csp_pose_name || 'Original'}</div>
                   {isAltActive && (
                     <div className="csp-manager-alt-overlay">
                       <span>Set Active</span>

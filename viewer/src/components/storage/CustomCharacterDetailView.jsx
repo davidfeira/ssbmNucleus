@@ -55,7 +55,14 @@ const resolveBaseCharacter = (name) => {
   ) || null
 }
 
-export default function CustomCharacterDetailView({ character, onBack, onDelete, onRename, API_URL }) {
+export default function CustomCharacterDetailView({
+  character,
+  onBack,
+  onDelete,
+  onRename,
+  onSkinCreatorChange,
+  API_URL
+}) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(character.name)
   const [saving, setSaving] = useState(false)
@@ -232,6 +239,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
       has_hd_csp: skin.has_hd_csp,
       hd_csp_resolution: skin.hd_csp_resolution,
       hd_csp_size: skin.hd_csp_size,
+      csp_pose_name: skin.csp_pose_name,
       active_csp_id: skin.active_csp_id || null,
       alternateCsps: (skin.alternate_csps || []).map(alt => ({
         id: alt.id,
@@ -789,7 +797,8 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
       const data = await res.json()
       if (data.success) {
         playSound('camera')
-        flashSkinMessage(`Default pose set — re-rendered ${data.rendered} CSPs`)
+        const filled = data.filled ?? data.rendered ?? 0
+        flashSkinMessage(`Default pose set — filled ${filled} missing CSP${filled === 1 ? '' : 's'}`)
         await fetchDetail()
       } else {
         flashSkinMessage(`Set default pose failed: ${data.error}`)
@@ -974,8 +983,8 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                 aria-haspopup="menu"
                 aria-expanded={showDefaultPoseMenu}
                 title={poseList.length === 0
-                  ? 'Create a pose in Manage Poses first, then pick it here to re-render every costume + skin CSP in it'
-                  : 'Re-render every costume + skin CSP in this pose and remember it as the default'}
+                  ? 'Create a pose in Manage Poses first, then pick it here for new and missing CSPs'
+                  : 'Use this pose for new and missing custom character CSPs'}
               >
                 {defaultPoseButtonLabel}
               </button>
@@ -992,7 +1001,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
                         onClick={() => { playSound('boop'); handleSetDefaultPose(pose.name) }}
                         disabled={applyingDefaultPose}
                         role="menuitem"
-                        title={`Use ${pose.name} as the default pose`}
+                        title={`Use ${pose.name} for new and missing CSPs`}
                       >
                         <div className="default-pose-card-image">
                           {pose.hasThumbnail ? (
@@ -1653,6 +1662,7 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         isOpen={skinCreatorCostume != null}
         onClose={() => setSkinCreatorCostume(null)}
         selectedCharacter={character.name}
+        onSkinCreatorChange={onSkinCreatorChange}
         onRefresh={fetchDetail}
         initialCostume={skinCreatorCostume}
       />
@@ -1701,6 +1711,9 @@ export default function CustomCharacterDetailView({ character, onBack, onDelete,
         }))}
         onClose={() => setShowPoseManager(false)}
         onRefresh={fetchDetail}
+        defaultPoseName={detail?.default_pose || ''}
+        onSetDefaultPose={handleSetDefaultPose}
+        settingDefaultPose={applyingDefaultPose}
         API_URL={API_URL}
       />
       <SoundBankModal

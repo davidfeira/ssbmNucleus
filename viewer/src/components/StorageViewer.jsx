@@ -1043,6 +1043,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
             setSelectedCustomCharacter(updated)
             fetchCustomCharacters()
           }}
+          onSkinCreatorChange={onSkinCreatorChange}
           API_URL={API_URL}
         />
         {importFab}

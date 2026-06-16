@@ -43,6 +43,9 @@ export default function PoseManagerModal({
   // When set, clicking a library pose calls this instead of opening the
   // batch skin selector (used by the install page's apply-to-all flow)
   onSelectPose,
+  defaultPoseName = '',
+  onSetDefaultPose,
+  settingDefaultPose = false,
   API_URL
 }) {
   const viewerRef = useRef(null)
@@ -130,6 +133,17 @@ export default function PoseManagerModal({
   if (!show) return null
 
   const isCreating = mode === 'create'
+  const canEditDefaultPose = typeof onSetDefaultPose === 'function'
+  const showLockedDefaultPose = !canEditDefaultPose && !onSelectPose
+
+  const handleSetDefaultPose = async (pose) => {
+    if (!canEditDefaultPose || settingDefaultPose || !pose?.name || pose.name === defaultPoseName) return
+    try {
+      await onSetDefaultPose(pose.name)
+    } catch (err) {
+      console.error('[PoseManager] set-default-pose error:', err)
+    }
+  }
 
   const modal = (
     <div className="pm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -280,6 +294,16 @@ export default function PoseManagerModal({
                   <span>Original Portraits</span>
                 </div>
               )}
+              {showLockedDefaultPose && (
+                <div
+                  className="pm-create-card pm-default-card pm-default-card--locked"
+                  title="The built-in game pose is always available and cannot be edited for vanilla characters"
+                >
+                  <span className="pm-create-icon">Base</span>
+                  <span>Default Pose</span>
+                  <small>Built in</small>
+                </div>
+              )}
               {loadingPoses ? (
                 <div className="pm-library-empty">Loading poses…</div>
               ) : (
@@ -294,6 +318,9 @@ export default function PoseManagerModal({
                       playSound('boop'); setSelectedPose(pose)
                     }}
                     onStartFrom={startFromPose}
+                    defaultPoseName={defaultPoseName}
+                    onSetDefaultPose={canEditDefaultPose ? handleSetDefaultPose : null}
+                    settingDefaultPose={settingDefaultPose}
                     API_URL={API_URL}
                   />
                 ))

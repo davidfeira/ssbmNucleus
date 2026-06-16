@@ -206,6 +206,30 @@ export const POSE_MANAGER_STYLES = `
           color: var(--color-teal);
         }
 
+        .pm-default-card--locked,
+        .pm-default-card--locked:hover {
+          border-style: solid;
+          border-color: var(--color-border-strong, var(--color-border-subtle));
+          background: var(--color-bg-elevated);
+          color: var(--color-text-secondary);
+          cursor: default;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .pm-default-card--locked .pm-create-icon {
+          font-size: var(--text-sm);
+          font-weight: var(--font-bold);
+          color: var(--color-cyan);
+        }
+
+        .pm-default-card--locked small {
+          color: var(--color-text-muted);
+          font-size: var(--text-xs);
+          text-transform: none;
+          letter-spacing: 0;
+        }
+
         /* Pose cards (shared by the library grid) */
         .pm-pose-card {
           display: flex;
@@ -221,6 +245,11 @@ export const POSE_MANAGER_STYLES = `
           border-color: var(--color-cyan);
           transform: translateY(-2px);
           box-shadow: var(--glow-cyan-sm);
+        }
+
+        .pm-pose-card.is-default {
+          border-color: var(--color-teal);
+          box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.22);
         }
 
         .pm-pose-image {
@@ -304,6 +333,57 @@ export const POSE_MANAGER_STYLES = `
           background: var(--color-accent, #4a9eff);
           border-color: var(--color-accent, #4a9eff);
           color: white;
+        }
+
+        .pm-pose-default {
+          position: absolute;
+          left: 4px;
+          bottom: 4px;
+          padding: 3px 7px;
+          background: rgba(13, 148, 136, 0.9);
+          border: 1px solid var(--color-teal);
+          border-radius: var(--radius-sm);
+          color: white;
+          font-size: 10px;
+          font-weight: var(--font-bold);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          pointer-events: none;
+        }
+
+        .pm-pose-set-default {
+          position: absolute;
+          left: 4px;
+          right: 4px;
+          bottom: 4px;
+          min-height: 26px;
+          padding: 4px 6px;
+          background: rgba(6, 12, 20, 0.86);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-sm);
+          color: var(--color-text-secondary);
+          cursor: pointer;
+          opacity: 0;
+          transition: all var(--transition-fast);
+          font-size: 10px;
+          font-weight: var(--font-bold);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .pm-pose-card:hover .pm-pose-set-default {
+          opacity: 1;
+        }
+
+        .pm-pose-set-default:hover {
+          background: var(--color-teal);
+          border-color: var(--color-teal);
+          color: var(--color-bg-deep);
+        }
+
+        .pm-pose-set-default:disabled {
+          cursor: progress;
+          opacity: 0.75;
         }
 
         /* Row holding the left model picker + the viewer */
