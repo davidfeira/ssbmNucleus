@@ -5,13 +5,16 @@
  * batch install (with auto SSS grid layout), and removal from project.
  */
 import { useState, useEffect } from 'react'
+import { appConfirm } from '../../../utils/appDialogs'
 
 export default function useCustomStages({ API_URL, onRefresh }) {
   const [vaultStages, setVaultStages] = useState([])
   const [projectCustomStages, setProjectCustomStages] = useState([])
   const [addingStage, setAddingStage] = useState(null)
   const [selectedCustomStages, setSelectedCustomStages] = useState(new Set())
+  const [selectedInstalledCustomStages, setSelectedInstalledCustomStages] = useState(new Set())
   const [batchInstallingStages, setBatchInstallingStages] = useState(false)
+  const [removingCustomStages, setRemovingCustomStages] = useState(false)
   const [batchStageProgress, setBatchStageProgress] = useState({ current: 0, total: 0 })
 
   useEffect(() => {
@@ -43,11 +46,36 @@ export default function useCustomStages({ API_URL, onRefresh }) {
   }
 
   const selectAllCustomStages = () => {
-    setSelectedCustomStages(new Set(vaultStages.map(s => s.slug)))
+    setSelectedCustomStages(prev => {
+      const next = new Set(prev)
+      vaultStages.forEach(stage => next.add(stage.slug))
+      return next
+    })
   }
 
   const clearCustomStageSelection = () => {
     setSelectedCustomStages(new Set())
+  }
+
+  const toggleInstalledCustomStageSelection = (stageName) => {
+    setSelectedInstalledCustomStages(prev => {
+      const next = new Set(prev)
+      if (next.has(stageName)) next.delete(stageName)
+      else next.add(stageName)
+      return next
+    })
+  }
+
+  const selectAllInstalledCustomStages = () => {
+    setSelectedInstalledCustomStages(prev => {
+      const next = new Set(prev)
+      projectCustomStages.forEach(stage => next.add(stage.name))
+      return next
+    })
+  }
+
+  const clearInstalledCustomStageSelection = () => {
+    setSelectedInstalledCustomStages(new Set())
   }
 
   const autoApplySssGrid = async () => {
@@ -87,22 +115,31 @@ export default function useCustomStages({ API_URL, onRefresh }) {
     if (slugs.length === 0) return
     setBatchInstallingStages(true)
     setBatchStageProgress({ current: 0, total: slugs.length })
-    for (let i = 0; i < slugs.length; i++) {
-      setBatchStageProgress({ current: i + 1, total: slugs.length })
-      try {
-        const response = await fetch(`${API_URL}/custom-stages/install`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slug: slugs[i] })
-        })
-        const data = await response.json()
-        if (!data.success) {
-          console.error(`Failed to install ${slugs[i]}:`, data.error)
-        }
-      } catch (err) {
-        console.error(`Error installing ${slugs[i]}:`, err)
+    // ONE batch call: the backend folds add-stage + per-track add-music +
+    // set-stage-playlist for every selected stage into a single workspace recompile
+    // (~Nx faster than /install per stage). Output is byte-identical to the per-stage
+    // path.
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/install-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slugs })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        console.error('Batch stage install failed:', data.error)
+        alert(data.error || 'Failed to add stages')
+      } else {
+        if (data.failed?.length) console.warn('Some stages failed to install:', data.failed)
+        if (data.warnings?.length) console.warn('Install warnings:', data.warnings)
+        setBatchStageProgress({ current: slugs.length, total: slugs.length })
       }
+    } catch (err) {
+      console.error('Batch stage install error:', err)
+      alert(`Error: ${err.message}`)
     }
+    // Re-fit the SSS grid to the new roster (places the new stages on the
+    // stage-select grid), same step the per-stage path ran.
     await autoApplySssGrid()
     setBatchInstallingStages(false)
     setSelectedCustomStages(new Set())
@@ -110,23 +147,78 @@ export default function useCustomStages({ API_URL, onRefresh }) {
     onRefresh()
   }
 
+  const removeCustomStageFromProject = async (stageName) => {
+    const response = await fetch(`${API_URL}/custom-stages/remove-from-project`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: stageName })
+    })
+    const data = await response.json()
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to remove stage')
+    }
+    return data
+  }
+
   const handleRemoveCustomStage = async (stageName) => {
-    if (!confirm(`Remove "${stageName}" from the project?`)) return
+    if (!await appConfirm(`Remove "${stageName}" from the project?`, {
+      title: 'Remove Custom Stage',
+      confirmText: 'Remove',
+    })) return
     try {
-      const response = await fetch(`${API_URL}/custom-stages/remove-from-project`, {
+      await removeCustomStageFromProject(stageName)
+      setSelectedInstalledCustomStages(prev => {
+        const next = new Set(prev)
+        next.delete(stageName)
+        return next
+      })
+      await fetchCustomStagesData()
+      onRefresh()
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
+  const handleBatchRemoveCustomStages = async () => {
+    const names = [...selectedInstalledCustomStages]
+    if (names.length === 0 || removingCustomStages) return
+    if (!await appConfirm(`Remove ${names.length} selected custom stage(s) from the project?`, {
+      title: 'Remove Selected Stages',
+      confirmText: 'Remove',
+    })) return
+
+    setRemovingCustomStages(true)
+    let successCount = 0
+    let failCount = 0
+
+    // ONE batch call: removes every selected stage in a single workspace recompile
+    // (~Nx faster than /remove-from-project per stage, same final stage set).
+    try {
+      const response = await fetch(`${API_URL}/custom-stages/remove-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: stageName })
+        body: JSON.stringify({ names })
       })
       const data = await response.json()
       if (data.success) {
-        await fetchCustomStagesData()
-        onRefresh()
+        successCount = data.totalRemoved ?? names.length
+        failCount = data.totalFailed ?? 0
       } else {
-        alert(data.error || 'Failed to remove stage')
+        failCount = names.length
+        console.error('Batch stage remove failed:', data.error)
       }
     } catch (err) {
-      alert(`Error: ${err.message}`)
+      failCount = names.length
+      console.error('Batch stage remove error:', err)
+    }
+
+    setRemovingCustomStages(false)
+    setSelectedInstalledCustomStages(new Set())
+    await fetchCustomStagesData()
+    onRefresh()
+
+    if (failCount > 0) {
+      alert(`Batch remove completed:\n${successCount} removed, ${failCount} failed`)
     }
   }
 
@@ -136,13 +228,19 @@ export default function useCustomStages({ API_URL, onRefresh }) {
     addingStage,
     setAddingStage,
     selectedCustomStages,
+    selectedInstalledCustomStages,
     batchInstallingStages,
+    removingCustomStages,
     batchStageProgress,
     fetchCustomStagesData,
     toggleCustomStageSelection,
     selectAllCustomStages,
     clearCustomStageSelection,
+    toggleInstalledCustomStageSelection,
+    selectAllInstalledCustomStages,
+    clearInstalledCustomStageSelection,
     handleBatchInstallStages,
-    handleRemoveCustomStage
+    handleRemoveCustomStage,
+    handleBatchRemoveCustomStages
   }
 }

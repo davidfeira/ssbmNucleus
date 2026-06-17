@@ -25,6 +25,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
   const [removing, setRemoving] = useState(false)
   const [removingCostume, setRemovingCostume] = useState(null)
   const [selectedCostumes, setSelectedCostumes] = useState(new Set())
+  const [selectedInstalledCostumes, setSelectedInstalledCostumes] = useState(new Set())
   const [batchImporting, setBatchImporting] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   const [draggedIndex, setDraggedIndex] = useState(null)
@@ -388,12 +389,58 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     setShowConfirmDialog(true)
   }
 
+  const removeCostumeFromProject = async (fighterName, costumeIndex) => {
+    const requestBody = {
+      fighter: fighterName,
+      costumeIndex: costumeIndex
+    }
+
+    console.log('Sending remove request:', requestBody)
+
+    const response = await fetch(`${API_URL}/remove`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    })
+
+    const data = await response.json()
+    console.log('Remove response:', data)
+
+    if (!data.success) {
+      throw new Error(data.error || 'Remove failed')
+    }
+
+    return data
+  }
+
+  const handleBatchRemoveCostumes = () => {
+    if (removing || selectedInstalledCostumes.size === 0) return
+
+    const items = Array.from(selectedInstalledCostumes)
+      .map(parseInstalledCostumeKey)
+      .filter(Boolean)
+
+    if (items.length === 0) return
+
+    setPendingRemoval({ bulk: true, items })
+    setShowConfirmDialog(true)
+  }
+
   const confirmRemoveCostume = async () => {
     if (!pendingRemoval) return
 
-    const { fighterName, costumeIndex, costumeName, isIceClimbers } = pendingRemoval
+    const removal = pendingRemoval
     setShowConfirmDialog(false)
     setPendingRemoval(null)
+
+    if (removal.bulk) {
+      await confirmBatchRemoveCostumes(removal.items)
+      return
+    }
+
+    const { fighterName, costumeIndex, costumeName, isIceClimbers } = removal
 
     console.log(`=== REMOVE REQUEST ===`)
     console.log(`Fighter: ${fighterName}`)
@@ -407,28 +454,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     setRemovingCostume(costumeIndex)
 
     try {
-      const requestBody = {
-        fighter: fighterName,
-        costumeIndex: costumeIndex
-      }
-
-      console.log('Sending remove request:', requestBody)
-
-      const response = await fetch(`${API_URL}/remove`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      const data = await response.json()
-      console.log('Remove response:', data)
-
-      if (!data.success) {
-        alert(`Remove failed: ${data.error}`)
-        return
-      }
+      await removeCostumeFromProject(fighterName, costumeIndex)
 
       console.log(`✓ Successfully removed "${costumeName}" from ${fighterName}`)
 
@@ -471,6 +497,11 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
       // Refresh
       await onRefresh()
       await refreshMexCostumes(fighterName)
+      setSelectedInstalledCostumes(prev => {
+        const next = new Set(prev)
+        next.delete(installedCostumeKey(fighterName, costumeIndex))
+        return next
+      })
 
     } catch (err) {
       console.error('Remove error:', err)
@@ -478,6 +509,75 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     } finally {
       setRemoving(false)
       setRemovingCostume(null)
+    }
+  }
+
+  const confirmBatchRemoveCostumes = async (items) => {
+    const deduped = new Map()
+    items.forEach(item => {
+      deduped.set(installedCostumeKey(item.fighterName, item.costumeIndex), item)
+      if (item.fighterName === 'Ice Climbers') {
+        const nanaFighter = fighters.find(f => f.internalId === 11)
+        if (nanaFighter) {
+          deduped.set(installedCostumeKey(nanaFighter.name, item.costumeIndex), {
+            fighterName: nanaFighter.name,
+            costumeIndex: item.costumeIndex,
+            costumeName: `Paired Nana slot ${item.costumeIndex + 1}`,
+          })
+        }
+      }
+    })
+
+    const removalQueue = Array.from(deduped.values()).sort((a, b) => {
+      const fighterCompare = a.fighterName.localeCompare(b.fighterName)
+      return fighterCompare || b.costumeIndex - a.costumeIndex
+    })
+
+    setRemoving(true)
+    let successCount = 0
+    let failCount = 0
+
+    // ONE batch call: the backend removes every selected costume in a single
+    // workspace recompile (descending index per fighter, so indices stay valid) --
+    // ~Nx faster than /remove per costume, same final costume set.
+    try {
+      const items = removalQueue.map(it => ({
+        fighter: it.fighterName, costumeIndex: it.costumeIndex
+      }))
+      const response = await fetch(`${API_URL}/remove-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      })
+      const data = await response.json()
+      if (data.success) {
+        successCount = items.length
+      } else {
+        failCount = items.length
+        console.error('Batch remove failed:', data.error)
+      }
+    } catch (err) {
+      failCount = removalQueue.length
+      console.error('Batch remove error:', err)
+    }
+
+    try {
+      await onRefresh()
+      if (selectedFighter) {
+        await refreshMexCostumes(selectedFighter.name)
+      }
+    } finally {
+      setRemoving(false)
+      setRemovingCostume(null)
+      setSelectedInstalledCostumes(new Set())
+    }
+
+    if (failCount > 0) {
+      playSound('error')
+      alert(`Batch remove completed:\n${successCount} removed, ${failCount} failed`)
+    } else {
+      playSound('boop')
+      console.log(`âœ“ Successfully removed ${successCount} costume(s)`)
     }
   }
 
@@ -493,13 +593,21 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     let failCount = 0
     let completedCount = 0
     const importedNanas = new Set()
-    const markBatchStepComplete = () => {
-      completedCount += 1
+    const markBatchStepComplete = (n = 1) => {
+      completedCount += n
       setBatchProgress({ current: completedCount, total })
     }
 
-    for (let i = 0; i < costumesToImport.length; i++) {
-      const zipPath = costumesToImport[i]
+    // Partition the selection: ordinary costumes (incl. Ice Climbers pairs)
+    // collapse into ONE /import-batch call (one workspace recompile + parallel
+    // CSP decode -- ~7x faster than N /import calls). Custom-character skins use
+    // a different endpoint (/custom-characters/install-skin) and aren't a plain
+    // costume zip, so they stay individual.
+    const batchItems = []        // { fighter, costumePath } in selection order
+    const batchSelections = []   // selected zipPaths represented in batchItems
+    const customSkins = []       // costumes needing install-skin
+
+    for (const zipPath of costumesToImport) {
       const costume = storageCostumes.find(c => c.zipPath === zipPath)
 
       if (!costume) {
@@ -508,125 +616,95 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
         continue
       }
 
-      // Skip if this is a Nana that was already imported as part of a Popo pair
+      // Skip if this is a Nana that was already queued as part of a Popo pair
       if (importedNanas.has(zipPath)) {
         markBatchStepComplete()
         continue
       }
 
-      try {
-        // Custom-character added skin: route through import-costume
-        if (costume.isCustomCharSkin) {
-          const response = await fetch(`${API_URL}/custom-characters/install-skin`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              slug: costume.customSlug,
-              skinId: costume.skinId,
-              fighterName: costume.character,
-            })
-          })
-          const data = await response.json()
-          if (data.success) {
-            successCount++
-          } else {
-            console.error(`Import failed for ${costume.name}:`, data.error)
-            failCount++
-          }
-          continue  // loop's finally marks this step complete
+      if (costume.isCustomCharSkin) {
+        customSkins.push(costume)
+        continue
+      }
+
+      // Ice Climbers: queue the paired Nana alongside Popo. Two separate manifest
+      // entries (Ice Climbers + Nana fighter) -- NOT one bundled zip -- keeps the
+      // Popo/Nana slots aligned, same as two sequential /import calls.
+      if (costume.isPopo && costume.pairedNanaId) {
+        const nanaCostume = storageCostumes.find(c => c.folder === costume.pairedNanaId)
+        const nanaFighter = fighters.find(f => f.internalId === 11)
+
+        if (!nanaCostume) {
+          console.error('Paired Nana costume not found:', costume.pairedNanaId)
+          failCount++
+          markBatchStepComplete()
+          continue
+        }
+        if (!nanaFighter) {
+          console.error('Nana fighter (ID 11) not found in project')
+          failCount++
+          markBatchStepComplete()
+          continue
         }
 
-        // Ice Climbers: Auto-import paired Nana when Popo is selected
-        if (costume.isPopo && costume.pairedNanaId) {
-          console.log('Ice Climbers Popo detected in batch - will auto-import paired Nana')
+        batchItems.push({ fighter: 'Ice Climbers', costumePath: costume.zipPath })
+        batchItems.push({ fighter: nanaFighter.name, costumePath: nanaCostume.zipPath })
+        importedNanas.add(nanaCostume.zipPath)
+        batchSelections.push(zipPath)
+      } else {
+        batchItems.push({ fighter: costume.character, costumePath: costume.zipPath })
+        batchSelections.push(zipPath)
+      }
+    }
 
-          const nanaCostume = storageCostumes.find(c => c.folder === costume.pairedNanaId)
-
-          if (!nanaCostume) {
-            console.error('Paired Nana costume not found:', costume.pairedNanaId)
-            failCount++
-            continue
-          }
-
-          // Import Popo first
-          const popoResponse = await fetch(`${API_URL}/import`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fighter: 'Ice Climbers',
-              costumePath: costume.zipPath
-            })
+    // 1) Custom-character skins -- sequential (separate endpoint, not batchable).
+    for (const costume of customSkins) {
+      try {
+        const response = await fetch(`${API_URL}/custom-characters/install-skin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slug: costume.customSlug,
+            skinId: costume.skinId,
+            fighterName: costume.character,
           })
-
-          const popoData = await popoResponse.json()
-
-          if (!popoData.success) {
-            console.error(`Popo import failed: ${popoData.error}`)
-            failCount++
-            continue
-          }
-
-          // Import Nana second
-          const nanaFighter = fighters.find(f => f.internalId === 11)
-
-          if (!nanaFighter) {
-            console.error('Nana fighter (ID 11) not found in project')
-            failCount++
-            continue
-          }
-
-          const nanaResponse = await fetch(`${API_URL}/import`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fighter: nanaFighter.name,
-              costumePath: nanaCostume.zipPath
-            })
-          })
-
-          const nanaData = await nanaResponse.json()
-
-          if (!nanaData.success) {
-            console.error(`Nana import failed: ${nanaData.error}`)
-            failCount++
-            continue
-          }
-
-          console.log(`✓ Successfully imported Ice Climbers pair (Popo + Nana)`)
+        })
+        const data = await response.json()
+        if (data.success) {
           successCount++
-
-          // Mark this Nana as imported
-          importedNanas.add(nanaCostume.zipPath)
-
         } else {
-          // Normal single costume import
-          const requestBody = {
-            fighter: costume.character,
-            costumePath: costume.zipPath
-          }
-
-          const response = await fetch(`${API_URL}/import`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
-          })
-
-          const data = await response.json()
-
-          if (data.success) {
-            successCount++
-          } else {
-            console.error(`Import failed for ${costume.name}:`, data.error)
-            failCount++
-          }
+          console.error(`Import failed for ${costume.name}:`, data.error)
+          failCount++
         }
       } catch (err) {
         console.error(`Import error for ${costume.name}:`, err)
         failCount++
       } finally {
         markBatchStepComplete()
+      }
+    }
+
+    // 2) Everything else -- ONE batch call.
+    if (batchItems.length > 0) {
+      try {
+        const response = await fetch(`${API_URL}/import-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: batchItems })
+        })
+        const data = await response.json()
+        if (data.success) {
+          console.log(`✓ Batch-imported ${batchItems.length} file(s) for ${batchSelections.length} selection(s)`, data.result)
+          successCount += batchSelections.length
+        } else {
+          console.error('Batch import failed:', data.error)
+          failCount += batchSelections.length
+        }
+      } catch (err) {
+        console.error('Batch import error:', err)
+        failCount += batchSelections.length
+      } finally {
+        markBatchStepComplete(batchSelections.length)
       }
     }
 
@@ -817,6 +895,36 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     setSelectedCostumes(new Set())
   }
 
+  const installedCostumeKey = (fighterName, costumeIndex) => JSON.stringify([fighterName, costumeIndex])
+
+  const parseInstalledCostumeKey = (key) => {
+    try {
+      const [fighterName, costumeIndex] = JSON.parse(key)
+      if (typeof fighterName !== 'string' || !Number.isInteger(costumeIndex)) return null
+      return { fighterName, costumeIndex }
+    } catch (err) {
+      console.error('Invalid installed costume key:', key, err)
+      return null
+    }
+  }
+
+  const toggleInstalledCostumeSelection = (fighterName, costumeIndex) => {
+    const key = installedCostumeKey(fighterName, costumeIndex)
+    setSelectedInstalledCostumes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(key)) {
+        newSet.delete(key)
+      } else {
+        newSet.add(key)
+      }
+      return newSet
+    })
+  }
+
+  const clearInstalledCostumeSelection = () => {
+    setSelectedInstalledCostumes(new Set())
+  }
+
   return {
     mexCostumes,
     refreshMexCostumes,
@@ -827,6 +935,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     removing,
     removingCostume,
     selectedCostumes,
+    selectedInstalledCostumes,
     batchImporting,
     batchProgress,
     draggedIndex,
@@ -853,6 +962,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     handleImportCostume,
     handleRemoveCostume,
     confirmRemoveCostume,
+    handleBatchRemoveCostumes,
     handleBatchImport,
     handleDragStart,
     handleDragOver,
@@ -863,6 +973,9 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     getCostumesForFighter,
     toggleCostumeSelection,
     selectAllCostumes,
-    clearSelection
+    clearSelection,
+    installedCostumeKey,
+    toggleInstalledCostumeSelection,
+    clearInstalledCostumeSelection
   }
 }

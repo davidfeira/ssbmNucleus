@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import { computeAutoCssLayout } from '../../../utils/cssGridLayout'
+import { appConfirm } from '../../../utils/appDialogs'
 
 export default function useCustomCharacters({ API_URL, onRefresh }) {
   // Add character modal state
@@ -62,20 +63,30 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
     if (slugs.length === 0) return
     setBatchAddingChars(true)
     setBatchCharProgress({ current: 0, total: slugs.length })
-    for (let i = 0; i < slugs.length; i++) {
-      setBatchCharProgress({ current: i + 1, total: slugs.length })
-      try {
-        const response = await fetch(`${API_URL}/custom-characters/install`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slug: slugs[i] })
-        })
-        const data = await response.json()
-        if (!data.success) console.error(`Failed to install ${slugs[i]}:`, data.error)
-      } catch (err) {
-        console.error(`Error installing ${slugs[i]}:`, err)
+    // ONE batch call: the backend folds add-fighter + victory + announcer for every
+    // selected character into a single workspace recompile (~Nx faster than calling
+    // /install per char, which re-recompiled ~4x each).
+    try {
+      const response = await fetch(`${API_URL}/custom-characters/install-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slugs })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        console.error('Batch character install failed:', data.error)
+        alert(data.error || 'Failed to add characters')
+      } else {
+        if (data.failed?.length) console.warn('Some characters failed to install:', data.failed)
+        if (data.warnings?.length) console.warn('Install warnings:', data.warnings)
+        setBatchCharProgress({ current: slugs.length, total: slugs.length })
       }
+    } catch (err) {
+      console.error('Batch character install error:', err)
+      alert(`Error: ${err.message}`)
     }
+    // Re-fit the CSS grid to the new roster -- this is what places the newly added
+    // fighters on the character-select grid (same step the per-char path ran).
     await autoApplyCssGrid()
     setBatchAddingChars(false)
     setSelectedVaultChars(new Set())
@@ -84,7 +95,10 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
   }
 
   const handleRemoveFighter = async (fighterName) => {
-    if (!confirm(`Remove "${fighterName}" from the project?`)) return
+    if (!await appConfirm(`Remove "${fighterName}" from the project?`, {
+      title: 'Remove Character',
+      confirmText: 'Remove',
+    })) return
     setRemovingFighter(true)
     setRemovingFighterName(fighterName)
     try {

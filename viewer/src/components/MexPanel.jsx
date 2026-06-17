@@ -5,6 +5,7 @@ import IsoBuilder from './IsoBuilder'
 import ProjectSelector from './mex/ProjectSelector'
 import BuildInfoModal from './mex/BuildInfoModal'
 import ProjectHeaderInfo from './mex/ProjectHeaderInfo'
+import DiscUsageIndicator from './mex/DiscUsageIndicator'
 import CharacterMode from './mex/CharacterMode'
 import StageMode from './mex/StageMode'
 import MenuMode from './mex/MenuMode'
@@ -286,6 +287,13 @@ const MexPanel = () => {
                 projectName={mexStatus.project.path?.split(/[/\\]/).slice(-2, -1)[0] || mexStatus.project.name}
                 onOpenBanner={() => setShowBuildModal(true)}
                 onSaveField={handleInlineBuildSave}
+              />
+            )}
+            {mexStatus?.connected && projectLoaded && (
+              <DiscUsageIndicator
+                API_URL={API_URL}
+                projectLoaded={projectLoaded}
+                totalCostumes={(fighters || []).reduce((s, f) => s + (f.costumeCount || 0), 0)}
               />
             )}
             <div className="action-buttons-group">
