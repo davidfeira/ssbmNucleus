@@ -94,6 +94,7 @@ pytest-cache-files-*/
 /parallel_test/
 tmp_retake/
 /*_test_out/
+/tmp_iso_samples/
 
 # local release staging (release_to_r2.py)
 releases/
