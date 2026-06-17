@@ -106,6 +106,55 @@ def import_costume():
         }), 500
 
 
+@costumes_bp.route('/api/mex/import-batch', methods=['POST'])
+def import_costumes_batch():
+    """
+    Batch-import many costumes in ONE workspace save -- ~2x faster than calling
+    /import N times (each of those re-runs the full project recompile). The result
+    is byte-identical to N sequential imports.
+
+    Body:
+    {
+        "items": [
+            {"fighter": "Fox",   "costumePath": "storage/Fox/.../a.zip"},
+            {"fighter": "Falco", "costumePath": "storage/Falco/.../b.zip"}
+        ]
+    }
+    """
+    try:
+        data = request.json or {}
+        items = data.get('items') or []
+        if not items:
+            return jsonify({'success': False, 'error': 'No items provided'}), 400
+
+        manifest = {}
+        for it in items:
+            fighter_name = it.get('fighter')
+            costume_path = it.get('costumePath')
+            if not fighter_name or not costume_path:
+                return jsonify({'success': False,
+                                'error': 'Each item needs fighter and costumePath'}), 400
+            full_costume_path = PROJECT_ROOT / costume_path
+            if not full_costume_path.exists():
+                return jsonify({'success': False,
+                                'error': f'Costume ZIP not found: {costume_path}'}), 404
+            manifest.setdefault(fighter_name, []).append(str(full_costume_path))
+
+        logger.info(f"=== BATCH IMPORT ({sum(len(v) for v in manifest.values())} costumes, "
+                    f"{len(manifest)} fighters) ===")
+        mex = get_mex_manager()
+        result = mex.import_costumes(manifest)
+        time.sleep(0.15)
+        reload_mex_manager()
+        return jsonify({'success': True, 'result': result})
+    except MexManagerError as e:
+        logger.error(f"Batch import MexManagerError: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Batch import error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @costumes_bp.route('/api/mex/remove', methods=['POST'])
 def remove_costume():
     """
@@ -169,6 +218,55 @@ def remove_costume():
             'success': False,
             'error': f'Unexpected error: {str(e)}'
         }), 500
+
+
+@costumes_bp.route('/api/mex/remove-batch', methods=['POST'])
+def remove_costumes_batch():
+    """
+    Batch-remove many costumes in ONE workspace save -- ~Nx faster than calling
+    /remove N times. Same final costume set as N sequential removes (the generated
+    IfAll stock-icon file can differ in HSD layout but is functionally identical;
+    stock icons are regenerated from the final costume set).
+
+    Body:
+    {
+        "items": [
+            {"fighter": "Fox",  "costumeIndex": 5},
+            {"fighter": "Nana", "costumeIndex": 3}
+        ]
+    }
+    """
+    try:
+        data = request.json or {}
+        items = data.get('items') or []
+        if not items:
+            return jsonify({'success': False, 'error': 'No items provided'}), 400
+
+        manifest = {}
+        for it in items:
+            fighter_name = it.get('fighter')
+            costume_index = it.get('costumeIndex')
+            if fighter_name is None or costume_index is None:
+                return jsonify({'success': False,
+                                'error': 'Each item needs fighter and costumeIndex'}), 400
+            if not isinstance(costume_index, int) or costume_index < 0:
+                return jsonify({'success': False,
+                                'error': 'costumeIndex must be a non-negative integer'}), 400
+            manifest.setdefault(fighter_name, []).append(costume_index)
+
+        logger.info(f"=== BATCH REMOVE ({sum(len(v) for v in manifest.values())} costumes, "
+                    f"{len(manifest)} fighters) ===")
+        mex = get_mex_manager()
+        result = mex.remove_costumes(manifest)
+        time.sleep(0.15)
+        reload_mex_manager()
+        return jsonify({'success': True, 'result': result})
+    except MexManagerError as e:
+        logger.error(f"Batch remove MexManagerError: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Batch remove error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @costumes_bp.route('/api/mex/reorder', methods=['POST'])

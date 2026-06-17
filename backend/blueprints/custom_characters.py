@@ -1664,6 +1664,189 @@ def install_custom_character():
             temp_zip.unlink()
 
 
+def _prepare_fighter_for_batch(slug, project_path, mexcli_path):
+    """Per-char preprocessing for a batch install, identical to the work
+    install_custom_character does BEFORE add-fighter: resolve the series (may
+    create it, baking seriesID into a temp zip), fold costume CSP/stock edits +
+    renames into that zip, and collect the victory-theme / announcer manifest
+    fields. The actual add-fighter + victory + announcer mutations are folded into
+    the single `add-fighters` Save by the batch CLI command.
+
+    Returns {ok, slug, manifest, temp_zip, warnings} or {ok: False, slug, error}.
+    """
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    zip_path = char_dir / 'fighter.zip'
+    if not zip_path.exists():
+        return {'ok': False, 'slug': slug,
+                'error': f'Fighter ZIP not found for "{slug}". Re-scan the ISO to generate it.'}
+
+    metadata = _read_metadata()
+    entry = _find_entry(metadata, slug) or {}
+    warnings = []
+
+    # source announcerCall (only used for the reuse fallback when no WAV ships)
+    source_announcer_call = None
+    fighter_json_path = char_dir / 'fighter.json'
+    if fighter_json_path.exists():
+        try:
+            src = json.load(open(fighter_json_path, 'r', encoding='utf-8'))
+            if isinstance(src.get('announcerCall'), int):
+                source_announcer_call = src['announcerCall']
+        except (OSError, json.JSONDecodeError):
+            logger.warning(f"Could not read source announcerCall for {slug}")
+
+    # Custom franchise: re-create/match the series in the target project. This is
+    # the one piece that stays a separate (rare) save -- the zip carries the result.
+    series_id, series_warnings = _resolve_install_series(entry, char_dir, project_path, mexcli_path)
+    warnings += series_warnings
+
+    # Fold costume CSP/stock edits + color renames back into the fighter zip.
+    costumes_dir = char_dir / 'costumes'
+    meta_by_id = {m['id']: m for m in entry.get('costume_meta', [])}
+    replace_entries = {}
+    if costumes_dir.exists():
+        for f in costumes_dir.glob('*.zip'):
+            meta = meta_by_id.get(Path(f.name).stem)
+            if meta:
+                replace_entries[f.name] = _zip_bytes_with_active_csp(
+                    f'custom_characters/{slug}/costumes', meta, f)
+
+    def _mutate_install_json(meta):
+        if series_id is not None:
+            meta['seriesID'] = series_id
+        for costume in meta.get('costumes', []):
+            stem = Path((costume.get('file') or {}).get('fileName') or '').stem
+            m = meta_by_id.get(stem)
+            if m and m.get('color'):
+                costume['name'] = m['color']
+        return meta
+
+    install_zip = zip_path
+    temp_zip = None
+    if series_id is not None or replace_entries:
+        temp_zip = Path(tempfile.mktemp(suffix='.zip', prefix='nucleus_fighter_'))
+        _rewrite_zip_fighter_json(zip_path, temp_zip,
+                                  mutate_json=_mutate_install_json,
+                                  replace_entries=replace_entries)
+        install_zip = temp_zip
+
+    e = {'zip': str(install_zip)}
+
+    # Victory theme (add-fighter resets victoryTheme; the batch re-ports it).
+    vt_file = char_dir / 'victory_theme.hps'
+    vt_meta = entry.get('victory_theme') or {}
+    if vt_file.exists() and vt_meta.get('name'):
+        e['victoryHps'] = str(vt_file)
+        e['victoryName'] = vt_meta['name']
+
+    # Announcer name-call: prefer the WAV port (the common case); otherwise reuse
+    # an existing call id if it resolves in this project (mirrors single install).
+    announcer_wav = char_dir / 'announcer.wav'
+    if announcer_wav.exists():
+        e['announcerWav'] = str(announcer_wav)
+    elif isinstance(source_announcer_call, int) and source_announcer_call != 540000:
+        matching = _find_existing_fighter_with_announcer_call(project_path, source_announcer_call)
+        if matching:
+            sem_path = Path(project_path).parent / 'files' / 'audio' / 'us' / 'smash2.sem'
+            resolved = _run_mexcli('sem-resolve', sem_path, source_announcer_call)
+            if resolved.get('success'):
+                e['announcerCallReuse'] = source_announcer_call
+
+    return {'ok': True, 'slug': slug, 'manifest': e, 'temp_zip': temp_zip, 'warnings': warnings}
+
+
+@custom_characters_bp.route('/api/mex/custom-characters/install-batch', methods=['POST'])
+def install_custom_characters_batch():
+    """Bulk-install several vault custom characters in ONE `add-fighters` call --
+    one workspace Save instead of ~4 per character (add-fighter + add-music +
+    set-fighter-music + set-fighter-announcer all re-Save today). Output is
+    byte-identical to N sequential installs except the generated PlCo bone-lookup
+    file (serialization layout only; every fighter validated loadable in-game).
+
+    The frontend re-fits the CSS grid afterwards, exactly like the per-char path.
+
+    Body: { "slugs": ["wario", "toad", ...] }
+    """
+    temp_zips = []
+    try:
+        data = request.json or {}
+        slugs = [s.strip() for s in (data.get('slugs') or []) if s and s.strip()]
+        if not slugs:
+            return jsonify({'success': False, 'error': 'No slugs provided'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded. Open a project first.'}), 400
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        prepared, failed, warnings = [], [], []
+        for slug in slugs:
+            pre = _prepare_fighter_for_batch(slug, project_path, mexcli_path)
+            if not pre.get('ok'):
+                failed.append({'slug': slug, 'error': pre.get('error')})
+                continue
+            if pre.get('temp_zip'):
+                temp_zips.append(pre['temp_zip'])
+            prepared.append(pre)
+            warnings += [f"{slug}: {w}" for w in pre.get('warnings', [])]
+
+        if not prepared:
+            return jsonify({'success': False, 'error': 'No installable characters', 'failed': failed}), 400
+
+        manifest = {'fighters': [p['manifest'] for p in prepared]}
+        logger.info(f"=== BATCH CHARACTER INSTALL ({len(prepared)} fighters) ===")
+        fd, manifest_path = tempfile.mkstemp(suffix='.json', prefix='nucleus_fighters_batch_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f)
+            result = subprocess.run(
+                [mexcli_path, 'add-fighters', str(project_path), manifest_path],
+                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+        finally:
+            try:
+                os.unlink(manifest_path)
+            except OSError:
+                pass
+
+        if result.returncode != 0:
+            err = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"add-fighters batch failed: {err}")
+            return jsonify({'success': False, 'error': f'Batch add failed: {err}'}), 500
+
+        cli = _parse_cli_json(result.stdout)
+        for fr in cli.get('fighters', []):
+            for w in (fr.get('warnings') or []):
+                warnings.append(f"{fr.get('name', '?')}: {w}")
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        added = cli.get('totalAdded', 0)
+        logger.info(f"[OK] Batch-installed {added} custom character(s)")
+        return jsonify({
+            'success': True,
+            'message': f"Added {added} character(s) to project",
+            'totalAdded': added,
+            'totalFailed': cli.get('totalFailed', 0) + len(failed),
+            'fighters': cli.get('fighters', []),
+            'failed': failed,
+            'warnings': warnings,
+        })
+    except Exception as e:
+        logger.error(f"Batch install error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        for tz in temp_zips:
+            try:
+                if tz and tz.exists():
+                    tz.unlink()
+            except OSError:
+                pass
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/install-skin', methods=['POST'])
 def install_custom_character_skin():
     """Install ONE of a custom character's added skins into the open project.

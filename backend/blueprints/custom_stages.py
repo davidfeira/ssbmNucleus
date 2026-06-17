@@ -955,6 +955,115 @@ def install_custom_stage():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _stage_manifest_entry(slug):
+    """Build the add-stages manifest entry for a vault stage: the raw stage.zip plus
+    its playlist (hps path + name + chance per track), mirroring install_custom_stage.
+    Returns (entry_dict, warnings) or (None, [error])."""
+    zip_path = CUSTOM_STAGES_PATH / slug / 'stage.zip'
+    if not zip_path.exists():
+        return None, [f'Stage ZIP not found for "{slug}". Re-scan the ISO to generate it.']
+
+    e = {'zip': str(zip_path)}
+    warnings = []
+    metadata = _read_metadata()
+    entry = next((s for s in metadata.get('custom_stages', [])
+                  if not _is_folder(s) and s.get('slug') == slug), None)
+    playlist = (entry or {}).get('playlist') or []
+    if playlist:
+        stage_dir = CUSTOM_STAGES_PATH / slug
+        tracks = []
+        for i, track in enumerate(playlist):
+            hps = stage_dir / f'music_{i}.hps'
+            if not hps.exists() or not track.get('name'):
+                warnings.append(f"{slug}: track '{track.get('name')}' file missing, skipped")
+                continue
+            tracks.append({'hps': str(hps), 'name': track['name'],
+                           'chance': track.get('chance', 50)})
+        if tracks:
+            e['playlist'] = tracks
+    return e, warnings
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/install-batch', methods=['POST'])
+def install_custom_stages_batch():
+    """Bulk-install several vault custom stages in ONE `add-stages` call -- one
+    workspace Save instead of add-stage + (one add-music per track) + set-stage-playlist
+    PER stage. Byte-identical to N sequential installs (validated full-tree).
+
+    Body: { "slugs": ["awakening-wood-2", ...] }
+    """
+    try:
+        data = request.json or {}
+        slugs = [s.strip() for s in (data.get('slugs') or []) if s and s.strip()]
+        if not slugs:
+            return jsonify({'success': False, 'error': 'No slugs provided'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded. Open a project first.'}), 400
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        from blueprints.custom_characters import _parse_cli_json
+
+        manifest_stages, failed, warnings = [], [], []
+        for slug in slugs:
+            entry, warns = _stage_manifest_entry(slug)
+            if entry is None:
+                failed.append({'slug': slug, 'error': warns[0] if warns else 'prepare failed'})
+                continue
+            manifest_stages.append(entry)
+            warnings += warns
+
+        if not manifest_stages:
+            return jsonify({'success': False, 'error': 'No installable stages', 'failed': failed}), 400
+
+        logger.info(f"=== BATCH STAGE INSTALL ({len(manifest_stages)} stages) ===")
+        fd, manifest_path = tempfile.mkstemp(suffix='.json', prefix='nucleus_stages_batch_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump({'stages': manifest_stages}, f)
+            result = subprocess.run(
+                [mexcli_path, 'add-stages', str(project_path), manifest_path],
+                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+        finally:
+            try:
+                os.unlink(manifest_path)
+            except OSError:
+                pass
+
+        if result.returncode != 0:
+            err = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"add-stages batch failed: {err}")
+            return jsonify({'success': False, 'error': f'Batch add failed: {err}'}), 500
+
+        cli = _parse_cli_json(result.stdout)
+        for sr in cli.get('stages', []):
+            for w in (sr.get('warnings') or []):
+                warnings.append(f"{sr.get('name', '?')}: {w}")
+
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        added = cli.get('totalAdded', 0)
+        logger.info(f"[OK] Batch-installed {added} custom stage(s)")
+        return jsonify({
+            'success': True,
+            'message': f"Added {added} stage(s) to project",
+            'totalAdded': added,
+            'totalFailed': cli.get('totalFailed', 0) + len(failed),
+            'totalTracks': cli.get('totalTracks', 0),
+            'stages': cli.get('stages', []),
+            'failed': failed,
+            'warnings': warnings,
+        })
+    except Exception as e:
+        logger.error(f"Batch stage install error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @custom_stages_bp.route('/api/mex/custom-stages/remove-from-project', methods=['POST'])
 def remove_custom_stage_from_project():
     """Remove a custom stage from the currently open project."""
@@ -989,6 +1098,66 @@ def remove_custom_stage_from_project():
         return jsonify({'success': True, 'message': f'Removed {stage_name}'})
     except Exception as e:
         logger.error(f"Remove stage error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@custom_stages_bp.route('/api/mex/custom-stages/remove-batch', methods=['POST'])
+def remove_custom_stages_batch():
+    """Bulk-remove several custom stages in ONE `remove-stages` call -- one workspace
+    Save instead of one per stage. Byte-identical to N sequential removes (the live
+    project matches; only a stale, never-loaded orphan stage json can differ).
+
+    Body: { "names": ["My Stage", ...] }
+    """
+    try:
+        data = request.json or {}
+        names = [n.strip() for n in (data.get('names') or []) if n and n.strip()]
+        if not names:
+            return jsonify({'success': False, 'error': 'No names provided'}), 400
+
+        project_path = get_current_project_path()
+        if project_path is None:
+            return jsonify({'success': False, 'error': 'No project loaded.'}), 400
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
+
+        from blueprints.custom_characters import _parse_cli_json
+        logger.info(f"=== BATCH STAGE REMOVE ({len(names)} stages) ===")
+        fd, manifest_path = tempfile.mkstemp(suffix='.json', prefix='nucleus_stages_rm_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump({'stages': names}, f)
+            result = subprocess.run(
+                [mexcli_path, 'remove-stages', str(project_path), manifest_path],
+                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+        finally:
+            try:
+                os.unlink(manifest_path)
+            except OSError:
+                pass
+
+        if result.returncode != 0:
+            err = result.stderr or result.stdout or 'Unknown error'
+            logger.error(f"remove-stages batch failed: {err}")
+            return jsonify({'success': False, 'error': f'Batch remove failed: {err}'}), 500
+
+        cli = _parse_cli_json(result.stdout)
+        import time
+        time.sleep(0.15)
+        reload_mex_manager()
+
+        removed = cli.get('totalRemoved', 0)
+        logger.info(f"[OK] Batch-removed {removed} custom stage(s)")
+        return jsonify({
+            'success': True,
+            'message': f'Removed {removed} stage(s)',
+            'totalRemoved': removed,
+            'totalFailed': cli.get('totalFailed', 0),
+            'stages': cli.get('stages', []),
+        })
+    except Exception as e:
+        logger.error(f"Batch stage remove error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
