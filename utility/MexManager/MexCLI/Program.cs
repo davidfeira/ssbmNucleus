@@ -36,8 +36,12 @@ namespace MexCLI
                         return Commands.GetFighterCostumesCommand.Execute(args);
                     case "import-costume":
                         return Commands.ImportCostumeCommand.Execute(args);
+                    case "import-costumes":
+                        return Commands.ImportCostumesCommand.Execute(args);
                     case "remove-costume":
                         return Commands.RemoveCostumeCommand.Execute(args);
+                    case "remove-costumes":
+                        return Commands.RemoveCostumesCommand.Execute(args);
                     case "reorder-costume":
                         return Commands.ReorderCostumeCommand.Execute(args);
                     case "save":
@@ -70,6 +74,8 @@ namespace MexCLI
                         return Commands.ExportStageCommand.Execute(args);
                     case "add-fighter":
                         return Commands.AddFighterCommand.Execute(args);
+                    case "add-fighters":
+                        return Commands.AddFightersCommand.Execute(args);
                     case "add-series":
                         return Commands.AddSeriesCommand.Execute(args);
                     case "add-music":
@@ -104,10 +110,14 @@ namespace MexCLI
                         return Commands.RemoveFighterCommand.Execute(args);
                     case "add-stage":
                         return Commands.AddStageCommand.Execute(args);
+                    case "add-stages":
+                        return Commands.AddStagesCommand.Execute(args);
                     case "placeholder-bytes":
                         return Commands.PlaceholderBytesCommand.Execute(args);
                     case "remove-stage":
                         return Commands.RemoveStageCommand.Execute(args);
+                    case "remove-stages":
+                        return Commands.RemoveStagesCommand.Execute(args);
                     case "help":
                     case "--help":
                     case "-h":
@@ -146,7 +156,12 @@ namespace MexCLI
             Console.WriteLine("  list-fighters <project.mexproj>            - List all fighters");
             Console.WriteLine("  get-costumes <project> <fighter>           - Get costumes for fighter");
             Console.WriteLine("  import-costume <project> <fighter> <zip>   - Import costume ZIP");
+            Console.WriteLine("  import-costumes <project> <manifest.json>  - Batch-import costumes (one Save; ~Nx faster)");
+            Console.WriteLine("  add-fighters <project> <manifest.json>     - Batch-add custom fighters (one Save; ~Nx faster)");
+            Console.WriteLine("  add-stages <project> <manifest.json>       - Batch-add custom stages (one Save; ~Nx faster)");
             Console.WriteLine("  remove-costume <project> <fighter> <index> - Remove costume by index");
+            Console.WriteLine("  remove-costumes <project> <manifest.json>  - Batch-remove costumes (one Save; ~Nx faster)");
+            Console.WriteLine("  remove-stages <project> <manifest.json>    - Batch-remove custom stages (one Save; ~Nx faster)");
             Console.WriteLine("  reorder-costume <project> <fighter> <from> <to> - Reorder costume");
             Console.WriteLine("  save <project.mexproj>                     - Save project changes");
             Console.WriteLine("  export <project.mexproj> <output.iso>      - Export ISO");

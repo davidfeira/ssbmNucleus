@@ -97,7 +97,7 @@ namespace MexCLI.Commands
             return changed;
         }
 
-        private static int RetargetCloneSoundCalls(MexWorkspace workspace, MexFighter fighter)
+        internal static int RetargetCloneSoundCalls(MexWorkspace workspace, MexFighter fighter)
         {
             if (string.IsNullOrEmpty(fighter.Files.FighterDataSymbol))
                 return 0;
@@ -245,6 +245,108 @@ namespace MexCLI.Commands
             return added;
         }
 
+        /// <summary>
+        /// All workspace-mutating work of adding ONE fighter, WITHOUT Save() and
+        /// WITHOUT the post-save RetargetCloneSoundCalls. Both the standalone
+        /// add-fighter command and the batch add-fighters command call this; the
+        /// caller is responsible for Save() and (after save) RetargetCloneSoundCalls.
+        /// Returns an error message, or null on success (out params populated).
+        /// </summary>
+        internal static string? AddFighterCore(
+            MexWorkspace workspace,
+            string fighterZipPath,
+            out MexFighter? fighter,
+            out int internalId,
+            out int externalId,
+            out int cssSfxId,
+            out int packCodesMerged,
+            out int packPatchesMerged)
+        {
+            fighter = null;
+            internalId = -1;
+            externalId = -1;
+            cssSfxId = -1;
+            packCodesMerged = 0;
+            packPatchesMerged = 0;
+
+            // Import fighter from ZIP
+            {
+                using FileStream stream = new(fighterZipPath, FileMode.Open);
+                var importError = MexFighter.FromPackage(workspace, stream, out fighter);
+
+                if (importError != null || fighter == null)
+                    return importError?.Message ?? "Failed to parse fighter package";
+            }
+
+            // FromPackage doesn't extract fighter data files — do it manually
+            {
+                using FileStream stream2 = new(fighterZipPath, FileMode.Open);
+                using System.IO.Compression.ZipArchive zip = new(stream2);
+                fighter.Files.FromPackage(workspace, zip);
+
+                // Also extract any remaining .dat files (kirby cap, effects, etc.)
+                foreach (var entry in zip.Entries)
+                {
+                    if (entry.Name.Length == 0) continue;
+                    if (!entry.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)) continue;
+                    // `patches/*.dat` are m-ex function patches (e.g. clone_engine),
+                    // not loose game files — they go into Project.Patches (MxPt.dat)
+                    // via MergePackPatches, so don't extract them as standalone files.
+                    if (entry.FullName.StartsWith("patches/", StringComparison.OrdinalIgnoreCase)) continue;
+                    string destPath = workspace.GetFilePath(entry.Name);
+                    if (File.Exists(destPath)) continue;
+                    string? destDir = Path.GetDirectoryName(destPath);
+                    if (destDir != null && !Directory.Exists(destDir))
+                        Directory.CreateDirectory(destDir);
+                    using Stream entryStream = entry.Open();
+                    using FileStream outFile = new(destPath, FileMode.CreateNew);
+                    entryStream.CopyTo(outFile);
+                }
+            }
+
+            // Fix shared files: FromPackage renames files with _001 suffix via
+            // GetUniqueFilePath when a file already exists. But if the original
+            // file is identical (shared resource like effect files), we should
+            // use the original instead of the duplicate.
+            FixSharedFile(workspace, fighter.Files, f => f.EffectFile, (f, v) => f.EffectFile = v);
+            FixSharedFile(workspace, fighter.Files, f => f.KirbyEffectFile, (f, v) => f.KirbyEffectFile = v);
+            FixSharedFile(workspace, fighter.Files, f => f.KirbyCapFileName, (f, v) => f.KirbyCapFileName = v);
+
+            // Internal index 34 is a broken slot in m-ex — insert a NONE placeholder
+            // if this addition would land there, then add the real fighter after it.
+            int insertIndex = workspace.Project.Fighters.Count - 6;
+            if (insertIndex == 34)
+            {
+                MexFighter noneFighter = new() { Name = "NONE" };
+                workspace.Project.AddNewFighter(noneFighter);
+            }
+
+            // Compute the external ID before adding (same as AddNewFighter does internally)
+            internalId = workspace.Project.Fighters.Count - 6;
+            externalId = MexFighterIDConverter.ToExternalID(internalId, workspace.Project.Fighters.Count);
+
+            // Add fighter to project (shifts existing CSS icon references)
+            workspace.Project.AddNewFighter(fighter);
+
+            // Add a CSS icon for the new fighter
+            cssSfxId = FighterAudioHelpers.ResolveCssSfxId(workspace, fighter.AnnouncerCall);
+            MexCharacterSelectIcon icon = new()
+            {
+                Fighter = externalId,
+            };
+            if (cssSfxId >= 0)
+                icon.SFXID = cssSfxId;
+            workspace.Project.CharacterSelect.FighterIcons.Add(icon);
+
+            // Merge any per-pack Gecko codes the fighter ships (self-contained fixes).
+            packCodesMerged = MergePackCodes(workspace, fighterZipPath);
+            // Merge any per-pack m-ex function patches (e.g. clone_engine.dat) so
+            // a clone's cape/fireball articles work (-> MxPt.dat in the ISO).
+            packPatchesMerged = MergePackPatches(workspace, fighterZipPath);
+
+            return null;
+        }
+
         public static int Execute(string[] args)
         {
             try
@@ -280,88 +382,22 @@ namespace MexCLI.Commands
                     return 1;
                 }
 
-                // Import fighter from ZIP
-                MexFighter? fighter;
-                {
-                    using FileStream stream = new(fighterZipPath, FileMode.Open);
-                    var importError = MexFighter.FromPackage(workspace, stream, out fighter);
+                // Do all workspace mutations (no Save) via the shared core, then
+                // Save once and retarget — the batch command (add-fighters) reuses
+                // AddFighterCore for every fighter and Saves ONLY once at the end.
+                string? coreError = AddFighterCore(workspace, fighterZipPath,
+                    out MexFighter? fighter, out int internalId, out int externalId,
+                    out int cssSfxId, out int packCodesMerged, out int packPatchesMerged);
 
-                    if (importError != null || fighter == null)
+                if (coreError != null || fighter == null)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(new
                     {
-                        Console.WriteLine(JsonSerializer.Serialize(new
-                        {
-                            success = false,
-                            error = importError?.Message ?? "Failed to parse fighter package"
-                        }, new JsonSerializerOptions { WriteIndented = true }));
-                        return 1;
-                    }
+                        success = false,
+                        error = coreError ?? "Failed to parse fighter package"
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                    return 1;
                 }
-
-                // FromPackage doesn't extract fighter data files — do it manually
-                {
-                    using FileStream stream2 = new(fighterZipPath, FileMode.Open);
-                    using System.IO.Compression.ZipArchive zip = new(stream2);
-                    fighter.Files.FromPackage(workspace, zip);
-
-                    // Also extract any remaining .dat files (kirby cap, effects, etc.)
-                    foreach (var entry in zip.Entries)
-                    {
-                        if (entry.Name.Length == 0) continue;
-                        if (!entry.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)) continue;
-                        // `patches/*.dat` are m-ex function patches (e.g. clone_engine),
-                        // not loose game files — they go into Project.Patches (MxPt.dat)
-                        // via MergePackPatches, so don't extract them as standalone files.
-                        if (entry.FullName.StartsWith("patches/", StringComparison.OrdinalIgnoreCase)) continue;
-                        string destPath = workspace.GetFilePath(entry.Name);
-                        if (File.Exists(destPath)) continue;
-                        string? destDir = Path.GetDirectoryName(destPath);
-                        if (destDir != null && !Directory.Exists(destDir))
-                            Directory.CreateDirectory(destDir);
-                        using Stream entryStream = entry.Open();
-                        using FileStream outFile = new(destPath, FileMode.CreateNew);
-                        entryStream.CopyTo(outFile);
-                    }
-                }
-
-                // Fix shared files: FromPackage renames files with _001 suffix via
-                // GetUniqueFilePath when a file already exists. But if the original
-                // file is identical (shared resource like effect files), we should
-                // use the original instead of the duplicate.
-                FixSharedFile(workspace, fighter.Files, f => f.EffectFile, (f, v) => f.EffectFile = v);
-                FixSharedFile(workspace, fighter.Files, f => f.KirbyEffectFile, (f, v) => f.KirbyEffectFile = v);
-                FixSharedFile(workspace, fighter.Files, f => f.KirbyCapFileName, (f, v) => f.KirbyCapFileName = v);
-
-                // Internal index 34 is a broken slot in m-ex — insert a NONE placeholder
-                // if this addition would land there, then add the real fighter after it.
-                int insertIndex = workspace.Project.Fighters.Count - 6;
-                if (insertIndex == 34)
-                {
-                    MexFighter noneFighter = new() { Name = "NONE" };
-                    workspace.Project.AddNewFighter(noneFighter);
-                }
-
-                // Compute the external ID before adding (same as AddNewFighter does internally)
-                int internalId = workspace.Project.Fighters.Count - 6;
-                int externalId = MexFighterIDConverter.ToExternalID(internalId, workspace.Project.Fighters.Count);
-
-                // Add fighter to project (shifts existing CSS icon references)
-                workspace.Project.AddNewFighter(fighter);
-
-                // Add a CSS icon for the new fighter
-                int cssSfxId = FighterAudioHelpers.ResolveCssSfxId(workspace, fighter.AnnouncerCall);
-                MexCharacterSelectIcon icon = new()
-                {
-                    Fighter = externalId,
-                };
-                if (cssSfxId >= 0)
-                    icon.SFXID = cssSfxId;
-                workspace.Project.CharacterSelect.FighterIcons.Add(icon);
-
-                // Merge any per-pack Gecko codes the fighter ships (self-contained fixes).
-                int packCodesMerged = MergePackCodes(workspace, fighterZipPath);
-                // Merge any per-pack m-ex function patches (e.g. clone_engine.dat) so
-                // a clone's cape/fireball articles work (-> MxPt.dat in the ISO).
-                int packPatchesMerged = MergePackPatches(workspace, fighterZipPath);
 
                 workspace.Save(null);
                 int soundCallsRetargeted = RetargetCloneSoundCalls(workspace, fighter);

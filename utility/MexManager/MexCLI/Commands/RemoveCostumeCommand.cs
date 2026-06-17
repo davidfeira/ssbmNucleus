@@ -6,6 +6,44 @@ namespace MexCLI.Commands
 {
     public static class RemoveCostumeCommand
     {
+        /// <summary>Resolve a fighter by internal id or name. Returns (null, -1) if missing.</summary>
+        internal static (MexFighter?, int) FindFighter(MexWorkspace workspace, string nameOrId)
+        {
+            if (int.TryParse(nameOrId, out int id) && id >= 0 && id < workspace.Project.Fighters.Count)
+                return (workspace.Project.Fighters[id], id);
+            for (int i = 0; i < workspace.Project.Fighters.Count; i++)
+                if (workspace.Project.Fighters[i].Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase))
+                    return (workspace.Project.Fighters[i], i);
+            return (null, -1);
+        }
+
+        /// <summary>
+        /// Remove ONE costume at an already-validated index, WITHOUT Save(). Both the
+        /// standalone remove-costume command and the batch remove-costumes command call
+        /// this; the caller validates the index and Saves. Keeps Kirby's per-fighter
+        /// cap-costume tables aligned (internal id 4), same as the GUI.
+        /// </summary>
+        internal static (string name, string fileName) RemoveCostumeCore(
+            MexWorkspace workspace, MexFighter fighter, int fighterInternalId, int costumeIndex)
+        {
+            MexCostume removed = fighter.Costumes[costumeIndex];
+            string name = removed.Name;
+            string file = removed.File.FileName;
+
+            fighter.Costumes.RemoveAt(costumeIndex);
+
+            if (fighterInternalId == 4)
+            {
+                foreach (MexFighter f in workspace.Project.Fighters)
+                {
+                    if (f.HasKirbyCostumes && costumeIndex < f.KirbyCostumes.Count)
+                        f.KirbyCostumes.RemoveAt(costumeIndex);
+                }
+            }
+
+            return (name, file);
+        }
+
         public static int Execute(string[] args)
         {
             if (args.Length < 4)
@@ -102,24 +140,8 @@ namespace MexCLI.Commands
             // Remove costume
             try
             {
-                var removedCostume = fighter.Costumes[costumeIndex];
-                string removedCostumeName = removedCostume.Name;
-                string removedCostumeFile = removedCostume.File.FileName;
-
-                fighter.Costumes.RemoveAt(costumeIndex);
-
-                // Kirby (internal id 4): keep every fighter's kirby cap-costume
-                // table aligned with Kirby's costume list (mirrors the GUI)
-                if (fighterInternalId == 4)
-                {
-                    foreach (MexFighter f in workspace.Project.Fighters)
-                    {
-                        if (f.HasKirbyCostumes && costumeIndex < f.KirbyCostumes.Count)
-                        {
-                            f.KirbyCostumes.RemoveAt(costumeIndex);
-                        }
-                    }
-                }
+                var (removedCostumeName, removedCostumeFile) =
+                    RemoveCostumeCore(workspace, fighter, fighterInternalId, costumeIndex);
 
                 // Save the workspace
                 workspace.Save(null);

@@ -13,6 +13,63 @@ namespace MexCLI.Commands
     /// </summary>
     public static class AddMusicCommand
     {
+        /// <summary>
+        /// Add (or reuse) a music track WITHOUT Save(). Returns the music index.
+        /// Existence/content checks go through FileManager so a track added by an
+        /// earlier (not-yet-saved) entry in a batch is correctly deduped — for the
+        /// standalone command the FileManager has no pending writes, so this is
+        /// identical to the old File.* path. Caller must verify hpsPath exists.
+        /// </summary>
+        internal static int AddMusicCore(MexWorkspace workspace, string hpsPath, string name,
+                                         out bool existed, out string? fileName)
+        {
+            existed = false;
+            fileName = null;
+
+            // reuse an existing track only when BOTH the name and the
+            // audio content match — different songs that happen to share
+            // a name (e.g. two stages with a "Battle Theme") must not
+            // collide into one entry
+            byte[] newBytes = File.ReadAllBytes(hpsPath);
+            for (int i = 0; i < workspace.Project.Music.Count; i++)
+            {
+                if (!string.Equals(workspace.Project.Music[i].Name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string existingPath = workspace.GetFilePath("audio/" + workspace.Project.Music[i].FileName);
+                if (!workspace.FileManager.Exists(existingPath))
+                    continue;
+                byte[] existingBytes = workspace.FileManager.Get(existingPath);
+                if (existingBytes.Length != newBytes.Length)
+                    continue;
+                if (!existingBytes.AsSpan().SequenceEqual(newBytes))
+                    continue;
+
+                existed = true;
+                fileName = workspace.Project.Music[i].FileName;
+                return i;
+            }
+
+            // unique file name within audio/
+            string fn = Path.GetFileName(hpsPath);
+            string targetPath = workspace.GetFilePath($"audio/{fn}");
+            if (workspace.FileManager.Exists(targetPath))
+            {
+                string stem = Path.GetFileNameWithoutExtension(fn);
+                string ext = Path.GetExtension(fn);
+                int n = 2;
+                while (workspace.FileManager.Exists(workspace.GetFilePath($"audio/{stem}_{n}{ext}")))
+                    n++;
+                fn = $"{stem}_{n}{ext}";
+                targetPath = workspace.GetFilePath($"audio/{fn}");
+            }
+
+            workspace.FileManager.Set(targetPath, newBytes);
+            workspace.Project.AddMusic(new MexMusic { Name = name, FileName = fn });
+            fileName = fn;
+            return workspace.Project.Music.Count - 1;
+        }
+
         public static int Execute(string[] args)
         {
             try
@@ -49,52 +106,7 @@ namespace MexCLI.Commands
                     return 1;
                 }
 
-                // reuse an existing track only when BOTH the name and the
-                // audio content match — different songs that happen to share
-                // a name (e.g. two stages with a "Battle Theme") must not
-                // collide into one entry
-                byte[] newBytes = File.ReadAllBytes(hpsPath);
-                for (int i = 0; i < workspace.Project.Music.Count; i++)
-                {
-                    if (!string.Equals(workspace.Project.Music[i].Name?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    string existingPath = workspace.GetFilePath("audio/" + workspace.Project.Music[i].FileName);
-                    if (!File.Exists(existingPath))
-                        continue;
-                    FileInfo info = new(existingPath);
-                    if (info.Length != newBytes.Length)
-                        continue;
-                    if (!File.ReadAllBytes(existingPath).AsSpan().SequenceEqual(newBytes))
-                        continue;
-
-                    Console.WriteLine(JsonSerializer.Serialize(new
-                    {
-                        success = true,
-                        musicId = i,
-                        name = workspace.Project.Music[i].Name,
-                        existed = true,
-                    }, new JsonSerializerOptions { WriteIndented = true }));
-                    return 0;
-                }
-
-                // unique file name within audio/
-                string fileName = Path.GetFileName(hpsPath);
-                string targetPath = workspace.GetFilePath($"audio/{fileName}");
-                if (File.Exists(targetPath))
-                {
-                    string stem = Path.GetFileNameWithoutExtension(fileName);
-                    string ext = Path.GetExtension(fileName);
-                    int n = 2;
-                    while (File.Exists(workspace.GetFilePath($"audio/{stem}_{n}{ext}")))
-                        n++;
-                    fileName = $"{stem}_{n}{ext}";
-                    targetPath = workspace.GetFilePath($"audio/{fileName}");
-                }
-
-                workspace.FileManager.Set(targetPath, File.ReadAllBytes(hpsPath));
-                workspace.Project.AddMusic(new MexMusic { Name = name, FileName = fileName });
-                int musicId = workspace.Project.Music.Count - 1;
+                int musicId = AddMusicCore(workspace, hpsPath, name, out bool existed, out string? fileName);
 
                 workspace.Save(null);
 
@@ -102,9 +114,9 @@ namespace MexCLI.Commands
                 {
                     success = true,
                     musicId,
-                    name,
+                    name = existed ? workspace.Project.Music[musicId].Name : name,
                     fileName,
-                    existed = false,
+                    existed,
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 return 0;
             }

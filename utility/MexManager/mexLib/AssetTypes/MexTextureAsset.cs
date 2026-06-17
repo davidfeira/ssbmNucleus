@@ -1,11 +1,67 @@
 ﻿using HSDRaw.GX;
 using mexLib.Utilties;
+using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace mexLib.AssetTypes
 {
     public class MexTextureAsset
     {
+        /// <summary>
+        /// Optional process-wide decode cache used ONLY by the batch importer.
+        /// When non-null, <see cref="SetFromImageFile"/> returns pre-decoded
+        /// (png, tex) bytes for an image-content key instead of running the
+        /// expensive ImageSharp quantization inline. The batch importer decodes
+        /// every CSP/icon PNG in parallel up-front, fills this cache, then commits
+        /// them serially -- so the FileManager path assignment stays byte-identical
+        /// to N sequential imports while the heavy decode is parallelized.
+        ///
+        /// Null on the single-import / GUI path => zero overhead, original behavior.
+        /// </summary>
+        public static ConcurrentDictionary<string, (byte[] png, byte[] tex)>? DecodeCache;
+
+        /// <summary>
+        /// Stable content hash of raw image bytes, used as the decode-cache key.
+        /// </summary>
+        public static string HashImage(byte[] bytes)
+        {
+            return Convert.ToHexString(SHA256.HashData(bytes));
+        }
+
+        /// <summary>
+        /// PURE decode (no workspace mutation, safe to call from any thread).
+        /// Reproduces exactly the two FromPNG conversions inside
+        /// <see cref="SetFromImageFile"/>: the native-size preview .png and the
+        /// format-sized .tex. Returns the bytes the serial commit would have
+        /// produced inline.
+        /// </summary>
+        public (byte[] png, byte[] tex) DecodeImageBytes(byte[] imageBytes)
+        {
+            using MemoryStream ms = new(imageBytes);
+
+            ms.Position = 0;
+            MexImage source_png = ImageConverter.FromPNG(ms, Format, TlutFormat);
+            byte[] png = source_png.ToPNG();
+
+            ms.Position = 0;
+            MexImage tex = ImageConverter.FromPNG(ms,
+                Width == -1 ? source_png.Width : Width,
+                Height == -1 ? source_png.Height : Height,
+                Format,
+                TlutFormat);
+
+            return (png, tex.ToByteArray());
+        }
+
+        /// <summary>
+        /// Cache key incorporating the target format/dimensions so the same PNG
+        /// decoded as (say) a CSP vs an icon never alias.
+        /// </summary>
+        public string DecodeKey(byte[] imageBytes)
+        {
+            return $"{Format}_{Width}_{Height}_{TlutFormat}_{HashImage(imageBytes)}";
+        }
         public string? AssetFileName { get; set; }
 
         public string AssetPath { get; internal set; } = "";
@@ -89,22 +145,42 @@ namespace mexLib.AssetTypes
         /// <param name="filePath"></param>
         public void SetFromImageFile(MexWorkspace workspace, Stream imageStream)
         {
+            byte[] png, tex;
+
+            ConcurrentDictionary<string, (byte[] png, byte[] tex)>? cache = DecodeCache;
+            if (cache != null)
+            {
+                // Batch path: reuse the parallel-decoded result (or decode now on a
+                // miss). Byte-identical to the inline path below -- same FromPNG on
+                // the same bytes -- just memoized.
+                imageStream.Position = 0;
+                using MemoryStream raw = new();
+                imageStream.CopyTo(raw);
+                byte[] bytes = raw.ToArray();
+                (png, tex) = cache.GetOrAdd(DecodeKey(bytes), _ => DecodeImageBytes(bytes));
+            }
+            else
+            {
+                // Single-import / GUI path: decode inline (original behavior).
+                // i perform an encoding before saving to apply limitations of the texture format for more accurate preview
+                imageStream.Position = 0;
+                MexImage source_png = ImageConverter.FromPNG(imageStream, Format, TlutFormat);
+                png = source_png.ToPNG();
+
+                imageStream.Position = 0;
+                MexImage texImg = ImageConverter.FromPNG(imageStream,
+                    Width == -1 ? source_png.Width : Width,
+                    Height == -1 ? source_png.Height : Height,
+                    Format,
+                    TlutFormat);
+                tex = texImg.ToByteArray();
+            }
+
+            // path assignment + commit stay strictly serial (GetUniqueFilePath is
+            // order-dependent); decode above is the only thing parallelized.
             string path = GetFullPath(workspace);
-
-            // set png
-            // i perform an encoding before saving to apply limitations of the texture format for more accurate preview
-            imageStream.Position = 0;
-            MexImage source_png = ImageConverter.FromPNG(imageStream, Format, TlutFormat);
-            workspace.FileManager.Set(path + ".png", source_png.ToPNG());
-
-            // compile and set tex
-            imageStream.Position = 0;
-            MexImage tex = ImageConverter.FromPNG(imageStream,
-                Width == -1 ? source_png.Width : Width,
-                Height == -1 ? source_png.Height : Height,
-                Format,
-                TlutFormat);
-            workspace.FileManager.Set(path + ".tex", tex.ToByteArray());
+            workspace.FileManager.Set(path + ".png", png);
+            workspace.FileManager.Set(path + ".tex", tex);
         }
         /// <summary>
         /// 

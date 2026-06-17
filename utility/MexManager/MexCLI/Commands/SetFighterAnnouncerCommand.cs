@@ -29,6 +29,103 @@ namespace MexCLI.Commands
             return 1;
         }
 
+        /// <summary>
+        /// Ports a name-call WAV into the narrator bank and points an
+        /// already-resolved fighter at it, WITHOUT Save(). Both the standalone
+        /// command and the batch add-fighters command call this. Returns an error
+        /// message, or null on success (out params populated). Caller saves.
+        /// </summary>
+        internal static string? SetFighterAnnouncerCore(
+            MexWorkspace workspace,
+            MexFighter fighter,
+            string wavPath,
+            out int announcerCall,
+            out int cssSfxId,
+            out int narratorIndex,
+            out int scriptIndex,
+            out int soundRelIndex)
+        {
+            announcerCall = -1;
+            cssSfxId = -1;
+            narratorIndex = -1;
+            scriptIndex = -1;
+            soundRelIndex = -1;
+
+            // locate the narrator name bank (nr_name.ssm) by index
+            for (int i = 0; i < workspace.Project.SoundGroups.Count; i++)
+            {
+                MexSoundGroup g = workspace.Project.SoundGroups[i];
+                if (string.Equals(g.FileName, "nr_name.ssm", StringComparison.OrdinalIgnoreCase))
+                {
+                    narratorIndex = i;
+                    break;
+                }
+            }
+            // fall back to the NarratorName-typed bank with the most entries
+            if (narratorIndex == -1)
+            {
+                int best = -1;
+                for (int i = 0; i < workspace.Project.SoundGroups.Count; i++)
+                {
+                    MexSoundGroup g = workspace.Project.SoundGroups[i];
+                    if (g.Group == MexSoundGroupGroup.NarratorName && g.Sounds.Count > best)
+                    {
+                        best = g.Sounds.Count;
+                        narratorIndex = i;
+                    }
+                }
+            }
+            if (narratorIndex == -1)
+                return "Narrator name bank (nr_name) not found in project";
+
+            MexSoundGroup narrator = workspace.Project.SoundGroups[narratorIndex];
+            if (narrator.Scripts == null)
+                return "Narrator bank has no script table loaded";
+
+            // decode the name-call audio
+            DSP dsp = new();
+            if (!dsp.FromFile(wavPath))
+                return $"Unsupported or unreadable audio file: {wavPath}";
+
+            // append the sound to the bank; its bank-relative index is the
+            // old count (scripts store sound ids relative to the bank)
+            soundRelIndex = narrator.Sounds.Count;
+            narrator.Sounds.Add(new MexSound
+            {
+                Name = $"nr_{fighter.Name}",
+                DSP = dsp,
+            });
+
+            // build the play script by cloning an existing narrator script
+            // (preserves the priority/volume envelope) and retargeting its
+            // sound command; fall back to a minimal script if none exist
+            SemScript? template = narrator.Scripts.FirstOrDefault(s => s.GetFirstSoundID() >= 0);
+            SemScript script;
+            if (template != null)
+            {
+                script = new SemScript(template);
+                foreach (SemCommand c in script.Script)
+                    if (c.SemCode == SemCode.Sound)
+                        c.Value = soundRelIndex;
+            }
+            else
+            {
+                script = new SemScript();
+                script.Script.Add(new SemCommand(SemCode.Sound, soundRelIndex));
+                script.Script.Add(new SemCommand(SemCode.End, 0));
+            }
+            script.Name = $"nr_{fighter.Name}";
+
+            scriptIndex = narrator.Scripts.Count;
+            narrator.Scripts.Add(script);
+
+            announcerCall = narratorIndex * 10000 + scriptIndex;
+            fighter.AnnouncerCall = announcerCall;
+            cssSfxId = FighterAudioHelpers.ApplyAnnouncerCallToCssIcons(workspace, fighter);
+
+            return null;
+        }
+
         public static int Execute(string[] args)
         {
             try
@@ -59,78 +156,11 @@ namespace MexCLI.Commands
                 if (fighter == null)
                     return Fail($"Fighter not found: {fighterNameOrId}");
 
-                // locate the narrator name bank (nr_name.ssm) by index
-                int narratorIndex = -1;
-                for (int i = 0; i < workspace.Project.SoundGroups.Count; i++)
-                {
-                    MexSoundGroup g = workspace.Project.SoundGroups[i];
-                    if (string.Equals(g.FileName, "nr_name.ssm", StringComparison.OrdinalIgnoreCase))
-                    {
-                        narratorIndex = i;
-                        break;
-                    }
-                }
-                // fall back to the NarratorName-typed bank with the most entries
-                if (narratorIndex == -1)
-                {
-                    int best = -1;
-                    for (int i = 0; i < workspace.Project.SoundGroups.Count; i++)
-                    {
-                        MexSoundGroup g = workspace.Project.SoundGroups[i];
-                        if (g.Group == MexSoundGroupGroup.NarratorName && g.Sounds.Count > best)
-                        {
-                            best = g.Sounds.Count;
-                            narratorIndex = i;
-                        }
-                    }
-                }
-                if (narratorIndex == -1)
-                    return Fail("Narrator name bank (nr_name) not found in project");
-
-                MexSoundGroup narrator = workspace.Project.SoundGroups[narratorIndex];
-                if (narrator.Scripts == null)
-                    return Fail("Narrator bank has no script table loaded");
-
-                // decode the name-call audio
-                DSP dsp = new();
-                if (!dsp.FromFile(wavPath))
-                    return Fail($"Unsupported or unreadable audio file: {wavPath}");
-
-                // append the sound to the bank; its bank-relative index is the
-                // old count (scripts store sound ids relative to the bank)
-                int soundRelIndex = narrator.Sounds.Count;
-                narrator.Sounds.Add(new MexSound
-                {
-                    Name = $"nr_{fighter.Name}",
-                    DSP = dsp,
-                });
-
-                // build the play script by cloning an existing narrator script
-                // (preserves the priority/volume envelope) and retargeting its
-                // sound command; fall back to a minimal script if none exist
-                SemScript? template = narrator.Scripts.FirstOrDefault(s => s.GetFirstSoundID() >= 0);
-                SemScript script;
-                if (template != null)
-                {
-                    script = new SemScript(template);
-                    foreach (SemCommand c in script.Script)
-                        if (c.SemCode == SemCode.Sound)
-                            c.Value = soundRelIndex;
-                }
-                else
-                {
-                    script = new SemScript();
-                    script.Script.Add(new SemCommand(SemCode.Sound, soundRelIndex));
-                    script.Script.Add(new SemCommand(SemCode.End, 0));
-                }
-                script.Name = $"nr_{fighter.Name}";
-
-                int scriptIndex = narrator.Scripts.Count;
-                narrator.Scripts.Add(script);
-
-                int announcerCall = narratorIndex * 10000 + scriptIndex;
-                fighter.AnnouncerCall = announcerCall;
-                int cssSfxId = FighterAudioHelpers.ApplyAnnouncerCallToCssIcons(workspace, fighter);
+                string? coreError = SetFighterAnnouncerCore(workspace, fighter, wavPath,
+                    out int announcerCall, out int cssSfxId, out int narratorIndex,
+                    out int scriptIndex, out int soundRelIndex);
+                if (coreError != null)
+                    return Fail(coreError);
 
                 workspace.Save(null);
 
