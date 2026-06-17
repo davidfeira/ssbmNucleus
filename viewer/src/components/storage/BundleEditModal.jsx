@@ -2,6 +2,7 @@
  * BundleEditModal - Modal for editing bundle details
  */
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 export default function BundleEditModal({
   show,
@@ -97,8 +98,11 @@ export default function BundleEditModal({
           <button
             className="btn-delete-modal"
             onMouseEnter={playHoverSound}
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this bundle?')) {
+            onClick={async () => {
+              if (await appConfirm('Are you sure you want to delete this bundle?', {
+                title: 'Delete Bundle',
+                confirmText: 'Delete',
+              })) {
                 playSound('boop')
                 onDelete(bundle.id)
                 onCancel()

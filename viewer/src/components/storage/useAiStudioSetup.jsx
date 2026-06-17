@@ -102,17 +102,22 @@ export default function useAiStudioSetup(show, taskKinds) {
         label: `${m.name} — local LLM (free, offline)${speed(`ollama:${m.name}`)}`,
         locked: false,
       }))
-      if (p.recommended
-          && !localList.some((l) => l.id === `ollama:${p.recommended.name}`)) {
+      const recommended = p.recommendedPlanners
+        || (p.recommended ? [p.recommended] : [])
+      recommended.forEach((rec) => {
+        if (!rec?.name
+            || localList.some((l) => l.id === `ollama:${rec.name}`)) {
+          return
+        }
         localList.push({
-          id: `ollama:${p.recommended.name}`,
-          label: `${p.recommended.name} — local LLM (free, offline)`,
+          id: `ollama:${rec.name}`,
+          label: `${rec.name} — local LLM (free, offline)${rec.tier ? ` — ${rec.tier}` : ''}`,
           locked: true,
           reason: p.ollamaAvailable
             ? 'pull it in AI Studio setup'
             : 'set up local LLMs in AI Studio setup',
         })
-      }
+      })
       // locals first (weakest), then API planners least → most powerful
       setPlanners([
         ...localList,

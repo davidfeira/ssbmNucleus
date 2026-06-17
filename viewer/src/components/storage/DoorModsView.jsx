@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 import MenuModGrid from './MenuModGrid'
 import MenuModEditModal from './MenuModEditModal'
@@ -102,7 +103,10 @@ export default function DoorModsView() {
   }
 
   const handleDelete = async (mod) => {
-    if (!window.confirm(`Delete "${mod.name}"?`)) return
+    if (!await appConfirm(`Delete "${mod.name}"?`, {
+      title: 'Delete Door Mod',
+      confirmText: 'Delete',
+    })) return
     edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/css/doors/delete/${mod.id}`, { method: 'POST' })

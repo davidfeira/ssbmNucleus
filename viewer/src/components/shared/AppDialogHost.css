@@ -1,0 +1,68 @@
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-tooltip) + 100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(10, 20, 32, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.app-dialog {
+  width: min(100%, 420px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(
+      180deg,
+      var(--color-bg-elevated) 0%,
+      var(--color-bg-base) 100%
+    );
+  box-shadow: var(--shadow-xl), 0 0 32px rgba(125, 211, 232, 0.12);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.app-dialog h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--color-text-primary);
+}
+
+.app-dialog-message {
+  margin: 0 0 var(--space-5);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+}
+
+.app-dialog-input {
+  width: 100%;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-deep);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.app-dialog-input:focus {
+  border-color: var(--color-cyan);
+  outline: none;
+  box-shadow: var(--glow-cyan-sm);
+}
+
+.app-dialog-buttons {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.app-dialog-buttons button {
+  min-width: 96px;
+}

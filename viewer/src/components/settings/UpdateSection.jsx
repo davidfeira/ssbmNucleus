@@ -84,7 +84,13 @@ export default function UpdateSection() {
 
       {update ? (
         <div className="update-available">
-          <p className="update-available-version">v{update.version} is available</p>
+          <div className="update-shine-badge" aria-hidden="true">
+            <span />
+          </div>
+          <div className="update-available-copy">
+            <p className="update-available-kicker">Update detected</p>
+            <p className="update-available-version">v{update.version} is available</p>
+          </div>
           {update.notes && <p className="update-notes">{update.notes}</p>}
           <button
             className="restore-button update-install-button"

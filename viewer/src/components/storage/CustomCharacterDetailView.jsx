@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm, appPrompt } from '../../utils/appDialogs'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import InGameTestPanel from '../shared/InGameTestPanel'
 import { useInGameTest } from '../../hooks/useInGameTest'
@@ -294,12 +295,15 @@ export default function CustomCharacterDetailView({
 
   // The modal's Delete: a bundled costume must come out of fighter.zip via
   // the proper removal endpoint, not the skins-library delete
-  const handleModalDelete = () => {
+  const handleModalDelete = async () => {
     const item = editModal.editingItem
     if (item?.data?.character?.endsWith('/costumes')) {
       const costume = (detail?.costumes || []).find(c => c.edit_id === item.data.id)
       if (!costume) return
-      if (!window.confirm(`Remove costume "${costume.name}" from ${character.name}?`)) return
+      if (!await appConfirm(`Remove costume "${costume.name}" from ${character.name}?`, {
+        title: 'Remove Costume',
+        confirmText: 'Remove',
+      })) return
       fetch(`${API_URL}/custom-characters/${character.slug}/costumes/${costume.index}/remove`, { method: 'POST' })
         .then(r => r.json())
         .then(async (data) => {
@@ -477,7 +481,11 @@ export default function CustomCharacterDetailView({
 
   const handleRenameCustomSeries = async () => {
     const current = detail?.custom_series?.name || ''
-    const name = window.prompt('Franchise name (used to share the series between characters):', current)
+    const name = await appPrompt('Franchise name (used to share the series between characters):', {
+      title: 'Rename Franchise',
+      defaultValue: current,
+      confirmText: 'Save',
+    })
     if (!name || name.trim() === current) return
     try {
       const response = await fetch(`${API_URL}/custom-characters/${character.slug}/set-series-custom`, {

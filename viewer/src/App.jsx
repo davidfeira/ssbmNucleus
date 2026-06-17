@@ -6,6 +6,7 @@ import FirstRunSetup from './components/FirstRunSetup'
 import SlippiSafetyDialog from './components/shared/SlippiSafetyDialog'
 import DownloadModal from './components/shared/DownloadModal'
 import HexagonLoader from './components/shared/HexagonLoader'
+import AppDialogHost from './components/shared/AppDialogHost'
 import { useDownloadQueue, DOWNLOAD_PHASES } from './hooks/useDownloadQueue'
 import { playSound, playHoverSound } from './utils/sounds'
 import { API_URL } from './config'
@@ -216,22 +217,31 @@ function App() {
   // Show loading state while checking setup status
   if (setupNeeded === null) {
     return (
-      <div className="app">
-        <div className="app-loading">
-          <HexagonLoader size={88} decorative />
-          <p>Checking setup status...</p>
+      <>
+        <AppDialogHost />
+        <div className="app">
+          <div className="app-loading">
+            <HexagonLoader size={88} decorative />
+            <p>Checking setup status...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // Show first-run setup if needed
   if (setupNeeded) {
-    return <FirstRunSetup onComplete={handleSetupComplete} />;
+    return (
+      <>
+        <AppDialogHost />
+        <FirstRunSetup onComplete={handleSetupComplete} />
+      </>
+    );
   }
 
   return (
     <div className="app">
+      <AppDialogHost />
       {!skinCreatorOpen && (
         <header className="app-header">
           <div className="header-brand">

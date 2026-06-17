@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePanelResize } from '../hooks/usePanelResize'
 import { playSound } from '../utils/sounds'
+import { appConfirm } from '../utils/appDialogs'
 import { API_URL } from '../config'
 import { useCanvasScale } from './skincreator/useCanvasScale'
 import { useUndoRedo } from './skincreator/useUndoRedo'
@@ -493,7 +494,10 @@ export default function SkinCreator({
   // Close and cleanup
   const closeSkinCreator = async (force = false) => {
     if (isDirty && !force) {
-      const confirmed = window.confirm('You have unsaved changes. Are you sure you want to close?')
+      const confirmed = await appConfirm('You have unsaved changes. Are you sure you want to close?', {
+        title: 'Discard Changes',
+        confirmText: 'Close',
+      })
       if (!confirmed) return
     }
     playSound('back')

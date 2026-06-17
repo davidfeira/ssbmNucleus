@@ -8,6 +8,7 @@ Pipeline lives in `iso_scanner.py`. This blueprint exposes:
 - GET    /api/mex/iso-scan/<job_id>/csp/<key> serve a candidate's CSP png
 - POST   /api/mex/iso-scan/<job_id>/import    import selected keys into vault
 - POST   /api/mex/iso-scan/<job_id>/cancel    request cancellation
+- POST   /api/mex/iso-scan/cleanup            prune inactive work dirs
 - DELETE /api/mex/iso-scan/<job_id>           drop work dir + job state
 - GET    /api/mex/iso-scan/preflight          report whether wit.exe is present
 """
@@ -24,7 +25,8 @@ from flask import Blueprint, jsonify, request, send_file
 
 from core.state import get_socketio
 from iso_scanner import (
-    start_scan, get_job, delete_job, cancel_job, wit_available, WIT_EXE,
+    start_scan, get_job, delete_job, cancel_job, cleanup_stale_jobs,
+    wit_available, WIT_EXE,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,19 @@ def cancel(job_id):
     if cancel_job(job_id):
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Job not found'}), 404
+
+
+@iso_scan_bp.route('/api/mex/iso-scan/cleanup', methods=['POST'])
+def cleanup():
+    data = request.get_json(silent=True) or {}
+    max_age_seconds = data.get('maxAgeSeconds')
+    if max_age_seconds is not None:
+        try:
+            max_age_seconds = int(max_age_seconds)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'maxAgeSeconds must be an integer'}), 400
+    result = cleanup_stale_jobs(max_age_seconds=max_age_seconds)
+    return jsonify({'success': True, **result})
 
 
 @iso_scan_bp.route('/api/mex/iso-scan/<job_id>', methods=['DELETE'])
@@ -191,6 +206,14 @@ def import_selected(job_id):
                     csp_inner_name = f"{os.path.splitext(inner_name)[0]}_csp.png"
                     with open(s.csp_path, 'rb') as f:
                         zf.writestr(csp_inner_name, f.read())
+                # Prefer the actual stock icon extracted from the source ISO's
+                # IfAll stock table. The unified detector matches this by the
+                # costume stem, so import_character_costume stores it instead
+                # of deriving/reusing a vanilla icon.
+                if s.stock_path and os.path.exists(s.stock_path):
+                    stock_inner_name = f"{os.path.splitext(inner_name)[0]}_stock.png"
+                    with open(s.stock_path, 'rb') as f:
+                        zf.writestr(stock_inner_name, f.read())
 
             try:
                 char_infos = detect_character_from_zip(tmp_zip)

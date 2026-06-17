@@ -33,7 +33,7 @@ from core.config import (
 # via core.config import side effects.
 from detect_character import DATParser
 from dat_processor import validate_for_slippi
-from generate_csp import generate_csp
+from generate_csp import HSDRAW_EXE, generate_csp
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,69 @@ def _resolve_wit_exe() -> Path:
 
 WIT_EXE = _resolve_wit_exe()
 SCAN_WORK_ROOT = OUTPUT_PATH / "iso_scan"
+SCAN_CLEANUP_MAX_AGE_SECONDS = int(os.environ.get('NUCLEUS_ISO_SCAN_MAX_AGE_SECONDS', str(12 * 60 * 60)))
+
+
+def _safe_scan_job_dir(job_id: str) -> Optional[Path]:
+    """Return the direct child work dir for job_id, rejecting traversal."""
+    if not job_id:
+        return None
+    job_name = Path(job_id).name
+    if job_name != job_id:
+        return None
+    root = SCAN_WORK_ROOT.resolve()
+    candidate = (SCAN_WORK_ROOT / job_id).resolve()
+    if candidate.parent != root:
+        return None
+    return candidate
+
+
+def _dir_size(path: Path) -> int:
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += (Path(root) / name).stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def cleanup_stale_jobs(max_age_seconds: Optional[int] = SCAN_CLEANUP_MAX_AGE_SECONDS) -> dict:
+    """Remove inactive ISO scan work dirs old enough to be considered stale."""
+    SCAN_WORK_ROOT.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    removed: list[str] = []
+    bytes_removed = 0
+    with _jobs_lock:
+        active_ids = set(_jobs.keys())
+
+    for child in SCAN_WORK_ROOT.iterdir():
+        if not child.is_dir() or child.name in active_ids:
+            continue
+        safe_child = _safe_scan_job_dir(child.name)
+        if safe_child is None or safe_child != child.resolve():
+            continue
+        try:
+            age_seconds = now - child.stat().st_mtime
+        except OSError:
+            continue
+        if max_age_seconds is not None and max_age_seconds > 0 and age_seconds < max_age_seconds:
+            continue
+        try:
+            bytes_removed += _dir_size(child)
+            shutil.rmtree(child)
+            removed.append(child.name)
+        except Exception as e:
+            logger.warning(f"[iso-scan][cleanup] failed to remove {child}: {e}")
+
+    if removed:
+        logger.info(
+            f"[iso-scan][cleanup] removed {len(removed)} stale job dir(s), "
+            f"{bytes_removed} bytes"
+        )
+
+    return {'removed': len(removed), 'bytes_removed': bytes_removed, 'job_ids': removed}
 
 def _csp_parallelism() -> int:
     """Pick a worker count for thumbnail generation.
@@ -141,6 +204,14 @@ CHAR_CODE_TO_NAME = {
     'Zd': 'Zelda',
 }
 
+_INTERNAL_TO_EXTERNAL = [
+    0x08, 0x02, 0x00, 0x01, 0x04, 0x05, 0x06,
+    0x13, 0x0B, 0x0C, 0x0E, 0x20, 0x0D, 0x10,
+    0x11, 0x0F, 0x0A, 0x07, 0x09, 0x12, 0x15,
+    0x16, 0x14, 0x18, 0x03, 0x19, 0x17, 0x1A,
+    0x1E, 0x1B, 0x1C, 0x1D, 0x1F,
+]
+
 # Characters the user never wants surfaced in scan results. Wireframes and
 # bosses aren't selectable in normal play so showing them as importable skins
 # is just noise.
@@ -188,6 +259,7 @@ class CandidateSkin:
     costume_code: str
     dat_path: str
     csp_path: Optional[str]
+    stock_path: Optional[str]
     dat_hash: str
     source_iso: str
     # For Ice Climbers: the paired Nana DAT (when the primary is Popo) or
@@ -209,6 +281,7 @@ class IsoScanJob:
         'existing': 0, 'vanilla': 0, 'dupes': 0,
         'slippi_matched': 0, 'data_mod': 0, 'custom_fighter': 0,
         'unknown': 0, 'errors': 0,
+        'stock_icons': 0,
         'total_files': 0,
     })
     candidates: dict[str, list[CandidateSkin]] = field(default_factory=dict)
@@ -444,6 +517,240 @@ def _ensure_dat_ext(name: str) -> str:
     return stem + '.dat'
 
 
+def _stock_lookup_key(costume_code: str) -> str:
+    """Normalize a costume filename/code for stock lookup."""
+    return os.path.splitext(os.path.basename(costume_code or ''))[0].lower()
+
+
+def _to_external_id(internal_id: int, character_count: int = 0x21) -> int:
+    """Port of mexLib.MexFighterIDConverter.ToExternalID for vanilla ids."""
+    base_character_count = 0x21
+    internal_special_count = 6
+    external_special_count = 7
+    added_chars = character_count - base_character_count
+    is_special = internal_id >= character_count - internal_special_count
+
+    if internal_id >= character_count - internal_special_count - added_chars and not is_special:
+        return (base_character_count - external_special_count) + (
+            internal_id - (base_character_count - internal_special_count)
+        )
+
+    external_id = internal_id + (-added_chars if is_special else 0)
+    if external_id < len(_INTERNAL_TO_EXTERNAL):
+        external_id = _INTERNAL_TO_EXTERNAL[external_id]
+    if is_special:
+        external_id += added_chars
+    if internal_id == 11:  # Popo special case in mexLib; stock extractor skips Nana.
+        external_id = character_count - 1
+    return external_id
+
+
+def _vanilla_stock_frame(internal_id: int, costume_index: int) -> Optional[int]:
+    """Frame used by vanilla IfAll Stc_scemdls for a costume stock icon."""
+    if internal_id > 26 or internal_id == 11:
+        return None
+    external_id = _to_external_id(internal_id, 0x21)
+    if internal_id == 7:
+        external_id = 25
+    elif external_id == 26:
+        pass
+    elif external_id >= 19:
+        external_id -= 1
+    return external_id + costume_index * 30
+
+
+class _DolReader:
+    """Minimal big-endian DOL address reader for Melee's costume tables."""
+
+    def __init__(self, path: Path):
+        self.data = path.read_bytes()
+        self.section_offsets = [self._u32_at(i * 4) for i in range(18)]
+        self.section_addresses = [self._u32_at(0x48 + i * 4) for i in range(18)]
+        self.section_lengths = [self._u32_at(0x90 + i * 4) for i in range(18)]
+
+    def _u32_at(self, offset: int) -> int:
+        if offset < 0 or offset + 4 > len(self.data):
+            return 0
+        return int.from_bytes(self.data[offset:offset + 4], 'big')
+
+    def _to_file_offset(self, address: int) -> Optional[int]:
+        if address & 0x80000000:
+            for section_offset, section_address, section_length in zip(
+                self.section_offsets, self.section_addresses, self.section_lengths
+            ):
+                if not section_address:
+                    continue
+                if section_address <= address < section_address + section_length:
+                    return section_offset + (address - section_address)
+            return None
+        return address if 0 <= address < len(self.data) else None
+
+    def read_u8(self, address: int) -> Optional[int]:
+        offset = self._to_file_offset(address)
+        if offset is None or offset >= len(self.data):
+            return None
+        return self.data[offset]
+
+    def read_u32(self, address: int) -> Optional[int]:
+        offset = self._to_file_offset(address)
+        if offset is None or offset + 4 > len(self.data):
+            return None
+        return self._u32_at(offset)
+
+    def read_string(self, address: int) -> str:
+        offset = self._to_file_offset(address)
+        if offset is None:
+            return ''
+        end = offset
+        while end < len(self.data) and self.data[end] != 0:
+            end += 1
+        try:
+            return self.data[offset:end].decode('ascii', errors='ignore')
+        except Exception:
+            return ''
+
+    def read_string_pointer(self, address: int) -> str:
+        pointer = self.read_u32(address)
+        if not pointer:
+            return ''
+        return self.read_string(pointer)
+
+
+def _read_dol_costume_stock_frames(dol_path: Path) -> dict[str, int]:
+    """Map costume stem -> vanilla stock animation frame using main.dol order."""
+    reader = _DolReader(dol_path)
+    mapping: dict[str, int] = {}
+
+    for internal_id in range(0x21):
+        costume_count = reader.read_u8(0x803C0EC0 + 0x4 + internal_id * 8)
+        costume_pointer = reader.read_u32(0x803C2360 + internal_id * 4)
+        if not costume_count or not costume_pointer:
+            continue
+
+        for costume_index in range(costume_count):
+            frame = _vanilla_stock_frame(internal_id, costume_index)
+            if frame is None:
+                continue
+            file_name = reader.read_string_pointer(costume_pointer + costume_index * 0x0C)
+            key = _stock_lookup_key(file_name)
+            if key:
+                mapping[key] = frame
+
+    return mapping
+
+
+def _find_disc_file(root: Path, preferred_names: tuple[str, ...]) -> Optional[Path]:
+    """Find a file under a WIT extraction, preferring names in order."""
+    matches: dict[str, Path] = {}
+    wanted = {n.lower() for n in preferred_names}
+    for path in root.rglob('*'):
+        if path.is_file() and path.name.lower() in wanted:
+            matches.setdefault(path.name.lower(), path)
+    for name in preferred_names:
+        match = matches.get(name.lower())
+        if match:
+            return match
+    return None
+
+
+def _run_stock_icon_export(ifall_path: Path, out_dir: Path) -> Optional[dict]:
+    if not os.path.exists(HSDRAW_EXE):
+        logger.warning(f"[iso-scan][stock] HSDRawViewer not found: {HSDRAW_EXE}")
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [HSDRAW_EXE, '--stock-icons', 'export', str(ifall_path), str(out_dir)],
+        capture_output=True, text=True, **get_subprocess_args(),
+    )
+    if result.returncode != 0:
+        logger.warning(
+            f"[iso-scan][stock] export failed for {ifall_path}: "
+            f"{(result.stderr or result.stdout)[-500:]}"
+        )
+        return None
+    manifest_path = out_dir / 'manifest.json'
+    if not manifest_path.exists():
+        logger.warning(f"[iso-scan][stock] no manifest written for {ifall_path}")
+        return None
+    try:
+        return json.loads(manifest_path.read_text(encoding='utf-8'))
+    except Exception as e:
+        logger.warning(f"[iso-scan][stock] bad manifest for {ifall_path}: {e}")
+        return None
+
+
+def _build_stock_map_for_iso(iso_dir: Path, out_dir: Path) -> dict[str, str]:
+    """Extract actual ISO stock icons and map costume stem -> PNG path."""
+    ifall_path = _find_disc_file(iso_dir, ('IfAll.usd', 'IfAll.dat'))
+    dol_path = _find_disc_file(iso_dir, ('main.dol',))
+    if not ifall_path or not dol_path:
+        logger.info(
+            f"[iso-scan][stock] {iso_dir.name}: missing "
+            f"{'IfAll' if not ifall_path else 'main.dol'}, stock extraction skipped"
+        )
+        return {}
+
+    try:
+        costume_frames = _read_dol_costume_stock_frames(dol_path)
+    except Exception as e:
+        logger.warning(f"[iso-scan][stock] {iso_dir.name}: DOL parse failed: {e}")
+        return {}
+    if not costume_frames:
+        logger.info(f"[iso-scan][stock] {iso_dir.name}: no DOL costume frames found")
+        return {}
+
+    manifest = _run_stock_icon_export(ifall_path, out_dir)
+    if not manifest:
+        return {}
+    if manifest.get('format') != 'vanilla':
+        logger.info(
+            f"[iso-scan][stock] {iso_dir.name}: {manifest.get('format')} stock "
+            "table is not DOL-frame compatible, stock extraction skipped"
+        )
+        return {}
+
+    frame_to_png: dict[int, str] = {}
+    for entry in manifest.get('entries', []):
+        try:
+            frame = int(entry.get('frame'))
+            width = int(entry.get('width', 0))
+            height = int(entry.get('height', 0))
+        except (TypeError, ValueError):
+            continue
+        # Costume stock icons are 24x24; skip timer digits and cursor fragments
+        # that live in the same Stc_scemdls animation bank.
+        if width != 24 or height != 24:
+            continue
+        filename = entry.get('filename')
+        if not filename:
+            continue
+        png_path = out_dir / filename
+        if png_path.exists():
+            frame_to_png[frame] = str(png_path)
+
+    stock_map = {
+        key: frame_to_png[frame]
+        for key, frame in costume_frames.items()
+        if frame in frame_to_png
+    }
+    logger.info(
+        f"[iso-scan][stock] {iso_dir.name}: mapped {len(stock_map)} stocks "
+        f"from {manifest.get('format')} IfAll ({len(costume_frames)} DOL costumes)"
+    )
+    return stock_map
+
+
+def _build_stock_maps(extract_root: Path, stocks_root: Path) -> dict[str, dict[str, str]]:
+    maps: dict[str, dict[str, str]] = {}
+    for iso_dir in extract_root.iterdir():
+        if not iso_dir.is_dir():
+            continue
+        stock_map = _build_stock_map_for_iso(iso_dir, stocks_root / iso_dir.name)
+        if stock_map:
+            maps[iso_dir.name] = stock_map
+    return maps
+
+
 def _ic_color_suffix(costume_code: str) -> Optional[str]:
     """Extract the 2-char Melee color suffix from PlPpXX / PlNnXX costume codes."""
     stem = os.path.splitext(costume_code)[0]
@@ -600,6 +907,7 @@ def start_scan(iso_paths: list[str], on_event: Callable[[str, dict], None]) -> I
     """
     job_id = uuid.uuid4().hex[:12]
     SCAN_WORK_ROOT.mkdir(parents=True, exist_ok=True)
+    cleanup_stale_jobs()
     work_dir = SCAN_WORK_ROOT / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
     job = IsoScanJob(job_id=job_id, iso_paths=list(iso_paths), work_dir=work_dir)
@@ -622,13 +930,15 @@ def get_job(job_id: str) -> Optional[IsoScanJob]:
 def delete_job(job_id: str) -> bool:
     with _jobs_lock:
         job = _jobs.pop(job_id, None)
-    if not job:
+    work_dir = job.work_dir if job else _safe_scan_job_dir(job_id)
+    if work_dir is None:
         return False
+    existed = work_dir.exists()
     try:
-        shutil.rmtree(job.work_dir, ignore_errors=True)
-    except Exception:
-        pass
-    return True
+        shutil.rmtree(work_dir, ignore_errors=True)
+    except Exception as e:
+        logger.warning(f"[iso-scan][cleanup] failed to delete job {job_id}: {e}")
+    return bool(job or existed)
 
 
 def cancel_job(job_id: str) -> bool:
@@ -704,6 +1014,8 @@ def _run_scan(job: IsoScanJob, on_event):
         _emit(job, on_event, 'scanning', "Loading vault & vanilla hashes...", 22)
         vault_hashes = _load_vault_hashes()
         vanilla_hashes = _load_vanilla_hashes()
+        stock_maps = _build_stock_maps(extract_root, job.work_dir / "stocks")
+        job.stats['stock_icons'] = sum(len(v) for v in stock_maps.values())
 
         all_files: list[tuple[str, str]] = []  # (path, source_iso_stem)
         for iso_dir in extract_root.iterdir():
@@ -811,6 +1123,7 @@ def _run_scan(job: IsoScanJob, on_event):
                 'path': fp, 'hash': file_hash,
                 'character': character, 'costume_code': costume_code,
                 'source_iso': source, 'symbol': symbol,
+                'stock_path': stock_maps.get(source, {}).get(_stock_lookup_key(costume_code)),
             })
 
         if job.cancelled:
@@ -963,12 +1276,23 @@ def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tup
         f"{primary_name:14} csp={csp_status:10} {elapsed_ms:>5}ms"
     )
 
+    stock_dest: Optional[Path] = None
+    stock_path = c.get('stock_path')
+    if stock_path and os.path.exists(stock_path):
+        try:
+            stock_dest = skin_folder / "stock.png"
+            shutil.copy2(stock_path, stock_dest)
+        except Exception as e:
+            logger.warning(f"[iso-scan][stock][{worker}] copy fail for {key}: {e}")
+            stock_dest = None
+
     return CandidateSkin(
         key=key,
         character=c['character'],
         costume_code=c['costume_code'],
         dat_path=str(dat_dest),
         csp_path=str(csp_dest) if csp_dest else None,
+        stock_path=str(stock_dest) if stock_dest else None,
         dat_hash=c['hash'],
         source_iso=c['source_iso'],
         paired_dat_path=str(paired_dest) if paired_dest else None,
@@ -994,9 +1318,10 @@ def _finalize(job: IsoScanJob, on_event, cancelled: bool):
     # How many got CSPs vs not
     with_csp = sum(1 for s in job.candidates.values() for x in s if x.csp_path)
     without_csp = sum(1 for s in job.candidates.values() for x in s if not x.csp_path)
+    with_stock = sum(1 for s in job.candidates.values() for x in s if x.stock_path)
     paired_ic = sum(1 for s in job.candidates.values() for x in s if x.paired_dat_path)
     logger.info(f"[iso-scan] csp coverage: {with_csp} rendered, {without_csp} blank/no-preview; "
-                f"{paired_ic} paired IC candidates")
+                f"{with_stock} actual stocks; {paired_ic} paired IC candidates")
 
     try:
         on_event('iso_scan_complete', {

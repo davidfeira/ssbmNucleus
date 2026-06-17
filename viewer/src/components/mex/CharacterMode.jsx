@@ -194,9 +194,11 @@ export default function CharacterMode({
 
       <ConfirmDialog
         show={cm.showConfirmDialog}
-        title="Remove Costume"
+        title={cm.pendingRemoval?.bulk ? 'Remove Selected Costumes' : 'Remove Costume'}
         message={cm.pendingRemoval
-          ? (cm.pendingRemoval.isIceClimbers
+          ? (cm.pendingRemoval.bulk
+              ? `Remove ${cm.pendingRemoval.items.length} selected costume(s) from the project?`
+              : cm.pendingRemoval.isIceClimbers
               ? `Are you sure you want to remove "${cm.pendingRemoval.costumeName}" (and paired Nana) from Ice Climbers?`
               : `Are you sure you want to remove "${cm.pendingRemoval.costumeName}" from ${cm.pendingRemoval.fighterName}?`)
           : ''}

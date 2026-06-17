@@ -52,8 +52,41 @@ export default function VariantsPanel({ sm }) {
     <>
       <div className="costumes-section">
         <div className="costumes-section-header">
-          <h3>In ISO ({dataReady ? mexVariants.length : 'Loading...'})</h3>
+          <h3>
+            In ISO ({dataReady ? mexVariants.length : 'Loading...'})
+            {sm.selectedInstalledVariants.size > 0 && ` - ${sm.selectedInstalledVariants.size} selected`}
+          </h3>
           <div className="iso-mod-actions">
+            {mexVariants.length > 0 && (
+              <button
+                className="btn-select-all"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); sm.selectAllInstalledVariants(); }}
+                disabled={!dataReady || sm.removing || sm.selectedButton}
+              >
+                Select All
+              </button>
+            )}
+            {sm.selectedInstalledVariants.size > 0 && (
+              <>
+                <button
+                  className="btn-batch-import btn-batch-delete"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('start'); sm.handleBatchRemoveVariants(); }}
+                  disabled={sm.removing || sm.selectedButton}
+                >
+                  Delete Selected ({sm.selectedInstalledVariants.size})
+                </button>
+                <button
+                  className="btn-clear-selection"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); sm.clearInstalledVariantSelection(); }}
+                  disabled={sm.removing}
+                >
+                  Clear
+                </button>
+              </>
+            )}
             <button
               className="btn-pose-all btn-sound-pack"
               onClick={() => { playSound('boop'); setShowSongPacks(true); }}
@@ -74,16 +107,26 @@ export default function VariantsPanel({ sm }) {
               : (variant.screenshotUrl ? `${BACKEND_URL}${variant.screenshotUrl}` : null)
             const hasImage = isVanilla ? true : variant.hasScreenshot
             const canAssignButton = sm.selectedButton && variant.button !== sm.selectedButton
+            const isDeleteSelected = sm.selectedInstalledVariants.has(sm.installedVariantKey(selectedStage.code, variant.name))
 
             return (
               <div
                 key={idx}
-                className={`costume-card existing-costume ${canAssignButton ? 'button-assignable' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
+                className={`costume-card existing-costume ${isDeleteSelected ? 'selected' : ''} ${canAssignButton ? 'button-assignable' : ''} ${dataReady ? 'card-visible' : 'card-hidden'}`}
                 onMouseEnter={playHoverSound}
                 onClick={() => sm.handleVariantClick(variant)}
                 style={{ cursor: canAssignButton ? 'pointer' : 'default', animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
               >
                 <div className="costume-preview">
+                  <input
+                    type="checkbox"
+                    className="costume-checkbox"
+                    checked={isDeleteSelected}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => { playSound('boop'); sm.toggleInstalledVariantSelection(selectedStage.code, variant.name); }}
+                    disabled={sm.removing || !!sm.selectedButton}
+                    title="Select for delete"
+                  />
                   {hasImage && (
                     <img
                       src={imageUrl}
@@ -139,7 +182,15 @@ export default function VariantsPanel({ sm }) {
           </h3>
           {availableVariants.length > 0 && (
             <div className="batch-controls">
-              {sm.selectedVariants.size > 0 ? (
+              <button
+                className="btn-select-all"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); sm.selectAllVariants(); }}
+                disabled={sm.batchImporting}
+              >
+                Select All
+              </button>
+              {sm.selectedVariants.size > 0 && (
                 <>
                   <button
                     className="btn-batch-import"
@@ -149,7 +200,7 @@ export default function VariantsPanel({ sm }) {
                   >
                     {sm.batchImporting
                       ? `Importing ${sm.batchProgress.current}/${sm.batchProgress.total}...`
-                      : `Import Selected (${sm.selectedVariants.size})`}
+                      : `Import All Selected (${sm.selectedVariants.size})`}
                   </button>
                   <button
                     className="btn-clear-selection"
@@ -160,14 +211,6 @@ export default function VariantsPanel({ sm }) {
                     Clear
                   </button>
                 </>
-              ) : (
-                <button
-                  className="btn-select-all"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); sm.selectAllVariants(); }}
-                >
-                  Select All
-                </button>
               )}
             </div>
           )}

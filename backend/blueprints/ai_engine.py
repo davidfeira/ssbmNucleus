@@ -279,11 +279,67 @@ def set_openrouter_key():
                     'hasKey': bool(keystore.get_openrouter_key())})
 
 
-# The local planner LLM we steer users toward: benchmarked 6/6 valid plans,
-# full region coverage, ~4s/plan, 3.9GB VRAM, AND it handles the vision
-# review pass (scripts/skinlab_local_planner_test.py).
-RECOMMENDED_PLANNER = {'name': 'gemma3:4b', 'sizeGb': 3.3,
-                       'blurb': 'plans + vision review, ~4s/plan'}
+# Local planner LLMs we steer users toward. All are pullable through Ollama
+# today, and every entry is vision-capable so inspiration-image planning and
+# self-review can stay local.
+PLANNER_RECOMMENDATIONS = [
+    # Benchmarked locally: 6/6 valid plans, full region coverage, ~4s/plan,
+    # 3.9GB VRAM, and supports the vision review pass.
+    {'name': 'gemma3:4b', 'sizeGb': 3.3,
+     'diskEstimateGb': 3.3, 'vramGb': 3.9,
+     'tier': 'default',
+     'speedBlurb': '~4s/plan',
+     'vision': True,
+     'description': 'Best default local planner: small, fast, and can review generated renders.',
+     'blurb': 'default vision planner, ~4s/plan'},
+    {'name': 'qwen3-vl:8b', 'sizeGb': 6.1,
+     'diskEstimateGb': 6.1, 'vramGb': 8.0,
+     'tier': '8GB VRAM',
+     'speedBlurb': 'stronger visual reasoning',
+     'vision': True,
+     'description': '8GB-class vision planner with a long context window; needs a recent Ollama build.',
+     'blurb': '8GB-class vision planner'},
+    {'name': 'gemma3:12b', 'sizeGb': 8.1,
+     'diskEstimateGb': 8.1, 'vramGb': 12.0,
+     'tier': '12-16GB VRAM',
+     'speedBlurb': 'stronger Gemma planner',
+     'vision': True,
+     'description': 'Larger Gemma planner for better plans and local review when you have more VRAM.',
+     'blurb': 'larger Gemma vision planner'},
+    {'name': 'gemma3:27b', 'sizeGb': 17.0,
+     'diskEstimateGb': 17.0, 'vramGb': 16.0,
+     'tier': '16GB+ VRAM',
+     'speedBlurb': 'best Gemma 3 quality, slower',
+     'vision': True,
+     'description': 'High-quality Gemma planner for larger GPUs; expect slower planning and heavier memory use.',
+     'blurb': 'high-quality Gemma vision planner'},
+]
+RECOMMENDED_PLANNER = PLANNER_RECOMMENDATIONS[0]
+PLANNER_KNOWN_SPECS = {
+    # Text-only models are not download recommendations because they cannot
+    # run the local vision review pass, but installed rows should still show
+    # honest sizing and fit information.
+    'gemma3:270m': {'name': 'gemma3:270m', 'sizeGb': 0.3,
+                    'diskEstimateGb': 0.3, 'vramGb': 0.6,
+                    'tier': 'tiny text-only',
+                    'speedBlurb': 'fastest text-only fallback',
+                    'vision': False,
+                    'description': 'Tiny text-only fallback planner; does not review images.'},
+    'gemma3:1b': {'name': 'gemma3:1b', 'sizeGb': 0.8,
+                  'diskEstimateGb': 0.8, 'vramGb': 1.5,
+                  'tier': 'small text-only',
+                  'speedBlurb': 'fast text-only fallback',
+                  'vision': False,
+                  'description': 'Small text-only planner; useful on low-end machines but no vision review.'},
+    'qwen3:8b': {'name': 'qwen3:8b', 'sizeGb': 5.2,
+                 'diskEstimateGb': 5.2, 'vramGb': 8.0,
+                 'tier': '8GB text-only',
+                 'speedBlurb': 'strong text planner, no vision review',
+                 'vision': False,
+                 'description': 'Strong text-only planner; use Qwen3-VL or Gemma 3 for local image review.'},
+}
+PLANNER_SPECS = {**PLANNER_KNOWN_SPECS,
+                 **{p['name']: p for p in PLANNER_RECOMMENDATIONS}}
 
 _planner_pulls = {}     # model name -> True while a pull thread runs
 
@@ -337,6 +393,22 @@ def _safe_probe():
         logger.debug('ollama warm-up probe failed', exc_info=True)
 
 
+def _planner_fit(spec, hw):
+    """Mirror image-model fit labels for known local planner specs."""
+    vram = spec.get('vramGb')
+    if not vram:
+        return None
+    gpu = (hw or {}).get('gpu')
+    if not gpu:
+        return 'no_gpu'
+    vram_gb = gpu.get('vramMb', 0) / 1024
+    if vram > vram_gb * 1.05:
+        return 'insufficient_vram'
+    if vram > vram_gb * 0.8:
+        return 'slow'
+    return 'good'
+
+
 @ai_engine_bp.route('/api/mex/ai-engine/planners', methods=['GET'])
 def local_planners():
     """Local planner LLMs via Ollama: server reachability (user install OR
@@ -345,8 +417,28 @@ def local_planners():
     'ollama:<name>'."""
     from aiengine import ollama_runtime
     base, probed = _probe_ollama()
-    models = [{**m, 'pulling': bool(_planner_pulls.get(m['name']))}
-              for m in probed]
+    hw = hardware.detect()
+    models = []
+    for m in probed:
+        spec = PLANNER_SPECS.get(m['name']) or {}
+        entry = {**m, 'pulling': bool(_planner_pulls.get(m['name']))}
+        if spec:
+            entry.update({
+                'diskEstimateGb': spec.get('diskEstimateGb'),
+                'vramGb': spec.get('vramGb'),
+                'speedBlurb': spec.get('speedBlurb'),
+                'vision': spec.get('vision', False),
+                'tier': spec.get('tier'),
+                'description': spec.get('description'),
+                'fit': _planner_fit(spec, hw),
+            })
+        models.append(entry)
+    recommended = {**RECOMMENDED_PLANNER,
+                   'fit': _planner_fit(RECOMMENDED_PLANNER, hw)}
+    recommended_planners = [
+        {**spec, 'fit': _planner_fit(spec, hw)}
+        for spec in PLANNER_RECOMMENDATIONS
+    ]
     # measured planner speeds/usage from the telemetry ledger — keys are the
     # planner ids ('ollama:gemma3:4b', 'openai/gpt-5-mini')
     stats = {m: s for m, s in telemetry.model_stats().items()
@@ -355,7 +447,8 @@ def local_planners():
                     'local': models,
                     'stats': stats,
                     'pulling': sorted(k for k, v in _planner_pulls.items() if v),
-                    'recommended': RECOMMENDED_PLANNER,
+                    'recommended': recommended,
+                    'recommendedPlanners': recommended_planners,
                     'bundled': {
                         'supported': ollama_runtime.is_supported(),
                         'installed': ollama_runtime.bundled_installed(),

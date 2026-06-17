@@ -1,5 +1,5 @@
 .confirm-dialog-overlay {
-  z-index: var(--z-toast); /* Above other modals (z-modal = 1100) */
+  z-index: calc(var(--z-tooltip) + 100);
 }
 
 .confirm-dialog-content {

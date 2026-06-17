@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * LaserRingEditorModal - Color picker UI for creating/editing laser ring mods
@@ -195,7 +196,10 @@ export default function LaserRingEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Laser Ring Mod',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { buildDisplayList, countSkinsInFolder } from '../../utils/storageViewerUtils'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL } from '../../config'
 import FolderCard from './FolderCard'
 
@@ -240,7 +241,10 @@ export default function CustomStagesGrid({
   }
 
   const deleteFolder = async (folderId) => {
-    if (!confirm('Delete this folder? Stages inside will move out, not be deleted.')) return
+    if (!await appConfirm('Delete this folder? Stages inside will move out, not be deleted.', {
+      title: 'Delete Folder',
+      confirmText: 'Delete',
+    })) return
     try {
       const response = await fetch(`${API_URL}/custom-stages/folders/delete`, {
         method: 'POST',

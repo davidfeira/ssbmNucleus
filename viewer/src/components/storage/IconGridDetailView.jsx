@@ -7,6 +7,7 @@
  */
 import { useEffect, useState, useRef } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 
 export default function IconGridDetailView({ modId, onBack, onModUpdated }) {
@@ -155,7 +156,10 @@ export default function IconGridDetailView({ modId, onBack, onModUpdated }) {
   }
 
   const handleDeleteIcon = async (character) => {
-    if (!confirm(`Delete icon for "${character}"?`)) return
+    if (!await appConfirm(`Delete icon for "${character}"?`, {
+      title: 'Delete Icon',
+      confirmText: 'Delete',
+    })) return
     try {
       const res = await fetch(`${API_URL}/menus/css/icon_grid/${modId}/delete_icon`, {
         method: 'POST',

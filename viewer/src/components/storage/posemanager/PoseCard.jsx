@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TrashIcon } from '../../shared/Icons'
+import { appConfirm } from '../../../utils/appDialogs'
 
 // Pose Card Component
 export default function PoseCard({
@@ -18,7 +19,10 @@ export default function PoseCard({
 
   const handleDelete = async (e) => {
     e.stopPropagation()
-    if (!confirm(`Delete pose "${pose.name}"?`)) return
+    if (!await appConfirm(`Delete pose "${pose.name}"?`, {
+      title: 'Delete Pose',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * GunEditorModal - Modal for importing custom gun models
@@ -118,7 +119,10 @@ export default function GunEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Model',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

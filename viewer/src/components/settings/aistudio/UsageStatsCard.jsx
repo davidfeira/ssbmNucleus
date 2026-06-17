@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { playHoverSound, playSound } from '../../../utils/sounds'
+import { appConfirm } from '../../../utils/appDialogs'
 import { fmtAgo } from './useAiEngine'
 
 export default function UsageStatsCard({ API_URL, refreshKey }) {
@@ -21,9 +22,13 @@ export default function UsageStatsCard({ API_URL, refreshKey }) {
   useEffect(() => { load() }, [load, refreshKey])
 
   const reset = async () => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm('Reset all generation stats? The measured speed/cost '
-                        + 'hints in the model pickers start over.')) return
+    if (!await appConfirm(
+      'Reset all generation stats? The measured speed/cost hints in the model pickers start over.',
+      {
+        title: 'Reset Stats',
+        confirmText: 'Reset',
+      }
+    )) return
     try {
       const res = await fetch(`${API_URL}/ai-engine/stats/reset`,
                               { method: 'POST' })

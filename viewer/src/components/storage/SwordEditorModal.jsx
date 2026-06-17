@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * SwordEditorModal - Color picker UI for creating/editing sword trail mods
@@ -181,7 +182,10 @@ export default function SwordEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Sword Mod',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

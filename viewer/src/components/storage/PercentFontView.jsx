@@ -11,6 +11,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm, appPrompt } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 import PercentFontEditor from './PercentFontEditor'
 import MenuModGrid from './MenuModGrid'
@@ -114,7 +115,11 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
   const commitDraft = async () => {
     const mod = editingMod
     if (!mod) return
-    const name = window.prompt(`Name this ${noun.toLowerCase()}:`, mod.name || `New ${noun}`)
+    const name = await appPrompt(`Name this ${noun.toLowerCase()}:`, {
+      title: `Save ${noun}`,
+      defaultValue: mod.name || `New ${noun}`,
+      confirmText: 'Save',
+    })
     if (name === null) return
     try {
       const res = await fetch(`${API_URL}/menus/percent/${mod.id}/save`, {
@@ -133,7 +138,10 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
   const discardDraft = async () => {
     const mod = editingMod
     if (!mod) return
-    if (!window.confirm(`Discard this unsaved ${noun.toLowerCase()}?`)) return
+    if (!await appConfirm(`Discard this unsaved ${noun.toLowerCase()}?`, {
+      title: 'Discard Draft',
+      confirmText: 'Discard',
+    })) return
     try {
       await fetch(`${API_URL}/menus/percent/${mod.id}/discard`, { method: 'POST' })
     } catch { /* best effort */ }
@@ -179,7 +187,10 @@ export default function PercentFontView({ onDetailChange, category = 'percent' }
   }
 
   const handleDelete = async (mod) => {
-    if (!window.confirm(`Delete "${mod.name}"?`)) return
+    if (!await appConfirm(`Delete "${mod.name}"?`, {
+      title: `Delete ${noun}`,
+      confirmText: 'Delete',
+    })) return
     edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/percent/delete/${mod.id}`, { method: 'POST' })

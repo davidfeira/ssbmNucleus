@@ -155,6 +155,14 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Check for stock icon table export mode
+            if (args.Length >= 1 && args[0] == "--stock-icons")
+            {
+                Console.WriteLine("Stock icons mode detected");
+                RunStockIconsOperation(args);
+                return;
+            }
+
             // Check for stage texture export/import mode (Gr*.dat map_head models)
             if (args.Length >= 1 && args[0] == "--stage-textures")
             {
@@ -3928,6 +3936,142 @@ namespace HSDRawViewer
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        /// Export stock icon texture-animation frames from IfAll.dat/.usd.
+        /// Supports MEX's Stc_icns root and vanilla's Stc_scemdls scene model.
+        /// Usage:
+        ///   HSDRawViewer.exe --stock-icons export <ifall.dat> <output_dir>
+        /// </summary>
+        static void RunStockIconsOperation(string[] args)
+        {
+            try
+            {
+                if (args.Length < 4 || args[1] != "export")
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  Export: HSDRawViewer.exe --stock-icons export <ifall.dat> <output_dir>");
+                    return;
+                }
+
+                string datFile = args[2];
+                string outDir = args[3];
+                System.IO.Directory.CreateDirectory(outDir);
+
+                Console.WriteLine($"Loading: {datFile}");
+                var rawFile = new HSDRawFile(datFile);
+
+                var entries = new List<Dictionary<string, object>>();
+                string format = null;
+
+                void ExportTexAnim(HSD_TexAnim anim, string section, short? reserved = null, short? stride = null)
+                {
+                    if (anim == null)
+                        return;
+
+                    var keys = anim.AnimationObject?.FObjDesc?.GetDecodedKeys();
+                    if (keys == null || keys.Count == 0)
+                        return;
+
+                    HSD_TOBJ[] tobjs;
+                    try { tobjs = anim.ToTOBJs(); }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR: could not decode stock TOBJs: {ex.Message}");
+                        return;
+                    }
+
+                    foreach (var key in keys.OrderBy(e => e.Frame))
+                    {
+                        int frame = (int)Math.Round(key.Frame);
+                        int tobjIndex = (int)key.Value;
+                        if (tobjIndex < 0 || tobjIndex >= tobjs.Length)
+                            continue;
+
+                        try
+                        {
+                            using var img = tobjs[tobjIndex].ToImage();
+                            string filename = $"stock_f{frame:D03}.png";
+                            using var fs = new System.IO.FileStream(
+                                System.IO.Path.Combine(outDir, filename),
+                                System.IO.FileMode.Create);
+                            img.Save(fs, new PngEncoder());
+
+                            var entry = new Dictionary<string, object>
+                            {
+                                ["frame"] = frame,
+                                ["tobj_index"] = tobjIndex,
+                                ["filename"] = filename,
+                                ["section"] = section,
+                                ["width"] = img.Width,
+                                ["height"] = img.Height,
+                                ["format"] = tobjs[tobjIndex].ImageData?.Format.ToString() ?? "",
+                            };
+                            if (reserved.HasValue) entry["reserved"] = reserved.Value;
+                            if (stride.HasValue) entry["stride"] = stride.Value;
+                            entries.Add(entry);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"  frame {frame}: skipped ({ex.Message})");
+                        }
+                    }
+                }
+
+                var mexRoot = rawFile.Roots.Find(r => r.Data is HSDRaw.MEX.MEX_Stock);
+                if (mexRoot?.Data is HSDRaw.MEX.MEX_Stock stock)
+                {
+                    format = "mex";
+                    Console.WriteLine($"Detected MEX stock table ({mexRoot.Name}), reserved={stock.Reserved}, stride={stock.Stride}");
+                    ExportTexAnim(
+                        stock.MatAnimJoint?.MaterialAnimation?.TextureAnimation,
+                        "Stc_icns",
+                        stock.Reserved,
+                        stock.Stride);
+                }
+
+                if (entries.Count == 0 && rawFile["Stc_scemdls"]?.Data is HSDNullPointerArrayAccessor<HSD_JOBJDesc> stc)
+                {
+                    format = "vanilla";
+                    Console.WriteLine("Detected vanilla stock scene model (Stc_scemdls)");
+                    try
+                    {
+                        var joint = stc[0].MaterialAnimations[0].TreeList[1];
+                        ExportTexAnim(joint.MaterialAnimation?.TextureAnimation, "Stc_scemdls");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR: Could not read Stc_scemdls stock animation: {ex.Message}");
+                    }
+                }
+
+                if (entries.Count == 0)
+                {
+                    Console.WriteLine("ERROR: No stock icon table found in IfAll");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                var manifest = new Dictionary<string, object>
+                {
+                    ["format"] = format ?? "unknown",
+                    ["source_file"] = System.IO.Path.GetFileName(datFile),
+                    ["entries"] = entries,
+                };
+                System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(outDir, "manifest.json"),
+                    JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })
+                );
+
+                Console.WriteLine($"SUCCESS: Exported {entries.Count} stock frames ({format})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Stock icons operation failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Environment.Exit(1);
+            }
         }
 
         /// <summary>

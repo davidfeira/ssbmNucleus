@@ -36,6 +36,8 @@ const SoundIcon = () => (
   </svg>
 )
 
+const PER_FIGHTER_COSTUME_CAP = 255
+
 export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFighter, onEnterExtras, onApplyPose }) {
   const {
     pairCostumes,
@@ -43,6 +45,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
     dataReady,
     removing,
     selectedCostumes,
+    selectedInstalledCostumes,
     batchImporting,
     batchProgress,
     draggedIndex,
@@ -55,6 +58,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
     handlePairCostumeTeamAssign,
     getPairCostumeTeamColor,
     handleRemoveCostume,
+    handleBatchRemoveCostumes,
     handleBatchImport,
     handlePairDragStart,
     handleDragOver,
@@ -65,7 +69,10 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
     getCostumesForFighter,
     toggleCostumeSelection,
     selectAllCostumes,
-    clearSelection
+    clearSelection,
+    installedCostumeKey,
+    toggleInstalledCostumeSelection,
+    clearInstalledCostumeSelection
   } = cm
 
   const BASE_URL = API_URL.replace('/api/mex', '')
@@ -120,9 +127,10 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
     const isDragging = draggedRow === fighterName && draggedIndex === idx
     const isDragOver = draggedRow === fighterName && dragOverIndex === idx
     const teamColorsOn = getPairCostumeTeamColor(fighterName, idx)
+    const isDeleteSelected = selectedInstalledCostumes.has(installedCostumeKey(fighterName, idx))
     return (
       <div
-        className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
+        className={`costume-card existing-costume ${isDeleteSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
         style={{ animationDelay: dataReady ? `${animDelay}ms` : '0ms' }}
         draggable={!removing && !reordering && !isTeamAssignable}
         onMouseEnter={playHoverSound}
@@ -135,6 +143,15 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
         onDragEnd={handleDragEnd}
       >
         <div className="costume-preview">
+          <input
+            type="checkbox"
+            className="costume-checkbox"
+            checked={isDeleteSelected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => { playSound('boop'); toggleInstalledCostumeSelection(fighterName, idx); }}
+            disabled={removing || reordering || isTeamAssignable}
+            title="Select for delete"
+          />
           <span className={`zs-fighter-tag zs-${fighterName.toLowerCase()}`}>{fighterName}</span>
           {costume.cspUrl && (
             <img
@@ -189,8 +206,11 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
       <div className="costumes-section">
         <div className="costumes-section-header">
           <h3>
-            In ISO — Zelda ({dataReady ? zelda.length : '…'}) / Sheik ({dataReady ? sheik.length : '…'})
+            In ISO ({dataReady ? `${slotCount}/${PER_FIGHTER_COSTUME_CAP}` : 'Loading...'}) - Zelda ({dataReady ? zelda.length : '...'}) / Sheik ({dataReady ? sheik.length : '...'})
           </h3>
+          {selectedInstalledCostumes.size > 0 && (
+            <span className="selection-count-badge">{selectedInstalledCostumes.size} selected</span>
+          )}
           {mismatch && (
             <span
               className="zs-mismatch"
@@ -200,6 +220,26 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
             </span>
           )}
           <div className="iso-mod-actions">
+            {selectedInstalledCostumes.size > 0 && (
+              <>
+                <button
+                  className="btn-batch-import btn-batch-delete"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('start'); handleBatchRemoveCostumes(); }}
+                  disabled={removing || reordering || isTeamAssignable}
+                >
+                  Delete Selected ({selectedInstalledCostumes.size})
+                </button>
+                <button
+                  className="btn-clear-selection"
+                  onMouseEnter={playHoverSound}
+                  onClick={() => { playSound('boop'); clearInstalledCostumeSelection(); }}
+                  disabled={removing || reordering}
+                >
+                  Clear
+                </button>
+              </>
+            )}
             {/* Extras (laser/sword/etc.) act on whichever half is selected.
                 Neither Zelda nor Sheik currently defines any, so this stays
                 hidden until one does — kept here so the split panel matches

@@ -294,6 +294,10 @@ export default function IsoScanModal({
       })
       const data = await res.json()
       setImportResult(data)
+      if (data.success) {
+        await cleanupJob(jobId)
+        setJobId(null)
+      }
       setPhase('done')
       playSound(data.imported > 0 ? 'achievement' : 'error')
       if (onRefresh) await onRefresh()
@@ -304,10 +308,12 @@ export default function IsoScanModal({
     }
   }
 
-  const cleanup = async () => {
-    if (!jobId) return
-    try { await fetch(`${API_URL}/iso-scan/${jobId}`, { method: 'DELETE' }) } catch (_) {}
+  const cleanupJob = async (id = jobId) => {
+    if (!id) return
+    try { await fetch(`${API_URL}/iso-scan/${id}`, { method: 'DELETE' }) } catch (_) {}
   }
+
+  const cleanup = async () => cleanupJob(jobId)
 
   const handleClose = async () => {
     playSound('boop')

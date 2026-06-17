@@ -4,6 +4,7 @@ import SssIconProperties from './SssIconProperties'
 import IconReorderList from './IconReorderList'
 import PropsPopup from './PropsPopup'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL } from '../../config'
 
 const STATUS_LABELS = ['Hidden', 'Locked', 'Unlocked', 'Random', 'Decoration']
@@ -376,9 +377,12 @@ export default function SssLayoutEditor() {
     setDirty(true)
   }, [layout])
 
-  const handleDeletePage = useCallback(() => {
+  const handleDeletePage = useCallback(async () => {
     if (!layout || layout.pages.length <= 1) return
-    if (!confirm(`Delete page "${currentPage?.name}"?`)) return
+    if (!await appConfirm(`Delete page "${currentPage?.name}"?`, {
+      title: 'Delete Page',
+      confirmText: 'Delete',
+    })) return
     const newPages = layout.pages.filter((_, i) => i !== activePage)
     setLayout({ ...layout, pages: newPages })
     setActivePage(Math.min(activePage, newPages.length - 1))

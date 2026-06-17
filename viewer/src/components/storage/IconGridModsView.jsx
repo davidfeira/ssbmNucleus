@@ -7,6 +7,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 import IconGridDetailView from './IconGridDetailView'
 import MenuModGrid from './MenuModGrid'
@@ -123,7 +124,10 @@ export default function IconGridModsView({ onDetailChange }) {
   }
 
   const handleDelete = async (mod) => {
-    if (!window.confirm(`Delete "${mod.name}"? This removes its files from your vault.`)) {
+    if (!await appConfirm(`Delete "${mod.name}"? This removes its files from your vault.`, {
+      title: 'Delete Icon Grid',
+      confirmText: 'Delete',
+    })) {
       return
     }
     edit.setDeleting(true)

@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import HexagonLoader from '../shared/HexagonLoader'
 import { BACKEND_URL } from '../../config'
 
@@ -757,8 +758,12 @@ export default function ProjectSelector({
     const projectName = getProjectDisplayName(project)
     const projectDirectory = getProjectDirectory(project)
 
-    const confirmed = window.confirm(
-      `Delete "${projectName}" and its project folder?\n\n${projectDirectory}\n\nThis cannot be undone.`
+    const confirmed = await appConfirm(
+      `Delete "${projectName}" and its project folder?\n\n${projectDirectory}\n\nThis cannot be undone.`,
+      {
+        title: 'Delete Project',
+        confirmText: 'Delete',
+      }
     )
 
     if (!confirmed) {

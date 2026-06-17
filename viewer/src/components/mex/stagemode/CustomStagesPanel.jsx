@@ -14,20 +14,67 @@ export default function CustomStagesPanel({ cs }) {
     <>
       <div className="costumes-section">
         <div className="costumes-section-header">
-          <h3>In ISO ({cs.projectCustomStages.length})</h3>
+          <h3>
+            In ISO ({cs.projectCustomStages.length})
+            {cs.selectedInstalledCustomStages.size > 0 && ` - ${cs.selectedInstalledCustomStages.size} selected`}
+          </h3>
+          {cs.projectCustomStages.length > 0 && (
+            <div className="iso-mod-actions">
+              <button
+                className="btn-select-all"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); cs.selectAllInstalledCustomStages(); }}
+                disabled={cs.removingCustomStages}
+              >
+                Select All
+              </button>
+              {cs.selectedInstalledCustomStages.size > 0 && (
+                <>
+                  <button
+                    className="btn-batch-import btn-batch-delete"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('start'); cs.handleBatchRemoveCustomStages(); }}
+                    disabled={cs.removingCustomStages}
+                  >
+                    Delete Selected ({cs.selectedInstalledCustomStages.size})
+                  </button>
+                  <button
+                    className="btn-clear-selection"
+                    onMouseEnter={playHoverSound}
+                    onClick={() => { playSound('boop'); cs.clearInstalledCustomStageSelection(); }}
+                    disabled={cs.removingCustomStages}
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
         <div className="costume-list existing">
-          {cs.projectCustomStages.slice(inIsoPager.start, inIsoPager.end).map((stage, i) => (
-            <div key={stage.index} className="costume-card existing-costume card-visible" style={{ animationDelay: `${Math.min(i * 30, 990)}ms` }}>
+          {cs.projectCustomStages.slice(inIsoPager.start, inIsoPager.end).map((stage, i) => {
+            const isSelected = cs.selectedInstalledCustomStages.has(stage.name)
+            return (
+            <div key={stage.index} className={`costume-card existing-costume card-visible ${isSelected ? 'selected' : ''}`} style={{ animationDelay: `${Math.min(i * 30, 990)}ms` }}>
               <div className="costume-preview">
                 {stage.icon_url && (
                   <img src={`${BACKEND_URL}${stage.icon_url}`} alt={stage.name} style={{ imageRendering: 'pixelated' }} onError={e => e.target.style.display = 'none'} />
                 )}
+                <input
+                  type="checkbox"
+                  className="costume-checkbox"
+                  checked={isSelected}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => { playSound('boop'); cs.toggleInstalledCustomStageSelection(stage.name); }}
+                  disabled={cs.removingCustomStages}
+                  title="Select for delete"
+                />
                 <button className="btn-remove" onClick={() => cs.handleRemoveCustomStage(stage.name)} title="Remove stage">×</button>
               </div>
               <div className="costume-info"><h4>{stage.name}</h4></div>
             </div>
-          ))}
+            )
+          })}
           {cs.projectCustomStages.length === 0 && (
             <div className="no-costumes"><p>No custom stages installed</p></div>
           )}
@@ -42,7 +89,15 @@ export default function CustomStagesPanel({ cs }) {
           </h3>
           {cs.vaultStages.length > 0 && (
             <div className="batch-controls">
-              {cs.selectedCustomStages.size > 0 ? (
+              <button
+                className="btn-select-all"
+                onMouseEnter={playHoverSound}
+                onClick={() => { playSound('boop'); cs.selectAllCustomStages(); }}
+                disabled={cs.batchInstallingStages}
+              >
+                Select All
+              </button>
+              {cs.selectedCustomStages.size > 0 && (
                 <>
                   <button
                     className="btn-batch-import"
@@ -52,7 +107,7 @@ export default function CustomStagesPanel({ cs }) {
                   >
                     {cs.batchInstallingStages
                       ? `Installing ${cs.batchStageProgress.current}/${cs.batchStageProgress.total}...`
-                      : `Install Selected (${cs.selectedCustomStages.size})`}
+                      : `Install All Selected (${cs.selectedCustomStages.size})`}
                   </button>
                   <button
                     className="btn-clear-selection"
@@ -63,14 +118,6 @@ export default function CustomStagesPanel({ cs }) {
                     Clear
                   </button>
                 </>
-              ) : (
-                <button
-                  className="btn-select-all"
-                  onMouseEnter={playHoverSound}
-                  onClick={() => { playSound('boop'); cs.selectAllCustomStages(); }}
-                >
-                  Select All
-                </button>
               )}
             </div>
           )}

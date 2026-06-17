@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useRef } from 'react'
 import { playSound } from '../../../utils/sounds'
+import { appConfirm } from '../../../utils/appDialogs'
 import { BACKEND_URL } from '../../../config'
 
 export const DAS_STAGES = [
@@ -63,6 +64,7 @@ export default function useStageVariants({ API_URL, onRefresh }) {
   const [mexVariants, setMexVariants] = useState([])
   const [mexVariantCounts, setMexVariantCounts] = useState({})
   const [selectedVariants, setSelectedVariants] = useState(new Set())
+  const [selectedInstalledVariants, setSelectedInstalledVariants] = useState(new Set())
   const [selectedButton, setSelectedButton] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importingCostume, setImportingCostume] = useState(null)
@@ -92,7 +94,6 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     if (selectedStage && dasInstalled) {
       setDataReady(false)
       setMexVariants([])
-      setSelectedVariants(new Set())
       setSelectedButton(null)
       fetchMexVariants(selectedStage.code)
       // Reset scroll position of Available to Import list
@@ -118,7 +119,11 @@ export default function useStageVariants({ API_URL, onRefresh }) {
   }
 
   const installDAS = async () => {
-    if (!confirm('Install Dynamic Alternate Stages framework? This will modify stage files in your MEX project.')) {
+    if (!await appConfirm('Install Dynamic Alternate Stages framework? This will modify stage files in your MEX project.', {
+      title: 'Install DAS Framework',
+      confirmText: 'Install',
+      confirmStyle: 'primary',
+    })) {
       return
     }
 
@@ -373,6 +378,25 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     }
   }
 
+  const removeVariantFromProject = async (stageCode, variantName) => {
+    const response = await fetch(`${API_URL}/das/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stageCode: stageCode,
+        variantName: variantName
+      })
+    })
+
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error || 'Remove failed')
+    }
+
+    return data
+  }
+
   const handleRemoveVariant = (stageCode, variantName) => {
     if (removing) return
 
@@ -381,12 +405,32 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     setShowConfirmDialog(true)
   }
 
+  const handleBatchRemoveVariants = () => {
+    if (removing || selectedInstalledVariants.size === 0) return
+
+    const items = Array.from(selectedInstalledVariants)
+      .map(parseInstalledVariantKey)
+      .filter(Boolean)
+
+    if (items.length === 0) return
+
+    setPendingRemoval({ bulk: true, items })
+    setShowConfirmDialog(true)
+  }
+
   const confirmRemoveVariant = async () => {
     if (!pendingRemoval) return
 
-    const { stageCode, variantName } = pendingRemoval
+    const removal = pendingRemoval
     setShowConfirmDialog(false)
     setPendingRemoval(null)
+
+    if (removal.bulk) {
+      await confirmBatchRemoveVariants(removal.items)
+      return
+    }
+
+    const { stageCode, variantName } = removal
     setRemoving(true)
 
     try {
@@ -418,8 +462,90 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     }
   }
 
+  const confirmBatchRemoveVariants = async (items) => {
+    const removalQueue = Array.from(
+      new Map(items.map(item => [installedVariantKey(item.stageCode, item.variantName), item])).values()
+    ).sort((a, b) => {
+      const stageCompare = a.stageCode.localeCompare(b.stageCode)
+      return stageCompare || a.variantName.localeCompare(b.variantName)
+    })
+
+    setRemoving(true)
+    let successCount = 0
+    let failCount = 0
+
+    for (const item of removalQueue) {
+      try {
+        await removeVariantFromProject(item.stageCode, item.variantName)
+        successCount++
+      } catch (err) {
+        failCount++
+        console.error(`Failed to remove ${item.stageCode} variant ${item.variantName}:`, err)
+      }
+    }
+
+    try {
+      await onRefresh()
+      if (selectedStage && !selectedStage.isCustom) {
+        await fetchMexVariants(selectedStage.code)
+      }
+      await fetchStorageVariants()
+      await fetchAllMexVariantCounts()
+    } finally {
+      setRemoving(false)
+      setSelectedInstalledVariants(new Set())
+    }
+
+    if (failCount > 0) {
+      playSound('error')
+      alert(`Batch remove completed:\n${successCount} removed, ${failCount} failed`)
+    } else {
+      playSound('boop')
+      console.log(`âœ“ Successfully removed ${successCount} stage variant(s)`)
+    }
+  }
+
   const getVariantsForStage = (stageCode) => {
     return storageVariants.filter(v => v.stageCode === stageCode)
+  }
+
+  const installedVariantKey = (stageCode, variantName) => JSON.stringify([stageCode, variantName])
+
+  const parseInstalledVariantKey = (key) => {
+    try {
+      const [stageCode, variantName] = JSON.parse(key)
+      if (typeof stageCode !== 'string' || typeof variantName !== 'string') return null
+      return { stageCode, variantName }
+    } catch (err) {
+      console.error('Invalid installed variant key:', key, err)
+      return null
+    }
+  }
+
+  const toggleInstalledVariantSelection = (stageCode, variantName) => {
+    const key = installedVariantKey(stageCode, variantName)
+    setSelectedInstalledVariants(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(key)) {
+        newSet.delete(key)
+      } else {
+        newSet.add(key)
+      }
+      return newSet
+    })
+  }
+
+  const selectAllInstalledVariants = () => {
+    if (!selectedStage) return
+    setSelectedInstalledVariants(prev => {
+      const newSet = new Set(prev)
+      mexVariants.forEach(variant => newSet.add(installedVariantKey(selectedStage.code, variant.name)))
+      return newSet
+    })
+  }
+
+  const clearInstalledVariantSelection = () => {
+    setSelectedInstalledVariants(new Set())
   }
 
   const toggleVariantSelection = (zipPath) => {
@@ -437,7 +563,11 @@ export default function useStageVariants({ API_URL, onRefresh }) {
   const selectAllVariants = () => {
     if (!selectedStage) return
     const allVariants = getVariantsForStage(selectedStage.code)
-    setSelectedVariants(new Set(allVariants.map(v => v.zipPath)))
+    setSelectedVariants(prev => {
+      const newSet = new Set(prev)
+      allVariants.forEach(v => newSet.add(v.zipPath))
+      return newSet
+    })
   }
 
   const clearVariantSelection = () => {
@@ -453,6 +583,7 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     mexVariants,
     mexVariantCounts,
     selectedVariants,
+    selectedInstalledVariants,
     selectedButton,
     importing,
     importingCostume,
@@ -472,8 +603,13 @@ export default function useStageVariants({ API_URL, onRefresh }) {
     handleVariantClick,
     handleRemoveButton,
     handleRemoveVariant,
+    handleBatchRemoveVariants,
     confirmRemoveVariant,
     getVariantsForStage,
+    installedVariantKey,
+    toggleInstalledVariantSelection,
+    selectAllInstalledVariants,
+    clearInstalledVariantSelection,
     toggleVariantSelection,
     selectAllVariants,
     clearVariantSelection

@@ -42,6 +42,8 @@ const SOUND_PACK_CHARS = new Set([
 
 export const hasSoundPack = (name) => SOUND_PACK_CHARS.has((name || '').toLowerCase())
 
+const PER_FIGHTER_COSTUME_CAP = 255
+
 export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL, onEnterExtras, onApplyPose }) {
   const {
     mexCostumes,
@@ -49,6 +51,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     dataReady,
     removing,
     selectedCostumes,
+    selectedInstalledCostumes,
     batchImporting,
     batchProgress,
     draggedIndex,
@@ -60,6 +63,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     handleCostumeTeamAssign,
     getCostumeTeamColor,
     handleRemoveCostume,
+    handleBatchRemoveCostumes,
     handleBatchImport,
     handleDragStart,
     handleDragOver,
@@ -70,7 +74,10 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     getCostumesForFighter,
     toggleCostumeSelection,
     selectAllCostumes,
-    clearSelection
+    clearSelection,
+    installedCostumeKey,
+    toggleInstalledCostumeSelection,
+    clearInstalledCostumeSelection
   } = cm
 
   // Sound pack browser (vanilla character SSM bank, stored in the vault and
@@ -106,8 +113,31 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
         <>
           <div className="costumes-section">
             <div className="costumes-section-header">
-              <h3>In ISO ({dataReady ? mexCostumes.length : 'Loading...'})</h3>
+              <h3>
+                In ISO ({dataReady ? `${mexCostumes.length}/${PER_FIGHTER_COSTUME_CAP}` : 'Loading...'})
+                {selectedInstalledCostumes.size > 0 && ` - ${selectedInstalledCostumes.size} selected`}
+              </h3>
               <div className="iso-mod-actions">
+                {selectedInstalledCostumes.size > 0 && (
+                  <>
+                    <button
+                      className="btn-batch-import btn-batch-delete"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('start'); handleBatchRemoveCostumes(); }}
+                      disabled={removing || reordering || selectedTeamColor !== null}
+                    >
+                      Delete Selected ({selectedInstalledCostumes.size})
+                    </button>
+                    <button
+                      className="btn-clear-selection"
+                      onMouseEnter={playHoverSound}
+                      onClick={() => { playSound('boop'); clearInstalledCostumeSelection(); }}
+                      disabled={removing || reordering}
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
                 {hasExtras(selectedFighter.name) && (
                   <button
                     className="btn-extras-mode"
@@ -165,10 +195,11 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                 const isDragOver = dragOverIndex === idx
                 const costumeTeamColors = getCostumeTeamColor(idx)
                 const isTeamAssignable = selectedTeamColor !== null
+                const isDeleteSelected = selectedInstalledCostumes.has(installedCostumeKey(selectedFighter.name, idx))
                 return (
                   <div
                     key={idx}
-                    className={`costume-card existing-costume ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
+                    className={`costume-card existing-costume ${isDeleteSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
                     style={{ animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
                     draggable={!removing && !reordering && !isTeamAssignable}
                     onMouseEnter={playHoverSound}
@@ -181,6 +212,15 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     onDragEnd={handleDragEnd}
                   >
                     <div className="costume-preview">
+                      <input
+                        type="checkbox"
+                        className="costume-checkbox"
+                        checked={isDeleteSelected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => { playSound('boop'); toggleInstalledCostumeSelection(selectedFighter.name, idx); }}
+                        disabled={removing || reordering || isTeamAssignable}
+                        title="Select for delete"
+                      />
                       {costume.cspUrl && (
                         <img
                           src={`${API_URL.replace('/api/mex', '')}${costume.cspUrl}`}

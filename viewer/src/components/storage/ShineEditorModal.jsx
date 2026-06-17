@@ -4,6 +4,7 @@ import { hexToRgby, rgbyToHex, formatRgby } from '../../utils/rgbyColor'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * ShineEditorModal - Two-color gradient editor for Fox/Falco shine
@@ -344,7 +345,10 @@ export default function ShineEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Shine Mod',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

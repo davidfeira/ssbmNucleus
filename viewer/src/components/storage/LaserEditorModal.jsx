@@ -4,6 +4,7 @@ import { hexToRgby, rgbyToHex, RGBY_PRESETS, formatRgby } from '../../utils/rgby
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * LaserEditorModal - Color picker UI for creating/editing laser mods
@@ -185,7 +186,10 @@ export default function LaserEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Laser Mod',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

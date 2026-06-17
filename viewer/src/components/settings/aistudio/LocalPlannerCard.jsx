@@ -8,6 +8,25 @@ import { useCallback, useEffect, useState } from 'react'
 import { playHoverSound, playSound } from '../../../utils/sounds'
 import { fmtBytes } from './useAiEngine'
 
+const FIT_BADGES = {
+  good: { cls: 'good', text: 'should run well' },
+  slow: { cls: 'warn', text: 'tight on VRAM - may be slow' },
+  insufficient_vram: { cls: 'bad', text: 'not enough VRAM' },
+  no_gpu: { cls: 'bad', text: 'needs an NVIDIA GPU' },
+  unknown: { cls: 'muted', text: 'VRAM varies by model' },
+}
+
+const fmtGb = (gb) => {
+  const n = Number(gb)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Number.isInteger(n) ? n.toFixed(0) : n.toFixed(1)
+}
+
+const plannerFitBadge = (model) => {
+  if (!model?.vramGb) return FIT_BADGES.unknown
+  return FIT_BADGES[model.fit] || FIT_BADGES.good
+}
+
 export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
   const [info, setInfo] = useState(null)
   const [pull, setPull] = useState(null)   // {model, completed, total, status}
@@ -147,8 +166,12 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
       <span className="aistudio-badge muted">checking Ollama…</span>)
   }
 
-  const rec = info.recommended
-  const hasRec = (info.local || []).some((m) => m.name === rec?.name)
+  const recommendedPlanners = info.recommendedPlanners
+    || (info.recommended ? [info.recommended] : [])
+  const installedPlannerNames = new Set((info.local || []).map((m) => m.name))
+  const missingRecommendedPlanners = recommendedPlanners
+    .filter((m) => m?.name && !installedPlannerNames.has(m.name))
+  const recommendedFor = (name) => recommendedPlanners.find((m) => m.name === name)
   const stats = info.stats || {}
   const measured = (name) => {
     const s = stats[`ollama:${name}`]
@@ -156,6 +179,8 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
       ? `~${Math.round(s.avgSeconds)}s/plan measured (${s.runs} runs)`
       : null
   }
+  const speedText = (model) => measured(model.name)
+    || (model.speedBlurb ? `${model.speedBlurb} (no runs yet)` : null)
   const toggleRow = (name) => {
     playSound('tick')
     setExpanded(expanded === name ? null : name)
@@ -179,7 +204,6 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
       </div>
     </div>
   )
-
   if (!info.ollamaAvailable) {
     return cardShell(
       rtInstall || info.bundled?.installing ? (
@@ -227,6 +251,10 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
     <>
       {(info.local || []).map((m) => {
         const pulling = pull?.model === m.name || m.pulling
+        const rec = recommendedFor(m.name)
+        const fit = plannerFitBadge(m)
+        const vram = fmtGb(m.vramGb)
+        const speed = speedText(m)
         return (
           <div key={m.name}
                className={`aistudio-row${expanded === m.name ? ' expanded' : ''}`}>
@@ -236,10 +264,10 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
                 ? <span className="aistudio-dot busy" />
                 : <span className="aistudio-dot on" />}
               <span className="aistudio-row-name">
-                {m.name}{m.name === rec?.name ? ' — recommended' : ''}
+                {m.name}{rec ? ` — ${rec.tier || 'recommended'}` : ''}
               </span>
               <span className="aistudio-row-hint">
-                unlocked · {fmtBytes(m.sizeBytes)}
+                unlocked · {fmtBytes(m.sizeBytes)}{vram && ` · ~${vram} GB VRAM`}
               </span>
               <span className="aistudio-row-chevron">
                 {expanded === m.name ? '▾' : '▸'}
@@ -248,11 +276,17 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
             {expanded === m.name && (
               <div className="aistudio-row-body">
                 <div className="aistudio-model-head">
+                  <span className={`aistudio-badge ${fit.cls}`}>{fit.text}</span>
                   <span className="aistudio-badge good">free · offline</span>
+                  {m.vision && <span className="aistudio-badge api">vision review</span>}
+                </div>
+                <div className="aistudio-model-desc">
+                  {m.description || 'Custom Ollama planner model.'}
                 </div>
                 <div className="aistudio-model-specs">
+                  {vram ? <span>needs ~{vram} GB VRAM</span> : <span>VRAM varies by model</span>}
                   <span>{fmtBytes(m.sizeBytes)} on disk</span>
-                  {measured(m.name) && <span>{measured(m.name)}</span>}
+                  {speed && <span>{speed}</span>}
                 </div>
                 {pulling ? pullProgress : (
                   <div className="aistudio-model-actions">
@@ -269,40 +303,62 @@ export default function LocalPlannerCard({ API_URL, socket, onChanged }) {
         )
       })}
 
-      {!hasRec && rec && (
-        <div className={`aistudio-row${expanded === rec.name ? ' expanded' : ''}${pull?.model === rec.name ? '' : ' locked'}`}>
-          <button className="aistudio-row-head" onMouseEnter={playHoverSound}
-                  onClick={() => toggleRow(rec.name)}>
-            {pull?.model === rec.name
-              ? <span className="aistudio-dot busy" />
-              : <span className="aistudio-lock">🔒</span>}
-            <span className="aistudio-row-name">{rec.name} — recommended</span>
-            <span className={`aistudio-row-hint${pull?.model === rec.name ? '' : ' locked'}`}>
-              {pull?.model === rec.name
-                ? (pull.total
-                  ? `${Math.round(100 * (pull.completed || 0) / pull.total)}%…`
-                  : 'starting…')
-                : 'not downloaded yet'}
-            </span>
-            <span className="aistudio-row-chevron">
-              {expanded === rec.name ? '▾' : '▸'}
-            </span>
-          </button>
-          {expanded === rec.name && (
-            <div className="aistudio-row-body">
-              <div className="aistudio-model-desc">{rec.blurb}</div>
-              {pull?.model === rec.name ? pullProgress : (
-                <div className="aistudio-model-actions">
-                  <button className="iso-browse-button" onMouseEnter={playHoverSound}
-                          onClick={() => startPull(rec.name)}>
-                    Download (~{rec.sizeGb} GB)
-                  </button>
+      {missingRecommendedPlanners.map((rec) => {
+        const pulling = pull?.model === rec.name
+        const fit = plannerFitBadge(rec)
+        const vram = fmtGb(rec.vramGb)
+        const disk = fmtGb(rec.diskEstimateGb || rec.sizeGb)
+        const speed = speedText(rec)
+        return (
+          <div
+            key={rec.name}
+            className={`aistudio-row${expanded === rec.name ? ' expanded' : ''}${pulling ? '' : ' locked'}`}
+          >
+            <button className="aistudio-row-head" onMouseEnter={playHoverSound}
+                    onClick={() => toggleRow(rec.name)}>
+              {pulling
+                ? <span className="aistudio-dot busy" />
+                : <span className="aistudio-lock">🔒</span>}
+              <span className="aistudio-row-name">
+                {rec.name} — {rec.tier || 'recommended'}
+              </span>
+              <span className={`aistudio-row-hint${pulling ? '' : ' locked'}`}>
+                {pulling
+                  ? (pull.total
+                    ? `${Math.round(100 * (pull.completed || 0) / pull.total)}%…`
+                    : 'starting…')
+                  : `not downloaded · ${vram ? `~${vram} GB VRAM` : 'VRAM varies'}`}
+              </span>
+              <span className="aistudio-row-chevron">
+                {expanded === rec.name ? '▾' : '▸'}
+              </span>
+            </button>
+            {expanded === rec.name && (
+              <div className="aistudio-row-body">
+                <div className="aistudio-model-head">
+                  <span className={`aistudio-badge ${fit.cls}`}>{fit.text}</span>
+                  <span className="aistudio-badge good">free · offline</span>
+                  {rec.vision && <span className="aistudio-badge api">vision review</span>}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                <div className="aistudio-model-desc">{rec.description || rec.blurb}</div>
+                <div className="aistudio-model-specs">
+                  {vram ? <span>needs ~{vram} GB VRAM</span> : <span>VRAM varies by model</span>}
+                  {disk && <span>~{disk} GB download</span>}
+                  {speed && <span>{speed}</span>}
+                </div>
+                {pulling ? pullProgress : (
+                  <div className="aistudio-model-actions">
+                    <button className="iso-browse-button" onMouseEnter={playHoverSound}
+                            onClick={() => startPull(rec.name)}>
+                      Download{disk ? ` (~${disk} GB)` : ''}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>,
     <span className="aistudio-badge good">Ollama running</span>,
   )

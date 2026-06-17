@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { getAppContentPortalTarget } from './appContentPortal'
 import { CloseIcon, SaveIcon } from '../shared/Icons'
 import { playSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 
 /**
  * SideBEditorModal - Color picker UI for creating/editing side-B mods
@@ -181,7 +182,10 @@ export default function SideBEditorModal({
 
   const handleDelete = async () => {
     if (!editingMod) return
-    if (!confirm(`Delete "${editingMod.name}"?`)) return
+    if (!await appConfirm(`Delete "${editingMod.name}"?`, {
+      title: 'Delete Side-B Mod',
+      confirmText: 'Delete',
+    })) return
 
     setDeleting(true)
     try {

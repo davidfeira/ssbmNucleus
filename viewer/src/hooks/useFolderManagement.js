@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react'
+import { appConfirm } from '../utils/appDialogs'
 
 const CHARACTER_ROUTES = {
   create: '/storage/folders/create',
@@ -139,7 +140,10 @@ export function useFolderManagement({
 
   // Delete folder (contents are moved out, not deleted)
   const deleteFolder = async (folderId) => {
-    if (!confirm('Delete this folder? Contents will be moved out, not deleted.')) {
+    if (!await appConfirm('Delete this folder? Contents will be moved out, not deleted.', {
+      title: 'Delete Folder',
+      confirmText: 'Delete',
+    })) {
       return
     }
 

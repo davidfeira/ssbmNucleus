@@ -7,6 +7,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 import MenuModGrid from './MenuModGrid'
 import MenuModEditModal from './MenuModEditModal'
@@ -113,7 +114,10 @@ export default function BackgroundModsView() {
   }
 
   const handleDelete = async (mod) => {
-    if (!window.confirm(`Delete "${mod.name}"? This removes its files from your vault.`)) {
+    if (!await appConfirm(`Delete "${mod.name}"? This removes its files from your vault.`, {
+      title: 'Delete Background',
+      confirmText: 'Delete',
+    })) {
       return
     }
     edit.setDeleting(true)

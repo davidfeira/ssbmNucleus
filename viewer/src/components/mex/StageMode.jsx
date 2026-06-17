@@ -102,8 +102,12 @@ export default function StageMode({
 
       <ConfirmDialog
         show={sm.showConfirmDialog}
-        title="Remove Variant"
-        message={sm.pendingRemoval ? `Are you sure you want to remove "${sm.pendingRemoval.variantName}"?` : ''}
+        title={sm.pendingRemoval?.bulk ? 'Remove Selected Variants' : 'Remove Variant'}
+        message={sm.pendingRemoval
+          ? (sm.pendingRemoval.bulk
+              ? `Remove ${sm.pendingRemoval.items.length} selected stage variant(s) from the project?`
+              : `Are you sure you want to remove "${sm.pendingRemoval.variantName}"?`)
+          : ''}
         confirmText="Remove"
         onConfirm={sm.confirmRemoveVariant}
         onCancel={() => { sm.setShowConfirmDialog(false); sm.setPendingRemoval(null); }}

@@ -9,6 +9,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { playSound, playHoverSound } from '../../utils/sounds'
+import { appConfirm, appPrompt } from '../../utils/appDialogs'
 import { API_URL, BACKEND_URL } from '../../config'
 import { useInGameTest } from '../../hooks/useInGameTest'
 import InGameTestPanel from '../shared/InGameTestPanel'
@@ -128,7 +129,11 @@ export default function PauseModsView({ onDetailChange }) {
   const commitDraft = async () => {
     const mod = editingMod
     if (!mod) return
-    const name = window.prompt('Name this pause mod:', mod.name || 'New Pause Mod')
+    const name = await appPrompt('Name this pause mod:', {
+      title: 'Save Pause Mod',
+      defaultValue: mod.name || 'New Pause Mod',
+      confirmText: 'Save',
+    })
     if (name === null) return  // cancelled — stay in the editor
     try {
       const res = await fetch(`${API_URL}/menus/pause/${mod.id}/save`, {
@@ -147,7 +152,10 @@ export default function PauseModsView({ onDetailChange }) {
   const discardDraft = async () => {
     const mod = editingMod
     if (!mod) return
-    if (!window.confirm('Discard this unsaved pause mod?')) return
+    if (!await appConfirm('Discard this unsaved pause mod?', {
+      title: 'Discard Draft',
+      confirmText: 'Discard',
+    })) return
     try {
       await fetch(`${API_URL}/menus/pause/${mod.id}/discard`, { method: 'POST' })
     } catch { /* best effort */ }
@@ -194,7 +202,10 @@ export default function PauseModsView({ onDetailChange }) {
   }
 
   const handleDelete = async (mod) => {
-    if (!window.confirm(`Delete "${mod.name}"?`)) return
+    if (!await appConfirm(`Delete "${mod.name}"?`, {
+      title: 'Delete Pause Mod',
+      confirmText: 'Delete',
+    })) return
     edit.setDeleting(true)
     try {
       const res = await fetch(`${API_URL}/menus/pause/delete/${mod.id}`, { method: 'POST' })

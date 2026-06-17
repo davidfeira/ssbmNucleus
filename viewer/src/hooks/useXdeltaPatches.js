@@ -10,6 +10,7 @@
  */
 
 import { useState } from 'react'
+import { appConfirm } from '../utils/appDialogs'
 
 export function useXdeltaPatches({ API_URL, onBundleImportSuccess }) {
   // Patches list state
@@ -339,7 +340,10 @@ export function useXdeltaPatches({ API_URL, onBundleImportSuccess }) {
 
   // Delete patch
   const handleDeleteXdelta = async (patchId) => {
-    if (!confirm('Are you sure you want to delete this patch?')) return
+    if (!await appConfirm('Are you sure you want to delete this patch?', {
+      title: 'Delete Patch',
+      confirmText: 'Delete',
+    })) return
 
     try {
       const response = await fetch(`${API_URL}/xdelta/delete/${patchId}`, {

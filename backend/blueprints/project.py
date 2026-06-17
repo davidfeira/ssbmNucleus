@@ -16,7 +16,8 @@ from core.config import (
     PROJECT_ROOT, PROJECTS_PATH, MEXCLI_PATH, OUTPUT_PATH, VANILLA_ASSETS_DIR, get_subprocess_args
 )
 from core.state import (
-    get_mex_manager, set_project_path, get_current_project_path, clear_project_path
+    get_mex_manager, set_project_path, get_current_project_path, clear_project_path,
+    get_project_files_dir, reload_mex_manager
 )
 from core.constants import VANILLA_COSTUME_COUNT
 from core.helpers import calculate_auto_compression
@@ -24,6 +25,114 @@ from core.helpers import calculate_auto_compression
 logger = logging.getLogger(__name__)
 
 project_bp = Blueprint('project', __name__)
+
+# Standard GameCube disc capacity (bytes). A build whose data exceeds this hangs at
+# the character-select screen (see docs/MEX_BUILD_LIMITS.md), so it's the hard
+# ceiling for total costumes/stages/etc. "free" below is the real headroom for
+# anything the user adds.
+DISC_CAPACITY = 1_459_978_240
+_AVG_SKIN_BYTES = 497 * 1024   # ~one added distinct costume in the ISO (model + csp + stock)
+_CSP_BYTES = 25 * 1024         # CSP portrait portion (the only part HD/texture-pack mode saves)
+
+
+def _disc_category(name):
+    """Bucket an ISO file by name into a coarse category for the usage bar. The big
+    *strippable* chunks (video, trophies) are split out so the bar shows where free
+    space can come from — cutting Mv*.mth movies alone frees ~800 MB."""
+    n = name.lower()
+    if n.startswith('pl'):
+        return 'costumes'          # PlFxNr.dat ... (player/costume files)
+    if n.startswith('gr'):
+        return 'stages'            # GrXX ... (stage files)
+    if n.startswith('mv'):
+        return 'video'             # Mv*.mth movies/cutscenes (~811 MB vanilla; the big cut)
+    if n.startswith('ty'):
+        return 'trophies'          # Ty*.dat trophies (~84 MB; also strippable)
+    if n.endswith(('.ssm', '.sem', '.hps')):
+        return 'audio'
+    return 'other'                 # menus, CSP atlas, effects, items, main.dol, sys, ...
+
+
+@project_bp.route('/api/mex/project/disc-usage', methods=['GET'])
+def project_disc_usage():
+    """Disc-space breakdown for the build-capacity indicator. Sums the project's
+    files/ (+sys/) by category and compares to the GameCube disc size. The build
+    hangs once it exceeds the disc, so `free` is the usable headroom and
+    `skinsRemaining` estimates how many more average costumes fit."""
+    try:
+        files_dir = get_project_files_dir()
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    try:
+        breakdown = {'costumes': 0, 'stages': 0, 'video': 0, 'trophies': 0, 'audio': 0, 'other': 0}
+        if files_dir.exists():
+            for p in files_dir.rglob('*'):
+                if not p.is_file():
+                    continue
+                parts = p.relative_to(files_dir).parts
+                cat = 'audio' if (parts and parts[0].lower() == 'audio') else _disc_category(p.name)
+                breakdown[cat] += p.stat().st_size
+        # sys/ (apploader, boot.bin, bi2.bin) also goes into the ISO
+        proj = get_current_project_path()
+        sys_dir = proj.parent / 'sys' if proj else None
+        if sys_dir and sys_dir.exists():
+            for p in sys_dir.rglob('*'):
+                if p.is_file():
+                    breakdown['other'] += p.stat().st_size
+
+        used = sum(breakdown.values())
+        free = max(0, DISC_CAPACITY - used)
+        return jsonify({
+            'success': True,
+            'capacity': DISC_CAPACITY,
+            'used': used,
+            'free': free,
+            'overCapacity': used > DISC_CAPACITY,
+            'breakdown': breakdown,
+            'avgSkinBytes': _AVG_SKIN_BYTES,
+            'skinsRemaining': int(free // _AVG_SKIN_BYTES),
+            'skinsRemainingHd': int(free // max(1, _AVG_SKIN_BYTES - _CSP_BYTES)),
+        })
+    except Exception as e:
+        logger.error(f"disc-usage failed: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@project_bp.route('/api/mex/project/strip', methods=['POST'])
+def project_strip():
+    """Free disc space by deleting the vanilla MOVIE files (Mv*.mth, ~810 MB).
+    OPTIONAL + destructive: removes the files from THIS project only (rebuild from a
+    vanilla ISO to restore). Body: {"targets": ["video"]}.
+
+    Only 'video' is supported: trophy files (Ty*) are parsed by MexManager's
+    TrophyLoader when the workspace opens, so deleting them makes the project fail
+    to open -- they must NOT be stripped this way."""
+    data = request.get_json(silent=True) or {}
+    targets = set(t for t in data.get('targets', []) if t in ('video',))
+    if not targets:
+        return jsonify({'success': False, 'error': 'no valid targets (video)'}), 400
+    try:
+        files_dir = get_project_files_dir()
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    freed, removed = 0, 0
+    try:
+        for p in list(files_dir.rglob('*')):
+            if p.is_file() and _disc_category(p.name) in targets:
+                try:
+                    sz = p.stat().st_size
+                    p.unlink()
+                    freed += sz
+                    removed += 1
+                except OSError as fe:
+                    logger.warning(f"strip: could not remove {p.name}: {fe}")
+        reload_mex_manager()  # next export/status re-reads files/ from disk
+        logger.info(f"strip {sorted(targets)}: removed {removed} files, freed {freed} bytes")
+        return jsonify({'success': True, 'removed': removed, 'freedBytes': freed,
+                        'targets': sorted(targets)})
+    except Exception as e:
+        logger.error(f"strip failed: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 def get_next_project_directory(requested_name=None):

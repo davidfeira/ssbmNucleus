@@ -1,4 +1,5 @@
 import { playSound } from '../../utils/sounds'
+import { createPortal } from 'react-dom'
 import './ConfirmDialog.css'
 
 /**
@@ -20,12 +21,17 @@ export default function ConfirmDialog({
   confirmText = 'Delete',
   cancelText = 'Cancel',
   confirmStyle = 'danger',
+  closeOnOverlayClick = false,
   onConfirm,
   onCancel
 }) {
   if (!show) return null
 
-  const handleOverlayClick = () => {
+  const handleOverlayClick = (e) => {
+    if (!closeOnOverlayClick) {
+      e.stopPropagation()
+      return
+    }
     playSound('back')
     onCancel()
   }
@@ -44,7 +50,7 @@ export default function ConfirmDialog({
     onCancel()
   }
 
-  return (
+  const dialog = (
     <div className="edit-modal-overlay confirm-dialog-overlay" onClick={handleOverlayClick}>
       <div className="edit-modal-content confirm-dialog-content" onClick={handleContentClick}>
         <h2>{title}</h2>
@@ -70,4 +76,6 @@ export default function ConfirmDialog({
       </div>
     </div>
   )
+
+  return createPortal(dialog, document.body)
 }
