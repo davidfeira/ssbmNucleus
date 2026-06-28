@@ -690,7 +690,7 @@ export default function ProjectSelector({
         <div className="project-name-modal" onClick={(event) => event.stopPropagation()}>
           <div className="patch-picker">
             <h3>Create From Patch</h3>
-            <p>Pick a patch from your vault. It will be applied to your vanilla ISO before the project is created.</p>
+            <p>Pick a patch from your vault. It's applied to a temporary copy of your vanilla ISO to build the project — your original vanilla ISO is never modified.</p>
             <p className="patch-picker-note">
               Only works with patches built on vanilla Melee (texture and visual mods).
               Patches that overhaul the game itself won't convert correctly.

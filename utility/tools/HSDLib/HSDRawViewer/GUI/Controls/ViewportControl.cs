@@ -160,6 +160,13 @@ namespace HSDRawViewer.GUI
         /// </summary>
         public static bool SkipCSPPostProcess { get; set; } = false;
 
+        /// <summary>
+        /// Keep the CSPMaker outline but skip ONLY the synthetic drop shadow.
+        /// Set via --no-shadow; used for the Popo half of an Ice Climbers
+        /// composite so the combined CSP shows a single shadow (Nana's).
+        /// </summary>
+        public static bool SkipCSPShadow { get; set; } = false;
+
         private List<IDrawable> Drawables { get; set; } = new List<IDrawable>();
 
         private bool Selecting = false;
@@ -736,7 +743,7 @@ namespace HSDRawViewer.GUI
 
                     // generate csp
                     if (!SkipCSPPostProcess)
-                        Converters.SBM.CSPMaker.MakeCSP(resize);
+                        Converters.SBM.CSPMaker.MakeCSP(resize, drawShadow: !SkipCSPShadow);
 
                     // crop
                     resize.Mutate(ctx => ctx.Crop(new Rectangle((glControl.Width - CSPWidth) / 4, (glControl.Height - CSPHeight) / 4, CSPWidth / 2, CSPHeight / 2)));

@@ -2,6 +2,7 @@
 Shared utility functions for the MEX API backend.
 """
 
+import re
 import json
 import math
 import logging
@@ -14,6 +15,36 @@ from .constants import VANILLA_COSTUME_COUNT
 from .costume_files import find_costume_archive_name
 
 logger = logging.getLogger(__name__)
+
+
+# MexCLI import-iso markers that mean "this ISO just isn't a vanilla/m-ex build"
+# (a custom build like 20XX) — an EXPECTED incompatibility, not a real failure.
+_INCOMPAT_ISO_MARKERS = ('not vanilla', 'm-ex build', 'mxdt', 'dol patch')
+
+
+def _mexcli_error_detail(raw_output: str) -> str:
+    """Pull the last ``"error"`` value from MexCLI's output (it emits one or more
+    pretty-printed JSON blocks), falling back to the raw text."""
+    text = (raw_output or '').strip()
+    matches = re.findall(r'"error"\s*:\s*"([^"]*)"', text)
+    return (matches[-1].strip() if matches else text)
+
+
+def is_incompatible_iso_error(raw_output: str) -> bool:
+    """True when import-iso failed only because the ISO isn't a vanilla/m-ex
+    build. Bulk scans skip these silently ("get what it can") instead of
+    surfacing them as errors."""
+    return any(k in _mexcli_error_detail(raw_output).lower() for k in _INCOMPAT_ISO_MARKERS)
+
+
+def friendly_iso_open_error(raw_output: str) -> str:
+    """Concise, user-facing message for a single-ISO import-iso failure."""
+    detail = _mexcli_error_detail(raw_output)
+    if is_incompatible_iso_error(raw_output):
+        return ("This ISO isn't a vanilla or m-ex build, so custom characters / "
+                "stages can't be extracted from it. Use the 'Character skins' "
+                "or 'DAS stage variants' targets for builds like 20XX.")
+    return (detail.splitlines()[0][:300] if detail else 'Failed to open ISO.')
 
 
 def calculate_auto_compression(added_costume_count: int) -> float:
@@ -29,7 +60,8 @@ def calculate_auto_compression(added_costume_count: int) -> float:
     Measured crash boundaries (r at which it starts to freeze):
         added   0 -> stable at 1.0      added 125 -> ~0.735
         added  55 -> ~0.84              added 255 -> ~0.525
-    These fit a drooping budget:  (128 + added) * r_crash^2 ~= 135 - 0.12*added.
+    These low/mid-count points fit a drooping budget:
+        (128 + added) * r_crash^2 ~= 135 - 0.12*added.
 
     We keep ~15% memory margin below that and never exceed 1.0:
         r = sqrt( (135 - 0.12*added) * 0.85 / (128 + added) )
@@ -38,7 +70,8 @@ def calculate_auto_compression(added_costume_count: int) -> float:
     This REPLACES the old linear `1 - 0.003*added`, which was borderline-UNSAFE
     at low-mid counts (55 added -> 0.83 vs ~0.84 crash, ~1% margin) and massively
     OVER-compressed at high counts (255 added -> 0.25 when ~0.48 is safe).
-    All outputs here sit below the confirmed-healthy points.
+    High-count ladders at the 0.1 floor are healthy through 1500 total costumes,
+    so the floor remains conservative beyond the fitted range.
     """
     if added_costume_count <= 0:
         return 1.0

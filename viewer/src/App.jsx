@@ -24,6 +24,18 @@ function App() {
   // First-run setup state
   const [setupNeeded, setSetupNeeded] = useState(null); // null = checking, true = needed, false = complete
 
+  // Version shown in the header. The authoritative value is the packaged
+  // Electron app version (app.getVersion(), driven by the root package.json
+  // the build uses) — fetched at runtime so the header is always correct and
+  // only the root package.json needs bumping. Falls back to the bundled
+  // package.json version when running outside Electron (pure vite dev).
+  const [appVersion, setAppVersion] = useState(APP_VERSION)
+  useEffect(() => {
+    if (window.electron?.getAppVersion) {
+      window.electron.getAppVersion().then(setAppVersion).catch(() => {})
+    }
+  }, [])
+
   // Deep components (e.g. the AI Studio gating CTA) can jump to Settings
   // without prop drilling through the detail views.
   useEffect(() => {
@@ -247,7 +259,7 @@ function App() {
           <div className="header-brand">
             <img src="./nucleuslogo.png" alt="SSBM Nucleus" className="header-logo" />
             <h1>SSBM <span className="vault-text">Nucleus</span></h1>
-            <span className="app-version" title={`SSBM Nucleus v${APP_VERSION}`}>v{APP_VERSION}</span>
+            <span className="app-version" title={`SSBM Nucleus v${appVersion}`}>v{appVersion}</span>
           </div>
           <nav className="app-tabs">
             <button

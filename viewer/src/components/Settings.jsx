@@ -12,6 +12,7 @@ import VolumeSection from './settings/VolumeSection'
 import SetupSection from './settings/SetupSection'
 import AiStudioSection from './settings/AiStudioSection'
 import UpdateSection from './settings/UpdateSection'
+import TroubleshootingSection from './settings/TroubleshootingSection'
 
 export default function Settings({ metadata, onOpenFirstRunSetup }) {
 
@@ -32,6 +33,7 @@ export default function Settings({ metadata, onOpenFirstRunSetup }) {
           <UpdateSection />
           <VolumeSection />
           <DiscordSection />
+          <TroubleshootingSection API_URL={API_URL} />
 
           {/* Vault tools */}
           <HdCspSection metadata={metadata} API_URL={API_URL} />

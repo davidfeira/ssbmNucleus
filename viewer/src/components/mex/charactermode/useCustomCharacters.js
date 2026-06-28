@@ -3,8 +3,10 @@
  * install/remove logic for CharacterMode.
  */
 import { useState } from 'react'
+import { io } from 'socket.io-client'
 import { computeAutoCssLayout } from '../../../utils/cssGridLayout'
 import { appConfirm } from '../../../utils/appDialogs'
+import { BACKEND_URL } from '../../../config'
 
 export default function useCustomCharacters({ API_URL, onRefresh }) {
   // Add character modal state
@@ -63,6 +65,18 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
     if (slugs.length === 0) return
     setBatchAddingChars(true)
     setBatchCharProgress({ current: 0, total: slugs.length })
+    // Live progress: the backend streams 'custom_char_install_progress' as it
+    // prepares each fighter and then compiles, so the bar moves instead of
+    // sitting at 0/N (it's a single synchronous request otherwise).
+    const socket = io(BACKEND_URL)
+    socket.on('custom_char_install_progress', (d) => {
+      setBatchCharProgress({
+        current: d.current ?? 0,
+        total: d.total ?? slugs.length,
+        message: d.message || null,
+        name: d.name || null,
+      })
+    })
     // ONE batch call: the backend folds add-fighter + victory + announcer for every
     // selected character into a single workspace recompile (~Nx faster than calling
     // /install per char, which re-recompiled ~4x each).
@@ -84,6 +98,8 @@ export default function useCustomCharacters({ API_URL, onRefresh }) {
     } catch (err) {
       console.error('Batch character install error:', err)
       alert(`Error: ${err.message}`)
+    } finally {
+      socket.disconnect()
     }
     // Re-fit the CSS grid to the new roster -- this is what places the newly added
     // fighters on the character-select grid (same step the per-char path ran).

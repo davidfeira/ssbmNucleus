@@ -320,7 +320,7 @@ export default function CssLayoutEditor() {
           iconBaseHeight={CSS_BASE_HEIGHT}
           templateWidth={CSS_TEMPLATE_WIDTH}
           templateHeight={CSS_TEMPLATE_HEIGHT}
-          templateSrc="/css_template.png"
+          templateSrc="./css_template.png"
           getCollisionRect={getCssCollisionRect}
           iconEndpoint="/menus/css/fighter-icon"
           fitToView

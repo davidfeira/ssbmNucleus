@@ -23,7 +23,8 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
   const bulk = useBulkStageCapture({ onSaved })
   const {
     phase, variants, loading, error, selected, toggle, setMany, clearSelection, keyOf,
-    progress, results, keep, toggleKeep, saving, loadVariants, startCapture, saveKept, reset,
+    progress, results, keep, toggleKeep, saving, captureLog, captureFailures,
+    captureAttempts, loadVariants, startCapture, saveKept, reset,
   } = bulk
 
   useEffect(() => {
@@ -45,6 +46,11 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
   const selectedCount = selected.size
   const missing = variants.filter((v) => !v.hasScreenshot)
   const keptCount = results.filter((r) => r.ok && r.screenshot && keep.has(r.variantId)).length
+  const failedCount = captureFailures.length || results.filter((r) => !r.ok).length
+  const diagnosticLog = captureLog.length ? captureLog : captureAttempts.flatMap((a) => [
+    `[${a.attempt || 'attempt'}] ${a.reason || 'failed'}`,
+    ...(a.log || []).map((line) => `  ${line}`),
+  ])
   const close = () => { playSound('back'); reset(); onClose() }
 
   return (
@@ -61,6 +67,12 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
         </div>
 
         {error && <div className="bulk-capture-error">{error}</div>}
+        {error && diagnosticLog.length > 0 && (
+          <details className="bulk-capture-log">
+            <summary>Capture log</summary>
+            <pre>{diagnosticLog.join('\n')}</pre>
+          </details>
+        )}
 
         {/* ---- SELECT ---- */}
         {phase === 'select' && (
@@ -150,6 +162,25 @@ export default function BulkStageCaptureModal({ show, onClose, onSaved }) {
             <div className="bulk-capture-review-note">
               Keep the shots you want, then save. {keptCount} of {results.filter((r) => r.ok).length} kept.
             </div>
+            {failedCount > 0 && (
+              <div className="bulk-capture-diagnostics">
+                <strong>{failedCount} failed</strong>
+                <ul>
+                  {(captureFailures.length ? captureFailures : results.filter((r) => !r.ok)).map((r) => (
+                    <li key={`${r.stageCode}:${r.variantId}`}>
+                      <span>{r.name || r.variantId}</span>
+                      <em>{r.reason || 'capture failed'}</em>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {diagnosticLog.length > 0 && (
+              <details className="bulk-capture-log">
+                <summary>Capture log</summary>
+                <pre>{diagnosticLog.join('\n')}</pre>
+              </details>
+            )}
             <div className="bulk-capture-review-grid">
               {results.map((r) => (
                 <div key={`${r.stageCode}:${r.variantId}`}

@@ -13,13 +13,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from core.config import HSDRAW_EXE, STORAGE_PATH, get_subprocess_args
+from core.config import HSDRAW_EXE, STORAGE_PATH, BACKEND_ASSETS_DIR, get_subprocess_args
 from skinlab import compose as compose_mod
 
 logger = logging.getLogger(__name__)
 
 STAGE_DATS_DIR = STORAGE_PATH / 'skinlab_stages'
-STAGE_REGIONS_DIR = Path(__file__).resolve().parents[1] / 'assets' / 'texture_regions' / 'stages'
+STAGE_REGIONS_DIR = BACKEND_ASSETS_DIR / 'texture_regions' / 'stages'
 
 # NTSC loads localized .usd files for stages with on-screen text. Stadium's
 # jumbotron is English only in GrPs.usd -- basing variants on GrPs.dat ships

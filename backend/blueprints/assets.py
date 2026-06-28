@@ -96,9 +96,14 @@ def serve_storage(file_path):
 def serve_vanilla(file_path):
     """Serve vanilla Melee assets (CSPs, stage images, etc.)"""
     try:
-        # Stage screenshots are in utility/assets/stages/, not utility/assets/vanilla/stages/
+        # Stage icons are EXTRACTED from the user's ISO at first-run setup into
+        # PROJECT_ROOT/utility/assets/stages (user-data) — see
+        # first_run_setup._copy_stage_images. Read them from there; fall back to
+        # the bundled copy (BASE_PATH) only if setup hasn't populated them.
         if file_path.startswith('stages/'):
             full_path = PROJECT_ROOT / "utility" / "assets" / file_path
+            if not full_path.exists():
+                full_path = BASE_PATH / "utility" / "assets" / file_path
         else:
             # Character assets are in utility/assets/vanilla/
             full_path = VANILLA_ASSETS_DIR / file_path

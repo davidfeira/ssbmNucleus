@@ -37,7 +37,14 @@ const PHASE_LABEL = {
   error: 'Error',
 }
 
-const TARGET_DEFAULTS = { skins: true, customCharacters: false, customStages: false }
+const TARGET_DEFAULTS = { skins: true, customCharacters: false, customStages: false, dasVariants: false }
+const isNkitIsoPath = (path) => {
+  const name = String(path || '').split(/[\\/]/).pop().toLowerCase()
+  return name.includes('.nkit') && /\.(iso|gcm)$/i.test(name)
+}
+const unique = (items) => Array.from(new Set(items.filter(Boolean)))
+const compatibleIsoPaths = (paths) => unique(paths).filter((p) => !isNkitIsoPath(p))
+const skippedNkitIsoPaths = (paths) => unique(paths).filter(isNkitIsoPath)
 
 export default function IsoScanModal({
   onClose,
@@ -49,7 +56,8 @@ export default function IsoScanModal({
 }) {
   const [phase, setPhase] = useState('idle') // idle | scanning | results | custom-done | importing | done | error
   // Seeded when the unified Import button / drag-and-drop receives .iso files
-  const [isoPaths, setIsoPaths] = useState(() => initialIsoPaths || [])
+  const [isoPaths, setIsoPaths] = useState(() => compatibleIsoPaths(initialIsoPaths || []))
+  const [skippedNkitPaths, setSkippedNkitPaths] = useState(() => skippedNkitIsoPaths(initialIsoPaths || []))
   // Which scan targets to run; remembered across sessions. An explicit
   // initialTargets (e.g. the custom grids' Scan ISO buttons) wins.
   const [targets, setTargets] = useState(() => {
@@ -99,12 +107,17 @@ export default function IsoScanModal({
         .then(r => r.json())
         .then(j => {
           if (j.success) {
-            setCharacters(j.characters || {})
+            const visibleCharacters = Object.fromEntries(
+              Object.entries(j.characters || {})
+                .map(([char, skins]) => [char, (skins || []).filter(s => s.csp_url)])
+                .filter(([, skins]) => skins.length > 0)
+            )
+            setCharacters(visibleCharacters)
             setStats(j.stats || null)
             // Default: select all new skins
             const all = new Set()
             const initialExpand = new Set()
-            for (const [char, skins] of Object.entries(j.characters || {})) {
+            for (const [char, skins] of Object.entries(visibleCharacters)) {
               initialExpand.add(char)
               for (const s of skins) all.add(s.key)
             }
@@ -137,12 +150,23 @@ export default function IsoScanModal({
       .catch(() => setWitAvailable(false))
   }, [])
 
+  const addIsoPaths = (paths) => {
+    const compatible = compatibleIsoPaths(paths || [])
+    const skipped = skippedNkitIsoPaths(paths || [])
+    if (compatible.length) {
+      setIsoPaths(prev => unique([...prev, ...compatible]))
+    }
+    if (skipped.length) {
+      setSkippedNkitPaths(prev => unique([...prev, ...skipped]))
+    }
+  }
+
   const pickFiles = async () => {
     if (!window.electron?.openIsoMultiDialog) return
     playSound('boop')
     const paths = await window.electron.openIsoMultiDialog()
     if (Array.isArray(paths) && paths.length) {
-      setIsoPaths(Array.from(new Set([...isoPaths, ...paths])))
+      addIsoPaths(paths)
     }
   }
 
@@ -150,7 +174,7 @@ export default function IsoScanModal({
     setIsoPaths(isoPaths.filter(p => p !== path))
   }
 
-  const anyTarget = targets.skins || targets.customCharacters || targets.customStages
+  const anyTarget = targets.skins || targets.customCharacters || targets.customStages || targets.dasVariants
 
   const toggleTarget = (key) => {
     const next = { ...targets, [key]: !targets[key] }
@@ -167,50 +191,97 @@ export default function IsoScanModal({
     setErrorMsg(null)
     setCustomSummary(null)
 
-    // Custom m-ex extraction passes run first. Each builds a temp MexCLI
-    // project per ISO, so these are synchronous and take a minute or two
-    // per ISO per target.
-    const customTargets = [
-      targets.customCharacters && ['characters', 'custom-characters', 'custom characters'],
-      targets.customStages && ['stages', 'custom-stages', 'custom stages'],
-    ].filter(Boolean)
+    // Custom extraction passes run first (synchronous, ~a minute or two per
+    // ISO). Custom characters + stages SHARE one temp m-ex project build per
+    // ISO (the /scan-iso/mex-content endpoint), so selecting both no longer
+    // doubles the work. DAS variants are wit-based and run as their own pass.
+    const wantMex = targets.customCharacters || targets.customStages
+    const nameOf = (it) => (typeof it === 'string' ? it : (it.name || it.id || ''))
+    const summary = {}
+    const ensure = (k) => (summary[k] || (summary[k] = { imported: [], skipped: [], errors: [] }))
 
-    if (customTargets.length) {
-      const summary = {}
-      const totalSteps = customTargets.length * isoPaths.length
-      let step = 0
-      for (const [key, route, label] of customTargets) {
-        const acc = { imported: [], skipped: [], errors: [] }
-        for (const isoPath of isoPaths) {
-          const isoName = isoPath.split(/[\\/]/).pop()
-          setProgress({
-            status: 'custom',
-            percent: Math.round((step / totalSteps) * 100),
-            message: `Extracting ${label} from ${isoName}…`,
+    const totalSteps = (wantMex ? isoPaths.length : 0)
+      + (targets.dasVariants ? isoPaths.length : 0)
+    let step = 0
+
+    if (wantMex) {
+      if (targets.customCharacters) ensure('characters')
+      if (targets.customStages) ensure('stages')
+      for (const isoPath of isoPaths) {
+        const isoName = isoPath.split(/[\\/]/).pop()
+        setProgress({
+          status: 'custom',
+          percent: totalSteps ? Math.round((step / totalSteps) * 100) : 0,
+          message: `Extracting custom content from ${isoName}…`,
+        })
+        try {
+          const res = await fetch(`${API_URL}/scan-iso/mex-content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              isoPath,
+              characters: targets.customCharacters,
+              stages: targets.customStages,
+            }),
           })
-          try {
-            const res = await fetch(`${API_URL}/${route}/scan-iso`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ isoPath }),
-            })
-            const data = await res.json()
-            if (data.success) {
-              acc.imported.push(...(data.imported || []))
-              acc.skipped.push(...(data.skipped || []))
-            } else {
-              acc.errors.push(`${isoName}: ${data.error || 'failed'}`)
+          const data = await res.json()
+          if (data.success) {
+            if (targets.customCharacters && data.characters) {
+              ensure('characters').imported.push(...(data.characters.imported || []).map(nameOf))
+              ensure('characters').skipped.push(...(data.characters.skipped || []))
             }
-          } catch (e) {
-            acc.errors.push(`${isoName}: ${e.message}`)
+            if (targets.customStages && data.stages) {
+              ensure('stages').imported.push(...(data.stages.imported || []).map(nameOf))
+              ensure('stages').skipped.push(...(data.stages.skipped || []))
+            }
+          } else {
+            const msg = `${isoName}: ${data.error || 'failed'}`
+            if (targets.customCharacters) ensure('characters').errors.push(msg)
+            if (targets.customStages) ensure('stages').errors.push(msg)
           }
-          step += 1
+        } catch (e) {
+          const msg = `${isoName}: ${e.message}`
+          if (targets.customCharacters) ensure('characters').errors.push(msg)
+          if (targets.customStages) ensure('stages').errors.push(msg)
         }
-        summary[key] = acc
+        step += 1
       }
+    }
+
+    if (targets.dasVariants) {
+      ensure('das')
+      for (const isoPath of isoPaths) {
+        const isoName = isoPath.split(/[\\/]/).pop()
+        setProgress({
+          status: 'custom',
+          percent: totalSteps ? Math.round((step / totalSteps) * 100) : 0,
+          message: `Extracting DAS variants from ${isoName}…`,
+        })
+        try {
+          const res = await fetch(`${API_URL}/das/scan-iso`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isoPath }),
+          })
+          const data = await res.json()
+          if (data.success) {
+            ensure('das').imported.push(...(data.imported || []).map(nameOf))
+            ensure('das').skipped.push(...(data.skipped || []))
+          } else {
+            ensure('das').errors.push(`${isoName}: ${data.error || 'failed'}`)
+          }
+        } catch (e) {
+          ensure('das').errors.push(`${isoName}: ${e.message}`)
+        }
+        step += 1
+      }
+    }
+
+    if (Object.keys(summary).length) {
       setCustomSummary(summary)
       if (summary.characters?.imported.length) onCustomCharactersChanged?.()
       if (summary.stages?.imported.length) onCustomStagesChanged?.()
+      if (summary.das?.imported.length) onCustomStagesChanged?.()
     }
 
     if (!targets.skins) {
@@ -226,6 +297,12 @@ export default function IsoScanModal({
         body: JSON.stringify({ iso_paths: isoPaths }),
       })
       const data = await res.json()
+      if (data.skipped?.length) {
+        setSkippedNkitPaths(prev => unique([
+          ...prev,
+          ...data.skipped.map((s) => s.path || s).filter(Boolean),
+        ]))
+      }
       if (!data.success) {
         setErrorMsg(data.error || 'Failed to start scan')
         setPhase('error')
@@ -326,7 +403,7 @@ export default function IsoScanModal({
 
   const customSummaryBlock = customSummary && (
     <div className="iso-scan-custom-summary">
-      {[['characters', 'Custom characters'], ['stages', 'Custom stages']].map(([key, label]) => {
+      {[['characters', 'Custom characters'], ['stages', 'Custom stages'], ['das', 'DAS stage variants']].map(([key, label]) => {
         const s = customSummary[key]
         if (!s) return null
         return (
@@ -365,6 +442,16 @@ export default function IsoScanModal({
               </div>
             )}
 
+            {skippedNkitPaths.length > 0 && (
+              <div className="iso-scan-warning">
+                <strong>Skipped NKit ISO{skippedNkitPaths.length === 1 ? '' : 's'}.</strong>
+                <p>
+                  NKit images are not compatible with this importer:{' '}
+                  {skippedNkitPaths.map(p => p.split(/[\\/]/).pop()).join(', ')}
+                </p>
+              </div>
+            )}
+
             <p className="iso-scan-help">
               Pick one or more <code>.iso</code> files and what to scan them for.
               Skins are compared against your vault + vanilla assets and shown as
@@ -396,6 +483,14 @@ export default function IsoScanModal({
                   onChange={() => { playSound('boop'); toggleTarget('customStages') }}
                 />
                 Custom stages
+              </label>
+              <label onMouseEnter={playHoverSound} title="Extract DAS alternate stages (Battlefield/FD/Yoshi's/Dreamland/Stadium/Fountain) — supports 20XX .Xat files and the m-ex DAS layout">
+                <input
+                  type="checkbox"
+                  checked={targets.dasVariants}
+                  onChange={() => { playSound('boop'); toggleTarget('dasVariants') }}
+                />
+                DAS stage variants
               </label>
             </div>
 
@@ -594,6 +689,9 @@ export default function IsoScanModal({
                 <strong>{stats.data_mod}</strong> data&nbsp;mods
                 {stats.custom_fighter > 0 && (
                   <>&nbsp;·&nbsp;<strong>{stats.custom_fighter}</strong> custom-fighter&nbsp;files</>
+                )}
+                {stats.preview_failed > 0 && (
+                  <>&nbsp;·&nbsp;<strong>{stats.preview_failed}</strong> preview&nbsp;failures</>
                 )}
               </div>
             )}

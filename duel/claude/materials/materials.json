@@ -1,0 +1,42 @@
+{
+  "porcelain": {
+    "prompt": "seamless tileable white glazed porcelain ceramic texture, soft glossy sheen, faint blue-grey craquelure crackle, smooth high-fired china, no text, no seams",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 7301,
+    "style": "tile",
+    "path": "materials/porcelain.png"
+  },
+  "qinghua": {
+    "prompt": "seamless tileable blue and white porcelain pattern, cobalt blue painted floral and cloud scrollwork on white glaze, ming dynasty qinghua china, crisp readable brushwork, no text",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 7302,
+    "style": "tile",
+    "path": "materials/qinghua.png"
+  },
+  "kintsugi": {
+    "prompt": "seamless tileable black lacquer ceramic mended with molten gold kintsugi veins and cracks, dark glaze with bright gold repair seams, luminous, no text",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 7303,
+    "style": "tile",
+    "path": "materials/kintsugi.png"
+  },
+  "stage_deck": {
+    "prompt": "seamless tileable polished white porcelain floor tiles, thin cobalt blue grout lines and gold kintsugi seams, glazed ceramic deck, no text",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 7304,
+    "style": "tile",
+    "path": "materials/stage_deck.png"
+  },
+  "stage_backdrop": {
+    "prompt": "wide blue and white ink wash landscape, misty layered mountains and stylized rolling clouds, cobalt blue brush on pale porcelain sky, serene, no text, readable game background",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 7305,
+    "style": "scene",
+    "path": "materials/stage_backdrop.png"
+  }
+}

@@ -28,7 +28,9 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
-from core.state import get_current_project_path, reload_mex_manager
+from core.helpers import friendly_iso_open_error
+from core.state import metadata_lock
+from core.state import get_current_project_path, reload_mex_manager, get_socketio
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +74,14 @@ def _read_metadata():
 
 
 def _write_metadata(data):
-    with open(METADATA_FILE, 'w') as f:
+    # Atomic write (temp + os.replace) so a concurrent reader never sees a
+    # half-written metadata.json. Paired with metadata_lock at mutation sites.
+    tmp = METADATA_FILE.with_suffix('.json.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, METADATA_FILE)
 
 
 def _is_folder(item):
@@ -185,9 +193,12 @@ def import_custom_stage_zip_bytes(zip_data, fallback_name):
         'has_icon': has_icon
     }
 
-    metadata = _read_metadata()
-    metadata['custom_stages'].append(entry)
-    _write_metadata(metadata)
+    # Locked read-append-write (see custom_characters import) — concurrent
+    # multi-file imports otherwise race on the shared metadata.json.
+    with metadata_lock:
+        metadata = _read_metadata()
+        metadata['custom_stages'].append(entry)
+        _write_metadata(metadata)
 
     logger.info(f"[OK] Imported custom stage '{stage_name}' as {slug}")
     return entry
@@ -490,6 +501,14 @@ def scan_iso_for_custom_stages():
             return jsonify({'success': False, 'error': f'ISO not found: {iso_path}'}), 404
         if iso_file.suffix.lower() not in ('.iso', '.gcm'):
             return jsonify({'success': False, 'error': 'File must be an .iso or .gcm'}), 400
+        if '.nkit' in iso_file.name.lower():
+            logger.info(f"Skipping NKit ISO for custom stage scan: {iso_path}")
+            return jsonify({
+                'success': True,
+                'imported': [],
+                'skipped': [iso_file.name],
+                'message': 'Skipped NKit ISO (not supported)'
+            })
 
         mexcli_path = str(MEXCLI_PATH)
         if not Path(mexcli_path).exists():
@@ -509,7 +528,7 @@ def scan_iso_for_custom_stages():
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout or 'Unknown error'
                 logger.error(f"MexCLI create failed: {error_msg}")
-                return jsonify({'success': False, 'error': f'Failed to open ISO: {error_msg}'}), 500
+                return jsonify({'success': False, 'error': friendly_iso_open_error(error_msg)}), 500
 
             project_dir = Path(temp_dir)
             if not (project_dir / 'project.mexproj').exists():
@@ -1007,8 +1026,22 @@ def install_custom_stages_batch():
 
         from blueprints.custom_characters import _parse_cli_json
 
+        # Stream progress so the UI doesn't sit at 0/N (same as the character
+        # batch). Stages prepare fast, but the compile is one step — show it.
+        socketio = get_socketio()
+        total = len(slugs)
+
+        def _emit(current, phase, name=None, message=None):
+            try:
+                socketio.emit('custom_stage_install_progress', {
+                    'current': current, 'total': total,
+                    'phase': phase, 'name': name, 'message': message})
+            except Exception:
+                pass
+
         manifest_stages, failed, warnings = [], [], []
-        for slug in slugs:
+        for i, slug in enumerate(slugs):
+            _emit(i + 1, 'preparing', name=slug)
             entry, warns = _stage_manifest_entry(slug)
             if entry is None:
                 failed.append({'slug': slug, 'error': warns[0] if warns else 'prepare failed'})
@@ -1020,6 +1053,7 @@ def install_custom_stages_batch():
             return jsonify({'success': False, 'error': 'No installable stages', 'failed': failed}), 400
 
         logger.info(f"=== BATCH STAGE INSTALL ({len(manifest_stages)} stages) ===")
+        _emit(total, 'compiling', message='Building project…')
         fd, manifest_path = tempfile.mkstemp(suffix='.json', prefix='nucleus_stages_batch_')
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
@@ -1049,6 +1083,7 @@ def install_custom_stages_batch():
 
         added = cli.get('totalAdded', 0)
         logger.info(f"[OK] Batch-installed {added} custom stage(s)")
+        _emit(total, 'done')
         return jsonify({
             'success': True,
             'message': f"Added {added} stage(s) to project",
@@ -1289,7 +1324,10 @@ def set_custom_stage_folder():
         metadata = _read_metadata()
         items = metadata.get('custom_stages', [])
 
-        stage = next((it for it in items if not _is_folder(it) and it.get('id') == stage_id), None)
+        # Custom-stage entries are keyed by 'slug' (no 'id' field); the grid
+        # sends the slug as stageId. Match either so drag-into-folder works.
+        stage = next((it for it in items if not _is_folder(it)
+                      and (it.get('slug') == stage_id or it.get('id') == stage_id)), None)
         if not stage:
             return jsonify({'success': False, 'error': f'Stage {stage_id} not found'}), 404
 

@@ -182,6 +182,19 @@ build_assets_dir = project_root / 'build' / 'assets'
 if build_assets_dir.exists():
     datas.append((str(build_assets_dir), 'build/assets'))
 
+# Backend bundled assets (e.g. the hand-made Giga Bowser CSS icon used when
+# seeding built-in custom characters, vanilla HUD glyphs). first_run_setup
+# resolves these from sys._MEIPASS in frozen builds.
+backend_assets_dir = project_root / 'backend' / 'assets'
+if backend_assets_dir.exists():
+    datas.append((str(backend_assets_dir), 'backend/assets'))
+
+# Backend bundled data (e.g. the texture-filename seed table). Resolved via
+# config.BACKEND_DATA_DIR (sys._MEIPASS in frozen builds).
+backend_data_dir = project_root / 'backend' / 'data'
+if backend_data_dir.exists():
+    datas.append((str(backend_data_dir), 'backend/data'))
+
 # Dynamic Alternate Stages framework
 das_dir = project_root / 'utility' / 'DynamicAlternateStages'
 if das_dir.exists():

@@ -1,0 +1,1382 @@
+{
+  "agent": "codex",
+  "theme": "Circuit Shrine",
+  "created_at": "2026-06-21T22:55:27.467072+00:00",
+  "local_image_generation": {
+    "required": true,
+    "provider": "local",
+    "models": [
+      "sd-turbo"
+    ]
+  },
+  "characters": {
+    "Bowser": [
+      {
+        "slot": 0,
+        "costumeCode": "PlKpNr",
+        "skinName": "CShrine-Bowser-Nr",
+        "vaultSkinId": "CShrine-Bowser-Nr-plkpnr",
+        "filename": "CShrine-Bowser-Nr-plkpnr.zip",
+        "zipPath": "storage/Bowser/CShrine-Bowser-Nr-plkpnr.zip",
+        "plan": "plans/characters/Bowser/PlKpNr.json",
+        "preview": "previews/characters/Bowser/PlKpNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlKpRe",
+        "skinName": "CShrine-Bowser-Re",
+        "vaultSkinId": "CShrine-Bowser-Re-plkpre",
+        "filename": "CShrine-Bowser-Re-plkpre.zip",
+        "zipPath": "storage/Bowser/CShrine-Bowser-Re-plkpre.zip",
+        "plan": "plans/characters/Bowser/PlKpRe.json",
+        "preview": "previews/characters/Bowser/PlKpRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlKpBu",
+        "skinName": "CShrine-Bowser-Bu",
+        "vaultSkinId": "CShrine-Bowser-Bu-plkpbu",
+        "filename": "CShrine-Bowser-Bu-plkpbu.zip",
+        "zipPath": "storage/Bowser/CShrine-Bowser-Bu-plkpbu.zip",
+        "plan": "plans/characters/Bowser/PlKpBu.json",
+        "preview": "previews/characters/Bowser/PlKpBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlKpBk",
+        "skinName": "CShrine-Bowser-Bk",
+        "vaultSkinId": "CShrine-Bowser-Bk-plkpbk",
+        "filename": "CShrine-Bowser-Bk-plkpbk.zip",
+        "zipPath": "storage/Bowser/CShrine-Bowser-Bk-plkpbk.zip",
+        "plan": "plans/characters/Bowser/PlKpBk.json",
+        "preview": "previews/characters/Bowser/PlKpBk_review.jpg"
+      }
+    ],
+    "C. Falcon": [
+      {
+        "slot": 0,
+        "costumeCode": "PlCaNr",
+        "skinName": "CShrine-CFalcon-Nr",
+        "vaultSkinId": "CShrine-CFalcon-Nr-plcanr",
+        "filename": "CShrine-CFalcon-Nr-plcanr.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Nr-plcanr.zip",
+        "plan": "plans/characters/C. Falcon/PlCaNr.json",
+        "preview": "previews/characters/C. Falcon/PlCaNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlCaGy",
+        "skinName": "CShrine-CFalcon-Gy",
+        "vaultSkinId": "CShrine-CFalcon-Gy-plcagy",
+        "filename": "CShrine-CFalcon-Gy-plcagy.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Gy-plcagy.zip",
+        "plan": "plans/characters/C. Falcon/PlCaGy.json",
+        "preview": "previews/characters/C. Falcon/PlCaGy_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlCaRe",
+        "skinName": "CShrine-CFalcon-Re",
+        "vaultSkinId": "CShrine-CFalcon-Re",
+        "filename": "CShrine-CFalcon-Re.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Re.zip",
+        "plan": "plans/characters/C. Falcon/PlCaRe.json",
+        "preview": "previews/characters/C. Falcon/PlCaRe_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlCaWh",
+        "skinName": "CShrine-CFalcon-Wh",
+        "vaultSkinId": "CShrine-CFalcon-Wh-plcawh",
+        "filename": "CShrine-CFalcon-Wh-plcawh.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Wh-plcawh.zip",
+        "plan": "plans/characters/C. Falcon/PlCaWh.json",
+        "preview": "previews/characters/C. Falcon/PlCaWh_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlCaGr",
+        "skinName": "CShrine-CFalcon-Gr",
+        "vaultSkinId": "CShrine-CFalcon-Gr-plcagr",
+        "filename": "CShrine-CFalcon-Gr-plcagr.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Gr-plcagr.zip",
+        "plan": "plans/characters/C. Falcon/PlCaGr.json",
+        "preview": "previews/characters/C. Falcon/PlCaGr_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlCaBu",
+        "skinName": "CShrine-CFalcon-Bu",
+        "vaultSkinId": "CShrine-CFalcon-Bu-plcabu",
+        "filename": "CShrine-CFalcon-Bu-plcabu.zip",
+        "zipPath": "storage/C. Falcon/CShrine-CFalcon-Bu-plcabu.zip",
+        "plan": "plans/characters/C. Falcon/PlCaBu.json",
+        "preview": "previews/characters/C. Falcon/PlCaBu_review.jpg"
+      }
+    ],
+    "DK": [
+      {
+        "slot": 0,
+        "costumeCode": "PlDkNr",
+        "skinName": "CShrine-DK-Nr",
+        "vaultSkinId": "CShrine-DK-Nr-pldknr",
+        "filename": "CShrine-DK-Nr-pldknr.zip",
+        "zipPath": "storage/DK/CShrine-DK-Nr-pldknr.zip",
+        "plan": "plans/characters/DK/PlDkNr.json",
+        "preview": "previews/characters/DK/PlDkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlDkBk",
+        "skinName": "CShrine-DK-Bk",
+        "vaultSkinId": "CShrine-DK-Bk-pldkbk",
+        "filename": "CShrine-DK-Bk-pldkbk.zip",
+        "zipPath": "storage/DK/CShrine-DK-Bk-pldkbk.zip",
+        "plan": "plans/characters/DK/PlDkBk.json",
+        "preview": "previews/characters/DK/PlDkBk_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlDkRe",
+        "skinName": "CShrine-DK-Re",
+        "vaultSkinId": "CShrine-DK-Re-pldkre",
+        "filename": "CShrine-DK-Re-pldkre.zip",
+        "zipPath": "storage/DK/CShrine-DK-Re-pldkre.zip",
+        "plan": "plans/characters/DK/PlDkRe.json",
+        "preview": "previews/characters/DK/PlDkRe_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlDkBu",
+        "skinName": "CShrine-DK-Bu",
+        "vaultSkinId": "CShrine-DK-Bu-pldkbu",
+        "filename": "CShrine-DK-Bu-pldkbu.zip",
+        "zipPath": "storage/DK/CShrine-DK-Bu-pldkbu.zip",
+        "plan": "plans/characters/DK/PlDkBu.json",
+        "preview": "previews/characters/DK/PlDkBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlDkGr",
+        "skinName": "CShrine-DK-Gr",
+        "vaultSkinId": "CShrine-DK-Gr-pldkgr",
+        "filename": "CShrine-DK-Gr-pldkgr.zip",
+        "zipPath": "storage/DK/CShrine-DK-Gr-pldkgr.zip",
+        "plan": "plans/characters/DK/PlDkGr.json",
+        "preview": "previews/characters/DK/PlDkGr_review.jpg"
+      }
+    ],
+    "Dr. Mario": [
+      {
+        "slot": 0,
+        "costumeCode": "PlDrNr",
+        "skinName": "CShrine-DrMario-Nr",
+        "vaultSkinId": "CShrine-DrMario-Nr-pldrnr",
+        "filename": "CShrine-DrMario-Nr-pldrnr.zip",
+        "zipPath": "storage/Dr. Mario/CShrine-DrMario-Nr-pldrnr.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrNr.json",
+        "preview": "previews/characters/Dr. Mario/PlDrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlDrRe",
+        "skinName": "CShrine-DrMario-Re",
+        "vaultSkinId": "CShrine-DrMario-Re-pldrre",
+        "filename": "CShrine-DrMario-Re-pldrre.zip",
+        "zipPath": "storage/Dr. Mario/CShrine-DrMario-Re-pldrre.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrRe.json",
+        "preview": "previews/characters/Dr. Mario/PlDrRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlDrBu",
+        "skinName": "CShrine-DrMario-Bu",
+        "vaultSkinId": "CShrine-DrMario-Bu-pldrbu",
+        "filename": "CShrine-DrMario-Bu-pldrbu.zip",
+        "zipPath": "storage/Dr. Mario/CShrine-DrMario-Bu-pldrbu.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrBu.json",
+        "preview": "previews/characters/Dr. Mario/PlDrBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlDrGr",
+        "skinName": "CShrine-DrMario-Gr",
+        "vaultSkinId": "CShrine-DrMario-Gr-pldrgr",
+        "filename": "CShrine-DrMario-Gr-pldrgr.zip",
+        "zipPath": "storage/Dr. Mario/CShrine-DrMario-Gr-pldrgr.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrGr.json",
+        "preview": "previews/characters/Dr. Mario/PlDrGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlDrBk",
+        "skinName": "CShrine-DrMario-Bk",
+        "vaultSkinId": "CShrine-DrMario-Bk-pldrbk",
+        "filename": "CShrine-DrMario-Bk-pldrbk.zip",
+        "zipPath": "storage/Dr. Mario/CShrine-DrMario-Bk-pldrbk.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrBk.json",
+        "preview": "previews/characters/Dr. Mario/PlDrBk_review.jpg"
+      }
+    ],
+    "Falco": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFcNr",
+        "skinName": "CShrine-Falco-Nr",
+        "vaultSkinId": "CShrine-Falco-Nr-plfcnr",
+        "filename": "CShrine-Falco-Nr-plfcnr.zip",
+        "zipPath": "storage/Falco/CShrine-Falco-Nr-plfcnr.zip",
+        "plan": "plans/characters/Falco/PlFcNr.json",
+        "preview": "previews/characters/Falco/PlFcNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFcRe",
+        "skinName": "CShrine-Falco-Re",
+        "vaultSkinId": "CShrine-Falco-Re",
+        "filename": "CShrine-Falco-Re.zip",
+        "zipPath": "storage/Falco/CShrine-Falco-Re.zip",
+        "plan": "plans/characters/Falco/PlFcRe.json",
+        "preview": "previews/characters/Falco/PlFcRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFcBu",
+        "skinName": "CShrine-Falco-Bu",
+        "vaultSkinId": "CShrine-Falco-Bu",
+        "filename": "CShrine-Falco-Bu.zip",
+        "zipPath": "storage/Falco/CShrine-Falco-Bu.zip",
+        "plan": "plans/characters/Falco/PlFcBu.json",
+        "preview": "previews/characters/Falco/PlFcBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFcGr",
+        "skinName": "CShrine-Falco-Gr",
+        "vaultSkinId": "CShrine-Falco-Gr",
+        "filename": "CShrine-Falco-Gr.zip",
+        "zipPath": "storage/Falco/CShrine-Falco-Gr.zip",
+        "plan": "plans/characters/Falco/PlFcGr.json",
+        "preview": "previews/characters/Falco/PlFcGr_review.jpg"
+      }
+    ],
+    "Fox": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFxNr",
+        "skinName": "CShrine-Fox-Nr",
+        "vaultSkinId": "CShrine-Fox-Nr",
+        "filename": "CShrine-Fox-Nr.zip",
+        "zipPath": "storage/Fox/CShrine-Fox-Nr.zip",
+        "plan": "plans/characters/Fox/PlFxNr.json",
+        "preview": "previews/characters/Fox/PlFxNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFxOr",
+        "skinName": "CShrine-Fox-Or",
+        "vaultSkinId": "CShrine-Fox-Or",
+        "filename": "CShrine-Fox-Or.zip",
+        "zipPath": "storage/Fox/CShrine-Fox-Or.zip",
+        "plan": "plans/characters/Fox/PlFxOr.json",
+        "preview": "previews/characters/Fox/PlFxOr_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFxLa",
+        "skinName": "CShrine-Fox-La",
+        "vaultSkinId": "CShrine-Fox-La",
+        "filename": "CShrine-Fox-La.zip",
+        "zipPath": "storage/Fox/CShrine-Fox-La.zip",
+        "plan": "plans/characters/Fox/PlFxLa.json",
+        "preview": "previews/characters/Fox/PlFxLa_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFxGr",
+        "skinName": "CShrine-Fox-Gr",
+        "vaultSkinId": "CShrine-Fox-Gr",
+        "filename": "CShrine-Fox-Gr.zip",
+        "zipPath": "storage/Fox/CShrine-Fox-Gr.zip",
+        "plan": "plans/characters/Fox/PlFxGr.json",
+        "preview": "previews/characters/Fox/PlFxGr_review.jpg"
+      }
+    ],
+    "Ganondorf": [
+      {
+        "slot": 0,
+        "costumeCode": "PlGnNr",
+        "skinName": "CShrine-Ganondorf-Nr",
+        "vaultSkinId": "CShrine-Ganondorf-Nr",
+        "filename": "CShrine-Ganondorf-Nr.zip",
+        "zipPath": "storage/Ganondorf/CShrine-Ganondorf-Nr.zip",
+        "plan": "plans/characters/Ganondorf/PlGnNr.json",
+        "preview": "previews/characters/Ganondorf/PlGnNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlGnRe",
+        "skinName": "CShrine-Ganondorf-Re",
+        "vaultSkinId": "CShrine-Ganondorf-Re",
+        "filename": "CShrine-Ganondorf-Re.zip",
+        "zipPath": "storage/Ganondorf/CShrine-Ganondorf-Re.zip",
+        "plan": "plans/characters/Ganondorf/PlGnRe.json",
+        "preview": "previews/characters/Ganondorf/PlGnRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlGnBu",
+        "skinName": "CShrine-Ganondorf-Bu",
+        "vaultSkinId": "CShrine-Ganondorf-Bu",
+        "filename": "CShrine-Ganondorf-Bu.zip",
+        "zipPath": "storage/Ganondorf/CShrine-Ganondorf-Bu.zip",
+        "plan": "plans/characters/Ganondorf/PlGnBu.json",
+        "preview": "previews/characters/Ganondorf/PlGnBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlGnGr",
+        "skinName": "CShrine-Ganondorf-Gr",
+        "vaultSkinId": "CShrine-Ganondorf-Gr",
+        "filename": "CShrine-Ganondorf-Gr.zip",
+        "zipPath": "storage/Ganondorf/CShrine-Ganondorf-Gr.zip",
+        "plan": "plans/characters/Ganondorf/PlGnGr.json",
+        "preview": "previews/characters/Ganondorf/PlGnGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlGnLa",
+        "skinName": "CShrine-Ganondorf-La",
+        "vaultSkinId": "CShrine-Ganondorf-La",
+        "filename": "CShrine-Ganondorf-La.zip",
+        "zipPath": "storage/Ganondorf/CShrine-Ganondorf-La.zip",
+        "plan": "plans/characters/Ganondorf/PlGnLa.json",
+        "preview": "previews/characters/Ganondorf/PlGnLa_review.jpg"
+      }
+    ],
+    "Ice Climbers": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPpNr",
+        "skinName": "CShrine-IceClimbers-Nr",
+        "vaultSkinId": "CShrine-IceClimbers-Nr",
+        "filename": "CShrine-IceClimbers-Nr.zip",
+        "zipPath": "storage/Ice Climbers/CShrine-IceClimbers-Nr.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpNr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPpGr",
+        "skinName": "CShrine-IceClimbers-Gr",
+        "vaultSkinId": "CShrine-IceClimbers-Gr",
+        "filename": "CShrine-IceClimbers-Gr.zip",
+        "zipPath": "storage/Ice Climbers/CShrine-IceClimbers-Gr.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpGr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpGr_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPpOr",
+        "skinName": "CShrine-IceClimbers-Or",
+        "vaultSkinId": "CShrine-IceClimbers-Or",
+        "filename": "CShrine-IceClimbers-Or.zip",
+        "zipPath": "storage/Ice Climbers/CShrine-IceClimbers-Or.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpOr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpOr_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPpRe",
+        "skinName": "CShrine-IceClimbers-Re",
+        "vaultSkinId": "CShrine-IceClimbers-Re",
+        "filename": "CShrine-IceClimbers-Re.zip",
+        "zipPath": "storage/Ice Climbers/CShrine-IceClimbers-Re.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpRe.json",
+        "preview": "previews/characters/Ice Climbers/PlPpRe_review.jpg"
+      }
+    ],
+    "Jigglypuff": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPrNr",
+        "skinName": "CShrine-Jigglypuff-Nr",
+        "vaultSkinId": "CShrine-Jigglypuff-Nr",
+        "filename": "CShrine-Jigglypuff-Nr.zip",
+        "zipPath": "storage/Jigglypuff/CShrine-Jigglypuff-Nr.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrNr.json",
+        "preview": "previews/characters/Jigglypuff/PlPrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPrRe",
+        "skinName": "CShrine-Jigglypuff-Re",
+        "vaultSkinId": "CShrine-Jigglypuff-Re",
+        "filename": "CShrine-Jigglypuff-Re.zip",
+        "zipPath": "storage/Jigglypuff/CShrine-Jigglypuff-Re.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrRe.json",
+        "preview": "previews/characters/Jigglypuff/PlPrRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPrBu",
+        "skinName": "CShrine-Jigglypuff-Bu",
+        "vaultSkinId": "CShrine-Jigglypuff-Bu",
+        "filename": "CShrine-Jigglypuff-Bu.zip",
+        "zipPath": "storage/Jigglypuff/CShrine-Jigglypuff-Bu.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrBu.json",
+        "preview": "previews/characters/Jigglypuff/PlPrBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPrGr",
+        "skinName": "CShrine-Jigglypuff-Gr",
+        "vaultSkinId": "CShrine-Jigglypuff-Gr",
+        "filename": "CShrine-Jigglypuff-Gr.zip",
+        "zipPath": "storage/Jigglypuff/CShrine-Jigglypuff-Gr.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrGr.json",
+        "preview": "previews/characters/Jigglypuff/PlPrGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlPrYe",
+        "skinName": "CShrine-Jigglypuff-Ye",
+        "vaultSkinId": "CShrine-Jigglypuff-Ye",
+        "filename": "CShrine-Jigglypuff-Ye.zip",
+        "zipPath": "storage/Jigglypuff/CShrine-Jigglypuff-Ye.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrYe.json",
+        "preview": "previews/characters/Jigglypuff/PlPrYe_review.jpg"
+      }
+    ],
+    "Kirby": [
+      {
+        "slot": 0,
+        "costumeCode": "PlKbNr",
+        "skinName": "CShrine-Kirby-Nr",
+        "vaultSkinId": "CShrine-Kirby-Nr",
+        "filename": "CShrine-Kirby-Nr.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Nr.zip",
+        "plan": "plans/characters/Kirby/PlKbNr.json",
+        "preview": "previews/characters/Kirby/PlKbNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlKbYe",
+        "skinName": "CShrine-Kirby-Ye",
+        "vaultSkinId": "CShrine-Kirby-Ye",
+        "filename": "CShrine-Kirby-Ye.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Ye.zip",
+        "plan": "plans/characters/Kirby/PlKbYe.json",
+        "preview": "previews/characters/Kirby/PlKbYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlKbBu",
+        "skinName": "CShrine-Kirby-Bu",
+        "vaultSkinId": "CShrine-Kirby-Bu",
+        "filename": "CShrine-Kirby-Bu.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Bu.zip",
+        "plan": "plans/characters/Kirby/PlKbBu.json",
+        "preview": "previews/characters/Kirby/PlKbBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlKbRe",
+        "skinName": "CShrine-Kirby-Re",
+        "vaultSkinId": "CShrine-Kirby-Re",
+        "filename": "CShrine-Kirby-Re.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Re.zip",
+        "plan": "plans/characters/Kirby/PlKbRe.json",
+        "preview": "previews/characters/Kirby/PlKbRe_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlKbGr",
+        "skinName": "CShrine-Kirby-Gr",
+        "vaultSkinId": "CShrine-Kirby-Gr",
+        "filename": "CShrine-Kirby-Gr.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Gr.zip",
+        "plan": "plans/characters/Kirby/PlKbGr.json",
+        "preview": "previews/characters/Kirby/PlKbGr_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlKbWh",
+        "skinName": "CShrine-Kirby-Wh",
+        "vaultSkinId": "CShrine-Kirby-Wh",
+        "filename": "CShrine-Kirby-Wh.zip",
+        "zipPath": "storage/Kirby/CShrine-Kirby-Wh.zip",
+        "plan": "plans/characters/Kirby/PlKbWh.json",
+        "preview": "previews/characters/Kirby/PlKbWh_review.jpg"
+      }
+    ],
+    "Link": [
+      {
+        "slot": 0,
+        "costumeCode": "PlLkNr",
+        "skinName": "CShrine-Link-Nr",
+        "vaultSkinId": "CShrine-Link-Nr",
+        "filename": "CShrine-Link-Nr.zip",
+        "zipPath": "storage/Link/CShrine-Link-Nr.zip",
+        "plan": "plans/characters/Link/PlLkNr.json",
+        "preview": "previews/characters/Link/PlLkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlLkRe",
+        "skinName": "CShrine-Link-Re",
+        "vaultSkinId": "CShrine-Link-Re",
+        "filename": "CShrine-Link-Re.zip",
+        "zipPath": "storage/Link/CShrine-Link-Re.zip",
+        "plan": "plans/characters/Link/PlLkRe.json",
+        "preview": "previews/characters/Link/PlLkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlLkBu",
+        "skinName": "CShrine-Link-Bu",
+        "vaultSkinId": "CShrine-Link-Bu",
+        "filename": "CShrine-Link-Bu.zip",
+        "zipPath": "storage/Link/CShrine-Link-Bu.zip",
+        "plan": "plans/characters/Link/PlLkBu.json",
+        "preview": "previews/characters/Link/PlLkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlLkBk",
+        "skinName": "CShrine-Link-Bk",
+        "vaultSkinId": "CShrine-Link-Bk",
+        "filename": "CShrine-Link-Bk.zip",
+        "zipPath": "storage/Link/CShrine-Link-Bk.zip",
+        "plan": "plans/characters/Link/PlLkBk.json",
+        "preview": "previews/characters/Link/PlLkBk_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlLkWh",
+        "skinName": "CShrine-Link-Wh",
+        "vaultSkinId": "CShrine-Link-Wh",
+        "filename": "CShrine-Link-Wh.zip",
+        "zipPath": "storage/Link/CShrine-Link-Wh.zip",
+        "plan": "plans/characters/Link/PlLkWh.json",
+        "preview": "previews/characters/Link/PlLkWh_review.jpg"
+      }
+    ],
+    "Luigi": [
+      {
+        "slot": 0,
+        "costumeCode": "PlLgNr",
+        "skinName": "CShrine-Luigi-Nr",
+        "vaultSkinId": "CShrine-Luigi-Nr",
+        "filename": "CShrine-Luigi-Nr.zip",
+        "zipPath": "storage/Luigi/CShrine-Luigi-Nr.zip",
+        "plan": "plans/characters/Luigi/PlLgNr.json",
+        "preview": "previews/characters/Luigi/PlLgNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlLgWh",
+        "skinName": "CShrine-Luigi-Wh",
+        "vaultSkinId": "CShrine-Luigi-Wh",
+        "filename": "CShrine-Luigi-Wh.zip",
+        "zipPath": "storage/Luigi/CShrine-Luigi-Wh.zip",
+        "plan": "plans/characters/Luigi/PlLgWh.json",
+        "preview": "previews/characters/Luigi/PlLgWh_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlLgAq",
+        "skinName": "CShrine-Luigi-Aq",
+        "vaultSkinId": "CShrine-Luigi-Aq",
+        "filename": "CShrine-Luigi-Aq.zip",
+        "zipPath": "storage/Luigi/CShrine-Luigi-Aq.zip",
+        "plan": "plans/characters/Luigi/PlLgAq.json",
+        "preview": "previews/characters/Luigi/PlLgAq_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlLgPi",
+        "skinName": "CShrine-Luigi-Pi",
+        "vaultSkinId": "CShrine-Luigi-Pi",
+        "filename": "CShrine-Luigi-Pi.zip",
+        "zipPath": "storage/Luigi/CShrine-Luigi-Pi.zip",
+        "plan": "plans/characters/Luigi/PlLgPi.json",
+        "preview": "previews/characters/Luigi/PlLgPi_review.jpg"
+      }
+    ],
+    "Mario": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMrNr",
+        "skinName": "CShrine-Mario-Nr",
+        "vaultSkinId": "CShrine-Mario-Nr",
+        "filename": "CShrine-Mario-Nr.zip",
+        "zipPath": "storage/Mario/CShrine-Mario-Nr.zip",
+        "plan": "plans/characters/Mario/PlMrNr.json",
+        "preview": "previews/characters/Mario/PlMrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMrYe",
+        "skinName": "CShrine-Mario-Ye",
+        "vaultSkinId": "CShrine-Mario-Ye",
+        "filename": "CShrine-Mario-Ye.zip",
+        "zipPath": "storage/Mario/CShrine-Mario-Ye.zip",
+        "plan": "plans/characters/Mario/PlMrYe.json",
+        "preview": "previews/characters/Mario/PlMrYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMrBk",
+        "skinName": "CShrine-Mario-Bk",
+        "vaultSkinId": "CShrine-Mario-Bk",
+        "filename": "CShrine-Mario-Bk.zip",
+        "zipPath": "storage/Mario/CShrine-Mario-Bk.zip",
+        "plan": "plans/characters/Mario/PlMrBk.json",
+        "preview": "previews/characters/Mario/PlMrBk_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMrBu",
+        "skinName": "CShrine-Mario-Bu",
+        "vaultSkinId": "CShrine-Mario-Bu",
+        "filename": "CShrine-Mario-Bu.zip",
+        "zipPath": "storage/Mario/CShrine-Mario-Bu.zip",
+        "plan": "plans/characters/Mario/PlMrBu.json",
+        "preview": "previews/characters/Mario/PlMrBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlMrGr",
+        "skinName": "CShrine-Mario-Gr",
+        "vaultSkinId": "CShrine-Mario-Gr",
+        "filename": "CShrine-Mario-Gr.zip",
+        "zipPath": "storage/Mario/CShrine-Mario-Gr.zip",
+        "plan": "plans/characters/Mario/PlMrGr.json",
+        "preview": "previews/characters/Mario/PlMrGr_review.jpg"
+      }
+    ],
+    "Marth": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMsNr",
+        "skinName": "CShrine-Marth-Nr",
+        "vaultSkinId": "CShrine-Marth-Nr",
+        "filename": "CShrine-Marth-Nr.zip",
+        "zipPath": "storage/Marth/CShrine-Marth-Nr.zip",
+        "plan": "plans/characters/Marth/PlMsNr.json",
+        "preview": "previews/characters/Marth/PlMsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMsRe",
+        "skinName": "CShrine-Marth-Re",
+        "vaultSkinId": "CShrine-Marth-Re",
+        "filename": "CShrine-Marth-Re.zip",
+        "zipPath": "storage/Marth/CShrine-Marth-Re.zip",
+        "plan": "plans/characters/Marth/PlMsRe.json",
+        "preview": "previews/characters/Marth/PlMsRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMsGr",
+        "skinName": "CShrine-Marth-Gr",
+        "vaultSkinId": "CShrine-Marth-Gr",
+        "filename": "CShrine-Marth-Gr.zip",
+        "zipPath": "storage/Marth/CShrine-Marth-Gr.zip",
+        "plan": "plans/characters/Marth/PlMsGr.json",
+        "preview": "previews/characters/Marth/PlMsGr_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMsBk",
+        "skinName": "CShrine-Marth-Bk",
+        "vaultSkinId": "CShrine-Marth-Bk",
+        "filename": "CShrine-Marth-Bk.zip",
+        "zipPath": "storage/Marth/CShrine-Marth-Bk.zip",
+        "plan": "plans/characters/Marth/PlMsBk.json",
+        "preview": "previews/characters/Marth/PlMsBk_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlMsWh",
+        "skinName": "CShrine-Marth-Wh",
+        "vaultSkinId": "CShrine-Marth-Wh",
+        "filename": "CShrine-Marth-Wh.zip",
+        "zipPath": "storage/Marth/CShrine-Marth-Wh.zip",
+        "plan": "plans/characters/Marth/PlMsWh.json",
+        "preview": "previews/characters/Marth/PlMsWh_review.jpg"
+      }
+    ],
+    "Mewtwo": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMtNr",
+        "skinName": "CShrine-Mewtwo-Nr",
+        "vaultSkinId": "CShrine-Mewtwo-Nr",
+        "filename": "CShrine-Mewtwo-Nr.zip",
+        "zipPath": "storage/Mewtwo/CShrine-Mewtwo-Nr.zip",
+        "plan": "plans/characters/Mewtwo/PlMtNr.json",
+        "preview": "previews/characters/Mewtwo/PlMtNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMtRe",
+        "skinName": "CShrine-Mewtwo-Re",
+        "vaultSkinId": "CShrine-Mewtwo-Re",
+        "filename": "CShrine-Mewtwo-Re.zip",
+        "zipPath": "storage/Mewtwo/CShrine-Mewtwo-Re.zip",
+        "plan": "plans/characters/Mewtwo/PlMtRe.json",
+        "preview": "previews/characters/Mewtwo/PlMtRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMtBu",
+        "skinName": "CShrine-Mewtwo-Bu",
+        "vaultSkinId": "CShrine-Mewtwo-Bu",
+        "filename": "CShrine-Mewtwo-Bu.zip",
+        "zipPath": "storage/Mewtwo/CShrine-Mewtwo-Bu.zip",
+        "plan": "plans/characters/Mewtwo/PlMtBu.json",
+        "preview": "previews/characters/Mewtwo/PlMtBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMtGr",
+        "skinName": "CShrine-Mewtwo-Gr",
+        "vaultSkinId": "CShrine-Mewtwo-Gr",
+        "filename": "CShrine-Mewtwo-Gr.zip",
+        "zipPath": "storage/Mewtwo/CShrine-Mewtwo-Gr.zip",
+        "plan": "plans/characters/Mewtwo/PlMtGr.json",
+        "preview": "previews/characters/Mewtwo/PlMtGr_review.jpg"
+      }
+    ],
+    "Ness": [
+      {
+        "slot": 0,
+        "costumeCode": "PlNsNr",
+        "skinName": "CShrine-Ness-Nr",
+        "vaultSkinId": "CShrine-Ness-Nr",
+        "filename": "CShrine-Ness-Nr.zip",
+        "zipPath": "storage/Ness/CShrine-Ness-Nr.zip",
+        "plan": "plans/characters/Ness/PlNsNr.json",
+        "preview": "previews/characters/Ness/PlNsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlNsYe",
+        "skinName": "CShrine-Ness-Ye",
+        "vaultSkinId": "CShrine-Ness-Ye",
+        "filename": "CShrine-Ness-Ye.zip",
+        "zipPath": "storage/Ness/CShrine-Ness-Ye.zip",
+        "plan": "plans/characters/Ness/PlNsYe.json",
+        "preview": "previews/characters/Ness/PlNsYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlNsBu",
+        "skinName": "CShrine-Ness-Bu",
+        "vaultSkinId": "CShrine-Ness-Bu",
+        "filename": "CShrine-Ness-Bu.zip",
+        "zipPath": "storage/Ness/CShrine-Ness-Bu.zip",
+        "plan": "plans/characters/Ness/PlNsBu.json",
+        "preview": "previews/characters/Ness/PlNsBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlNsGr",
+        "skinName": "CShrine-Ness-Gr",
+        "vaultSkinId": "CShrine-Ness-Gr",
+        "filename": "CShrine-Ness-Gr.zip",
+        "zipPath": "storage/Ness/CShrine-Ness-Gr.zip",
+        "plan": "plans/characters/Ness/PlNsGr.json",
+        "preview": "previews/characters/Ness/PlNsGr_review.jpg"
+      }
+    ],
+    "Peach": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPeNr",
+        "skinName": "CShrine-Peach-Nr",
+        "vaultSkinId": "CShrine-Peach-Nr",
+        "filename": "CShrine-Peach-Nr.zip",
+        "zipPath": "storage/Peach/CShrine-Peach-Nr.zip",
+        "plan": "plans/characters/Peach/PlPeNr.json",
+        "preview": "previews/characters/Peach/PlPeNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPeYe",
+        "skinName": "CShrine-Peach-Ye",
+        "vaultSkinId": "CShrine-Peach-Ye",
+        "filename": "CShrine-Peach-Ye.zip",
+        "zipPath": "storage/Peach/CShrine-Peach-Ye.zip",
+        "plan": "plans/characters/Peach/PlPeYe.json",
+        "preview": "previews/characters/Peach/PlPeYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPeWh",
+        "skinName": "CShrine-Peach-Wh",
+        "vaultSkinId": "CShrine-Peach-Wh",
+        "filename": "CShrine-Peach-Wh.zip",
+        "zipPath": "storage/Peach/CShrine-Peach-Wh.zip",
+        "plan": "plans/characters/Peach/PlPeWh.json",
+        "preview": "previews/characters/Peach/PlPeWh_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPeBu",
+        "skinName": "CShrine-Peach-Bu",
+        "vaultSkinId": "CShrine-Peach-Bu",
+        "filename": "CShrine-Peach-Bu.zip",
+        "zipPath": "storage/Peach/CShrine-Peach-Bu.zip",
+        "plan": "plans/characters/Peach/PlPeBu.json",
+        "preview": "previews/characters/Peach/PlPeBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlPeGr",
+        "skinName": "CShrine-Peach-Gr",
+        "vaultSkinId": "CShrine-Peach-Gr",
+        "filename": "CShrine-Peach-Gr.zip",
+        "zipPath": "storage/Peach/CShrine-Peach-Gr.zip",
+        "plan": "plans/characters/Peach/PlPeGr.json",
+        "preview": "previews/characters/Peach/PlPeGr_review.jpg"
+      }
+    ],
+    "Pichu": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPcNr",
+        "skinName": "CShrine-Pichu-Nr",
+        "vaultSkinId": "CShrine-Pichu-Nr",
+        "filename": "CShrine-Pichu-Nr.zip",
+        "zipPath": "storage/Pichu/CShrine-Pichu-Nr.zip",
+        "plan": "plans/characters/Pichu/PlPcNr.json",
+        "preview": "previews/characters/Pichu/PlPcNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPcRe",
+        "skinName": "CShrine-Pichu-Re",
+        "vaultSkinId": "CShrine-Pichu-Re",
+        "filename": "CShrine-Pichu-Re.zip",
+        "zipPath": "storage/Pichu/CShrine-Pichu-Re.zip",
+        "plan": "plans/characters/Pichu/PlPcRe.json",
+        "preview": "previews/characters/Pichu/PlPcRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPcBu",
+        "skinName": "CShrine-Pichu-Bu",
+        "vaultSkinId": "CShrine-Pichu-Bu",
+        "filename": "CShrine-Pichu-Bu.zip",
+        "zipPath": "storage/Pichu/CShrine-Pichu-Bu.zip",
+        "plan": "plans/characters/Pichu/PlPcBu.json",
+        "preview": "previews/characters/Pichu/PlPcBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPcGr",
+        "skinName": "CShrine-Pichu-Gr",
+        "vaultSkinId": "CShrine-Pichu-Gr",
+        "filename": "CShrine-Pichu-Gr.zip",
+        "zipPath": "storage/Pichu/CShrine-Pichu-Gr.zip",
+        "plan": "plans/characters/Pichu/PlPcGr.json",
+        "preview": "previews/characters/Pichu/PlPcGr_review.jpg"
+      }
+    ],
+    "Pikachu": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPkNr",
+        "skinName": "CShrine-Pikachu-Nr",
+        "vaultSkinId": "CShrine-Pikachu-Nr",
+        "filename": "CShrine-Pikachu-Nr.zip",
+        "zipPath": "storage/Pikachu/CShrine-Pikachu-Nr.zip",
+        "plan": "plans/characters/Pikachu/PlPkNr.json",
+        "preview": "previews/characters/Pikachu/PlPkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPkRe",
+        "skinName": "CShrine-Pikachu-Re",
+        "vaultSkinId": "CShrine-Pikachu-Re",
+        "filename": "CShrine-Pikachu-Re.zip",
+        "zipPath": "storage/Pikachu/CShrine-Pikachu-Re.zip",
+        "plan": "plans/characters/Pikachu/PlPkRe.json",
+        "preview": "previews/characters/Pikachu/PlPkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPkBu",
+        "skinName": "CShrine-Pikachu-Bu",
+        "vaultSkinId": "CShrine-Pikachu-Bu",
+        "filename": "CShrine-Pikachu-Bu.zip",
+        "zipPath": "storage/Pikachu/CShrine-Pikachu-Bu.zip",
+        "plan": "plans/characters/Pikachu/PlPkBu.json",
+        "preview": "previews/characters/Pikachu/PlPkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPkGr",
+        "skinName": "CShrine-Pikachu-Gr",
+        "vaultSkinId": "CShrine-Pikachu-Gr",
+        "filename": "CShrine-Pikachu-Gr.zip",
+        "zipPath": "storage/Pikachu/CShrine-Pikachu-Gr.zip",
+        "plan": "plans/characters/Pikachu/PlPkGr.json",
+        "preview": "previews/characters/Pikachu/PlPkGr_review.jpg"
+      }
+    ],
+    "Roy": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFeNr",
+        "skinName": "CShrine-Roy-Nr",
+        "vaultSkinId": "CShrine-Roy-Nr",
+        "filename": "CShrine-Roy-Nr.zip",
+        "zipPath": "storage/Roy/CShrine-Roy-Nr.zip",
+        "plan": "plans/characters/Roy/PlFeNr.json",
+        "preview": "previews/characters/Roy/PlFeNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFeRe",
+        "skinName": "CShrine-Roy-Re",
+        "vaultSkinId": "CShrine-Roy-Re",
+        "filename": "CShrine-Roy-Re.zip",
+        "zipPath": "storage/Roy/CShrine-Roy-Re.zip",
+        "plan": "plans/characters/Roy/PlFeRe.json",
+        "preview": "previews/characters/Roy/PlFeRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFeBu",
+        "skinName": "CShrine-Roy-Bu",
+        "vaultSkinId": "CShrine-Roy-Bu",
+        "filename": "CShrine-Roy-Bu.zip",
+        "zipPath": "storage/Roy/CShrine-Roy-Bu.zip",
+        "plan": "plans/characters/Roy/PlFeBu.json",
+        "preview": "previews/characters/Roy/PlFeBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFeGr",
+        "skinName": "CShrine-Roy-Gr",
+        "vaultSkinId": "CShrine-Roy-Gr",
+        "filename": "CShrine-Roy-Gr.zip",
+        "zipPath": "storage/Roy/CShrine-Roy-Gr.zip",
+        "plan": "plans/characters/Roy/PlFeGr.json",
+        "preview": "previews/characters/Roy/PlFeGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlFeYe",
+        "skinName": "CShrine-Roy-Ye",
+        "vaultSkinId": "CShrine-Roy-Ye",
+        "filename": "CShrine-Roy-Ye.zip",
+        "zipPath": "storage/Roy/CShrine-Roy-Ye.zip",
+        "plan": "plans/characters/Roy/PlFeYe.json",
+        "preview": "previews/characters/Roy/PlFeYe_review.jpg"
+      }
+    ],
+    "Samus": [
+      {
+        "slot": 0,
+        "costumeCode": "PlSsNr",
+        "skinName": "CShrine-Samus-Nr",
+        "vaultSkinId": "CShrine-Samus-Nr",
+        "filename": "CShrine-Samus-Nr.zip",
+        "zipPath": "storage/Samus/CShrine-Samus-Nr.zip",
+        "plan": "plans/characters/Samus/PlSsNr.json",
+        "preview": "previews/characters/Samus/PlSsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlSsPi",
+        "skinName": "CShrine-Samus-Pi",
+        "vaultSkinId": "CShrine-Samus-Pi",
+        "filename": "CShrine-Samus-Pi.zip",
+        "zipPath": "storage/Samus/CShrine-Samus-Pi.zip",
+        "plan": "plans/characters/Samus/PlSsPi.json",
+        "preview": "previews/characters/Samus/PlSsPi_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlSsBk",
+        "skinName": "CShrine-Samus-Bk",
+        "vaultSkinId": "CShrine-Samus-Bk",
+        "filename": "CShrine-Samus-Bk.zip",
+        "zipPath": "storage/Samus/CShrine-Samus-Bk.zip",
+        "plan": "plans/characters/Samus/PlSsBk.json",
+        "preview": "previews/characters/Samus/PlSsBk_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlSsGr",
+        "skinName": "CShrine-Samus-Gr",
+        "vaultSkinId": "CShrine-Samus-Gr",
+        "filename": "CShrine-Samus-Gr.zip",
+        "zipPath": "storage/Samus/CShrine-Samus-Gr.zip",
+        "plan": "plans/characters/Samus/PlSsGr.json",
+        "preview": "previews/characters/Samus/PlSsGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlSsLa",
+        "skinName": "CShrine-Samus-La",
+        "vaultSkinId": "CShrine-Samus-La",
+        "filename": "CShrine-Samus-La.zip",
+        "zipPath": "storage/Samus/CShrine-Samus-La.zip",
+        "plan": "plans/characters/Samus/PlSsLa.json",
+        "preview": "previews/characters/Samus/PlSsLa_review.jpg"
+      }
+    ],
+    "Sheik": [
+      {
+        "slot": 0,
+        "costumeCode": "PlSkNr",
+        "skinName": "CShrine-Sheik-Nr",
+        "vaultSkinId": "CShrine-Sheik-Nr",
+        "filename": "CShrine-Sheik-Nr.zip",
+        "zipPath": "storage/Sheik/CShrine-Sheik-Nr.zip",
+        "plan": "plans/characters/Sheik/PlSkNr.json",
+        "preview": "previews/characters/Sheik/PlSkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlSkRe",
+        "skinName": "CShrine-Sheik-Re",
+        "vaultSkinId": "CShrine-Sheik-Re",
+        "filename": "CShrine-Sheik-Re.zip",
+        "zipPath": "storage/Sheik/CShrine-Sheik-Re.zip",
+        "plan": "plans/characters/Sheik/PlSkRe.json",
+        "preview": "previews/characters/Sheik/PlSkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlSkBu",
+        "skinName": "CShrine-Sheik-Bu",
+        "vaultSkinId": "CShrine-Sheik-Bu",
+        "filename": "CShrine-Sheik-Bu.zip",
+        "zipPath": "storage/Sheik/CShrine-Sheik-Bu.zip",
+        "plan": "plans/characters/Sheik/PlSkBu.json",
+        "preview": "previews/characters/Sheik/PlSkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlSkGr",
+        "skinName": "CShrine-Sheik-Gr",
+        "vaultSkinId": "CShrine-Sheik-Gr",
+        "filename": "CShrine-Sheik-Gr.zip",
+        "zipPath": "storage/Sheik/CShrine-Sheik-Gr.zip",
+        "plan": "plans/characters/Sheik/PlSkGr.json",
+        "preview": "previews/characters/Sheik/PlSkGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlSkWh",
+        "skinName": "CShrine-Sheik-Wh",
+        "vaultSkinId": "CShrine-Sheik-Wh",
+        "filename": "CShrine-Sheik-Wh.zip",
+        "zipPath": "storage/Sheik/CShrine-Sheik-Wh.zip",
+        "plan": "plans/characters/Sheik/PlSkWh.json",
+        "preview": "previews/characters/Sheik/PlSkWh_review.jpg"
+      }
+    ],
+    "Yoshi": [
+      {
+        "slot": 0,
+        "costumeCode": "PlYsNr",
+        "skinName": "CShrine-Yoshi-Nr",
+        "vaultSkinId": "CShrine-Yoshi-Nr",
+        "filename": "CShrine-Yoshi-Nr.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Nr.zip",
+        "plan": "plans/characters/Yoshi/PlYsNr.json",
+        "preview": "previews/characters/Yoshi/PlYsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlYsRe",
+        "skinName": "CShrine-Yoshi-Re",
+        "vaultSkinId": "CShrine-Yoshi-Re",
+        "filename": "CShrine-Yoshi-Re.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Re.zip",
+        "plan": "plans/characters/Yoshi/PlYsRe.json",
+        "preview": "previews/characters/Yoshi/PlYsRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlYsBu",
+        "skinName": "CShrine-Yoshi-Bu",
+        "vaultSkinId": "CShrine-Yoshi-Bu",
+        "filename": "CShrine-Yoshi-Bu.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Bu.zip",
+        "plan": "plans/characters/Yoshi/PlYsBu.json",
+        "preview": "previews/characters/Yoshi/PlYsBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlYsYe",
+        "skinName": "CShrine-Yoshi-Ye",
+        "vaultSkinId": "CShrine-Yoshi-Ye",
+        "filename": "CShrine-Yoshi-Ye.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Ye.zip",
+        "plan": "plans/characters/Yoshi/PlYsYe.json",
+        "preview": "previews/characters/Yoshi/PlYsYe_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlYsPi",
+        "skinName": "CShrine-Yoshi-Pi",
+        "vaultSkinId": "CShrine-Yoshi-Pi",
+        "filename": "CShrine-Yoshi-Pi.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Pi.zip",
+        "plan": "plans/characters/Yoshi/PlYsPi.json",
+        "preview": "previews/characters/Yoshi/PlYsPi_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlYsAq",
+        "skinName": "CShrine-Yoshi-Aq",
+        "vaultSkinId": "CShrine-Yoshi-Aq",
+        "filename": "CShrine-Yoshi-Aq.zip",
+        "zipPath": "storage/Yoshi/CShrine-Yoshi-Aq.zip",
+        "plan": "plans/characters/Yoshi/PlYsAq.json",
+        "preview": "previews/characters/Yoshi/PlYsAq_review.jpg"
+      }
+    ],
+    "Young Link": [
+      {
+        "slot": 0,
+        "costumeCode": "PlClNr",
+        "skinName": "CShrine-YoungLink-Nr",
+        "vaultSkinId": "CShrine-YoungLink-Nr",
+        "filename": "CShrine-YoungLink-Nr.zip",
+        "zipPath": "storage/Young Link/CShrine-YoungLink-Nr.zip",
+        "plan": "plans/characters/Young Link/PlClNr.json",
+        "preview": "previews/characters/Young Link/PlClNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlClRe",
+        "skinName": "CShrine-YoungLink-Re",
+        "vaultSkinId": "CShrine-YoungLink-Re",
+        "filename": "CShrine-YoungLink-Re.zip",
+        "zipPath": "storage/Young Link/CShrine-YoungLink-Re.zip",
+        "plan": "plans/characters/Young Link/PlClRe.json",
+        "preview": "previews/characters/Young Link/PlClRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlClBu",
+        "skinName": "CShrine-YoungLink-Bu",
+        "vaultSkinId": "CShrine-YoungLink-Bu",
+        "filename": "CShrine-YoungLink-Bu.zip",
+        "zipPath": "storage/Young Link/CShrine-YoungLink-Bu.zip",
+        "plan": "plans/characters/Young Link/PlClBu.json",
+        "preview": "previews/characters/Young Link/PlClBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlClWh",
+        "skinName": "CShrine-YoungLink-Wh",
+        "vaultSkinId": "CShrine-YoungLink-Wh",
+        "filename": "CShrine-YoungLink-Wh.zip",
+        "zipPath": "storage/Young Link/CShrine-YoungLink-Wh.zip",
+        "plan": "plans/characters/Young Link/PlClWh.json",
+        "preview": "previews/characters/Young Link/PlClWh_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlClBk",
+        "skinName": "CShrine-YoungLink-Bk",
+        "vaultSkinId": "CShrine-YoungLink-Bk",
+        "filename": "CShrine-YoungLink-Bk.zip",
+        "zipPath": "storage/Young Link/CShrine-YoungLink-Bk.zip",
+        "plan": "plans/characters/Young Link/PlClBk.json",
+        "preview": "previews/characters/Young Link/PlClBk_review.jpg"
+      }
+    ],
+    "Zelda": [
+      {
+        "slot": 0,
+        "costumeCode": "PlZdNr",
+        "skinName": "CShrine-Zelda-Nr",
+        "vaultSkinId": "CShrine-Zelda-Nr",
+        "filename": "CShrine-Zelda-Nr.zip",
+        "zipPath": "storage/Zelda/CShrine-Zelda-Nr.zip",
+        "plan": "plans/characters/Zelda/PlZdNr.json",
+        "preview": "previews/characters/Zelda/PlZdNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlZdRe",
+        "skinName": "CShrine-Zelda-Re",
+        "vaultSkinId": "CShrine-Zelda-Re",
+        "filename": "CShrine-Zelda-Re.zip",
+        "zipPath": "storage/Zelda/CShrine-Zelda-Re.zip",
+        "plan": "plans/characters/Zelda/PlZdRe.json",
+        "preview": "previews/characters/Zelda/PlZdRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlZdBu",
+        "skinName": "CShrine-Zelda-Bu",
+        "vaultSkinId": "CShrine-Zelda-Bu",
+        "filename": "CShrine-Zelda-Bu.zip",
+        "zipPath": "storage/Zelda/CShrine-Zelda-Bu.zip",
+        "plan": "plans/characters/Zelda/PlZdBu.json",
+        "preview": "previews/characters/Zelda/PlZdBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlZdGr",
+        "skinName": "CShrine-Zelda-Gr",
+        "vaultSkinId": "CShrine-Zelda-Gr",
+        "filename": "CShrine-Zelda-Gr.zip",
+        "zipPath": "storage/Zelda/CShrine-Zelda-Gr.zip",
+        "plan": "plans/characters/Zelda/PlZdGr.json",
+        "preview": "previews/characters/Zelda/PlZdGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlZdWh",
+        "skinName": "CShrine-Zelda-Wh",
+        "vaultSkinId": "CShrine-Zelda-Wh",
+        "filename": "CShrine-Zelda-Wh.zip",
+        "zipPath": "storage/Zelda/CShrine-Zelda-Wh.zip",
+        "plan": "plans/characters/Zelda/PlZdWh.json",
+        "preview": "previews/characters/Zelda/PlZdWh_review.jpg"
+      }
+    ]
+  },
+  "ice_climbers_pairs": [
+    {
+      "slot": 0,
+      "popoCode": "PlPpNr",
+      "nanaCode": "PlNnNr",
+      "popoVaultSkinId": "CShrine-IceClimbers-Nr",
+      "nanaVaultSkinId": "CShrine-Nana-Nr",
+      "nanaZipPath": "storage/Nana/CShrine-Nana-Nr.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnNr.json",
+      "nanaPreview": "previews/characters/Nana/PlNnNr_review.jpg"
+    },
+    {
+      "slot": 1,
+      "popoCode": "PlPpGr",
+      "nanaCode": "PlNnYe",
+      "popoVaultSkinId": "CShrine-IceClimbers-Gr",
+      "nanaVaultSkinId": "CShrine-Nana-Ye",
+      "nanaZipPath": "storage/Nana/CShrine-Nana-Ye.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnYe.json",
+      "nanaPreview": "previews/characters/Nana/PlNnYe_review.jpg"
+    },
+    {
+      "slot": 2,
+      "popoCode": "PlPpOr",
+      "nanaCode": "PlNnAq",
+      "popoVaultSkinId": "CShrine-IceClimbers-Or",
+      "nanaVaultSkinId": "CShrine-Nana-Aq",
+      "nanaZipPath": "storage/Nana/CShrine-Nana-Aq.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnAq.json",
+      "nanaPreview": "previews/characters/Nana/PlNnAq_review.jpg"
+    },
+    {
+      "slot": 3,
+      "popoCode": "PlPpRe",
+      "nanaCode": "PlNnWh",
+      "popoVaultSkinId": "CShrine-IceClimbers-Re",
+      "nanaVaultSkinId": "CShrine-Nana-Wh",
+      "nanaZipPath": "storage/Nana/CShrine-Nana-Wh.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnWh.json",
+      "nanaPreview": "previews/characters/Nana/PlNnWh_review.jpg"
+    }
+  ],
+  "stages": {
+    "GrNBa": {
+      "stage": "Battlefield",
+      "skinName": "CircuitShrineBF",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-bf",
+      "filename": "cshr-bf.zip",
+      "zipPath": "storage/das/battlefield/cshr-bf.zip",
+      "plan": "plans/stages/GrNBa.json",
+      "preview": "previews/stages/GrNBa_capture.png"
+    },
+    "GrNLa": {
+      "stage": "Final Destination",
+      "skinName": "CircuitShrineFD",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-fd",
+      "filename": "cshr-fd.zip",
+      "zipPath": "storage/das/final_destination/cshr-fd.zip",
+      "plan": "plans/stages/GrNLa.json",
+      "preview": "previews/stages/GrNLa_capture.png"
+    },
+    "GrSt": {
+      "stage": "Yoshi's Story",
+      "skinName": "CircuitShrineYS",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-ys",
+      "filename": "cshr-ys.zip",
+      "zipPath": "storage/das/yoshis_story/cshr-ys.zip",
+      "plan": "plans/stages/GrSt.json",
+      "preview": "previews/stages/GrSt_capture.png"
+    },
+    "GrOp": {
+      "stage": "Dream Land N64",
+      "skinName": "CircuitShrineDL",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-dl",
+      "filename": "cshr-dl.zip",
+      "zipPath": "storage/das/dreamland/cshr-dl.zip",
+      "plan": "plans/stages/GrOp.json",
+      "preview": "previews/stages/GrOp_capture.png"
+    },
+    "GrPs": {
+      "stage": "Pokemon Stadium",
+      "skinName": "CircuitShrinePS",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-ps",
+      "filename": "cshr-ps.zip",
+      "zipPath": "storage/das/pokemon_stadium/cshr-ps.zip",
+      "plan": "plans/stages/GrPs.json",
+      "preview": "previews/stages/GrPs_capture.png"
+    },
+    "GrIz": {
+      "stage": "Fountain of Dreams",
+      "skinName": "CircuitShrineFoD",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "cshr-fod",
+      "filename": "cshr-fod.zip",
+      "zipPath": "storage/das/fountain_of_dreams/cshr-fod.zip",
+      "plan": "plans/stages/GrIz.json",
+      "preview": "previews/stages/GrIz_capture.png"
+    }
+  },
+  "build": {
+    "projectName": "duel-codex",
+    "sourceIsoMd5": "0e63d4223b01d9aba596259dc155a174",
+    "nucleusProject": "projects/duel-codex/project.mexproj",
+    "finalIso": "exports/final.iso",
+    "bundle": "exports/final.ssbm"
+  },
+  "verification": {
+    "bootHealth": "passed",
+    "stageCaptures": "offline_texture_sheets",
+    "notes": [
+      "Character previews are skin-lab render captures.",
+      "Stage preview files are offline texture sheets; in-game DAS captures are not run by this generator.",
+      "Boot-health verification passed: node tests/nucleus/run-modded-match.js --iso duel/codex/exports/final.iso --health reached the CSS and observed frame health for 25 seconds.",
+      "Boot-health screenshot: tests/artifacts/dolphin/live/screenshots/0001-modded-verify.png.",
+      "In-game DAS per-stage captures were not run; stage previews are offline texture sheets under duel/codex/previews/stages."
+    ]
+  }
+}

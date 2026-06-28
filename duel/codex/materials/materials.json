@@ -1,0 +1,44 @@
+{
+  "lacquer_circuit": {
+    "prompt": "black lacquer fabric with fine jade and cyan circuit traces, subtle gold foil inlay, seamless tileable game texture, high contrast but readable",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6101,
+    "path": "materials/lacquer_circuit.png"
+  },
+  "ceramic_metal": {
+    "prompt": "pearlescent white ceramic and brushed gunmetal panels with tiny teal circuit engravings, seamless tileable sci fi shrine material",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6102,
+    "path": "materials/ceramic_metal.png"
+  },
+  "aurora_fiber": {
+    "prompt": "soft iridescent fur and woven fiber, aurora cyan violet jade strands, seamless tileable character material, clean readable texture",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6103,
+    "path": "materials/aurora_fiber.png"
+  },
+  "gold_seal": {
+    "prompt": "aged gold foil over dark enamel with small geometric shrine seals, seamless tileable ornament texture, crisp luminous highlights",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6104,
+    "path": "materials/gold_seal.png"
+  },
+  "stage_deck": {
+    "prompt": "legal fighting stage floor of dark graphite lacquer, bright cyan edge inlays, gold circuit seams, seamless tileable arcade shrine deck",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6105,
+    "path": "materials/stage_deck.png"
+  },
+  "stage_backdrop": {
+    "prompt": "wide aurora night shrine skyline with floating circuit lanterns, teal and magenta nebula clouds, no text, readable game background",
+    "provider": "local",
+    "model": "sd-turbo",
+    "seed": 6106,
+    "path": "materials/stage_backdrop.png"
+  }
+}

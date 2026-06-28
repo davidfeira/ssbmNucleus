@@ -118,6 +118,15 @@ export default function EditModal({
 
   const displayCspUrl = getDisplayCspUrl()
 
+  // Root-relative URLs (/storage/..., /api/mex/...) resolve via the vite proxy in
+  // dev, but in the packaged app the page origin is file:// so they fail to load
+  // (blank stage preview / stock icon). Prefix the backend origin for any
+  // leading-'/' URL; data URIs and already-absolute URLs pass through unchanged.
+  const toAbsUrl = (u) =>
+    (typeof u === 'string' && u.startsWith('/'))
+      ? `${API_URL.replace('/api/mex', '')}${u}`
+      : u
+
   const handleCancel = () => {
     playSound('back')
     onCancel()
@@ -217,7 +226,7 @@ export default function EditModal({
                     />
                   ) : editingItem.data.has_stock ? (
                     <img
-                      src={`${editingItem.data.stockUrl}?t=${lastImageUpdate}`}
+                      src={`${toAbsUrl(editingItem.data.stockUrl)}?t=${lastImageUpdate}`}
                       alt="Stock"
                       className="edit-modal-stock-image"
                       onError={(e) => e.target.style.display = 'none'}
@@ -268,7 +277,7 @@ export default function EditModal({
                     <div className="edit-modal-stock-confirm-compare">
                       {editingItem.data.has_stock ? (
                         <img
-                          src={`${editingItem.data.stockUrl}?t=${lastImageUpdate}`}
+                          src={`${toAbsUrl(editingItem.data.stockUrl)}?t=${lastImageUpdate}`}
                           alt="Current stock"
                           className="edit-modal-stock-confirm-thumb"
                         />
@@ -497,7 +506,7 @@ export default function EditModal({
                     />
                   ) : editingItem.data.hasScreenshot ? (
                     <img
-                      src={`${editingItem.data.screenshotUrl}?t=${lastImageUpdate}`}
+                      src={`${toAbsUrl(editingItem.data.screenshotUrl)}?t=${lastImageUpdate}`}
                       alt="Preview"
                       className="edit-modal-csp-image"
                       onLoad={handleHeroImageLoad}

@@ -554,22 +554,69 @@ namespace mexLib.Installer
             10, 4, 8, 12, 33, 6, 14
         };
         /// <summary>
-        /// Replaces css icons that a modded ISO's MnSlChr couldn't provide with
-        /// icons read from another ISO (typically vanilla). Icons that extracted
-        /// successfully are left untouched.
+        /// Resets the character-select (CSS) and stage-select (SSS) scenes to a
+        /// clean vanilla base, sourced from the given ISO (typically vanilla).
+        ///
+        /// A modded patch's MnSlChr/MnSlMap (e.g. Animelee) carry a custom scene
+        /// and icon layout that m-ex's menu regeneration can't interpret: icons
+        /// get parsed with vanilla structural assumptions, so the m-ex managed
+        /// grid ends up drawn at vanilla coordinates ON TOP of the patch's custom
+        /// scene — the "double" menu. m-ex always repaints the grid from the
+        /// project's Fighter/Stage icons on every export, so the patch menus
+        /// can't be kept verbatim while staying editable; the only clean base is
+        /// vanilla.
+        ///
+        /// CSPs are NOT affected: InstallCSS already extracted them into the
+        /// project asset store (fighter costume CSPAsset) before this runs, and
+        /// export re-injects them from there into the (now vanilla) scene — so
+        /// the patch's portraits are preserved without any regeneration. Stage
+        /// previews, however, are re-extracted from vanilla (regenerate per-stage
+        /// screenshots afterward if the patch's stage art is wanted).
         /// </summary>
         /// <param name="workspace"></param>
         /// <param name="isoPath"></param>
-        public static void FillCSSIconsFromISO(MexWorkspace workspace, string isoPath)
+        public static void ResetMenuScenesToVanilla(MexWorkspace workspace, string isoPath)
         {
             using GCILib.GCISO iso = new(isoPath);
-            byte[]? cssData = iso.GetFileData("MnSlChr.usd");
-            if (cssData == null)
-                return;
 
-            HSDRawFile file = new(cssData);
-            if (file["MnSelectChrDataTable"]?.Data is SBM_SelectChrDataTable dataTable)
-                ExtractCSSIcons(workspace, dataTable, onlyFillBlank: true);
+            // --- character select (CSS) ---
+            byte[]? cssData = iso.GetFileData("MnSlChr.usd");
+            if (cssData != null)
+            {
+                // Replace the project's CSS scene file with the vanilla one so
+                // m-ex injects its grid onto a clean base (no leftover patch
+                // scene icons). GenerateMexSelectChr.Compile reads the scene via
+                // `new HSDRawFile(path)` from DISK, so the vanilla bytes must be
+                // written to disk here — a FileManager.Set alone is staged in
+                // memory and not flushed until after Compile runs (that was the
+                // bug that left the CSS doubled). FileManager.Set keeps the
+                // in-memory view in sync too.
+                string cssPath = workspace.GetFilePath("MnSlChr.usd");
+                File.WriteAllBytes(cssPath, cssData);
+                workspace.FileManager.Set(cssPath, cssData);
+
+                // Re-read the icon textures + grid positions from vanilla (full
+                // replace, not blank-fill) so FighterIcons match the vanilla
+                // scene. CSPs are untouched (extracted earlier, re-injected at
+                // export).
+                HSDRawFile cssFile = new(cssData);
+                if (cssFile["MnSelectChrDataTable"]?.Data is SBM_SelectChrDataTable cssTable)
+                    ExtractCSSIcons(workspace, cssTable, onlyFillBlank: false);
+            }
+
+            // --- stage select (SSS) ---
+            byte[]? mapData = iso.GetFileData("MnSlMap.usd");
+            if (mapData != null)
+            {
+                // Same fix for stage select. InstallSSS reads the scene from
+                // disk, so write the vanilla bytes there first; FileManager.Set
+                // keeps export in sync. InstallSSS then re-extracts the stage
+                // icons/positions (and previews) from the vanilla scene.
+                string mapPath = workspace.GetFilePath("MnSlMap.usd");
+                File.WriteAllBytes(mapPath, mapData);
+                workspace.FileManager.Set(mapPath, mapData);
+                InstallSSS(workspace);
+            }
         }
         /// <summary>
         /// True when a texture asset is missing or holds the blank placeholder

@@ -108,3 +108,12 @@ releases/
 /modellab/__pycache__/
 /modellab/roundtrip/
 /modellab/vault_lowpoly/
+
+# Modpack duel — generated/working artifacts (reproducible; keep source scripts only)
+duel/*/work/
+duel/*/previews/
+duel/*/plans/
+duel/*/exports/
+duel/**/_probe/
+duel/**/*.pid
+duel/**/*.port

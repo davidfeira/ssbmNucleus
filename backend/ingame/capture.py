@@ -433,10 +433,14 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
     build_stage_skin_multibatch_iso; `id` should be globally unique, e.g.
     "<stageCode>:<variantId>"). Build + boot happen once; between shots we quit to
     the CSS, re-enter, force-select that variant's stage holding its button.
-    Returns {"ok": bool, "shots": [{"id","button","png"}], "reason": str}."""
+    Returns {"ok": bool, "shots": [{"id","button","png"}],
+    "failures": [{"id","button","reason"}], "reason": str}."""
     emit = emit or _noop
     log = log or _noop
-    result = {"ok": False, "shots": [], "reason": ""}
+    # crashed_id: the variant in-flight when Dolphin died, so the caller can
+    # retry the SAME ISO with that one moved to the end (a single bad stage
+    # otherwise blocks every variant queued behind it). None = no crash.
+    result = {"ok": False, "shots": [], "failures": [], "reason": "", "crashed_id": None}
     if _await_dolphin_clear(result, emit, log):
         return result
 
@@ -490,8 +494,15 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
                  f"Capturing variant {i + 1}/{n}…")
             if i > 0:
                 # Quit the previous match back to the CSS before the next variant.
+                if not d.alive():
+                    result["reason"] = "Dolphin exited mid-batch."
+                    result["crashed_id"] = vid
+                    break
                 if not nav.reset_to_css(d, p, log=log):
-                    result["reason"] = "Could not return to the CSS between variants."
+                    reason = "Could not return to the CSS between variants."
+                    result["failures"].append({"id": vid, "button": button, "reason": reason})
+                    result["reason"] = reason
+                    result["crashed_id"] = vid
                     break
             on_sss = _memory_select_to_sss(d, sc, CKIND_FOX, 0, log) if solo else False
             if not on_sss:  # fallback to the cursor path (stays on CSS if warp missed)
@@ -500,11 +511,15 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
                 _lock_vanilla(cur, "fox", 0)
                 if not sc.ensure_stage_select():
                     if not (not solo and _ensure_on_sss(d, p, sc, cur, log)):
+                        reason = "Could not reach the stage-select screen."
+                        result["failures"].append({"id": vid, "button": button, "reason": reason})
                         log(f"could not reach the SSS for {vid}; skipping")
                         continue
             p.neutral()              # clear any residual held button from the prior variant
             time.sleep(0.15)
             if not sc.force_select(internal_id, hold=button):
+                reason = "Could not start the match on the stage."
+                result["failures"].append({"id": vid, "button": button, "reason": reason})
                 log(f"could not start the match for {vid} (hold {button}); skipping")
                 continue
             png, reason = _frame_and_shot(boot, d, fr, settle=settle, log=log)
@@ -512,9 +527,11 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
                 result["shots"].append({"id": vid, "button": button, "png": png})
                 log(f"captured {vid} (hold {button})")
             else:
+                result["failures"].append({"id": vid, "button": button, "reason": reason})
                 log(f"screenshot failed for {vid}: {reason}")
             if not d.alive():
                 result["reason"] = "Dolphin exited mid-batch."
+                result["crashed_id"] = vid
                 break
 
         result["ok"] = len(result["shots"]) > 0

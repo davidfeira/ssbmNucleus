@@ -164,7 +164,7 @@ class FirstRunSetup:
             exe_path = Path(sys.executable)
             self.bundled_resources_dir = exe_path.parent.parent  # resources/
             # In production, tools are bundled in resources/
-            self.csp_data_dir = self.bundled_resources_dir / "utility" / "website" / "backend" / "tools" / "processor" / "csp_data"
+            self.csp_data_dir = self.bundled_resources_dir / "utility" / "tools" / "processor" / "csp_data"
             self.hsdraw_path = self.bundled_resources_dir / "utility" / "HSDRawViewer" / "HSDRawViewer.exe"
         else:
             self.bundled_resources_dir = None
@@ -410,15 +410,20 @@ class FirstRunSetup:
         return path if path.exists() else None
 
     def _bundled_giga_icon(self) -> Path | None:
-        path = (
-            self.project_root
-            / "backend"
-            / "assets"
-            / "builtin"
-            / self.BUILTIN_GIGA_SLUG
-            / "icon.png"
-        )
-        return path if path.exists() else None
+        # Giga has no in-game CSS icon to derive, so ship a hand-made one. The
+        # asset lives at backend/assets/builtin/<slug>/icon.png. In a frozen
+        # build self.project_root is the user-data dir (LocalAppData), NOT the
+        # install, so resolve from the PyInstaller bundle (_MEIPASS) there;
+        # fall back to the source tree path for dev.
+        rel = Path("backend") / "assets" / "builtin" / self.BUILTIN_GIGA_SLUG / "icon.png"
+        candidates = []
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys._MEIPASS) / rel)
+        candidates.append(self.project_root / rel)
+        for path in candidates:
+            if path.exists():
+                return path
+        return None
 
     def _giga_bowser_seed_current(self, char_dir: Path) -> bool:
         zip_path = char_dir / "fighter.zip"
@@ -639,7 +644,17 @@ class FirstRunSetup:
         from PIL import Image
         from skinlab import compose as compose_mod
 
-        region_map_path = self.project_root / "backend" / "assets" / "texture_regions" / "Bowser.json"
+        # Bundled asset: in a frozen build self.project_root is the user-data dir,
+        # so resolve from the PyInstaller bundle (_MEIPASS) there. (Same gotcha as
+        # _bundled_giga_icon; without this Giga recolors silently fail in the
+        # installed build and Giga ends up with only the Normal costume.)
+        rmrel = Path("backend") / "assets" / "texture_regions" / "Bowser.json"
+        region_map_path = (
+            Path(sys._MEIPASS) / rmrel if getattr(sys, "frozen", False)
+            else self.project_root / rmrel
+        )
+        if not region_map_path.exists():
+            region_map_path = self.project_root / rmrel
         with open(region_map_path, "r", encoding="utf-8") as f:
             region_map = json.load(f)
         regions = region_map.get("regions") or {}
@@ -704,8 +719,17 @@ class FirstRunSetup:
             shutil.rmtree(work_dir, ignore_errors=True)
         return out_dat
 
-    def _seed_builtin_giga_bowser(self, temp_dir: Path, force: bool = False) -> dict:
+    def _seed_builtin_giga_bowser(self, temp_dir: Path, force: bool = False,
+                                  progress_callback=None) -> dict:
         """Seed Giga Bowser into the custom-character vault from vanilla ISO data."""
+        n_costumes = len(self.BUILTIN_GIGA_COSTUMES)
+
+        def _seed_progress(pct, message, done=0):
+            # Keep the bar visibly moving — the CSP/stock renders below are slow
+            # and otherwise sit silently, which looks frozen on first run.
+            if progress_callback:
+                progress_callback('seeding_builtins', int(pct), message, done, n_costumes)
+
         storage_dir = self.project_root / "storage"
         char_root = storage_dir / "custom_characters"
         char_dir = char_root / self.BUILTIN_GIGA_SLUG
@@ -753,6 +777,7 @@ class FirstRunSetup:
         char_dir.mkdir(parents=True, exist_ok=True)
         zip_path = char_dir / "fighter.zip"
 
+        _seed_progress(4, 'Exporting Giga Bowser fighter…')
         cmd = [
             str(self.mexcli_path),
             "export-fighter",
@@ -773,6 +798,7 @@ class FirstRunSetup:
                 "error": result.stderr or result.stdout or "mexcli export-fighter failed",
             }
 
+        _seed_progress(10, 'Rendering Giga Bowser portrait…', 1)
         csp_path = self._render_giga_csp(files_dir / "PlGkNr.dat")
         if csp_path is None:
             bowser_csp = self._resolve_asset_png(assets_dir, "csp\\csp_025")
@@ -784,7 +810,21 @@ class FirstRunSetup:
             "csp_path": csp_path,
         }]
         recolor_dir = temp_dir / "giga_bowser_recolors"
-        for spec in self.BUILTIN_GIGA_COSTUMES[1:]:
+        recolor_dir.mkdir(parents=True, exist_ok=True)
+        # Place Giga's ftData (PlGk.dat) beside the recolor costume DATs. The CSP
+        # renderer derives the per-character low-poly hide list from a sibling
+        # Pl<XX>.dat (_find_ftdata); without it the recolor renders fall back to a
+        # wrong scene hide list and drop Giga's hand. The Normal costume renders
+        # from files_dir, which already has PlGk.dat as a sibling.
+        giga_ftdata = files_dir / "PlGk.dat"
+        if giga_ftdata.exists():
+            shutil.copy2(giga_ftdata, recolor_dir / "PlGk.dat")
+        recolor_specs = self.BUILTIN_GIGA_COSTUMES[1:]
+        for ri, spec in enumerate(recolor_specs):
+            # Recolor renders are the slow part — spread them across 10–70%.
+            done = ri + 2
+            pct = 10 + int(60 * (ri / max(1, len(recolor_specs))))
+            _seed_progress(pct, f"Rendering {spec['name']} costume ({done}/{n_costumes})…", done)
             try:
                 stem = f"PlGk{spec['code']}"
                 dat_path = self._make_giga_recolor_dat(
@@ -850,6 +890,9 @@ class FirstRunSetup:
         costume_meta = []
         for index, asset in enumerate(costume_assets):
             spec = asset["spec"]
+            # Stock-icon renders run here — spread across 70–95%.
+            _seed_progress(70 + int(25 * (index / max(1, len(costume_assets)))),
+                           f"Building {spec['name']} stock icon…", index + 1)
             stem = f"PlGk{spec['code']}"
             csp_asset_path = asset.get("csp_path")
             csp_bytes = csp_asset_path.read_bytes() if csp_asset_path and csp_asset_path.exists() else None
@@ -874,6 +917,7 @@ class FirstRunSetup:
                 "has_stock": stock_bytes is not None,
             })
 
+        _seed_progress(96, 'Finalizing Giga Bowser…', n_costumes)
         self._zip_with_replacements(zip_path, replacements)
 
         with open(char_dir / "fighter.json", "w", encoding="utf-8") as f:
@@ -958,12 +1002,15 @@ class FirstRunSetup:
             # Giga Bowser is present in Melee but normally inaccessible; package
             # him into the same vault format as imported m-ex fighters.
             if progress_callback:
-                progress_callback('seeding_builtins', 0, 'Seeding built-in custom characters...', 0, 1)
-            builtin_result = self._seed_builtin_giga_bowser(temp_dir)
+                progress_callback('seeding_builtins', 0, 'Seeding built-in custom characters...', 0,
+                                  len(self.BUILTIN_GIGA_COSTUMES))
+            builtin_result = self._seed_builtin_giga_bowser(
+                temp_dir, progress_callback=progress_callback)
             if not builtin_result.get('success'):
                 logger.warning(f"Giga Bowser seed failed: {builtin_result.get('error')}")
             elif progress_callback:
-                progress_callback('seeding_builtins', 100, 'Seeded built-in custom characters', 1, 1)
+                progress_callback('seeding_builtins', 100, 'Seeded built-in custom characters',
+                                  len(self.BUILTIN_GIGA_COSTUMES), len(self.BUILTIN_GIGA_COSTUMES))
 
             # Phase 3: Copy stage images
             if progress_callback:

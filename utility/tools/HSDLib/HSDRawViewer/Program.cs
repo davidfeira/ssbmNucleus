@@ -417,14 +417,17 @@ namespace HSDRawViewer
                     Console.WriteLine("Head-shot mode: bind pose + auto-framed camera, raw silhouette");
                 }
 
-                // strip the legacy --no-shadow flag (the shadow was never a
-                // scene object -- it is CSPMaker post-processing, handled
-                // above) so it can't be mistaken for a positional argument
+                // --no-shadow: keep the CSPMaker outline but skip ONLY the
+                // synthetic drop shadow (the shadow is post-process, not a scene
+                // object). Used for the Popo half of an Ice Climbers composite so
+                // the combined render has a single shadow (Nana's), not two.
                 int noShadowArg = argsList.IndexOf("--no-shadow");
                 if (noShadowArg >= 0)
                 {
+                    GUI.ViewportControl.SkipCSPShadow = true;
                     argsList.RemoveAt(noShadowArg);
                     args = argsList.ToArray();
+                    Console.WriteLine("No-shadow mode: CSP outline kept, drop shadow skipped");
                 }
 
                 // --head-shot-yaw N: 3/4-view angle in degrees for head shots

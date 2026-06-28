@@ -1,6 +1,6 @@
 {
   "name": "ssbm-nucleus",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "sc00p",
   "license": "MIT",
   "description": "SSBM Nucleus - Costume and Stage Manager for Super Smash Bros. Melee",
@@ -57,6 +57,11 @@
       {
         "from": "utility/assets/buttons",
         "to": "utility/assets/buttons",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "utility/assets/stages",
+        "to": "utility/assets/stages",
         "filter": ["**/*"]
       },
       {

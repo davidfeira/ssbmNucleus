@@ -231,9 +231,20 @@ when that cell cannot be rendered through the offline CSS.
 ## Online CSS memory check
 
 The online CSS loads more CSP memory than the offline VS CSS. For compression
-and CSP stress work, `online_test_iso.sh` boots an ISO, enters the Slippi
-unranked CSS briefly, watches RAM/process health with `online_css_test.py`, and
-holds B out before matchmaking can pair anyone.
+and CSP stress work, prefer the backend batch probe when pinning limits:
+
+```sh
+cd backend
+python fps_batch.py --mode online ../output/count-comp-1000.iso
+python fps_batch.py --mode both ../output/count-comp-800.iso ../output/count-comp-1000.iso
+```
+
+Use `--mode offline` for the console/local-play number and `--mode online` for
+the Dolphin/Slippi number. The online path enters the Slippi unranked CSS
+briefly, watches RAM/process health, and holds B out before matchmaking can pair
+anyone.
+
+The older shell wrapper is still available for a single ISO:
 
 ```sh
 tests/nucleus/online_test_iso.sh output/harness-test.iso

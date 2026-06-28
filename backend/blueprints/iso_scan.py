@@ -62,8 +62,11 @@ def start():
     if not isinstance(iso_paths, list) or not iso_paths:
         return jsonify({'success': False, 'error': 'iso_paths required'}), 400
 
-    # Validate existence + .iso/.gcm extension
+    # Validate existence + .iso/.gcm extension. NKit images advertise as .iso but
+    # cannot be opened by this pipeline, so skip them instead of failing a mixed
+    # batch.
     cleaned = []
+    skipped = []
     for p in iso_paths:
         path = Path(p)
         if not path.exists() or not path.is_file():
@@ -71,12 +74,19 @@ def start():
         if path.suffix.lower() not in ('.iso', '.gcm'):
             return jsonify({'success': False, 'error': f'Not an ISO: {path.name}'}), 400
         if '.nkit' in path.name.lower():
-            return jsonify({'success': False, 'error': f'nkit ISOs not supported: {path.name}'}), 400
+            skipped.append({'path': str(path), 'reason': 'NKit ISO is not supported'})
+            continue
         cleaned.append(str(path))
+    if not cleaned:
+        return jsonify({
+            'success': False,
+            'error': 'No compatible ISO/GCM files to scan',
+            'skipped': skipped,
+        }), 400
 
     job = start_scan(cleaned, _emit_event)
     logger.info(f"Started ISO scan {job.job_id} for {len(cleaned)} ISO(s)")
-    return jsonify({'success': True, 'job_id': job.job_id})
+    return jsonify({'success': True, 'job_id': job.job_id, 'skipped': skipped})
 
 
 @iso_scan_bp.route('/api/mex/iso-scan/<job_id>', methods=['GET'])

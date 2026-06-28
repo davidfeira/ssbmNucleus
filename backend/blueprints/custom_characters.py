@@ -26,8 +26,9 @@ from pathlib import Path
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
-from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
-from core.state import get_current_project_path, reload_mex_manager
+from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, BACKEND_ASSETS_DIR, get_subprocess_args
+from core.helpers import friendly_iso_open_error, is_incompatible_iso_error
+from core.state import get_current_project_path, reload_mex_manager, metadata_lock, get_socketio
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ SERIES_NAMES = [
     'Metroid', 'Smash Bros.', 'Yoshi', 'The Legend of Zelda',
     'Master Hand', 'Crazy Hand', 'Special Stages',
 ]
-SERIES_ASSETS_DIR = Path(__file__).resolve().parent.parent / 'assets' / 'series'
+SERIES_ASSETS_DIR = BACKEND_ASSETS_DIR / 'series'
 
 VANILLA_FIGHTER_NAMES = {
     'C. Falcon', 'Captain Falcon', 'DK', 'Donkey Kong', 'Fox',
@@ -102,8 +103,26 @@ def _read_metadata():
 
 
 def _write_metadata(data):
-    with open(METADATA_FILE, 'w', encoding='utf-8') as f:
+    # Atomic write: serialize to a temp file then os.replace, so a concurrent
+    # reader never sees a half-written file. Paired with metadata_lock at the
+    # mutation sites to prevent lost updates across concurrent imports.
+    tmp = METADATA_FILE.with_suffix('.json.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, METADATA_FILE)
+
+
+def _append_custom_character(entry):
+    """Thread-safe append of one entry to metadata.json custom_characters.
+    The lock makes the read-modify-write atomic across concurrent imports (a
+    multi-file drag fires many /import/file at once); without it entries were
+    lost — this is what dropped the seeded Giga Bowser."""
+    with metadata_lock:
+        metadata = _read_metadata()
+        metadata.setdefault('custom_characters', []).append(entry)
+        _write_metadata(metadata)
 
 
 def _resolve_asset_png(assets_dir, asset_ref):
@@ -386,6 +405,24 @@ def _sync_costume_meta(entry, char_dir, fighter_data):
             if not (costumes_dir / f'{stem}_stc.png').exists() and (char_dir / f'stock_{i}.png').exists():
                 shutil.copy2(char_dir / f'stock_{i}.png', costumes_dir / f'{stem}_stc.png')
                 changed = True
+
+            # Belt-and-suspenders: a bare fighter.zip (no csp_{i}.png alongside)
+            # still carries previews INSIDE each costume zip — pull them out so
+            # even a minimal import materializes CSPs instead of placeholders.
+            need_csp = not (costumes_dir / f'{stem}_csp.png').exists()
+            need_stc = not (costumes_dir / f'{stem}_stc.png').exists()
+            if (need_csp or need_stc) and zip_dest.exists():
+                with zipfile.ZipFile(zip_dest) as cz:
+                    for n in cz.namelist():
+                        base = n.split('/')[-1].lower()
+                        if need_csp and base in ('csp.png', 'portrait.png', 'select.png'):
+                            (costumes_dir / f'{stem}_csp.png').write_bytes(cz.read(n))
+                            need_csp = False
+                            changed = True
+                        elif need_stc and base in ('stc.png', 'stock.png', 'icon.png'):
+                            (costumes_dir / f'{stem}_stc.png').write_bytes(cz.read(n))
+                            need_stc = False
+                            changed = True
 
             m = by_id.get(stem)
             if m is None:
@@ -894,6 +931,40 @@ def reorder_custom_characters():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _restore_full_vault_export(zf, payload, fallback_name):
+    """Restore a full-vault custom-character export (see export_custom_character).
+    Extracts every member except the marker into a fresh vault folder and
+    appends a (re-slugged) metadata entry. Returns the entry."""
+    entry = dict(payload.get('entry') or {})
+    name = entry.get('name') or fallback_name
+    slug = _dedupe_slug(_make_slug(name))
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    char_dir.mkdir(parents=True, exist_ok=True)
+
+    for member in zf.namelist():
+        if member == NUCLEUS_EXPORT_MARKER or member.endswith('/'):
+            continue
+        # Guard against zip-slip: resolve the destination and ensure it stays
+        # inside char_dir.
+        dest = (char_dir / member).resolve()
+        if not str(dest).startswith(str(char_dir.resolve())):
+            logger.warning(f"Skipping unsafe export member '{member}'")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(zf.read(member))
+
+    entry['slug'] = slug
+    entry['name'] = name
+    entry.setdefault('source', 'zip')
+    entry['date_added'] = datetime.now().isoformat()
+    # has_css_icon may have been stale; recompute from what was restored
+    entry['has_css_icon'] = (char_dir / 'css_icon.png').exists()
+
+    _append_custom_character(entry)
+    logger.info(f"[OK] Restored full-vault custom character '{name}' as {slug}")
+    return entry
+
+
 def import_custom_character_zip_bytes(zip_data, fallback_name):
     """Import a custom character fighter package (zip bytes) into the vault.
     Returns the metadata entry. Raises ValueError on an invalid package.
@@ -901,6 +972,17 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
     import io
     with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
         names = zf.namelist()
+
+        # Full-vault export (from export_custom_character): restore the whole
+        # storage/custom_characters/<slug>/ folder verbatim so CSPs, stocks,
+        # costumes, banners, series and audio all survive the round-trip.
+        if NUCLEUS_EXPORT_MARKER in names:
+            try:
+                payload = json.loads(zf.read(NUCLEUS_EXPORT_MARKER))
+            except (json.JSONDecodeError, KeyError):
+                payload = {}
+            if payload.get('nucleus_export') == NUCLEUS_EXPORT_KIND:
+                return _restore_full_vault_export(zf, payload, fallback_name)
 
         fighter_json_path = None
         icon_path = None
@@ -952,9 +1034,7 @@ def import_custom_character_zip_bytes(zip_data, fallback_name):
         'has_css_icon': has_css_icon
     }
 
-    metadata = _read_metadata()
-    metadata['custom_characters'].append(entry)
-    _write_metadata(metadata)
+    _append_custom_character(entry)
 
     logger.info(f"[OK] Imported custom character '{fighter_name}' as {slug}")
     return entry
@@ -1130,6 +1210,92 @@ def _extract_custom_characters_from_project(project_dir, source_label):
     return imported, skipped
 
 
+@custom_characters_bp.route('/api/mex/scan-iso/mex-content', methods=['POST'])
+def scan_iso_for_mex_content():
+    """Build the temp m-ex project ONCE per ISO and extract custom characters
+    and/or stages from it. Folding both into one build halves the cost of a
+    bulk scan when both targets are selected (each build is a ~1-2 min
+    import-iso). DAS variants are wit-based and stay on their own endpoint."""
+    try:
+        data = request.json or {}
+        iso_path = (data.get('isoPath') or '').strip()
+        want_chars = bool(data.get('characters'))
+        want_stages = bool(data.get('stages'))
+        if not iso_path:
+            return jsonify({'success': False, 'error': 'Missing isoPath parameter'}), 400
+        if not (want_chars or want_stages):
+            return jsonify({'success': True})
+
+        iso_file = Path(iso_path)
+        if not iso_file.exists():
+            return jsonify({'success': False, 'error': f'ISO not found: {iso_path}'}), 404
+        if iso_file.suffix.lower() not in ('.iso', '.gcm'):
+            return jsonify({'success': False, 'error': 'File must be an .iso or .gcm'}), 400
+        if '.nkit' in iso_file.name.lower():
+            logger.info(f"Skipping NKit ISO for m-ex content scan: {iso_path}")
+            out = {'success': True, 'nkit': True, 'message': 'Skipped NKit ISO (not supported)'}
+            if want_chars:
+                out['characters'] = {'imported': [], 'skipped': [iso_file.name]}
+            if want_stages:
+                out['stages'] = {'imported': [], 'skipped': [iso_file.name]}
+            return jsonify(out)
+
+        mexcli_path = str(MEXCLI_PATH)
+        if not Path(mexcli_path).exists():
+            return jsonify({'success': False, 'error': 'MexCLI not found. Build MexCLI first.'}), 500
+
+        # stages extractor lives in the stages blueprint; lazy import avoids a
+        # module-load cycle.
+        from blueprints.custom_stages import _extract_custom_stages_from_project
+
+        temp_dir = tempfile.mkdtemp(prefix='nucleus_mex_scan_')
+        try:
+            cmd = [mexcli_path, 'import-iso', str(iso_file), temp_dir, 'temp_scan']
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
+            if result.returncode != 0:
+                err = result.stderr or result.stdout or 'Unknown error'
+                # A non-vanilla/m-ex build (e.g. 20XX) isn't a failure — in a
+                # bulk scan we just get what we can and move on, no error shown.
+                if is_incompatible_iso_error(err):
+                    logger.info(f"Skipping non-vanilla/m-ex ISO for content scan: {iso_file.name}")
+                    out = {'success': True, 'incompatible': True}
+                    if want_chars:
+                        out['characters'] = {'imported': [], 'skipped': []}
+                    if want_stages:
+                        out['stages'] = {'imported': [], 'skipped': []}
+                    return jsonify(out)
+                logger.error(f"MexCLI import-iso failed: {err}")
+                return jsonify({'success': False, 'error': friendly_iso_open_error(err)}), 500
+
+            project_dir = Path(temp_dir)
+            if not (project_dir / 'project.mexproj').exists():
+                return jsonify({'success': False, 'error': 'MexCLI created project but .mexproj not found'}), 500
+
+            # Hold the metadata lock across both extractions so a concurrent
+            # import can't interleave a read-modify-write and drop entries.
+            out = {'success': True}
+            with metadata_lock:
+                if want_chars:
+                    ci, cs = _extract_custom_characters_from_project(project_dir, 'iso-scan')
+                    out['characters'] = {'imported': ci, 'skipped': cs}
+                if want_stages:
+                    si, ss = _extract_custom_stages_from_project(project_dir, 'iso-scan')
+                    out['stages'] = {'imported': si, 'skipped': ss}
+            logger.info(
+                f"[OK] m-ex content scan: "
+                f"chars={len(out.get('characters', {}).get('imported', []))} "
+                f"stages={len(out.get('stages', {}).get('imported', []))}")
+            return jsonify(out)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    except Exception as e:
+        logger.error(f"m-ex content ISO scan error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/scan-iso', methods=['POST'])
 def scan_iso_for_custom_characters():
     """Create a temp MEX project from an ISO, extract custom characters, clean up."""
@@ -1144,6 +1310,14 @@ def scan_iso_for_custom_characters():
             return jsonify({'success': False, 'error': f'ISO not found: {iso_path}'}), 404
         if iso_file.suffix.lower() not in ('.iso', '.gcm'):
             return jsonify({'success': False, 'error': 'File must be an .iso or .gcm'}), 400
+        if '.nkit' in iso_file.name.lower():
+            logger.info(f"Skipping NKit ISO for custom character scan: {iso_path}")
+            return jsonify({
+                'success': True,
+                'imported': [],
+                'skipped': [iso_file.name],
+                'message': 'Skipped NKit ISO (not supported)'
+            })
 
         mexcli_path = str(MEXCLI_PATH)
         if not Path(mexcli_path).exists():
@@ -1162,7 +1336,7 @@ def scan_iso_for_custom_characters():
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout or 'Unknown error'
                 logger.error(f"MexCLI import-iso failed: {error_msg}")
-                return jsonify({'success': False, 'error': f'Failed to open ISO: {error_msg}'}), 500
+                return jsonify({'success': False, 'error': friendly_iso_open_error(error_msg)}), 500
 
             project_dir = Path(temp_dir)
             if not (project_dir / 'project.mexproj').exists():
@@ -1411,13 +1585,67 @@ def rename_custom_character(slug):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# Marker file that flags a zip as a full-vault custom-character export (vs a
+# bare MexManager fighter.zip). Carries the metadata entry so source/series/
+# audio/CSP state survive a round-trip between installs.
+NUCLEUS_EXPORT_MARKER = 'nucleus_export.json'
+NUCLEUS_EXPORT_KIND = 'custom_character'
+
+
+def _build_full_vault_export_bytes(slug):
+    """Zip the WHOLE storage/custom_characters/<slug>/ folder plus a
+    nucleus_export.json marker carrying the metadata entry. Returns zip bytes,
+    or None if the folder is missing. See export_custom_character for why."""
+    import io
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    if not char_dir.is_dir() or not (char_dir / 'fighter.json').exists():
+        return None
+
+    metadata = _read_metadata()
+    entry = next((c for c in metadata.get('custom_characters', [])
+                  if c.get('slug') == slug), None)
+    payload = {
+        'nucleus_export': NUCLEUS_EXPORT_KIND,
+        'version': 1,
+        'entry': entry or {'slug': slug, 'name': slug},
+    }
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(NUCLEUS_EXPORT_MARKER, json.dumps(payload, indent=2))
+        for path in sorted(char_dir.rglob('*')):
+            if path.is_file():
+                zf.write(path, path.relative_to(char_dir).as_posix())
+    return buf.getvalue()
+
+
 @custom_characters_bp.route('/api/mex/custom-characters/<slug>/export', methods=['GET'])
 def export_custom_character(slug):
-    zip_path = CUSTOM_CHARACTERS_PATH / slug / 'fighter.zip'
-    if zip_path.exists():
-        return send_file(zip_path, as_attachment=True, download_name=f'{slug}.zip')
+    """Export EVERYTHING the vault knows about a custom character.
 
-    return jsonify({'success': False, 'error': 'Fighter ZIP not found (imported from project scan?)'}), 404
+    The old behaviour just sent the bare fighter.zip, which drops the display
+    assets (csp_N.png, stock_N.png, costumes/, banners, series icon/emblem,
+    fsm.txt, victory_theme.hps, announcer.wav) — so a re-import on another
+    install showed "N" placeholders instead of CSPs. We now zip the WHOLE
+    folder plus a nucleus_export.json marker, and the importer restores it
+    verbatim. A zip without the marker is still treated as a bare fighter.zip
+    (back-compat)."""
+    char_dir = CUSTOM_CHARACTERS_PATH / slug
+    if not char_dir.is_dir() or not (char_dir / 'fighter.json').exists():
+        # imported from a project scan with no folder, or a bad slug
+        zip_path = char_dir / 'fighter.zip'
+        if zip_path.exists():
+            return send_file(zip_path, as_attachment=True, download_name=f'{slug}.zip')
+        return jsonify({'success': False, 'error': 'Custom character folder not found'}), 404
+
+    export_bytes = _build_full_vault_export_bytes(slug)
+    # Stream from the scratch temp dir; send_file reads it before the request
+    # ends, so it's safe to leave for the OS to reap.
+    fd, tmp_zip = tempfile.mkstemp(prefix=f'{slug}_export_', suffix='.zip')
+    os.close(fd)
+    Path(tmp_zip).write_bytes(export_bytes)
+    return send_file(tmp_zip, as_attachment=True, download_name=f'{slug}.zip',
+                     mimetype='application/zip')
 
 
 def _resolve_install_series(entry, char_dir, project_path, mexcli_path):
@@ -1781,8 +2009,24 @@ def install_custom_characters_batch():
         if not Path(mexcli_path).exists():
             return jsonify({'success': False, 'error': 'MexCLI not found'}), 500
 
+        # Stream progress: the per-fighter prepare loop is the slow part and the
+        # UI otherwise sits at 0/N the whole time (looks frozen). Events go over
+        # SocketIO as 'custom_char_install_progress'; the request still returns
+        # the final result synchronously.
+        socketio = get_socketio()
+        total = len(slugs)
+
+        def _emit(current, phase, name=None, message=None):
+            try:
+                socketio.emit('custom_char_install_progress', {
+                    'current': current, 'total': total,
+                    'phase': phase, 'name': name, 'message': message})
+            except Exception:
+                pass
+
         prepared, failed, warnings = [], [], []
-        for slug in slugs:
+        for i, slug in enumerate(slugs):
+            _emit(i + 1, 'preparing', name=slug)
             pre = _prepare_fighter_for_batch(slug, project_path, mexcli_path)
             if not pre.get('ok'):
                 failed.append({'slug': slug, 'error': pre.get('error')})
@@ -1797,6 +2041,9 @@ def install_custom_characters_batch():
 
         manifest = {'fighters': [p['manifest'] for p in prepared]}
         logger.info(f"=== BATCH CHARACTER INSTALL ({len(prepared)} fighters) ===")
+        # The single add-fighters compile is one long step — tell the user so the
+        # bar doesn't look stuck at N/N.
+        _emit(total, 'compiling', message='Building project (this can take a minute)…')
         fd, manifest_path = tempfile.mkstemp(suffix='.json', prefix='nucleus_fighters_batch_')
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
@@ -1826,6 +2073,7 @@ def install_custom_characters_batch():
 
         added = cli.get('totalAdded', 0)
         logger.info(f"[OK] Batch-installed {added} custom character(s)")
+        _emit(total, 'done')
         return jsonify({
             'success': True,
             'message': f"Added {added} character(s) to project",

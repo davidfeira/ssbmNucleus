@@ -58,6 +58,12 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   const buildIdRef = useRef(null);
   const patchCreateIdRef = useRef(null);
   const bundleExportIdRef = useRef(null);
+  // Re-entry guards: the export→auto-texture→bundle chain is driven by socket
+  // events; a duplicated event (reconnect / double delivery) was firing the
+  // bundle step twice and creating TWO bundles in the vault. Each stage runs at
+  // most once per pipeline (reset in runExport).
+  const autoTextureStartedRef = useRef(false);
+  const bundlePackageStartedRef = useRef(false);
   const liveRef = useRef({});
 
   const bundleName = () => filename.replace(/\.iso$/i, '');
@@ -88,6 +94,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   };
 
   const startAutoTexture = async (bId) => {
+    if (autoTextureStartedRef.current) return;  // ignore duplicate socket events
+    autoTextureStartedRef.current = true;
     setProgressTitle('Applying HD texture pack…');
     setStepMeta('Step 2 of 3');
     setProgress(0);
@@ -106,6 +114,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
   };
 
   const startBundlePackage = async (texturePackPath) => {
+    if (bundlePackageStartedRef.current) return;  // ignore duplicate socket events
+    bundlePackageStartedRef.current = true;
     setProgressTitle('Packaging bundle…');
     setStepMeta('Step 3 of 3');
     setProgress(0);
@@ -234,6 +244,8 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     setError(null);
     setPatchResult(null);
     setBundleResult(null);
+    autoTextureStartedRef.current = false;     // fresh pipeline; allow each stage once
+    bundlePackageStartedRef.current = false;
     setProgress(0);
     setMessage('Starting…');
     setProgressTitle(useTexturePack ? 'Building texture-pack ISO…' : 'Building ISO…');
@@ -288,16 +300,7 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
     document.body.removeChild(link);
   };
 
-  const handleDownloadBundle = () => {
-    if (!bundleResult?.bundle_id) return;
-    playSound('start');
-    const link = document.createElement('a');
-    link.href = `${API_URL}/bundle/download/${bundleResult.bundle_id}`;
-    link.download = bundleResult.filename || 'bundle.ssbm';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  // Bundle downloads now happen from the vault (Patches → Bundles), not here.
 
   // ---- done screens ----
   const renderDone = () => {
@@ -328,11 +331,11 @@ const IsoBuilder = ({ onClose, projectName = 'game' }) => {
             {bundleResult.texture_count > 0 && ` · ${bundleResult.texture_count} HD portraits`}
           </p>
           <p className="share-note">
-            Find it under <strong>Patches → Bundles</strong>. Rename it or add a cover there.
+            Saved to your vault under <strong>Patches → Bundles</strong>, where you
+            can rename it, add a cover, or download/share it.
           </p>
           <div className="complete-actions">
-            <button className="btn-download btn-gold" onClick={handleDownloadBundle}>Download</button>
-            <button className="btn-secondary" onClick={handleClose}>Done</button>
+            <button className="btn-secondary btn-gold" onClick={handleClose}>Done</button>
           </div>
         </div>
       );

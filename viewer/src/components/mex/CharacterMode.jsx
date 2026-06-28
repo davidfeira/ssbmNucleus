@@ -179,15 +179,22 @@ export default function CharacterMode({
       {cc.batchAddingChars && (
         <div className="import-overlay">
           <div className="import-modal import-modal--hexagon">
+            {/* Indeterminate, NOT a count-based %: the per-fighter prepare is fast
+                and the single project build is the long, opaque step — a count bar
+                filled to 100% then sat there the whole build (a "lie"). */}
             <HexagonLoader
               className="import-loader"
               size={112}
               label="Adding characters"
-              progress={cc.batchCharProgress.total > 0 ? (cc.batchCharProgress.current / cc.batchCharProgress.total) * 100 : null}
-              minimumVisibleProgress={6}
+              progress={null}
             />
             <h3>Adding Characters...</h3>
-            <p className="import-status">{cc.batchCharProgress.current} / {cc.batchCharProgress.total}</p>
+            <p className="import-status">
+              {cc.batchCharProgress.message
+                || (cc.batchCharProgress.total > 0
+                      ? `Preparing ${cc.batchCharProgress.current} / ${cc.batchCharProgress.total}…`
+                      : 'Preparing…')}
+            </p>
           </div>
         </div>
       )}

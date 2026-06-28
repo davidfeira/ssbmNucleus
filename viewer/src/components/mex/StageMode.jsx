@@ -87,15 +87,21 @@ export default function StageMode({
       {cs.batchInstallingStages && (
         <div className="import-overlay">
           <div className="import-modal import-modal--hexagon">
+            {/* Indeterminate (see CharacterMode): the build step is the long,
+                opaque part, so a count-based bar would lie. */}
             <HexagonLoader
               className="import-loader"
               size={112}
               label="Adding stages"
-              progress={cs.batchStageProgress.total > 0 ? (cs.batchStageProgress.current / cs.batchStageProgress.total) * 100 : null}
-              minimumVisibleProgress={6}
+              progress={null}
             />
             <h3>Adding Stages...</h3>
-            <p className="import-status">{cs.batchStageProgress.current} / {cs.batchStageProgress.total}</p>
+            <p className="import-status">
+              {cs.batchStageProgress.message
+                || (cs.batchStageProgress.total > 0
+                      ? `Preparing ${cs.batchStageProgress.current} / ${cs.batchStageProgress.total}…`
+                      : 'Preparing…')}
+            </p>
           </div>
         </div>
       )}

@@ -12,11 +12,15 @@ import glob
 import shutil
 import zipfile
 import logging
+import tempfile
+import subprocess
+from collections import Counter
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 
-from core.config import PROJECT_ROOT, STORAGE_PATH, BASE_PATH
-from core.state import get_project_files_dir
+import das_scan
+from core.config import PROJECT_ROOT, STORAGE_PATH, BASE_PATH, get_subprocess_args
+from core.state import get_project_files_dir, metadata_lock
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +229,11 @@ def das_install():
 
                 # Copy default screenshot for vanilla variant to storage
                 if stage_code in DAS_DEFAULT_SCREENSHOTS:
+                    # Stage icons are extracted to PROJECT_ROOT at setup; fall back
+                    # to the bundled copy (BASE_PATH) if setup didn't populate them.
                     default_screenshot = PROJECT_ROOT / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
+                    if not default_screenshot.exists():
+                        default_screenshot = BASE_PATH / "utility" / "assets" / "stages" / DAS_DEFAULT_SCREENSHOTS[stage_code]
                     if default_screenshot.exists():
                         storage_das_folder = STORAGE_PATH / 'das' / stage_info['folder']
                         storage_das_folder.mkdir(parents=True, exist_ok=True)
@@ -457,6 +465,98 @@ def das_list_storage_variants():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@das_bp.route('/api/mex/das/scan-iso', methods=['POST'])
+def das_scan_iso():
+    """Extract an ISO's stage files and import any NEW DAS alternate stages
+    into the vault. Handles both the m-ex DAS folder layout and the 20XX flat
+    Gr<code>.<X>at layout (see das_scan.detect_das_variants)."""
+    try:
+        data = request.json or {}
+        iso_path = (data.get('isoPath') or '').strip()
+        if not iso_path:
+            return jsonify({'success': False, 'error': 'Missing isoPath parameter'}), 400
+
+        iso_file = Path(iso_path)
+        if not iso_file.exists():
+            return jsonify({'success': False, 'error': f'ISO not found: {iso_path}'}), 404
+        if iso_file.suffix.lower() not in ('.iso', '.gcm'):
+            return jsonify({'success': False, 'error': 'File must be an .iso or .gcm'}), 400
+        if '.nkit' in iso_file.name.lower():
+            logger.info(f"Skipping NKit ISO for DAS scan: {iso_path}")
+            return jsonify({'success': True, 'imported': [], 'importedCount': 0,
+                            'skipped': [iso_file.name], 'message': 'Skipped NKit ISO (not supported)'})
+
+        from iso_scanner import WIT_EXE, wit_available
+        if not wit_available():
+            return jsonify({'success': False, 'error': 'wit.exe not found — cannot scan ISOs.'}), 500
+
+        das_root = STORAGE_PATH / 'das'
+        temp_dir = tempfile.mkdtemp(prefix='nucleus_das_scan_')
+        try:
+            # Extract just the stage files (Gr*) — far lighter than a full rip.
+            # wit's --DEST must NOT already exist (it creates it; an existing dir
+            # gives "ERROR #64 FILE ALREADY EXISTS"), so target a fresh subdir.
+            extract_dir = Path(temp_dir) / 'fst'
+            cmd = [str(WIT_EXE), 'EXTRACT', str(iso_file), '--DEST', str(extract_dir),
+                   '--files=+/files/Gr*', '--quiet']
+            result = subprocess.run(cmd, capture_output=True, text=True, **get_subprocess_args())
+            if result.returncode != 0:
+                err = result.stderr or result.stdout or 'unknown error'
+                logger.error(f"wit extract failed: {err}")
+                return jsonify({'success': False, 'error': f'Failed to read ISO: {err}'}), 500
+
+            # wit lays the FST under <PARTITION>/files; find the one with Gr files.
+            files_dir = next(
+                (d for d in extract_dir.rglob('files')
+                 if d.is_dir() and any(d.glob('Gr*'))),
+                None,
+            )
+            if files_dir is None:
+                return jsonify({'success': True, 'imported': [], 'importedCount': 0,
+                                'message': 'No stage files found in ISO'})
+
+            skip = das_scan.vault_variant_md5s(das_root)
+            variants = das_scan.detect_das_variants(files_dir, skip_md5s=skip)
+
+            # Hold the shared metadata lock across the read-modify-write so this
+            # can't race a concurrent import and clobber custom_characters etc.
+            metadata_file = STORAGE_PATH / 'metadata.json'
+            imported = []
+            with metadata_lock:
+                metadata = {}
+                if metadata_file.exists():
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                stages_meta = metadata.setdefault('stages', {})
+
+                for v in variants:
+                    stage_meta = stages_meta.setdefault(v.folder, {})
+                    vlist = stage_meta.setdefault('variants', [])
+                    taken = {e.get('id') for e in vlist if isinstance(e, dict)}
+                    entry = das_scan.import_variant_to_vault(v, das_root, taken_ids=taken)
+                    vlist.append(entry)
+                    imported.append({'stageCode': v.stage_code, 'stageName': v.stage_name,
+                                     'name': entry['name'], 'id': entry['id'], 'source': v.source})
+
+                if imported:
+                    tmp = metadata_file.with_suffix('.json.tmp')
+                    with open(tmp, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=2)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, metadata_file)
+
+            by_stage = dict(Counter(i['stageName'] for i in imported))
+            logger.info(f"[OK] DAS ISO scan: imported {len(imported)} variants {by_stage}")
+            return jsonify({'success': True, 'imported': imported,
+                            'importedCount': len(imported), 'byStage': by_stage})
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    except Exception as e:
+        logger.error(f"DAS ISO scan error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @das_bp.route('/api/mex/das/import', methods=['POST'])

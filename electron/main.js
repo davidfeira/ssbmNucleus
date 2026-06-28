@@ -73,9 +73,22 @@ function startFlaskServer() {
     }
 
     // Spawn options with hidden window
+    // Gate the AI Studios off in packaged/public builds (not ready for
+    // public release yet). Dev keeps full access. The backend feature gates
+    // are NUCLEUS_AI_LAB (skin + stage studios) and NUCLEUS_MODEL_LAB; with
+    // both '0' the /ai-status + /model-lab/status probes report disabled, so
+    // every entry point (character/stage pages, costume picker, Settings)
+    // hides itself and the routes refuse to run.
+    const backendEnv = { ...process.env };
+    if (!isDev) {
+      backendEnv.NUCLEUS_AI_LAB = '0';
+      backendEnv.NUCLEUS_MODEL_LAB = '0';
+    }
+
     const spawnOptions = {
       cwd: backendCwd,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: backendEnv
     };
 
     // Hide CMD window on Windows

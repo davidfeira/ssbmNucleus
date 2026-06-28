@@ -29,17 +29,29 @@ def get_windows_subprocess_args():
         'creationflags': subprocess.CREATE_NO_WINDOW,
     }
 
-# HSDRawViewer CSP generator path - relative to this script
+# HSDRawViewer CSP generator path - relative to this script.
 SCRIPT_DIR = Path(__file__).parent
 TOOLS_DIR = SCRIPT_DIR.parent
 
-if os.name == 'nt':  # Windows
-    HSDRAW_PATH = str(TOOLS_DIR / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows")
-    CSP_BASE_PATH = str(SCRIPT_DIR / "csp_data")
-else:  # WSL/Linux
-    HSDRAW_PATH = str(TOOLS_DIR / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows")
-    CSP_BASE_PATH = str(SCRIPT_DIR / "csp_data")
+# csp_data is bundled next to this script (PyInstaller datas) in both dev and
+# frozen builds, so it's always SCRIPT_DIR-relative.
+CSP_BASE_PATH = str(SCRIPT_DIR / "csp_data")
 
+def _resolve_hsdraw_dir() -> str:
+    """Directory holding HSDRawViewer.exe.
+
+    Packaged build: HSDRawViewer is shipped by electron-builder extraResources
+    to <install>/resources/utility/HSDRawViewer — it is NOT inside the
+    PyInstaller bundle, so resolving it relative to THIS script (_MEIPASS) gives
+    a path that doesn't exist (the cause of mass CSP "preview failures" in the
+    installed app). Resolve from the exe location instead; mirrors
+    core.config.HSDRAW_EXE (RESOURCES_DIR = mex_backend.exe parent.parent)."""
+    if getattr(sys, 'frozen', False):
+        return str(Path(sys.executable).parent.parent / "utility" / "HSDRawViewer")
+    return str(TOOLS_DIR / "HSDLib" / "HSDRawViewer" / "bin" / "Release" / "net6.0-windows")
+
+
+HSDRAW_PATH = _resolve_hsdraw_dir()
 HSDRAW_EXE = os.path.join(HSDRAW_PATH, "HSDRawViewer.exe")
 
 # Character code mapping for folder structure
@@ -187,6 +199,11 @@ SCENE_MODE_CHARACTERS = [
     'Mario',
 ]
 
+# Characters that pose with ANOTHER fighter's CSP scene (find_character_assets
+# remaps the folder), so that scene's curated hiddenNodes describe the WRONG
+# model. These fall back to the auto-derived low-poly hide set instead.
+SCENE_BORROWERS = {'Giga Bowser'}
+
 
 def find_character_assets(character_name, dat_filepath=None):
     """Find animation and camera files for a character
@@ -328,7 +345,7 @@ def apply_character_specific_layers(csp_path, character_name, scale=1):
 
     return False
 
-def find_ice_climbers_pair(dat_filepath):
+def find_ice_climbers_pair(dat_filepath, explicit_pair_filepath=None):
     """Find matching Popo/Nana pair using color mapping
 
     Color pairing scheme (based on actual DAT color detection):
@@ -360,8 +377,9 @@ def find_ice_climbers_pair(dat_filepath):
     # Reverse mapping: Nana color -> Popo color
     NANA_TO_POPO = {v: k for k, v in POPO_TO_NANA.items()}
 
-    filename = Path(dat_filepath).name
-    dat_dir = Path(dat_filepath).parent
+    dat_path = Path(dat_filepath)
+    filename = dat_path.name
+    dat_dir = dat_path.parent
 
     # Parse this file to get the actual color
     parser = DATParser(dat_filepath)
@@ -393,6 +411,34 @@ def find_ice_climbers_pair(dat_filepath):
     else:
         return (None, None, None, None)
 
+    if explicit_pair_filepath:
+        explicit_pair = Path(explicit_pair_filepath)
+        if explicit_pair.exists() and explicit_pair.resolve() != dat_path.resolve():
+            try:
+                pair_parser = DATParser(str(explicit_pair))
+                pair_parser.read_dat()
+                pair_character, _pair_symbol = pair_parser.detect_character()
+                pair_color = pair_parser.detect_costume_color()
+            except Exception as e:
+                logger.warning(f"Explicit Ice Climbers pair is not readable: {explicit_pair} ({e})")
+            else:
+                expected_character = 'Ice Climbers (Nana)' if char_type == 'popo' else 'Ice Climbers'
+                expected_prefix = 'PlNn' if char_type == 'popo' else 'PlPp'
+                if pair_character == expected_character or expected_prefix in explicit_pair.name:
+                    if char_type == 'popo':
+                        nana_color = pair_color
+                    else:
+                        popo_color = pair_color
+                    logger.info(
+                        f"Using explicit Ice Climbers pair: {filename} + "
+                        f"{explicit_pair.name} ({pair_character} - {pair_color})"
+                    )
+                    return (char_type, str(explicit_pair), popo_color, nana_color)
+                logger.warning(
+                    f"Explicit Ice Climbers pair has unexpected character: "
+                    f"{explicit_pair.name} parsed as {pair_character}"
+                )
+
     # Strategy 0: Filename slot suffix in the SAME directory.
     # Custom MEX color slots (e.g. Popo Blue + Nana Blue) aren't in the vanilla
     # POPO_TO_NANA color table, so the color-name strategies below give up. But
@@ -409,6 +455,31 @@ def find_ice_climbers_pair(dat_filepath):
                 f"{candidate.name} (suffix '{my_suffix}')"
             )
             return (char_type, str(candidate), popo_color, nana_color)
+
+    # Strategy 0b: A caller may stage exactly one opposite climber beside this
+    # DAT even when the slot suffixes do not match. Treat that as an explicit
+    # local pair before any color-table or tree-search heuristics.
+    local_opposites = [
+        p for p in dat_dir.glob(f'*{search_pattern}*.dat')
+        if p.resolve() != dat_path.resolve()
+    ]
+    if len(local_opposites) == 1:
+        pair = local_opposites[0]
+        try:
+            pair_parser = DATParser(str(pair))
+            pair_parser.read_dat()
+            pair_color = pair_parser.detect_costume_color()
+        except Exception:
+            pair_color = None
+        if char_type == 'popo':
+            nana_color = pair_color
+        else:
+            popo_color = pair_color
+        logger.info(
+            f"Found Ice Climbers pair in same directory by single opposite DAT: "
+            f"{pair.name}"
+        )
+        return (char_type, str(pair), popo_color, nana_color)
 
     # If the vanilla color table doesn't cover this slot, we can't fall back
     # on color-based matching below — bail out so the caller renders solo.
@@ -461,17 +532,27 @@ def find_ice_climbers_pair(dat_filepath):
     else:
         logger.info(f"Strategy 3 SKIPPED: Directory name '{dir_name_lower}' doesn't contain popo/nana/pp/nn")
 
-    # Strategy 4: Search entire extracted folder tree
+    # Strategy 4: Search entire extracted folder tree. Do not climb out of a
+    # temporary render/staging directory into the repo root; that caused ISO
+    # scans to pair custom Popo DATs with utility/assets/vanilla/Nana DATs.
     search_root = dat_dir
+    found_extract_root = False
     for _ in range(5):  # Max 5 levels up
-        if 'extracted_' in str(search_root) or search_root.parent == search_root:
+        root_name = search_root.name.lower()
+        if root_name == 'extracted' or root_name.startswith('extracted_'):
+            found_extract_root = True
+            break
+        if search_root.parent == search_root:
             break
         search_root = search_root.parent
 
-    for dat_file in search_root.rglob(f'*{search_pattern}*.dat'):
-        if check_color_match(dat_file, target_color):
-            logger.info(f"Found Ice Climbers pair in tree: {dat_file.relative_to(search_root)} (color: {target_color})")
-            return (char_type, str(dat_file), popo_color, nana_color)
+    if found_extract_root:
+        for dat_file in search_root.rglob(f'*{search_pattern}*.dat'):
+            if check_color_match(dat_file, target_color):
+                logger.info(f"Found Ice Climbers pair in tree: {dat_file.relative_to(search_root)} (color: {target_color})")
+                return (char_type, str(dat_file), popo_color, nana_color)
+    else:
+        logger.info(f"Strategy 4 SKIPPED: no extracted root above {dat_dir}")
 
     logger.warning(f"No Ice Climbers pair found for {filename} (Popo: {popo_color if char_type == 'popo' else 'N/A'}, Nana: {nana_color if char_type == 'nana' else 'N/A'})")
     return (char_type, None, popo_color, nana_color)
@@ -682,11 +763,19 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     if head_bone is not None:
         cmd.extend(["--head-bone", str(head_bone)])
 
-    # Hide the off-screen low-poly mesh (authoritative: overrides any scene
-    # hiddenNodes, so a borrowed scene's hand-list can't mis-hide this model).
-    hide = low_poly_dobjs(dat_filepath, character)
-    if hide:
-        cmd.extend(["--hide-dobjs", hide])
+    # Hiding the off-screen low-poly mesh. A character rendered with its OWN
+    # curated CSP scene/camera yml already carries the correct hiddenNodes
+    # (authored per character -- e.g. Kirby's copy-ability meshes, Peach's alt
+    # parts). The auto-derived low-poly set is only a SUBSET of that, so
+    # overriding the curated list UNDER-hides and leaves stray meshes in the
+    # portrait. Use the auto set only when there is NO curated yml (custom /
+    # model imports) or the scene is BORROWED from another fighter (Giga Bowser
+    # poses with Bowser's scene, whose hiddenNodes are wrong for the Giga model).
+    has_curated_scene = bool(anim_file or camera_file) and character not in SCENE_BORROWERS
+    if not has_curated_scene:
+        hide = low_poly_dobjs(dat_filepath, character)
+        if hide:
+            cmd.extend(["--hide-dobjs", hide])
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -859,7 +948,7 @@ def generate_head_shot(dat_filepath):
     return output, head_info
 
 
-def generate_csp(dat_filepath, scale=1):
+def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
     """
     Generate CSP for a DAT file using HSDRawViewer headless CSP generation
     Returns path to generated CSP or None if failed
@@ -867,6 +956,7 @@ def generate_csp(dat_filepath, scale=1):
     Args:
         dat_filepath: Path to the DAT file
         scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
+        paired_dat_filepath: Optional explicit Ice Climbers partner DAT.
     """
 
     logger.info(f"Starting CSP generation for: {dat_filepath} (scale={scale}x)")
@@ -890,7 +980,10 @@ def generate_csp(dat_filepath, scale=1):
     # Special handling for Ice Climbers - match and composite pairs
     is_ice_climbers = character in ['Ice Climbers', 'Ice Climbers (Nana)']
     if is_ice_climbers:
-        char_type, pair_file, popo_color, nana_color = find_ice_climbers_pair(dat_filepath)
+        char_type, pair_file, popo_color, nana_color = find_ice_climbers_pair(
+            dat_filepath,
+            explicit_pair_filepath=paired_dat_filepath,
+        )
 
         if char_type == 'nana':
             # Nana files are composited with Popo, skip individual generation

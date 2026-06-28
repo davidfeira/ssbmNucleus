@@ -65,16 +65,19 @@ def delete_storage_stage():
             return jsonify({'success': False, 'error': f'Variant {variant_id} not found in {stage_folder}'}), 404
 
         das_folder = STORAGE_PATH / 'das' / stage_folder
-        zip_file = das_folder / variant_to_delete['filename']
-        screenshot_file = das_folder / f"{variant_id}_screenshot.png"
+        # ISO-scan-imported variants store no 'filename' key; the zip follows the
+        # <id>.zip convention, so fall back to that instead of KeyError'ing.
+        zip_name = variant_to_delete.get('filename') or f"{variant_id}.zip"
+        zip_file = das_folder / zip_name
 
         deleted_files = []
         if zip_file.exists():
             zip_file.unlink()
             deleted_files.append(str(zip_file))
-        if screenshot_file.exists():
-            screenshot_file.unlink()
-            deleted_files.append(str(screenshot_file))
+        # screenshots may be saved with any image extension
+        for shot in das_folder.glob(f"{variant_id}_screenshot.*"):
+            shot.unlink()
+            deleted_files.append(str(shot))
 
         variants.pop(variant_index)
 

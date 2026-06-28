@@ -120,7 +120,7 @@ export default function SkinCard({
               // Alternate CSPs from batch pose generation (metadata uses snake_case)
               alternateCsps: (skin.alternate_csps || []).map(alt => ({
                 id: alt.id,
-                url: `/storage/${selectedCharacter}/${alt.filename}`,
+                url: `${API_URL.replace('/api/mex', '')}/storage/${selectedCharacter}/${alt.filename}`,
                 poseName: alt.pose_name,
                 isHd: alt.is_hd,
                 timestamp: alt.timestamp

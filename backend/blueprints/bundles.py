@@ -22,7 +22,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import PROJECT_ROOT, RESOURCES_DIR, STORAGE_PATH, OUTPUT_PATH, get_subprocess_args
-from core.state import get_socketio
+from core.state import get_socketio, metadata_lock
 
 logger = logging.getLogger(__name__)
 
@@ -46,21 +46,40 @@ def load_bundle_metadata():
 
 
 def save_bundle_metadata(bundles_list):
-    """Save bundle metadata to metadata.json"""
+    """Save the bundles list into the SHARED metadata.json.
+
+    metadata.json also holds custom_characters/stages; an unguarded
+    read-modify-write here can clobber those (the same race that dropped the
+    seeded Giga Bowser). So hold the shared metadata_lock and write atomically
+    (temp + os.replace). See [[metadata-concurrency]]."""
     metadata_file = STORAGE_PATH / 'metadata.json'
+    with metadata_lock:
+        if metadata_file.exists():
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        else:
+            metadata = {'version': '1.0', 'characters': {}, 'stages': {}}
 
-    if metadata_file.exists():
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-    else:
-        metadata = {'version': '1.0', 'characters': {}, 'stages': {}}
+        metadata['bundles'] = bundles_list
 
-    metadata['bundles'] = bundles_list
-
-    with open(metadata_file, 'w') as f:
-        json.dump(metadata, f, indent=2)
+        tmp = metadata_file.with_suffix('.json.tmp')
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, metadata_file)
 
     logger.info(f"Saved {len(bundles_list)} bundles to metadata.json")
+
+
+def _append_bundle(entry):
+    """Thread-safe append of one bundle entry: the whole load-append-save runs
+    under metadata_lock so two concurrent bundle exports can't lose each other's
+    entry (read-modify-write race)."""
+    with metadata_lock:
+        bundles = load_bundle_metadata()
+        bundles.append(entry)
+        save_bundle_metadata(bundles)
 
 
 def parse_dolphin_ini_iso_path(ini_path: str) -> str:
@@ -275,9 +294,8 @@ def run_bundle_export(export_id, name, description, build_name, vanilla_iso_path
             # Delete temp image
             os.remove(image_path)
 
-        # 7. Save to metadata
-        bundles = load_bundle_metadata()
-        bundles.append({
+        # 7. Save to metadata (locked load-append-save; shared metadata.json)
+        _append_bundle({
             'id': bundle_id,
             'name': name,
             'description': description,
@@ -288,7 +306,6 @@ def run_bundle_export(export_id, name, description, build_name, vanilla_iso_path
             'texture_count': texture_count,
             'created': datetime.now().isoformat()
         })
-        save_bundle_metadata(bundles)
 
         # Create user-friendly filename for download
         safe_name = re.sub(r'[^\w\-_]', '_', name)

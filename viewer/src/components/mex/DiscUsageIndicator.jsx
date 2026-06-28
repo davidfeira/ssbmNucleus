@@ -1,33 +1,23 @@
 /**
- * DiscUsageIndicator — build-capacity meter for the install-page header.
+ * DiscUsageIndicator - build-capacity meter for the install-page header.
  *
- * There are TWO independent limits, shown as two stacked rows:
+ * There are two independent limits:
+ *  1. CSS memory: CSP texture RAM, capped separately for the console/offline VS
+ *     CSS and the Dolphin/Slippi online CSS.
+ *  2. Disc/image size: real hardware disc capacity and Dolphin's ~4 GiB ISO
+ *     boot ceiling.
  *
- *  1. COSTUME COUNT (primary) — the character-select screen HANGS once a build
- *     holds more than ~512 TOTAL costumes across the whole roster. This is the
- *     ceiling you actually hit first, it's a hard game limit, and it is
- *     INDEPENDENT of disc size and of HD-texture mode — freeing disc space does
- *     NOT raise it. Verified in-game with video stripped (so size was a non-
- *     factor): count-500 ran at 60 fps, count-550 froze at the CSS. See
- *     docs/MEX_BUILD_LIMITS.md. Driven purely by the `totalCostumes` prop, so it
- *     shows even if the disc-usage fetch fails.
- *
- *  2. DISC SIZE (secondary) — a GameCube disc holds 1,459,978,240 bytes. A build
- *     over that still RUNS in Dolphin, but won't boot on real hardware / an SD
- *     setup. Shown as a stacked breakdown of what fills the disc (hover a
- *     segment), with an optional "Free space" tool that strips the big vanilla
- *     video files (~810 MB). Stripping frees DISC space — it does not raise the
- *     costume-count ceiling. Driven by GET /project/disc-usage.
+ * Stripping video frees disc space only. It does not raise either CSS memory
+ * ceiling. See docs/MEX_BUILD_LIMITS.md.
  */
 import React, { useEffect, useState } from 'react'
 
-// Costume-count gauge. The CSS hang is a CSP-texture-MEMORY limit, not a fixed count:
-// the screen freezes when CSP video memory (128+total)*r^2 overflows the heap. The app
-// AUTO-compresses CSP portraits as you add costumes (calculate_auto_compression scales
-// the ratio r from 1.0 down toward 0.1), so a normally-exported build is safe up to
-// ~1150 total (where even max compression can't fit). (An UNcompressed export walls at
-// only ~510 — the app compresses for you.) See docs/MEX_BUILD_LIMITS.md §2.
-const COSTUME_HANG = 1150   // ~ceiling once CSPs are auto-compressed (CSS-memory bound)
+// CSS memory ceilings. Console/local play should be keyed to the offline VS CSS;
+// Dolphin/Slippi should be keyed to the online CSS, which loads more memory. Keep
+// these as separate constants so new online/offline ladder results can land without
+// mixing the two use cases.
+const CONSOLE_COSTUME_HANG = 1150   // offline VS CSS, auto-compressed CSPs
+const DOLPHIN_COSTUME_HANG = 1500   // Slippi online CSS, tested healthy through here
 
 // Disc size has TWO thresholds. The console disc (from the backend = 1,459,978,240 B)
 // is the real-hardware / SD limit. A build over it still RUNS in Dolphin (confirmed
@@ -83,12 +73,13 @@ export default function DiscUsageIndicator({ API_URL, projectLoaded, totalCostum
       const overConsoleBy = used - capacity            // bytes past the console disc
       const overDolphin = used > DOLPHIN_LIMIT
       const dolphinFree = DOLPHIN_LIMIT - used         // headroom before the ISO won't boot
-      // How many more costumes fit in each free space, capped by the CSS-memory ceiling
-      // (so we never promise more than the game can actually load).
+      // How many more costumes fit in each free space, capped by the matching
+      // CSS-memory ceiling (so we never promise more than the game can load).
       const avg = data.avgSkinBytes || 497 * 1024      // ~bytes per added costume on disc
-      const memRoom = Math.max(0, COSTUME_HANG - totalCostumes)
-      const consoleFits = Math.min(Math.floor(free / avg), memRoom)
-      const dolphinFits = Math.min(Math.floor(dolphinFree / avg), memRoom)
+      const consoleMemRoom = Math.max(0, CONSOLE_COSTUME_HANG - totalCostumes)
+      const dolphinMemRoom = Math.max(0, DOLPHIN_COSTUME_HANG - totalCostumes)
+      const consoleFits = Math.min(Math.floor(free / avg), consoleMemRoom)
+      const dolphinFits = Math.min(Math.floor(dolphinFree / avg), dolphinMemRoom)
       const anyStrippable = STRIPPABLE.some((c) => (breakdown[c.key] || 0) > 0)
       const selectedBytes = STRIPPABLE.reduce(
         (s, c) => s + (selected[c.key] ? breakdown[c.key] || 0 : 0), 0)
@@ -120,7 +111,7 @@ export default function DiscUsageIndicator({ API_URL, projectLoaded, totalCostum
           {/* CONSOLE bar: build composition, full width = the 1.46 GB console disc */}
           <div
             className="disc-usage__gauge"
-            title="Real GameCube / SD-console disc (1.46 GB). A build past the end of this bar won't boot on hardware — but still runs in Dolphin."
+            title="Real GameCube / SD-console disc (1.46 GB). A build past the end of this bar won't boot on hardware; costume room uses the offline VS CSS memory ceiling."
           >
             <span className="disc-usage__gauge-label">Console</span>
             <div className="disc-usage__barwrap">
@@ -155,7 +146,7 @@ export default function DiscUsageIndicator({ API_URL, projectLoaded, totalCostum
           {/* DOLPHIN bar: build size, full width = the ~4 GiB ISO boot ceiling */}
           <div
             className="disc-usage__gauge"
-            title="Dolphin / ISO-format ceiling (~4 GiB = 2³²). Dolphin runs an over-disc build up to here; past the end of this bar the ISO won't boot at all."
+            title="Dolphin / ISO-format ceiling (~4 GiB = 2^32). Dolphin runs an over-disc build up to here; costume room uses the Slippi online CSS memory ceiling."
           >
             <span className="disc-usage__gauge-label">Dolphin</span>
             <div className="disc-usage__barwrap">
@@ -199,12 +190,6 @@ export default function DiscUsageIndicator({ API_URL, projectLoaded, totalCostum
                   <span className="disc-usage__strip-size">{fmtMB(disc.breakdown[c.key])}</span>
                 </label>
               ) : null))}
-              <div className="disc-usage__strip-note">
-                Frees disc space for real-hardware / SD builds (Dolphin runs over-disc fine). Does
-                NOT raise the ~{COSTUME_HANG}-costume limit above. Permanent for this project
-                (rebuild from a vanilla ISO to restore); only removes the intro movie / cutscenes
-                and idle demo, not VS matches.
-              </div>
               <div className="disc-usage__strip-actions">
                 <button type="button" className="disc-usage__strip-cancel"
                   onClick={() => { setStripOpen(false); setSelected({}) }}>

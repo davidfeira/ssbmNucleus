@@ -955,8 +955,9 @@ def generate_costume_stock():
             return jsonify({'success': True,
                             'stockUrl': f"/storage/{character}/{skin_id}_stc.png"})
 
-        # preview: generate and return without writing
-        from skinlab.stock_gen import generate_stock
+        # preview: generate (generated-only, no vanilla fallback) via the shared
+        # canonical builder; nothing is written here.
+        from skinlab.costume_assets import build_stock
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             dat_filename = find_costume_archive_name(zip_ref.namelist())
@@ -968,35 +969,22 @@ def generate_costume_stock():
         stem = Path(dat_filename).stem
         costume_code = stem[:-3] if stem.endswith('Mod') else stem
 
-        # texture-diff straight off the DAT (recolors); model imports fall
-        # through to a lazy bind-pose head-shot render + head crop, then
-        # csp-diff off our own stored render as the last resort
-        from generate_csp import generate_head_shot
-
+        # only our own stored render (vanilla pose) may feed the csp-diff path
         csp_bytes = None
         if skin_meta and skin_meta.get('csp_source') == 'generated':
             csp_path = char_folder / f"{skin_id}_csp.png"
             if csp_path.exists():
                 csp_bytes = csp_path.read_bytes()
 
-        tmp_dir = tempfile.mkdtemp()
-        try:
-            tmp_dat_path = os.path.join(tmp_dir, f"{costume_code or 'costume'}.dat")
-            with open(tmp_dat_path, 'wb') as f:
-                f.write(dat_data)
-            result = generate_stock(VANILLA_ASSETS_DIR, character, costume_code,
-                                    modded_dat_path=tmp_dat_path,
-                                    modded_csp=csp_bytes,
-                                    head_shot_provider=lambda: generate_head_shot(tmp_dat_path))
-        finally:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        stock_data, _source, method = build_stock(
+            character, costume_code, dat_data,
+            aligned_csp=csp_bytes, vanilla_fallback=False)
 
-        if result is None:
+        if stock_data is None:
             return jsonify({
                 'success': False,
                 'error': 'Could not derive a stock icon for this skin (no vanilla '
                          'reference lines up with its DAT or CSP)'}), 422
-        stock_data, method = result
 
         logger.info(f"[OK] Previewed generated stock for {character} - {skin_id} via {method}")
         return jsonify({'success': True, 'method': method,

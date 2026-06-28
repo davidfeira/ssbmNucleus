@@ -233,6 +233,16 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM Wiimms ISO Tools (wit) — used by the ISO-scan feature. extraResources in
+REM package.json ships it from tools/, but electron-builder runs from the staging
+REM dir, so the source must be copied here or it's silently skipped (= "wit.exe
+REM missing" in the installed app only).
+call :CopyDir "%PROJECT_ROOT%\tools\wit-v3.05a-r8638-cygwin64" "%PACKAGE_STAGE%\tools\wit-v3.05a-r8638-cygwin64" "wit ISO tools"
+if %errorlevel% neq 0 (
+    pause
+    exit /b 1
+)
+
 call :CopyFile "%PROJECT_ROOT%\scripts\tools\clear_storage.py" "%PACKAGE_STAGE%\scripts\tools\clear_storage.py" "clear_storage.py"
 if %errorlevel% neq 0 (
     pause
@@ -256,6 +266,10 @@ if not exist "%PACKAGE_STAGE%\dist-backend\mex\mexcli.exe" (
 )
 if not exist "%PACKAGE_STAGE%\dist-backend\hsdraw\HSDRawViewer.exe" (
     echo ERROR: HSDRawViewer.exe missing from %PACKAGE_STAGE%\dist-backend\hsdraw
+    set "MISSING_ARTIFACT=1"
+)
+if not exist "%PACKAGE_STAGE%\tools\wit-v3.05a-r8638-cygwin64\bin\wit.exe" (
+    echo ERROR: wit.exe missing from %PACKAGE_STAGE%\tools\wit-v3.05a-r8638-cygwin64\bin
     set "MISSING_ARTIFACT=1"
 )
 if defined MISSING_ARTIFACT (

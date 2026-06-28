@@ -8,9 +8,17 @@ and functions to access/modify them safely.
 from pathlib import Path
 import sys
 import logging
+import threading
 
 # Add mex_bridge to path
 from .config import PROJECT_ROOT
+
+# Serializes read-modify-write of the shared storage/metadata.json. Flask runs
+# threaded, so concurrent imports (e.g. a multi-file drag firing 8 /import/file
+# requests at once) otherwise race and lose entries — this is what silently
+# dropped the seeded Giga Bowser from the vault. Both the custom-character and
+# custom-stage blueprints write the SAME metadata.json, so they share this lock.
+metadata_lock = threading.RLock()
 
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "tools"))
 from mex_bridge import MexManager, MexManagerError

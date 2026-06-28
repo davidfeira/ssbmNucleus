@@ -37,7 +37,7 @@ export function useCspManager({
   const mapAlternateCsps = (character, skin) => (
     (skin.alternate_csps || []).map(alt => ({
       id: alt.id,
-      url: `/storage/${character}/${alt.filename}`,
+      url: `${baseUrl}/storage/${character}/${alt.filename}`,
       poseName: alt.pose_name,
       isHd: alt.is_hd,
       timestamp: alt.timestamp,
@@ -219,7 +219,9 @@ export function useCspManager({
       if (data.success) {
         const newAlt = {
           id: data.altId,
-          url: data.url,
+          // backend returns a root-relative /storage/... path; prefix the origin
+          // so it loads in the packaged app (file:// origin has no dev proxy)
+          url: data.url?.startsWith('http') ? data.url : `${baseUrl}${data.url}`,
           poseName: null,
           isHd: false,
           file: null

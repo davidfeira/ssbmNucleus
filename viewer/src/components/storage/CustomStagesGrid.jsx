@@ -363,7 +363,7 @@ export default function CustomStagesGrid({
               <div className="stage-icon-container">
                 {stage.has_icon ? (
                   <img
-                    src={stage.icon_url}
+                    src={`${API_URL.replace('/api/mex', '')}${stage.icon_url}`}
                     alt={stage.name}
                     className="stage-icon"
                     style={{ imageRendering: 'pixelated' }}

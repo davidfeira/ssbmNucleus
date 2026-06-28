@@ -39,7 +39,7 @@ namespace HSDRawViewer.Rendering.Renderers
             string currentDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
             string filePath = Path.Combine(currentDirectory, "lib\\" + fontFile);
 
-            using FileStream s = new(filePath, FileMode.Open);
+            using FileStream s = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using BinaryReader r = new(s);
             if (r.ReadByte() != 0xBF || r.ReadByte() != 0xF2)
                 throw new InvalidDataException($"{fontFile} was not a valid bff file");

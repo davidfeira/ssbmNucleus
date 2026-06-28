@@ -1,0 +1,1400 @@
+{
+  "agent": "claude",
+  "theme": "Porcelain & Ink",
+  "created_at": "2026-06-22T02:08:23.967387+00:00",
+  "local_image_generation": {
+    "required": true,
+    "provider": "local",
+    "models": [
+      "sd-turbo"
+    ]
+  },
+  "characters": {
+    "Fox": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFxNr",
+        "skinName": "PorcInk-Fox-Nr",
+        "vaultSkinId": "PorcInk-Fox-Nr",
+        "filename": "PorcInk-Fox-Nr.zip",
+        "zipPath": "storage/Fox/PorcInk-Fox-Nr.zip",
+        "plan": "plans/characters/Fox/PlFxNr.json",
+        "preview": "previews/characters/Fox/PlFxNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFxOr",
+        "skinName": "PorcInk-Fox-Or",
+        "vaultSkinId": "PorcInk-Fox-Or",
+        "filename": "PorcInk-Fox-Or.zip",
+        "zipPath": "storage/Fox/PorcInk-Fox-Or.zip",
+        "plan": "plans/characters/Fox/PlFxOr.json",
+        "preview": "previews/characters/Fox/PlFxOr_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFxLa",
+        "skinName": "PorcInk-Fox-La",
+        "vaultSkinId": "PorcInk-Fox-La",
+        "filename": "PorcInk-Fox-La.zip",
+        "zipPath": "storage/Fox/PorcInk-Fox-La.zip",
+        "plan": "plans/characters/Fox/PlFxLa.json",
+        "preview": "previews/characters/Fox/PlFxLa_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFxGr",
+        "skinName": "PorcInk-Fox-Gr",
+        "vaultSkinId": "PorcInk-Fox-Gr",
+        "filename": "PorcInk-Fox-Gr.zip",
+        "zipPath": "storage/Fox/PorcInk-Fox-Gr.zip",
+        "plan": "plans/characters/Fox/PlFxGr.json",
+        "preview": "previews/characters/Fox/PlFxGr_review.jpg"
+      }
+    ],
+    "Bowser": [
+      {
+        "slot": 0,
+        "costumeCode": "PlKpNr",
+        "skinName": "PorcInk-Bowser-Nr",
+        "vaultSkinId": "PorcInk-Bowser-Nr",
+        "filename": "PorcInk-Bowser-Nr.zip",
+        "zipPath": "storage/Bowser/PorcInk-Bowser-Nr.zip",
+        "plan": "plans/characters/Bowser/PlKpNr.json",
+        "preview": "previews/characters/Bowser/PlKpNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlKpRe",
+        "skinName": "PorcInk-Bowser-Re",
+        "vaultSkinId": "PorcInk-Bowser-Re",
+        "filename": "PorcInk-Bowser-Re.zip",
+        "zipPath": "storage/Bowser/PorcInk-Bowser-Re.zip",
+        "plan": "plans/characters/Bowser/PlKpRe.json",
+        "preview": "previews/characters/Bowser/PlKpRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlKpBu",
+        "skinName": "PorcInk-Bowser-Bu",
+        "vaultSkinId": "PorcInk-Bowser-Bu",
+        "filename": "PorcInk-Bowser-Bu.zip",
+        "zipPath": "storage/Bowser/PorcInk-Bowser-Bu.zip",
+        "plan": "plans/characters/Bowser/PlKpBu.json",
+        "preview": "previews/characters/Bowser/PlKpBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlKpBk",
+        "skinName": "PorcInk-Bowser-Bk",
+        "vaultSkinId": "PorcInk-Bowser-Bk",
+        "filename": "PorcInk-Bowser-Bk.zip",
+        "zipPath": "storage/Bowser/PorcInk-Bowser-Bk.zip",
+        "plan": "plans/characters/Bowser/PlKpBk.json",
+        "preview": "previews/characters/Bowser/PlKpBk_review.jpg"
+      }
+    ],
+    "C. Falcon": [
+      {
+        "slot": 0,
+        "costumeCode": "PlCaNr",
+        "skinName": "PorcInk-CFalcon-Nr",
+        "vaultSkinId": "PorcInk-CFalcon-Nr",
+        "filename": "PorcInk-CFalcon-Nr.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Nr.zip",
+        "plan": "plans/characters/C. Falcon/PlCaNr.json",
+        "preview": "previews/characters/C. Falcon/PlCaNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlCaGy",
+        "skinName": "PorcInk-CFalcon-Gy",
+        "vaultSkinId": "PorcInk-CFalcon-Gy",
+        "filename": "PorcInk-CFalcon-Gy.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Gy.zip",
+        "plan": "plans/characters/C. Falcon/PlCaGy.json",
+        "preview": "previews/characters/C. Falcon/PlCaGy_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlCaRe",
+        "skinName": "PorcInk-CFalcon-Re",
+        "vaultSkinId": "PorcInk-CFalcon-Re",
+        "filename": "PorcInk-CFalcon-Re.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Re.zip",
+        "plan": "plans/characters/C. Falcon/PlCaRe.json",
+        "preview": "previews/characters/C. Falcon/PlCaRe_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlCaWh",
+        "skinName": "PorcInk-CFalcon-Wh",
+        "vaultSkinId": "PorcInk-CFalcon-Wh",
+        "filename": "PorcInk-CFalcon-Wh.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Wh.zip",
+        "plan": "plans/characters/C. Falcon/PlCaWh.json",
+        "preview": "previews/characters/C. Falcon/PlCaWh_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlCaGr",
+        "skinName": "PorcInk-CFalcon-Gr",
+        "vaultSkinId": "PorcInk-CFalcon-Gr",
+        "filename": "PorcInk-CFalcon-Gr.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Gr.zip",
+        "plan": "plans/characters/C. Falcon/PlCaGr.json",
+        "preview": "previews/characters/C. Falcon/PlCaGr_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlCaBu",
+        "skinName": "PorcInk-CFalcon-Bu",
+        "vaultSkinId": "PorcInk-CFalcon-Bu",
+        "filename": "PorcInk-CFalcon-Bu.zip",
+        "zipPath": "storage/C. Falcon/PorcInk-CFalcon-Bu.zip",
+        "plan": "plans/characters/C. Falcon/PlCaBu.json",
+        "preview": "previews/characters/C. Falcon/PlCaBu_review.jpg"
+      }
+    ],
+    "DK": [
+      {
+        "slot": 0,
+        "costumeCode": "PlDkNr",
+        "skinName": "PorcInk-DK-Nr",
+        "vaultSkinId": "PorcInk-DK-Nr",
+        "filename": "PorcInk-DK-Nr.zip",
+        "zipPath": "storage/DK/PorcInk-DK-Nr.zip",
+        "plan": "plans/characters/DK/PlDkNr.json",
+        "preview": "previews/characters/DK/PlDkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlDkBk",
+        "skinName": "PorcInk-DK-Bk",
+        "vaultSkinId": "PorcInk-DK-Bk",
+        "filename": "PorcInk-DK-Bk.zip",
+        "zipPath": "storage/DK/PorcInk-DK-Bk.zip",
+        "plan": "plans/characters/DK/PlDkBk.json",
+        "preview": "previews/characters/DK/PlDkBk_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlDkRe",
+        "skinName": "PorcInk-DK-Re",
+        "vaultSkinId": "PorcInk-DK-Re",
+        "filename": "PorcInk-DK-Re.zip",
+        "zipPath": "storage/DK/PorcInk-DK-Re.zip",
+        "plan": "plans/characters/DK/PlDkRe.json",
+        "preview": "previews/characters/DK/PlDkRe_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlDkBu",
+        "skinName": "PorcInk-DK-Bu",
+        "vaultSkinId": "PorcInk-DK-Bu",
+        "filename": "PorcInk-DK-Bu.zip",
+        "zipPath": "storage/DK/PorcInk-DK-Bu.zip",
+        "plan": "plans/characters/DK/PlDkBu.json",
+        "preview": "previews/characters/DK/PlDkBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlDkGr",
+        "skinName": "PorcInk-DK-Gr",
+        "vaultSkinId": "PorcInk-DK-Gr",
+        "filename": "PorcInk-DK-Gr.zip",
+        "zipPath": "storage/DK/PorcInk-DK-Gr.zip",
+        "plan": "plans/characters/DK/PlDkGr.json",
+        "preview": "previews/characters/DK/PlDkGr_review.jpg"
+      }
+    ],
+    "Dr. Mario": [
+      {
+        "slot": 0,
+        "costumeCode": "PlDrNr",
+        "skinName": "PorcInk-DrMario-Nr",
+        "vaultSkinId": "PorcInk-DrMario-Nr",
+        "filename": "PorcInk-DrMario-Nr.zip",
+        "zipPath": "storage/Dr. Mario/PorcInk-DrMario-Nr.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrNr.json",
+        "preview": "previews/characters/Dr. Mario/PlDrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlDrRe",
+        "skinName": "PorcInk-DrMario-Re",
+        "vaultSkinId": "PorcInk-DrMario-Re",
+        "filename": "PorcInk-DrMario-Re.zip",
+        "zipPath": "storage/Dr. Mario/PorcInk-DrMario-Re.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrRe.json",
+        "preview": "previews/characters/Dr. Mario/PlDrRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlDrBu",
+        "skinName": "PorcInk-DrMario-Bu",
+        "vaultSkinId": "PorcInk-DrMario-Bu",
+        "filename": "PorcInk-DrMario-Bu.zip",
+        "zipPath": "storage/Dr. Mario/PorcInk-DrMario-Bu.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrBu.json",
+        "preview": "previews/characters/Dr. Mario/PlDrBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlDrGr",
+        "skinName": "PorcInk-DrMario-Gr",
+        "vaultSkinId": "PorcInk-DrMario-Gr",
+        "filename": "PorcInk-DrMario-Gr.zip",
+        "zipPath": "storage/Dr. Mario/PorcInk-DrMario-Gr.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrGr.json",
+        "preview": "previews/characters/Dr. Mario/PlDrGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlDrBk",
+        "skinName": "PorcInk-DrMario-Bk",
+        "vaultSkinId": "PorcInk-DrMario-Bk",
+        "filename": "PorcInk-DrMario-Bk.zip",
+        "zipPath": "storage/Dr. Mario/PorcInk-DrMario-Bk.zip",
+        "plan": "plans/characters/Dr. Mario/PlDrBk.json",
+        "preview": "previews/characters/Dr. Mario/PlDrBk_review.jpg"
+      }
+    ],
+    "Falco": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFcNr",
+        "skinName": "PorcInk-Falco-Nr",
+        "vaultSkinId": "PorcInk-Falco-Nr",
+        "filename": "PorcInk-Falco-Nr.zip",
+        "zipPath": "storage/Falco/PorcInk-Falco-Nr.zip",
+        "plan": "plans/characters/Falco/PlFcNr.json",
+        "preview": "previews/characters/Falco/PlFcNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFcRe",
+        "skinName": "PorcInk-Falco-Re",
+        "vaultSkinId": "PorcInk-Falco-Re",
+        "filename": "PorcInk-Falco-Re.zip",
+        "zipPath": "storage/Falco/PorcInk-Falco-Re.zip",
+        "plan": "plans/characters/Falco/PlFcRe.json",
+        "preview": "previews/characters/Falco/PlFcRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFcBu",
+        "skinName": "PorcInk-Falco-Bu",
+        "vaultSkinId": "PorcInk-Falco-Bu",
+        "filename": "PorcInk-Falco-Bu.zip",
+        "zipPath": "storage/Falco/PorcInk-Falco-Bu.zip",
+        "plan": "plans/characters/Falco/PlFcBu.json",
+        "preview": "previews/characters/Falco/PlFcBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFcGr",
+        "skinName": "PorcInk-Falco-Gr",
+        "vaultSkinId": "PorcInk-Falco-Gr",
+        "filename": "PorcInk-Falco-Gr.zip",
+        "zipPath": "storage/Falco/PorcInk-Falco-Gr.zip",
+        "plan": "plans/characters/Falco/PlFcGr.json",
+        "preview": "previews/characters/Falco/PlFcGr_review.jpg"
+      }
+    ],
+    "Ganondorf": [
+      {
+        "slot": 0,
+        "costumeCode": "PlGnNr",
+        "skinName": "PorcInk-Ganondorf-Nr",
+        "vaultSkinId": "PorcInk-Ganondorf-Nr",
+        "filename": "PorcInk-Ganondorf-Nr.zip",
+        "zipPath": "storage/Ganondorf/PorcInk-Ganondorf-Nr.zip",
+        "plan": "plans/characters/Ganondorf/PlGnNr.json",
+        "preview": "previews/characters/Ganondorf/PlGnNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlGnRe",
+        "skinName": "PorcInk-Ganondorf-Re",
+        "vaultSkinId": "PorcInk-Ganondorf-Re",
+        "filename": "PorcInk-Ganondorf-Re.zip",
+        "zipPath": "storage/Ganondorf/PorcInk-Ganondorf-Re.zip",
+        "plan": "plans/characters/Ganondorf/PlGnRe.json",
+        "preview": "previews/characters/Ganondorf/PlGnRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlGnBu",
+        "skinName": "PorcInk-Ganondorf-Bu",
+        "vaultSkinId": "PorcInk-Ganondorf-Bu",
+        "filename": "PorcInk-Ganondorf-Bu.zip",
+        "zipPath": "storage/Ganondorf/PorcInk-Ganondorf-Bu.zip",
+        "plan": "plans/characters/Ganondorf/PlGnBu.json",
+        "preview": "previews/characters/Ganondorf/PlGnBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlGnGr",
+        "skinName": "PorcInk-Ganondorf-Gr",
+        "vaultSkinId": "PorcInk-Ganondorf-Gr",
+        "filename": "PorcInk-Ganondorf-Gr.zip",
+        "zipPath": "storage/Ganondorf/PorcInk-Ganondorf-Gr.zip",
+        "plan": "plans/characters/Ganondorf/PlGnGr.json",
+        "preview": "previews/characters/Ganondorf/PlGnGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlGnLa",
+        "skinName": "PorcInk-Ganondorf-La",
+        "vaultSkinId": "PorcInk-Ganondorf-La",
+        "filename": "PorcInk-Ganondorf-La.zip",
+        "zipPath": "storage/Ganondorf/PorcInk-Ganondorf-La.zip",
+        "plan": "plans/characters/Ganondorf/PlGnLa.json",
+        "preview": "previews/characters/Ganondorf/PlGnLa_review.jpg"
+      }
+    ],
+    "Ice Climbers": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPpNr",
+        "skinName": "PorcInk-IceClimbers-Nr",
+        "vaultSkinId": "PorcInk-IceClimbers-Nr",
+        "filename": "PorcInk-IceClimbers-Nr.zip",
+        "zipPath": "storage/Ice Climbers/PorcInk-IceClimbers-Nr.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpNr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPpGr",
+        "skinName": "PorcInk-IceClimbers-Gr",
+        "vaultSkinId": "PorcInk-IceClimbers-Gr",
+        "filename": "PorcInk-IceClimbers-Gr.zip",
+        "zipPath": "storage/Ice Climbers/PorcInk-IceClimbers-Gr.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpGr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpGr_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPpOr",
+        "skinName": "PorcInk-IceClimbers-Or",
+        "vaultSkinId": "PorcInk-IceClimbers-Or",
+        "filename": "PorcInk-IceClimbers-Or.zip",
+        "zipPath": "storage/Ice Climbers/PorcInk-IceClimbers-Or.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpOr.json",
+        "preview": "previews/characters/Ice Climbers/PlPpOr_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPpRe",
+        "skinName": "PorcInk-IceClimbers-Re",
+        "vaultSkinId": "PorcInk-IceClimbers-Re",
+        "filename": "PorcInk-IceClimbers-Re.zip",
+        "zipPath": "storage/Ice Climbers/PorcInk-IceClimbers-Re.zip",
+        "plan": "plans/characters/Ice Climbers/PlPpRe.json",
+        "preview": "previews/characters/Ice Climbers/PlPpRe_review.jpg"
+      }
+    ],
+    "Jigglypuff": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPrNr",
+        "skinName": "PorcInk-Jigglypuff-Nr",
+        "vaultSkinId": "PorcInk-Jigglypuff-Nr",
+        "filename": "PorcInk-Jigglypuff-Nr.zip",
+        "zipPath": "storage/Jigglypuff/PorcInk-Jigglypuff-Nr.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrNr.json",
+        "preview": "previews/characters/Jigglypuff/PlPrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPrRe",
+        "skinName": "PorcInk-Jigglypuff-Re",
+        "vaultSkinId": "PorcInk-Jigglypuff-Re",
+        "filename": "PorcInk-Jigglypuff-Re.zip",
+        "zipPath": "storage/Jigglypuff/PorcInk-Jigglypuff-Re.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrRe.json",
+        "preview": "previews/characters/Jigglypuff/PlPrRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPrBu",
+        "skinName": "PorcInk-Jigglypuff-Bu",
+        "vaultSkinId": "PorcInk-Jigglypuff-Bu",
+        "filename": "PorcInk-Jigglypuff-Bu.zip",
+        "zipPath": "storage/Jigglypuff/PorcInk-Jigglypuff-Bu.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrBu.json",
+        "preview": "previews/characters/Jigglypuff/PlPrBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPrGr",
+        "skinName": "PorcInk-Jigglypuff-Gr",
+        "vaultSkinId": "PorcInk-Jigglypuff-Gr",
+        "filename": "PorcInk-Jigglypuff-Gr.zip",
+        "zipPath": "storage/Jigglypuff/PorcInk-Jigglypuff-Gr.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrGr.json",
+        "preview": "previews/characters/Jigglypuff/PlPrGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlPrYe",
+        "skinName": "PorcInk-Jigglypuff-Ye",
+        "vaultSkinId": "PorcInk-Jigglypuff-Ye",
+        "filename": "PorcInk-Jigglypuff-Ye.zip",
+        "zipPath": "storage/Jigglypuff/PorcInk-Jigglypuff-Ye.zip",
+        "plan": "plans/characters/Jigglypuff/PlPrYe.json",
+        "preview": "previews/characters/Jigglypuff/PlPrYe_review.jpg"
+      }
+    ],
+    "Kirby": [
+      {
+        "slot": 0,
+        "costumeCode": "PlKbNr",
+        "skinName": "PorcInk-Kirby-Nr",
+        "vaultSkinId": "PorcInk-Kirby-Nr",
+        "filename": "PorcInk-Kirby-Nr.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Nr.zip",
+        "plan": "plans/characters/Kirby/PlKbNr.json",
+        "preview": "previews/characters/Kirby/PlKbNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlKbYe",
+        "skinName": "PorcInk-Kirby-Ye",
+        "vaultSkinId": "PorcInk-Kirby-Ye",
+        "filename": "PorcInk-Kirby-Ye.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Ye.zip",
+        "plan": "plans/characters/Kirby/PlKbYe.json",
+        "preview": "previews/characters/Kirby/PlKbYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlKbBu",
+        "skinName": "PorcInk-Kirby-Bu",
+        "vaultSkinId": "PorcInk-Kirby-Bu",
+        "filename": "PorcInk-Kirby-Bu.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Bu.zip",
+        "plan": "plans/characters/Kirby/PlKbBu.json",
+        "preview": "previews/characters/Kirby/PlKbBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlKbRe",
+        "skinName": "PorcInk-Kirby-Re",
+        "vaultSkinId": "PorcInk-Kirby-Re",
+        "filename": "PorcInk-Kirby-Re.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Re.zip",
+        "plan": "plans/characters/Kirby/PlKbRe.json",
+        "preview": "previews/characters/Kirby/PlKbRe_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlKbGr",
+        "skinName": "PorcInk-Kirby-Gr",
+        "vaultSkinId": "PorcInk-Kirby-Gr",
+        "filename": "PorcInk-Kirby-Gr.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Gr.zip",
+        "plan": "plans/characters/Kirby/PlKbGr.json",
+        "preview": "previews/characters/Kirby/PlKbGr_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlKbWh",
+        "skinName": "PorcInk-Kirby-Wh",
+        "vaultSkinId": "PorcInk-Kirby-Wh",
+        "filename": "PorcInk-Kirby-Wh.zip",
+        "zipPath": "storage/Kirby/PorcInk-Kirby-Wh.zip",
+        "plan": "plans/characters/Kirby/PlKbWh.json",
+        "preview": "previews/characters/Kirby/PlKbWh_review.jpg"
+      }
+    ],
+    "Link": [
+      {
+        "slot": 0,
+        "costumeCode": "PlLkNr",
+        "skinName": "PorcInk-Link-Nr",
+        "vaultSkinId": "PorcInk-Link-Nr",
+        "filename": "PorcInk-Link-Nr.zip",
+        "zipPath": "storage/Link/PorcInk-Link-Nr.zip",
+        "plan": "plans/characters/Link/PlLkNr.json",
+        "preview": "previews/characters/Link/PlLkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlLkRe",
+        "skinName": "PorcInk-Link-Re",
+        "vaultSkinId": "PorcInk-Link-Re",
+        "filename": "PorcInk-Link-Re.zip",
+        "zipPath": "storage/Link/PorcInk-Link-Re.zip",
+        "plan": "plans/characters/Link/PlLkRe.json",
+        "preview": "previews/characters/Link/PlLkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlLkBu",
+        "skinName": "PorcInk-Link-Bu",
+        "vaultSkinId": "PorcInk-Link-Bu",
+        "filename": "PorcInk-Link-Bu.zip",
+        "zipPath": "storage/Link/PorcInk-Link-Bu.zip",
+        "plan": "plans/characters/Link/PlLkBu.json",
+        "preview": "previews/characters/Link/PlLkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlLkBk",
+        "skinName": "PorcInk-Link-Bk",
+        "vaultSkinId": "PorcInk-Link-Bk",
+        "filename": "PorcInk-Link-Bk.zip",
+        "zipPath": "storage/Link/PorcInk-Link-Bk.zip",
+        "plan": "plans/characters/Link/PlLkBk.json",
+        "preview": "previews/characters/Link/PlLkBk_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlLkWh",
+        "skinName": "PorcInk-Link-Wh",
+        "vaultSkinId": "PorcInk-Link-Wh",
+        "filename": "PorcInk-Link-Wh.zip",
+        "zipPath": "storage/Link/PorcInk-Link-Wh.zip",
+        "plan": "plans/characters/Link/PlLkWh.json",
+        "preview": "previews/characters/Link/PlLkWh_review.jpg"
+      }
+    ],
+    "Luigi": [
+      {
+        "slot": 0,
+        "costumeCode": "PlLgNr",
+        "skinName": "PorcInk-Luigi-Nr",
+        "vaultSkinId": "PorcInk-Luigi-Nr",
+        "filename": "PorcInk-Luigi-Nr.zip",
+        "zipPath": "storage/Luigi/PorcInk-Luigi-Nr.zip",
+        "plan": "plans/characters/Luigi/PlLgNr.json",
+        "preview": "previews/characters/Luigi/PlLgNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlLgWh",
+        "skinName": "PorcInk-Luigi-Wh",
+        "vaultSkinId": "PorcInk-Luigi-Wh",
+        "filename": "PorcInk-Luigi-Wh.zip",
+        "zipPath": "storage/Luigi/PorcInk-Luigi-Wh.zip",
+        "plan": "plans/characters/Luigi/PlLgWh.json",
+        "preview": "previews/characters/Luigi/PlLgWh_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlLgAq",
+        "skinName": "PorcInk-Luigi-Aq",
+        "vaultSkinId": "PorcInk-Luigi-Aq",
+        "filename": "PorcInk-Luigi-Aq.zip",
+        "zipPath": "storage/Luigi/PorcInk-Luigi-Aq.zip",
+        "plan": "plans/characters/Luigi/PlLgAq.json",
+        "preview": "previews/characters/Luigi/PlLgAq_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlLgPi",
+        "skinName": "PorcInk-Luigi-Pi",
+        "vaultSkinId": "PorcInk-Luigi-Pi",
+        "filename": "PorcInk-Luigi-Pi.zip",
+        "zipPath": "storage/Luigi/PorcInk-Luigi-Pi.zip",
+        "plan": "plans/characters/Luigi/PlLgPi.json",
+        "preview": "previews/characters/Luigi/PlLgPi_review.jpg"
+      }
+    ],
+    "Mario": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMrNr",
+        "skinName": "PorcInk-Mario-Nr",
+        "vaultSkinId": "PorcInk-Mario-Nr",
+        "filename": "PorcInk-Mario-Nr.zip",
+        "zipPath": "storage/Mario/PorcInk-Mario-Nr.zip",
+        "plan": "plans/characters/Mario/PlMrNr.json",
+        "preview": "previews/characters/Mario/PlMrNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMrYe",
+        "skinName": "PorcInk-Mario-Ye",
+        "vaultSkinId": "PorcInk-Mario-Ye",
+        "filename": "PorcInk-Mario-Ye.zip",
+        "zipPath": "storage/Mario/PorcInk-Mario-Ye.zip",
+        "plan": "plans/characters/Mario/PlMrYe.json",
+        "preview": "previews/characters/Mario/PlMrYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMrBk",
+        "skinName": "PorcInk-Mario-Bk",
+        "vaultSkinId": "PorcInk-Mario-Bk",
+        "filename": "PorcInk-Mario-Bk.zip",
+        "zipPath": "storage/Mario/PorcInk-Mario-Bk.zip",
+        "plan": "plans/characters/Mario/PlMrBk.json",
+        "preview": "previews/characters/Mario/PlMrBk_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMrBu",
+        "skinName": "PorcInk-Mario-Bu",
+        "vaultSkinId": "PorcInk-Mario-Bu",
+        "filename": "PorcInk-Mario-Bu.zip",
+        "zipPath": "storage/Mario/PorcInk-Mario-Bu.zip",
+        "plan": "plans/characters/Mario/PlMrBu.json",
+        "preview": "previews/characters/Mario/PlMrBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlMrGr",
+        "skinName": "PorcInk-Mario-Gr",
+        "vaultSkinId": "PorcInk-Mario-Gr",
+        "filename": "PorcInk-Mario-Gr.zip",
+        "zipPath": "storage/Mario/PorcInk-Mario-Gr.zip",
+        "plan": "plans/characters/Mario/PlMrGr.json",
+        "preview": "previews/characters/Mario/PlMrGr_review.jpg"
+      }
+    ],
+    "Marth": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMsNr",
+        "skinName": "PorcInk-Marth-Nr",
+        "vaultSkinId": "PorcInk-Marth-Nr",
+        "filename": "PorcInk-Marth-Nr.zip",
+        "zipPath": "storage/Marth/PorcInk-Marth-Nr.zip",
+        "plan": "plans/characters/Marth/PlMsNr.json",
+        "preview": "previews/characters/Marth/PlMsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMsRe",
+        "skinName": "PorcInk-Marth-Re",
+        "vaultSkinId": "PorcInk-Marth-Re",
+        "filename": "PorcInk-Marth-Re.zip",
+        "zipPath": "storage/Marth/PorcInk-Marth-Re.zip",
+        "plan": "plans/characters/Marth/PlMsRe.json",
+        "preview": "previews/characters/Marth/PlMsRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMsGr",
+        "skinName": "PorcInk-Marth-Gr",
+        "vaultSkinId": "PorcInk-Marth-Gr",
+        "filename": "PorcInk-Marth-Gr.zip",
+        "zipPath": "storage/Marth/PorcInk-Marth-Gr.zip",
+        "plan": "plans/characters/Marth/PlMsGr.json",
+        "preview": "previews/characters/Marth/PlMsGr_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMsBk",
+        "skinName": "PorcInk-Marth-Bk",
+        "vaultSkinId": "PorcInk-Marth-Bk",
+        "filename": "PorcInk-Marth-Bk.zip",
+        "zipPath": "storage/Marth/PorcInk-Marth-Bk.zip",
+        "plan": "plans/characters/Marth/PlMsBk.json",
+        "preview": "previews/characters/Marth/PlMsBk_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlMsWh",
+        "skinName": "PorcInk-Marth-Wh",
+        "vaultSkinId": "PorcInk-Marth-Wh",
+        "filename": "PorcInk-Marth-Wh.zip",
+        "zipPath": "storage/Marth/PorcInk-Marth-Wh.zip",
+        "plan": "plans/characters/Marth/PlMsWh.json",
+        "preview": "previews/characters/Marth/PlMsWh_review.jpg"
+      }
+    ],
+    "Mewtwo": [
+      {
+        "slot": 0,
+        "costumeCode": "PlMtNr",
+        "skinName": "PorcInk-Mewtwo-Nr",
+        "vaultSkinId": "PorcInk-Mewtwo-Nr",
+        "filename": "PorcInk-Mewtwo-Nr.zip",
+        "zipPath": "storage/Mewtwo/PorcInk-Mewtwo-Nr.zip",
+        "plan": "plans/characters/Mewtwo/PlMtNr.json",
+        "preview": "previews/characters/Mewtwo/PlMtNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlMtRe",
+        "skinName": "PorcInk-Mewtwo-Re",
+        "vaultSkinId": "PorcInk-Mewtwo-Re",
+        "filename": "PorcInk-Mewtwo-Re.zip",
+        "zipPath": "storage/Mewtwo/PorcInk-Mewtwo-Re.zip",
+        "plan": "plans/characters/Mewtwo/PlMtRe.json",
+        "preview": "previews/characters/Mewtwo/PlMtRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlMtBu",
+        "skinName": "PorcInk-Mewtwo-Bu",
+        "vaultSkinId": "PorcInk-Mewtwo-Bu",
+        "filename": "PorcInk-Mewtwo-Bu.zip",
+        "zipPath": "storage/Mewtwo/PorcInk-Mewtwo-Bu.zip",
+        "plan": "plans/characters/Mewtwo/PlMtBu.json",
+        "preview": "previews/characters/Mewtwo/PlMtBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlMtGr",
+        "skinName": "PorcInk-Mewtwo-Gr",
+        "vaultSkinId": "PorcInk-Mewtwo-Gr",
+        "filename": "PorcInk-Mewtwo-Gr.zip",
+        "zipPath": "storage/Mewtwo/PorcInk-Mewtwo-Gr.zip",
+        "plan": "plans/characters/Mewtwo/PlMtGr.json",
+        "preview": "previews/characters/Mewtwo/PlMtGr_review.jpg"
+      }
+    ],
+    "Ness": [
+      {
+        "slot": 0,
+        "costumeCode": "PlNsNr",
+        "skinName": "PorcInk-Ness-Nr",
+        "vaultSkinId": "PorcInk-Ness-Nr",
+        "filename": "PorcInk-Ness-Nr.zip",
+        "zipPath": "storage/Ness/PorcInk-Ness-Nr.zip",
+        "plan": "plans/characters/Ness/PlNsNr.json",
+        "preview": "previews/characters/Ness/PlNsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlNsYe",
+        "skinName": "PorcInk-Ness-Ye",
+        "vaultSkinId": "PorcInk-Ness-Ye",
+        "filename": "PorcInk-Ness-Ye.zip",
+        "zipPath": "storage/Ness/PorcInk-Ness-Ye.zip",
+        "plan": "plans/characters/Ness/PlNsYe.json",
+        "preview": "previews/characters/Ness/PlNsYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlNsBu",
+        "skinName": "PorcInk-Ness-Bu",
+        "vaultSkinId": "PorcInk-Ness-Bu",
+        "filename": "PorcInk-Ness-Bu.zip",
+        "zipPath": "storage/Ness/PorcInk-Ness-Bu.zip",
+        "plan": "plans/characters/Ness/PlNsBu.json",
+        "preview": "previews/characters/Ness/PlNsBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlNsGr",
+        "skinName": "PorcInk-Ness-Gr",
+        "vaultSkinId": "PorcInk-Ness-Gr",
+        "filename": "PorcInk-Ness-Gr.zip",
+        "zipPath": "storage/Ness/PorcInk-Ness-Gr.zip",
+        "plan": "plans/characters/Ness/PlNsGr.json",
+        "preview": "previews/characters/Ness/PlNsGr_review.jpg"
+      }
+    ],
+    "Peach": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPeNr",
+        "skinName": "PorcInk-Peach-Nr",
+        "vaultSkinId": "PorcInk-Peach-Nr",
+        "filename": "PorcInk-Peach-Nr.zip",
+        "zipPath": "storage/Peach/PorcInk-Peach-Nr.zip",
+        "plan": "plans/characters/Peach/PlPeNr.json",
+        "preview": "previews/characters/Peach/PlPeNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPeYe",
+        "skinName": "PorcInk-Peach-Ye",
+        "vaultSkinId": "PorcInk-Peach-Ye",
+        "filename": "PorcInk-Peach-Ye.zip",
+        "zipPath": "storage/Peach/PorcInk-Peach-Ye.zip",
+        "plan": "plans/characters/Peach/PlPeYe.json",
+        "preview": "previews/characters/Peach/PlPeYe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPeWh",
+        "skinName": "PorcInk-Peach-Wh",
+        "vaultSkinId": "PorcInk-Peach-Wh",
+        "filename": "PorcInk-Peach-Wh.zip",
+        "zipPath": "storage/Peach/PorcInk-Peach-Wh.zip",
+        "plan": "plans/characters/Peach/PlPeWh.json",
+        "preview": "previews/characters/Peach/PlPeWh_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPeBu",
+        "skinName": "PorcInk-Peach-Bu",
+        "vaultSkinId": "PorcInk-Peach-Bu",
+        "filename": "PorcInk-Peach-Bu.zip",
+        "zipPath": "storage/Peach/PorcInk-Peach-Bu.zip",
+        "plan": "plans/characters/Peach/PlPeBu.json",
+        "preview": "previews/characters/Peach/PlPeBu_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlPeGr",
+        "skinName": "PorcInk-Peach-Gr",
+        "vaultSkinId": "PorcInk-Peach-Gr",
+        "filename": "PorcInk-Peach-Gr.zip",
+        "zipPath": "storage/Peach/PorcInk-Peach-Gr.zip",
+        "plan": "plans/characters/Peach/PlPeGr.json",
+        "preview": "previews/characters/Peach/PlPeGr_review.jpg"
+      }
+    ],
+    "Pichu": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPcNr",
+        "skinName": "PorcInk-Pichu-Nr",
+        "vaultSkinId": "PorcInk-Pichu-Nr",
+        "filename": "PorcInk-Pichu-Nr.zip",
+        "zipPath": "storage/Pichu/PorcInk-Pichu-Nr.zip",
+        "plan": "plans/characters/Pichu/PlPcNr.json",
+        "preview": "previews/characters/Pichu/PlPcNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPcRe",
+        "skinName": "PorcInk-Pichu-Re",
+        "vaultSkinId": "PorcInk-Pichu-Re",
+        "filename": "PorcInk-Pichu-Re.zip",
+        "zipPath": "storage/Pichu/PorcInk-Pichu-Re.zip",
+        "plan": "plans/characters/Pichu/PlPcRe.json",
+        "preview": "previews/characters/Pichu/PlPcRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPcBu",
+        "skinName": "PorcInk-Pichu-Bu",
+        "vaultSkinId": "PorcInk-Pichu-Bu",
+        "filename": "PorcInk-Pichu-Bu.zip",
+        "zipPath": "storage/Pichu/PorcInk-Pichu-Bu.zip",
+        "plan": "plans/characters/Pichu/PlPcBu.json",
+        "preview": "previews/characters/Pichu/PlPcBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPcGr",
+        "skinName": "PorcInk-Pichu-Gr",
+        "vaultSkinId": "PorcInk-Pichu-Gr",
+        "filename": "PorcInk-Pichu-Gr.zip",
+        "zipPath": "storage/Pichu/PorcInk-Pichu-Gr.zip",
+        "plan": "plans/characters/Pichu/PlPcGr.json",
+        "preview": "previews/characters/Pichu/PlPcGr_review.jpg"
+      }
+    ],
+    "Pikachu": [
+      {
+        "slot": 0,
+        "costumeCode": "PlPkNr",
+        "skinName": "PorcInk-Pikachu-Nr",
+        "vaultSkinId": "PorcInk-Pikachu-Nr",
+        "filename": "PorcInk-Pikachu-Nr.zip",
+        "zipPath": "storage/Pikachu/PorcInk-Pikachu-Nr.zip",
+        "plan": "plans/characters/Pikachu/PlPkNr.json",
+        "preview": "previews/characters/Pikachu/PlPkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlPkRe",
+        "skinName": "PorcInk-Pikachu-Re",
+        "vaultSkinId": "PorcInk-Pikachu-Re",
+        "filename": "PorcInk-Pikachu-Re.zip",
+        "zipPath": "storage/Pikachu/PorcInk-Pikachu-Re.zip",
+        "plan": "plans/characters/Pikachu/PlPkRe.json",
+        "preview": "previews/characters/Pikachu/PlPkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlPkBu",
+        "skinName": "PorcInk-Pikachu-Bu",
+        "vaultSkinId": "PorcInk-Pikachu-Bu",
+        "filename": "PorcInk-Pikachu-Bu.zip",
+        "zipPath": "storage/Pikachu/PorcInk-Pikachu-Bu.zip",
+        "plan": "plans/characters/Pikachu/PlPkBu.json",
+        "preview": "previews/characters/Pikachu/PlPkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlPkGr",
+        "skinName": "PorcInk-Pikachu-Gr",
+        "vaultSkinId": "PorcInk-Pikachu-Gr",
+        "filename": "PorcInk-Pikachu-Gr.zip",
+        "zipPath": "storage/Pikachu/PorcInk-Pikachu-Gr.zip",
+        "plan": "plans/characters/Pikachu/PlPkGr.json",
+        "preview": "previews/characters/Pikachu/PlPkGr_review.jpg"
+      }
+    ],
+    "Roy": [
+      {
+        "slot": 0,
+        "costumeCode": "PlFeNr",
+        "skinName": "PorcInk-Roy-Nr",
+        "vaultSkinId": "PorcInk-Roy-Nr",
+        "filename": "PorcInk-Roy-Nr.zip",
+        "zipPath": "storage/Roy/PorcInk-Roy-Nr.zip",
+        "plan": "plans/characters/Roy/PlFeNr.json",
+        "preview": "previews/characters/Roy/PlFeNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlFeRe",
+        "skinName": "PorcInk-Roy-Re",
+        "vaultSkinId": "PorcInk-Roy-Re",
+        "filename": "PorcInk-Roy-Re.zip",
+        "zipPath": "storage/Roy/PorcInk-Roy-Re.zip",
+        "plan": "plans/characters/Roy/PlFeRe.json",
+        "preview": "previews/characters/Roy/PlFeRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlFeBu",
+        "skinName": "PorcInk-Roy-Bu",
+        "vaultSkinId": "PorcInk-Roy-Bu",
+        "filename": "PorcInk-Roy-Bu.zip",
+        "zipPath": "storage/Roy/PorcInk-Roy-Bu.zip",
+        "plan": "plans/characters/Roy/PlFeBu.json",
+        "preview": "previews/characters/Roy/PlFeBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlFeGr",
+        "skinName": "PorcInk-Roy-Gr",
+        "vaultSkinId": "PorcInk-Roy-Gr",
+        "filename": "PorcInk-Roy-Gr.zip",
+        "zipPath": "storage/Roy/PorcInk-Roy-Gr.zip",
+        "plan": "plans/characters/Roy/PlFeGr.json",
+        "preview": "previews/characters/Roy/PlFeGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlFeYe",
+        "skinName": "PorcInk-Roy-Ye",
+        "vaultSkinId": "PorcInk-Roy-Ye",
+        "filename": "PorcInk-Roy-Ye.zip",
+        "zipPath": "storage/Roy/PorcInk-Roy-Ye.zip",
+        "plan": "plans/characters/Roy/PlFeYe.json",
+        "preview": "previews/characters/Roy/PlFeYe_review.jpg"
+      }
+    ],
+    "Samus": [
+      {
+        "slot": 0,
+        "costumeCode": "PlSsNr",
+        "skinName": "PorcInk-Samus-Nr",
+        "vaultSkinId": "PorcInk-Samus-Nr",
+        "filename": "PorcInk-Samus-Nr.zip",
+        "zipPath": "storage/Samus/PorcInk-Samus-Nr.zip",
+        "plan": "plans/characters/Samus/PlSsNr.json",
+        "preview": "previews/characters/Samus/PlSsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlSsPi",
+        "skinName": "PorcInk-Samus-Pi",
+        "vaultSkinId": "PorcInk-Samus-Pi",
+        "filename": "PorcInk-Samus-Pi.zip",
+        "zipPath": "storage/Samus/PorcInk-Samus-Pi.zip",
+        "plan": "plans/characters/Samus/PlSsPi.json",
+        "preview": "previews/characters/Samus/PlSsPi_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlSsBk",
+        "skinName": "PorcInk-Samus-Bk",
+        "vaultSkinId": "PorcInk-Samus-Bk",
+        "filename": "PorcInk-Samus-Bk.zip",
+        "zipPath": "storage/Samus/PorcInk-Samus-Bk.zip",
+        "plan": "plans/characters/Samus/PlSsBk.json",
+        "preview": "previews/characters/Samus/PlSsBk_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlSsGr",
+        "skinName": "PorcInk-Samus-Gr",
+        "vaultSkinId": "PorcInk-Samus-Gr",
+        "filename": "PorcInk-Samus-Gr.zip",
+        "zipPath": "storage/Samus/PorcInk-Samus-Gr.zip",
+        "plan": "plans/characters/Samus/PlSsGr.json",
+        "preview": "previews/characters/Samus/PlSsGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlSsLa",
+        "skinName": "PorcInk-Samus-La",
+        "vaultSkinId": "PorcInk-Samus-La",
+        "filename": "PorcInk-Samus-La.zip",
+        "zipPath": "storage/Samus/PorcInk-Samus-La.zip",
+        "plan": "plans/characters/Samus/PlSsLa.json",
+        "preview": "previews/characters/Samus/PlSsLa_review.jpg"
+      }
+    ],
+    "Sheik": [
+      {
+        "slot": 0,
+        "costumeCode": "PlSkNr",
+        "skinName": "PorcInk-Sheik-Nr",
+        "vaultSkinId": "PorcInk-Sheik-Nr",
+        "filename": "PorcInk-Sheik-Nr.zip",
+        "zipPath": "storage/Sheik/PorcInk-Sheik-Nr.zip",
+        "plan": "plans/characters/Sheik/PlSkNr.json",
+        "preview": "previews/characters/Sheik/PlSkNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlSkRe",
+        "skinName": "PorcInk-Sheik-Re",
+        "vaultSkinId": "PorcInk-Sheik-Re",
+        "filename": "PorcInk-Sheik-Re.zip",
+        "zipPath": "storage/Sheik/PorcInk-Sheik-Re.zip",
+        "plan": "plans/characters/Sheik/PlSkRe.json",
+        "preview": "previews/characters/Sheik/PlSkRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlSkBu",
+        "skinName": "PorcInk-Sheik-Bu",
+        "vaultSkinId": "PorcInk-Sheik-Bu",
+        "filename": "PorcInk-Sheik-Bu.zip",
+        "zipPath": "storage/Sheik/PorcInk-Sheik-Bu.zip",
+        "plan": "plans/characters/Sheik/PlSkBu.json",
+        "preview": "previews/characters/Sheik/PlSkBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlSkGr",
+        "skinName": "PorcInk-Sheik-Gr",
+        "vaultSkinId": "PorcInk-Sheik-Gr",
+        "filename": "PorcInk-Sheik-Gr.zip",
+        "zipPath": "storage/Sheik/PorcInk-Sheik-Gr.zip",
+        "plan": "plans/characters/Sheik/PlSkGr.json",
+        "preview": "previews/characters/Sheik/PlSkGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlSkWh",
+        "skinName": "PorcInk-Sheik-Wh",
+        "vaultSkinId": "PorcInk-Sheik-Wh",
+        "filename": "PorcInk-Sheik-Wh.zip",
+        "zipPath": "storage/Sheik/PorcInk-Sheik-Wh.zip",
+        "plan": "plans/characters/Sheik/PlSkWh.json",
+        "preview": "previews/characters/Sheik/PlSkWh_review.jpg"
+      }
+    ],
+    "Yoshi": [
+      {
+        "slot": 0,
+        "costumeCode": "PlYsNr",
+        "skinName": "PorcInk-Yoshi-Nr",
+        "vaultSkinId": "PorcInk-Yoshi-Nr",
+        "filename": "PorcInk-Yoshi-Nr.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Nr.zip",
+        "plan": "plans/characters/Yoshi/PlYsNr.json",
+        "preview": "previews/characters/Yoshi/PlYsNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlYsRe",
+        "skinName": "PorcInk-Yoshi-Re",
+        "vaultSkinId": "PorcInk-Yoshi-Re",
+        "filename": "PorcInk-Yoshi-Re.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Re.zip",
+        "plan": "plans/characters/Yoshi/PlYsRe.json",
+        "preview": "previews/characters/Yoshi/PlYsRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlYsBu",
+        "skinName": "PorcInk-Yoshi-Bu",
+        "vaultSkinId": "PorcInk-Yoshi-Bu",
+        "filename": "PorcInk-Yoshi-Bu.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Bu.zip",
+        "plan": "plans/characters/Yoshi/PlYsBu.json",
+        "preview": "previews/characters/Yoshi/PlYsBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlYsYe",
+        "skinName": "PorcInk-Yoshi-Ye",
+        "vaultSkinId": "PorcInk-Yoshi-Ye",
+        "filename": "PorcInk-Yoshi-Ye.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Ye.zip",
+        "plan": "plans/characters/Yoshi/PlYsYe.json",
+        "preview": "previews/characters/Yoshi/PlYsYe_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlYsPi",
+        "skinName": "PorcInk-Yoshi-Pi",
+        "vaultSkinId": "PorcInk-Yoshi-Pi",
+        "filename": "PorcInk-Yoshi-Pi.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Pi.zip",
+        "plan": "plans/characters/Yoshi/PlYsPi.json",
+        "preview": "previews/characters/Yoshi/PlYsPi_review.jpg"
+      },
+      {
+        "slot": 5,
+        "costumeCode": "PlYsAq",
+        "skinName": "PorcInk-Yoshi-Aq",
+        "vaultSkinId": "PorcInk-Yoshi-Aq",
+        "filename": "PorcInk-Yoshi-Aq.zip",
+        "zipPath": "storage/Yoshi/PorcInk-Yoshi-Aq.zip",
+        "plan": "plans/characters/Yoshi/PlYsAq.json",
+        "preview": "previews/characters/Yoshi/PlYsAq_review.jpg"
+      }
+    ],
+    "Young Link": [
+      {
+        "slot": 0,
+        "costumeCode": "PlClNr",
+        "skinName": "PorcInk-YoungLink-Nr",
+        "vaultSkinId": "PorcInk-YoungLink-Nr",
+        "filename": "PorcInk-YoungLink-Nr.zip",
+        "zipPath": "storage/Young Link/PorcInk-YoungLink-Nr.zip",
+        "plan": "plans/characters/Young Link/PlClNr.json",
+        "preview": "previews/characters/Young Link/PlClNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlClRe",
+        "skinName": "PorcInk-YoungLink-Re",
+        "vaultSkinId": "PorcInk-YoungLink-Re",
+        "filename": "PorcInk-YoungLink-Re.zip",
+        "zipPath": "storage/Young Link/PorcInk-YoungLink-Re.zip",
+        "plan": "plans/characters/Young Link/PlClRe.json",
+        "preview": "previews/characters/Young Link/PlClRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlClBu",
+        "skinName": "PorcInk-YoungLink-Bu",
+        "vaultSkinId": "PorcInk-YoungLink-Bu",
+        "filename": "PorcInk-YoungLink-Bu.zip",
+        "zipPath": "storage/Young Link/PorcInk-YoungLink-Bu.zip",
+        "plan": "plans/characters/Young Link/PlClBu.json",
+        "preview": "previews/characters/Young Link/PlClBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlClWh",
+        "skinName": "PorcInk-YoungLink-Wh",
+        "vaultSkinId": "PorcInk-YoungLink-Wh",
+        "filename": "PorcInk-YoungLink-Wh.zip",
+        "zipPath": "storage/Young Link/PorcInk-YoungLink-Wh.zip",
+        "plan": "plans/characters/Young Link/PlClWh.json",
+        "preview": "previews/characters/Young Link/PlClWh_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlClBk",
+        "skinName": "PorcInk-YoungLink-Bk",
+        "vaultSkinId": "PorcInk-YoungLink-Bk",
+        "filename": "PorcInk-YoungLink-Bk.zip",
+        "zipPath": "storage/Young Link/PorcInk-YoungLink-Bk.zip",
+        "plan": "plans/characters/Young Link/PlClBk.json",
+        "preview": "previews/characters/Young Link/PlClBk_review.jpg"
+      }
+    ],
+    "Zelda": [
+      {
+        "slot": 0,
+        "costumeCode": "PlZdNr",
+        "skinName": "PorcInk-Zelda-Nr",
+        "vaultSkinId": "PorcInk-Zelda-Nr",
+        "filename": "PorcInk-Zelda-Nr.zip",
+        "zipPath": "storage/Zelda/PorcInk-Zelda-Nr.zip",
+        "plan": "plans/characters/Zelda/PlZdNr.json",
+        "preview": "previews/characters/Zelda/PlZdNr_review.jpg"
+      },
+      {
+        "slot": 1,
+        "costumeCode": "PlZdRe",
+        "skinName": "PorcInk-Zelda-Re",
+        "vaultSkinId": "PorcInk-Zelda-Re",
+        "filename": "PorcInk-Zelda-Re.zip",
+        "zipPath": "storage/Zelda/PorcInk-Zelda-Re.zip",
+        "plan": "plans/characters/Zelda/PlZdRe.json",
+        "preview": "previews/characters/Zelda/PlZdRe_review.jpg"
+      },
+      {
+        "slot": 2,
+        "costumeCode": "PlZdBu",
+        "skinName": "PorcInk-Zelda-Bu",
+        "vaultSkinId": "PorcInk-Zelda-Bu",
+        "filename": "PorcInk-Zelda-Bu.zip",
+        "zipPath": "storage/Zelda/PorcInk-Zelda-Bu.zip",
+        "plan": "plans/characters/Zelda/PlZdBu.json",
+        "preview": "previews/characters/Zelda/PlZdBu_review.jpg"
+      },
+      {
+        "slot": 3,
+        "costumeCode": "PlZdGr",
+        "skinName": "PorcInk-Zelda-Gr",
+        "vaultSkinId": "PorcInk-Zelda-Gr",
+        "filename": "PorcInk-Zelda-Gr.zip",
+        "zipPath": "storage/Zelda/PorcInk-Zelda-Gr.zip",
+        "plan": "plans/characters/Zelda/PlZdGr.json",
+        "preview": "previews/characters/Zelda/PlZdGr_review.jpg"
+      },
+      {
+        "slot": 4,
+        "costumeCode": "PlZdWh",
+        "skinName": "PorcInk-Zelda-Wh",
+        "vaultSkinId": "PorcInk-Zelda-Wh",
+        "filename": "PorcInk-Zelda-Wh.zip",
+        "zipPath": "storage/Zelda/PorcInk-Zelda-Wh.zip",
+        "plan": "plans/characters/Zelda/PlZdWh.json",
+        "preview": "previews/characters/Zelda/PlZdWh_review.jpg"
+      }
+    ]
+  },
+  "ice_climbers_pairs": [
+    {
+      "slot": 0,
+      "popoCode": "PlPpNr",
+      "nanaCode": "PlNnNr",
+      "popoVaultSkinId": "PorcInk-IceClimbers-Nr",
+      "nanaVaultSkinId": "PorcInk-Nana-Nr",
+      "nanaFilename": "PorcInk-Nana-Nr.zip",
+      "nanaZipPath": "storage/Nana/PorcInk-Nana-Nr.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnNr.json",
+      "nanaPreview": "previews/characters/Nana/PlNnNr_review.jpg"
+    },
+    {
+      "slot": 1,
+      "popoCode": "PlPpGr",
+      "nanaCode": "PlNnYe",
+      "popoVaultSkinId": "PorcInk-IceClimbers-Gr",
+      "nanaVaultSkinId": "PorcInk-Nana-Ye",
+      "nanaFilename": "PorcInk-Nana-Ye.zip",
+      "nanaZipPath": "storage/Nana/PorcInk-Nana-Ye.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnYe.json",
+      "nanaPreview": "previews/characters/Nana/PlNnYe_review.jpg"
+    },
+    {
+      "slot": 2,
+      "popoCode": "PlPpOr",
+      "nanaCode": "PlNnAq",
+      "popoVaultSkinId": "PorcInk-IceClimbers-Or",
+      "nanaVaultSkinId": "PorcInk-Nana-Aq",
+      "nanaFilename": "PorcInk-Nana-Aq.zip",
+      "nanaZipPath": "storage/Nana/PorcInk-Nana-Aq.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnAq.json",
+      "nanaPreview": "previews/characters/Nana/PlNnAq_review.jpg"
+    },
+    {
+      "slot": 3,
+      "popoCode": "PlPpRe",
+      "nanaCode": "PlNnWh",
+      "popoVaultSkinId": "PorcInk-IceClimbers-Re",
+      "nanaVaultSkinId": "PorcInk-Nana-Wh",
+      "nanaFilename": "PorcInk-Nana-Wh.zip",
+      "nanaZipPath": "storage/Nana/PorcInk-Nana-Wh.zip",
+      "nanaPlan": "plans/characters/Nana/PlNnWh.json",
+      "nanaPreview": "previews/characters/Nana/PlNnWh_review.jpg"
+    }
+  ],
+  "stages": {
+    "GrNBa": {
+      "stage": "Battlefield",
+      "skinName": "PorcelainInk BF",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-bf",
+      "filename": "pi-bf.zip",
+      "zipPath": "storage/das/battlefield/pi-bf.zip",
+      "plan": "plans/stages/GrNBa.json",
+      "preview": "previews/stages/GrNBa_capture.png"
+    },
+    "GrNLa": {
+      "stage": "Final Destination",
+      "skinName": "PorcelainInk FD",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-fd",
+      "filename": "pi-fd.zip",
+      "zipPath": "storage/das/final_destination/pi-fd.zip",
+      "plan": "plans/stages/GrNLa.json",
+      "preview": "previews/stages/GrNLa_capture.png"
+    },
+    "GrSt": {
+      "stage": "Yoshi's Story",
+      "skinName": "PorcelainInk YS",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-ys",
+      "filename": "pi-ys.zip",
+      "zipPath": "storage/das/yoshis_story/pi-ys.zip",
+      "plan": "plans/stages/GrSt.json",
+      "preview": "previews/stages/GrSt_capture.png"
+    },
+    "GrOp": {
+      "stage": "Dream Land N64",
+      "skinName": "PorcelainInk DL",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-dl",
+      "filename": "pi-dl.zip",
+      "zipPath": "storage/das/dreamland/pi-dl.zip",
+      "plan": "plans/stages/GrOp.json",
+      "preview": "previews/stages/GrOp_capture.png"
+    },
+    "GrPs": {
+      "stage": "Pokemon Stadium",
+      "skinName": "PorcelainInk PS",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-ps",
+      "filename": "pi-ps.zip",
+      "zipPath": "storage/das/pokemon_stadium/pi-ps.zip",
+      "plan": "plans/stages/GrPs.json",
+      "preview": "previews/stages/GrPs_capture.png"
+    },
+    "GrIz": {
+      "stage": "Fountain of Dreams",
+      "skinName": "PorcelainInk FoD",
+      "mode": "das",
+      "button": "X",
+      "vaultVariantId": "pi-fod",
+      "filename": "pi-fod.zip",
+      "zipPath": "storage/das/fountain_of_dreams/pi-fod.zip",
+      "plan": "plans/stages/GrIz.json",
+      "preview": "previews/stages/GrIz_capture.png"
+    }
+  },
+  "build": {
+    "projectName": "duel-claude",
+    "sourceIsoMd5": "0e63d4223b01d9aba596259dc155a174",
+    "nucleusProject": "projects/duel-claude/project.mexproj",
+    "finalIso": "exports/final.iso",
+    "bundle": "exports/final.ssbm"
+  },
+  "verification": {
+    "bootHealth": "pass",
+    "stageCaptures": "pass",
+    "notes": [
+      "Theme: Porcelain & Ink (Qinghua blue-and-white porcelain + gold kintsugi). All costume + stage textures generated locally (sd-turbo) via structured skin-lab composite/tint/hue-shift ops; no remote/AI-planner endpoints used.",
+      "Character previews are live skin-lab viewer renders (front pose). Stage previews are offline texture sheets from the stage-ops pipeline; in-game hold-X DAS captures are added during verification.",
+      "C. Falcon PlCaRe: generated from fallback source PlCaNr (no standalone vanilla PlCaRe.dat)",
+      "57 'composite ... changed nothing' events were on protected face-decal textures (eyes/mouth); those are intentionally skipped by composite and instead receive the cobalt eye tint plus body-color spillover, so no stock squares remain.",
+      "Boot health: PASS. final.iso boots to the CSS and into a solo VS match; verified by booting it and loading 4 stages in-game (Battlefield, Final Destination, Yoshi's Story, Dream Land N64) with no crash/hang.",
+      "Stage captures: GrNBa/GrNLa/GrSt/GrOp previews are LIVE in-game hold-X DAS captures from final.iso (the X variant loads the Porcelain & Ink stage). GrPs/GrIz previews are offline texture-sheet renders (in-game capture stopped early at user request); all six are installed as judged X DAS variants.",
+      "PorcInk-Luigi-Nr: composite face_detail changed nothing",
+      "PorcInk-Luigi-Wh: composite face_detail changed nothing",
+      "PorcInk-Luigi-Aq: composite face_detail changed nothing",
+      "PorcInk-Luigi-Pi: composite face_detail changed nothing",
+      "PorcInk-Mario-Nr: composite face_detail changed nothing",
+      "PorcInk-Mario-Ye: composite face_detail changed nothing",
+      "PorcInk-Mario-Bk: composite face_detail changed nothing",
+      "PorcInk-Mario-Bu: composite face_detail changed nothing",
+      "PorcInk-Mario-Gr: composite face_detail changed nothing",
+      "PorcInk-Pichu-Nr: composite face_detail changed nothing",
+      "PorcInk-Pichu-Re: composite face_detail changed nothing",
+      "PorcInk-Pichu-Bu: composite face_detail changed nothing",
+      "PorcInk-Pichu-Gr: composite face_detail changed nothing"
+    ]
+  }
+}

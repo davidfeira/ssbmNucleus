@@ -31,8 +31,9 @@ namespace MexCLI.Commands
                 string isoPath = args[1];
                 string outputDir = args[2];
                 string projectName = args[3];
-                // when creating from a modded iso, a vanilla iso can be supplied to
-                // backfill menu assets (css icons) the modded iso couldn't provide
+                // when creating from a modded/patched iso, a vanilla iso can be
+                // supplied to reset the character-select scene to a clean vanilla
+                // base (the patch's custom CSS doubles up with m-ex's grid)
                 string? assetIsoPath = args.Length >= 5 ? args[4] : null;
 
                 // Validate ISO exists
@@ -131,27 +132,30 @@ namespace MexCLI.Commands
                     defaultCodes
                 );
 
-                // backfill css icons from the vanilla iso when the source iso's
-                // character select screen couldn't be fully parsed
+                // reset the character-select AND stage-select scenes to a clean
+                // vanilla base when a vanilla iso was supplied (patched source).
+                // The patch's custom CSS/SSS otherwise doubles up with m-ex's
+                // regenerated grids. CSPs are already extracted to the project and
+                // are preserved.
                 if (assetIsoPath != null && File.Exists(assetIsoPath))
                 {
                     var fillOutput = new
                     {
                         status = "filling-assets",
-                        message = "Filling missing menu assets from vanilla ISO..."
+                        message = "Resetting character/stage select to a clean vanilla base..."
                     };
                     Console.WriteLine(JsonSerializer.Serialize(fillOutput, new JsonSerializerOptions { WriteIndented = true }));
 
                     try
                     {
-                        mexLib.Installer.MexInstaller.FillCSSIconsFromISO(workspace, assetIsoPath);
+                        mexLib.Installer.MexInstaller.ResetMenuScenesToVanilla(workspace, assetIsoPath);
                     }
                     catch (Exception fillEx)
                     {
                         var fillWarning = new
                         {
                             status = "warning",
-                            message = $"Could not fill menu assets from vanilla ISO: {fillEx.Message}"
+                            message = $"Could not reset menus to vanilla base: {fillEx.Message}"
                         };
                         Console.WriteLine(JsonSerializer.Serialize(fillWarning, new JsonSerializerOptions { WriteIndented = true }));
                     }

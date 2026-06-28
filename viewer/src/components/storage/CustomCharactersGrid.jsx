@@ -135,7 +135,7 @@ export default function CustomCharactersGrid({
             <div className="character-icon-container">
               {char.has_css_icon ? (
                 <img
-                  src={char.icon_url}
+                  src={`${API_URL.replace('/api/mex', '')}${char.icon_url}`}
                   alt={char.name}
                   className="character-css-icon"
                   draggable={false}

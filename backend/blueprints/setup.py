@@ -4,15 +4,20 @@ Setup Blueprint - First-run setup and auto-detection.
 Handles first-run setup process, auto-detection of Slippi/ISO paths.
 """
 
+import io
 import os
+import sys
+import zipfile
+import platform
 import hashlib
 import threading
 import configparser
 import logging
+from datetime import datetime
 from pathlib import Path
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 
-from core.config import PROJECT_ROOT, MEXCLI_PATH
+from core.config import PROJECT_ROOT, MEXCLI_PATH, LOGS_PATH
 from core.constants import VANILLA_ISO_MD5
 from core.state import get_socketio
 from first_run_setup import FirstRunSetup
@@ -144,11 +149,74 @@ def parse_dolphin_ini_iso_path(ini_path: str) -> str:
         return None
 
 
-def find_vanilla_melee_iso(folder: str) -> str:
+# GameCube disc header: bytes 0x00-0x05 = 6-char game ID, byte 0x07 = disc
+# version. Vanilla Melee NTSC 1.02 is "GALE01" with version byte 0x02.
+MELEE_GAME_ID = b'GALE01'
+MELEE_102_VERSION = 0x02
+
+
+def _is_melee_102_header(iso_file: Path) -> bool:
+    """Cheaply test a disc's 8-byte header for Melee NTSC 1.02 (GALE01 v1.02).
+
+    Reads only 8 bytes, so it rejects unrelated GameCube ISOs before any
+    full-file MD5. This matters because every uncompressed GC ISO shares the
+    same disc size, so the size pre-filter alone never narrows the candidates.
+    """
+    try:
+        with open(iso_file, 'rb') as f:
+            header = f.read(8)
+    except OSError:
+        return False
+    return (len(header) == 8
+            and header[:6] == MELEE_GAME_ID
+            and header[7] == MELEE_102_VERSION)
+
+
+# Filename hints. Vanilla dumps are usually named plainly (Melee / SSBM /
+# vanilla / 1.02); mod builds carry a tell in the name (20XX, m-ex, Akaneia,
+# Ace, training, etc.). We can't tell vanilla from a mod by the disc header
+# (both are GALE01 v1.02, same size), so we MD5 — but ordering candidates by
+# these hints means the real vanilla is almost always hashed FIRST and we
+# early-exit, instead of hashing a modded build (e.g. acebuild.iso) first.
+_VANILLA_NAME_HINTS = ('vanilla', 'melee', 'ssbm', 'smashmelee', '1.02', 'v1.02',
+                       'ntsc', 'gale01')
+_MOD_NAME_HINTS = ('mod', 'ace', '20xx', 'mex', 'm-ex', 'akaneia', 'training',
+                   'tournament', 'beyond', 'diet', 'widescreen', 'netplay',
+                   'build', 'mango', 'uncle', 'hax', 'crazy', 'summit', 'slippi')
+
+
+def _vanilla_name_score(iso_path: Path) -> int:
+    """Higher = more likely to be the plain vanilla dump (hash it sooner)."""
+    name = iso_path.stem.lower()
+    score = 0
+    if name in ('melee', 'vanilla', 'ssbm', 'ssbm melee', 'super smash bros melee'):
+        score += 100
+    for hint in _VANILLA_NAME_HINTS:
+        if hint in name:
+            score += 10
+    for hint in _MOD_NAME_HINTS:
+        if hint in name:
+            score -= 25
+    # plain/short names (e.g. "Melee.iso") lean vanilla; long descriptive names
+    # are usually mods ("z20XX 4.05 Corona Beginnings").
+    score -= len(name) // 12
+    return score
+
+
+def find_vanilla_melee_iso(folder: str, deep_verify: bool = True) -> str:
     """Scan a folder for a vanilla Melee 1.02 ISO.
 
-    Checks .iso and .gcm files against the known MD5 hash.
-    Returns the path to the first matching ISO found, or None.
+    Filters to .iso/.gcm files matching the exact disc size + 8-byte GALE01 v1.02
+    header, then — because a modded 1.02 build shares both — confirms by MD5.
+    Candidates are tried in filename-likelihood order (`_vanilla_name_score`) so
+    the genuine vanilla dump is normally the FIRST (and only) file hashed; we
+    early-exit on the first MD5 match. Results are cached, so /setup/start's
+    re-verify is then instant.
+
+    ``deep_verify=False`` returns the best-named size+header candidate WITHOUT
+    hashing (used only where a cheap guess is acceptable). Auto-detect uses the
+    default (True): an earlier header-only shortcut wrongly picked a modded
+    acebuild.iso because it can't be distinguished from vanilla without the MD5.
     """
     folder_path = Path(folder)
     if not folder_path.is_dir():
@@ -167,21 +235,42 @@ def find_vanilla_melee_iso(folder: str) -> str:
             seen.add(lower_path)
             unique_files.append(f)
 
+    # First narrow to real Melee-1.02 candidates by the cheap size + 8-byte
+    # header check (rejects other games / non-1.02 instantly). All uncompressed
+    # GC ISOs share the disc size, so the header is what does the filtering.
+    candidates = []
     for iso_file in unique_files:
         try:
-            # Check file size first (vanilla Melee is ~1.36GB)
-            file_size = iso_file.stat().st_size
-            if file_size != VANILLA_ISO_EXPECTED_SIZE:
+            if iso_file.stat().st_size != VANILLA_ISO_EXPECTED_SIZE:
                 continue
+            if not _is_melee_102_header(iso_file):
+                logger.info(f"Skipping non-Melee-1.02 ISO (header): {iso_file}")
+                continue
+            candidates.append(iso_file)
+        except OSError as e:
+            logger.warning(f"Error checking ISO {iso_file}: {e}")
 
+    if not candidates:
+        return None
+
+    # A modded build (acebuild.iso, 20XX, …) has the SAME header + size as
+    # vanilla, so hash to confirm — but try the most vanilla-looking name first
+    # so the genuine dump is normally the only file hashed (early-exit below).
+    candidates.sort(key=_vanilla_name_score, reverse=True)
+
+    if not deep_verify:
+        logger.info(f"Best-named vanilla candidate (no hash): {candidates[0]}")
+        return str(candidates[0])
+
+    for iso_file in candidates:
+        try:
             logger.info(f"Checking ISO: {iso_file}")
-
-            verification = verify_iso_file(iso_file)
-            if verification['valid']:
+            if verify_iso_file(iso_file)['valid']:
                 logger.info(f"Found vanilla Melee ISO: {iso_file}")
                 return str(iso_file)
+            logger.info(f"Not vanilla (modded build?): {iso_file}")
         except Exception as e:
-            logger.warning(f"Error checking ISO {iso_file}: {e}")
+            logger.warning(f"Error hashing ISO {iso_file}: {e}")
             continue
 
     return None
@@ -342,7 +431,10 @@ def auto_detect_paths():
                     result['isoFolderPath'] = iso_dir
                     logger.info(f"Found ISO folder: {iso_dir}")
 
-                    # 3. Scan folder for vanilla Melee ISO
+                    # 3. Scan folder for the vanilla Melee ISO. Hash-confirmed
+                    # (a modded build shares vanilla's header+size), but tried in
+                    # filename-likelihood order so the real dump is normally the
+                    # only file hashed — fast in the common case, correct always.
                     vanilla_iso = find_vanilla_melee_iso(iso_dir)
                     if vanilla_iso:
                         result['isoPath'] = vanilla_iso
@@ -399,3 +491,115 @@ def verify_vanilla_iso():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# Caps so a logs zip can't balloon (Slippi crash .dmp files can be large, and the
+# User tree also holds replays/ISOs we must NEVER sweep in).
+_SLIPPI_LOG_MAX_FILE = 25 * 1024 * 1024     # 25 MB per file
+_SLIPPI_LOG_MAX_TOTAL = 100 * 1024 * 1024   # 100 MB total
+
+
+def _add_slippi_dolphin_logs(zf: zipfile.ZipFile, slippi_path: str) -> int:
+    """Add the user's Slippi Dolphin logs + crash dumps to the zip under
+    slippi-dolphin/. Only known log/dump locations are touched (Dolphin's Logs
+    folder + .dmp/.log/.txt at known top levels) so we never pull in replays or
+    ISOs. Size-capped. Returns the number of files added."""
+    root = Path(slippi_path)
+    if not root.is_dir():
+        return 0
+    user = root / 'User'
+    added = 0
+    total = 0
+
+    def _add(p: Path, arc: str):
+        nonlocal added, total
+        try:
+            sz = p.stat().st_size
+        except OSError:
+            return
+        if sz > _SLIPPI_LOG_MAX_FILE or total + sz > _SLIPPI_LOG_MAX_TOTAL:
+            return
+        try:
+            zf.write(p, arc)
+        except OSError:
+            return
+        total += sz
+        added += 1
+
+    # Dolphin's Logs folder (recursive — small text logs).
+    logs_dir = user / 'Logs'
+    if logs_dir.is_dir():
+        for p in sorted(logs_dir.rglob('*')):
+            if p.is_file():
+                _add(p, f"slippi-dolphin/Logs/{p.relative_to(logs_dir).as_posix()}")
+
+    # Crash dumps / stray logs at known top levels (non-recursive so we don't
+    # walk into Slippi/replays or Games/ISOs). Covers the netplay dir, its User
+    # dir, and the Slippi Launcher dir above it.
+    for base, prefix in ((root, 'netplay'), (user, 'User'), (root.parent, 'launcher')):
+        if base.is_dir():
+            for p in sorted(base.iterdir()):
+                if p.is_file() and p.suffix.lower() in ('.dmp', '.log', '.txt'):
+                    _add(p, f"slippi-dolphin/{prefix}/{p.name}")
+
+    return added
+
+
+def _build_diagnostics_text(slippi_path: str = '', app_logs: int = 0,
+                            slippi_logs: int = 0) -> str:
+    """A short system summary bundled alongside the logs so a bug report has
+    context (app paths, OS, python, what was gathered) without the user having
+    to describe it."""
+    lines = [
+        'SSBM Nucleus diagnostics',
+        f'Generated: {datetime.now().isoformat()}',
+        f'Platform: {platform.platform()}',
+        f'Python: {sys.version.split()[0]}',
+        f'Frozen build: {bool(getattr(sys, "frozen", False))}',
+        f'Project root: {PROJECT_ROOT}',
+        f'Logs path: {LOGS_PATH}',
+        f'App log files: {app_logs}',
+        f'Slippi Dolphin path: {slippi_path or "(not provided)"}',
+        f'Slippi log/dump files: {slippi_logs}',
+    ]
+    return '\n'.join(lines) + '\n'
+
+
+@setup_bp.route('/api/mex/logs/download', methods=['GET'])
+def download_logs_zip():
+    """Bundle the app's log files into a single zip the user can attach to a bug
+    report. Built in-memory and streamed as a timestamped download. Includes a
+    diagnostics.txt with basic system info. Safe even if the logs folder is empty
+    (the zip still carries the diagnostics).
+
+    If a `slippiPath` query param is given (the user's Slippi Dolphin folder), the
+    zip also gathers Slippi Dolphin's own logs + crash dumps under slippi-dolphin/
+    — so a crash playing a Nucleus-built ISO in their Slippi Dolphin is debuggable
+    too, not just issues inside our app."""
+    try:
+        slippi_path = (request.args.get('slippiPath') or '').strip()
+        buf = io.BytesIO()
+        added = 0
+        slippi_added = 0
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            if LOGS_PATH.is_dir():
+                for log_file in sorted(LOGS_PATH.rglob('*')):
+                    if log_file.is_file():
+                        try:
+                            zf.write(log_file, f'logs/{log_file.relative_to(LOGS_PATH).as_posix()}')
+                            added += 1
+                        except OSError as e:
+                            logger.warning(f"Could not add log to zip: {log_file} ({e})")
+            if slippi_path:
+                slippi_added = _add_slippi_dolphin_logs(zf, slippi_path)
+            # diagnostics written last so it can report what was gathered
+            zf.writestr('diagnostics.txt',
+                        _build_diagnostics_text(slippi_path, added, slippi_added))
+        buf.seek(0)
+        name = f"nucleus-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        logger.info(f"Built logs zip '{name}' ({added} app log(s), {slippi_added} Slippi log(s))")
+        return send_file(buf, mimetype='application/zip',
+                         as_attachment=True, download_name=name)
+    except Exception as e:
+        logger.error(f"Logs zip error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500

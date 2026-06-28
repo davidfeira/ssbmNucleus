@@ -35,13 +35,13 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
-from core.config import MEXCLI_PATH, PROJECT_ROOT, STORAGE_PATH
+from core.config import MEXCLI_PATH, PROJECT_ROOT, STORAGE_PATH, BACKEND_DATA_DIR
 from texture_pack import generate_encoded_placeholder
 
 logger = logging.getLogger(__name__)
 
 # Shipped seed (proven bit-exact) and the per-install persistent cache.
-SEED_TABLE_PATH = Path(__file__).resolve().parent / "data" / "texture_filename_table_seed.json"
+SEED_TABLE_PATH = BACKEND_DATA_DIR / "texture_filename_table_seed.json"
 CACHE_TABLE_PATH = STORAGE_PATH / "texture_filename_table.json"
 
 # Dolphin names CI8 textures (format 9) by XXH64 of the image data and of the

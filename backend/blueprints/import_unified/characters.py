@@ -10,11 +10,11 @@ import tempfile
 import logging
 from datetime import datetime
 
-from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR
+from core.config import STORAGE_PATH
 from core.costume_files import get_costume_archive_extension
 from core.metadata import load_metadata, save_metadata
 from dat_processor import validate_for_slippi
-from generate_csp import generate_csp
+from skinlab.costume_assets import build_csp_and_stock
 
 from .helpers import compute_dat_hash, extract_custom_name_from_filename
 
@@ -180,108 +180,38 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                 # Copy the costume archive (potentially fixed version), preserving .usd when present.
                 dest_zip.writestr(f"{char_info['costume_code']}Mod{archive_ext}", dat_data)
 
-                # Handle CSP - copy if found, generate if missing
-                csp_data = None
-                if char_info['csp_file']:
-                    # CSP found in ZIP - copy it
-                    csp_data = source_zip.read(char_info['csp_file'])
-                    logger.info(f"Using CSP from ZIP: {char_info['csp_file']}")
-                else:
-                    # No CSP in ZIP - generate one
-                    logger.info("No CSP found in ZIP, generating...")
+                # Build the costume's portrait assets through the ONE canonical
+                # path (render via generate_csp with proper anim+camera, recolor
+                # via generate_stock) so import, skin-lab, and the duel generator
+                # all produce identical CSP/stock. See skinlab.costume_assets.
+                existing_csp = source_zip.read(char_info['csp_file']) if char_info['csp_file'] else None
+                existing_stock = source_zip.read(char_info['stock_file']) if char_info['stock_file'] else None
 
-                    # Ice Climbers Popo: Extract both Popo and Nana DATs to same temp dir
-                    # so generate_csp can find the pair and create composite CSP
-                    if char_info.get('is_popo') and char_info.get('pair_dat_file'):
-                        logger.info("Ice Climbers Popo detected - extracting pair for composite CSP")
-                        temp_dir = tempfile.mkdtemp()
-                        try:
-                            # Extract Popo DAT
-                            popo_dat_name = os.path.basename(char_info['dat_file'])
-                            tmp_dat_path = os.path.join(temp_dir, popo_dat_name)
-                            with open(tmp_dat_path, 'wb') as f:
-                                f.write(dat_data)
+                paired_dat_data = None
+                if char_info.get('is_popo') and char_info.get('pair_dat_file'):
+                    paired_dat_data = source_zip.read(char_info['pair_dat_file'])
 
-                            # Extract paired Nana DAT
-                            nana_dat_name = os.path.basename(char_info['pair_dat_file'])
-                            nana_dat_path = os.path.join(temp_dir, nana_dat_name)
-                            nana_dat_data = source_zip.read(char_info['pair_dat_file'])
-                            with open(nana_dat_path, 'wb') as f:
-                                f.write(nana_dat_data)
+                # Ice Climbers: Nana copies Popo's composite CSP + stock (Popo is
+                # imported first), looked up from storage by paired color.
+                popo_csp = popo_stock = None
+                if char_info.get('is_nana') and char_info.get('pair_color'):
+                    popo_id = f"{character.lower().replace(' ', '-')}-{char_info['pair_color'].lower()}"
+                    for skin in metadata.get('characters', {}).get(character, {}).get('skins', []):
+                        if skin['id'] == popo_id:
+                            pcsp = STORAGE_PATH / character / f"{popo_id}_csp.png"
+                            pstk = STORAGE_PATH / character / f"{popo_id}_stc.png"
+                            popo_csp = pcsp.read_bytes() if pcsp.exists() else None
+                            popo_stock = pstk.read_bytes() if pstk.exists() else None
+                            break
 
-                            # Generate composite CSP (generate_csp will detect pair)
-                            generated_csp_path = generate_csp(tmp_dat_path)
-                            if generated_csp_path and os.path.exists(generated_csp_path):
-                                with open(generated_csp_path, 'rb') as f:
-                                    csp_data = f.read()
-                                logger.info("Successfully generated composite Ice Climbers CSP")
-                                csp_source = 'generated'
-                                # Clean up generated CSP
-                                try:
-                                    os.unlink(generated_csp_path)
-                                except:
-                                    pass
-                            else:
-                                logger.warning("Ice Climbers CSP generation failed")
-                        finally:
-                            # Clean up temp directory
-                            try:
-                                import shutil
-                                shutil.rmtree(temp_dir)
-                            except:
-                                pass
-                    else:
-                        # Regular character or Nana - single DAT extraction
-                        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as tmp_dat:
-                            tmp_dat.write(dat_data)
-                            tmp_dat_path = tmp_dat.name
-
-                        try:
-                            generated_csp_path = generate_csp(tmp_dat_path)
-                            if generated_csp_path and os.path.exists(generated_csp_path):
-                                with open(generated_csp_path, 'rb') as f:
-                                    csp_data = f.read()
-                                logger.info("Successfully generated CSP")
-                                csp_source = 'generated'
-                                # Drop the head sidecar the renderer writes
-                                # alongside (stock crops use a dedicated
-                                # head-shot render, not the action-pose CSP)
-                                try:
-                                    os.unlink(generated_csp_path + '.head.json')
-                                except OSError:
-                                    pass
-                                # Clean up generated CSP
-                                try:
-                                    os.unlink(generated_csp_path)
-                                except:
-                                    pass
-                            else:
-                                logger.warning("CSP generation failed")
-                        finally:
-                            # Clean up temp DAT
-                            try:
-                                os.unlink(tmp_dat_path)
-                            except:
-                                pass
-
-                # Ice Climbers: Nana should copy composite CSP from Popo
-                if char_info.get('is_nana') and not csp_data:
-                    # Look for paired Popo in metadata
-                    popo_color = char_info.get('pair_color')
-                    if popo_color:
-                        popo_id = f"{character.lower().replace(' ', '-')}-{popo_color.lower()}"
-
-                        # Check if Popo already imported
-                        if character in metadata.get('characters', {}):
-                            for skin in metadata['characters'][character]['skins']:
-                                if skin['id'] == popo_id:
-                                    # Found Popo - copy its CSP
-                                    popo_csp_path = STORAGE_PATH / character / f"{popo_id}_csp.png"
-                                    if popo_csp_path.exists():
-                                        csp_data = popo_csp_path.read_bytes()
-                                        csp_source = 'copied_from_popo'
-                                        logger.info(f"Copied composite CSP from Popo: {popo_id}")
-                                    break
+                assets = build_csp_and_stock(
+                    character, char_info['costume_code'], dat_data,
+                    existing_csp=existing_csp, existing_stock=existing_stock,
+                    paired_dat_data=paired_dat_data,
+                    is_nana=bool(char_info.get('is_nana')),
+                    popo_csp=popo_csp, popo_stock=popo_stock, log=logger)
+                csp_data, csp_source = assets['csp'], assets['csp_source']
+                stock_data, stock_source = assets['stock'], assets['stock_source']
 
                 # Save CSP to ZIP and storage if we have one
                 if csp_data:
@@ -291,89 +221,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                     storage_char_folder.mkdir(parents=True, exist_ok=True)
                     (storage_char_folder / f"{skin_id}_csp.png").write_bytes(csp_data)
 
-                # Handle stock - copy if found, use vanilla if missing
-                stock_data = None
-                stock_source = 'imported'
-                if char_info['stock_file']:
-                    # Stock found in ZIP (using improved matching from character detector)
-                    stock_data = source_zip.read(char_info['stock_file'])
-                elif not char_info.get('is_nana'):
-                    # No stock in ZIP - derive one by recoloring the vanilla
-                    # icon with the costume's measured color movement (Nana
-                    # keeps copying Popo's so the pair shares one icon set)
-                    try:
-                        from skinlab.stock_gen import generate_stock
-                        from generate_csp import generate_head_shot
-                        tmp_stock_dir = tempfile.mkdtemp()
-                        tmp_dat_path = os.path.join(tmp_stock_dir, 'costume.dat')
-                        with open(tmp_dat_path, 'wb') as tmp_dat:
-                            tmp_dat.write(dat_data)
-                        try:
-                            # community CSPs use custom poses, so only our own
-                            # renders (vanilla pose => pixel-aligned) may feed
-                            # the csp-diff fallback; model imports get a lazy
-                            # bind-pose head-shot render for the crop
-                            aligned_csp = csp_data if csp_source == 'generated' else None
-                            generated = generate_stock(
-                                VANILLA_ASSETS_DIR, character,
-                                char_info.get('costume_code') or '',
-                                modded_dat_path=tmp_dat_path,
-                                modded_csp=aligned_csp,
-                                head_shot_provider=lambda: generate_head_shot(tmp_dat_path))
-                        finally:
-                            import shutil as _shutil
-                            _shutil.rmtree(tmp_stock_dir, ignore_errors=True)
-                        if generated:
-                            stock_data, gen_method = generated
-                            stock_source = 'generated'
-                            logger.info(f"Generated stock icon via {gen_method}")
-                    except Exception as e:
-                        logger.warning(f"Stock generation failed, falling back to vanilla: {e}")
-
-                if stock_data is None and not char_info['stock_file']:
-                    # Generation unavailable - try vanilla matching costume
-                    vanilla_stock_path = VANILLA_ASSETS_DIR / character / char_info['costume_code'] / "stock.png"
-                    if vanilla_stock_path.exists():
-                        with open(vanilla_stock_path, 'rb') as f:
-                            stock_data = f.read()
-                        stock_source = 'vanilla'
-                    else:
-                        # Custom MEX color slots (e.g. PlPpBr) have no matching
-                        # vanilla folder, so fall back to the character's default
-                        # color (Nr) stock. Better an arbitrary but on-brand icon
-                        # than no icon — empty stock is the most reported "import
-                        # looks broken" symptom.
-                        costume_code = char_info.get('costume_code') or ''
-                        if len(costume_code) >= 4:
-                            default_costume_code = costume_code[:4] + 'Nr'
-                            default_stock_path = VANILLA_ASSETS_DIR / character / default_costume_code / "stock.png"
-                            if default_stock_path.exists():
-                                with open(default_stock_path, 'rb') as f:
-                                    stock_data = f.read()
-                                stock_source = 'vanilla_default'
-                                logger.info(
-                                    f"No stock found for {costume_code}, falling back to "
-                                    f"vanilla default {default_costume_code}/stock.png"
-                                )
-
-                # Ice Climbers: Nana should copy stock from Popo
-                if char_info.get('is_nana') and not stock_data:
-                    # Look for paired Popo in metadata
-                    popo_color = char_info.get('pair_color')
-                    if popo_color:
-                        popo_id = f"{character.lower().replace(' ', '-')}-{popo_color.lower()}"
-
-                        # Check if Popo already imported
-                        if character in metadata.get('characters', {}):
-                            for skin in metadata['characters'][character]['skins']:
-                                if skin['id'] == popo_id:
-                                    # Found Popo - copy its stock
-                                    popo_stock_path = STORAGE_PATH / character / f"{popo_id}_stc.png"
-                                    if popo_stock_path.exists():
-                                        stock_data = popo_stock_path.read_bytes()
-                                        stock_source = 'copied_from_popo'
-                                        logger.info(f"Copied stock from Popo: {popo_id}")
-                                    break
+                # (csp_data / stock_data and their sources were resolved above by
+                # build_csp_and_stock; just persist them.)
 
                 # Save stock if we have one
                 if stock_data:

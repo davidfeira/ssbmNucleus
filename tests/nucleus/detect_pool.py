@@ -12,8 +12,9 @@ uploads before the /import/file route is rewired onto it:
                 detected character is compared against the DB's character
 
 Usage:
-    python detect_pool.py archives [--limit N]
-    python detect_pool.py dats [--sample N] [--seed N]
+    python detect_pool.py archives [--backup-root D:/ssbm-backup] [--limit N]
+    python detect_pool.py dats [--backup-root D:/ssbm-backup] [--sample N] [--seed N]
+    python detect_pool.py isos [--slippi-root D:/Slippi]
 
 Writes a JSONL report next to tests/artifacts/nucleus/.
 """
@@ -30,6 +31,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND = REPO_ROOT / 'backend'
 BACKUP_ROOT = Path('D:/ssbm-backup')
+SLIPPI_ROOT = Path('D:/Slippi')
 ARTIFACTS = REPO_ROOT / 'tests' / 'artifacts' / 'nucleus'
 
 sys.path.insert(0, str(BACKEND))
@@ -47,8 +49,9 @@ def load_detection():
     return mod
 
 
-def iter_archives():
-    roots = [BACKUP_ROOT / 'uploads' / 'posts', BACKUP_ROOT / 'post_zips']
+def iter_archives(backup_root=BACKUP_ROOT):
+    backup_root = Path(backup_root)
+    roots = [backup_root / 'uploads' / 'posts', backup_root / 'post_zips']
     for root in roots:
         if not root.exists():
             continue
@@ -60,10 +63,11 @@ def iter_archives():
             yield p
 
 
-def run_archives(detection, limit=0):
+def run_archives(detection, backup_root=BACKUP_ROOT, limit=0):
     results = []
     counts = Counter()
-    archives = list(iter_archives())
+    backup_root = Path(backup_root)
+    archives = list(iter_archives(backup_root))
     if limit:
         archives = archives[:limit]
     print(f'classifying {len(archives)} archives...')
@@ -74,8 +78,13 @@ def run_archives(detection, limit=0):
             r = {'type': 'ERROR', 'confidence': '-', 'candidates': [],
                  'detail': {'error': str(e)}}
         counts[r['type']] += 1
+        try:
+            display_path = str(p.relative_to(backup_root))
+        except ValueError:
+            display_path = str(p)
         results.append({
-            'file': str(p.relative_to(BACKUP_ROOT)),
+            'file': display_path,
+            'absolute_path': str(p),
             'type': r['type'],
             'confidence': r['confidence'],
             'candidates': r['candidates'],
@@ -122,8 +131,8 @@ def _norm_char(name):
     return _CHAR_ALIASES.get(n, n)
 
 
-def run_dats(detection, sample=300, seed=42):
-    pool = ModPool(BACKUP_ROOT)
+def run_dats(detection, backup_root=BACKUP_ROOT, sample=300, seed=42):
+    pool = ModPool(backup_root)
     rows = [f for f in pool.files.values()
             if f.get('file_type') == 'character_dat'
             and pool.local_exists(f.get('file_url'))]
@@ -189,19 +198,61 @@ def run_dats(detection, sample=300, seed=42):
     return results
 
 
+def run_isos(slippi_root=SLIPPI_ROOT, limit=0):
+    slippi_root = Path(slippi_root)
+    if not slippi_root.exists():
+        raise FileNotFoundError(f'slippi root not found: {slippi_root}')
+
+    isos = [
+        p for p in sorted(slippi_root.rglob('*'))
+        if p.is_file() and p.suffix.lower() in ('.iso', '.gcm')
+        and '.nkit' not in p.name.lower()
+    ]
+    if limit:
+        isos = isos[:limit]
+
+    results = []
+    total_bytes = 0
+    print(f'found {len(isos)} ISO/GCM files under {slippi_root}')
+    for p in isos:
+        size = p.stat().st_size
+        total_bytes += size
+        try:
+            display_path = str(p.relative_to(slippi_root))
+        except ValueError:
+            display_path = str(p)
+        entry = {
+            'file': display_path,
+            'absolute_path': str(p),
+            'bytes': size,
+            'gib': round(size / (1024 ** 3), 3),
+        }
+        results.append(entry)
+        print(f'  {entry["gib"]:>6.3f} GiB  {display_path}')
+
+    print(f'\nTotal: {round(total_bytes / (1024 ** 3), 3)} GiB')
+    print('Use these paths with the app ISO scanner or a targeted backend scan run.')
+    return results
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('command', choices=['archives', 'dats'])
+    ap.add_argument('command', choices=['archives', 'dats', 'isos'])
+    ap.add_argument('--backup-root', default=str(BACKUP_ROOT))
+    ap.add_argument('--slippi-root', default=str(SLIPPI_ROOT))
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--sample', type=int, default=300)
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
-    detection = load_detection()
     if args.command == 'archives':
-        results = run_archives(detection, args.limit)
+        detection = load_detection()
+        results = run_archives(detection, args.backup_root, args.limit)
+    elif args.command == 'dats':
+        detection = load_detection()
+        results = run_dats(detection, args.backup_root, args.sample, args.seed)
     else:
-        results = run_dats(detection, args.sample, args.seed)
+        results = run_isos(args.slippi_root, args.limit)
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     out = ARTIFACTS / f'detect_pool_{args.command}.jsonl'

@@ -62,7 +62,7 @@ export default function SssCanvas({
   iconBaseHeight = SSS_BASE_HEIGHT,
   templateWidth = SSS_TEMPLATE_WIDTH,
   templateHeight = SSS_TEMPLATE_HEIGHT,
-  templateSrc = '/sss_template.png',
+  templateSrc = './sss_template.png',
   getCollisionRect,
   iconEndpoint = '/menus/sss/stage-icon',
   fitToView = false

@@ -808,7 +808,8 @@ namespace HSDRawViewer.Rendering.Models
                         continue;
 
                     // make sure texture is loaded
-                    PreLoadTexture(displayTex);
+                    if (!PreLoadTexture(displayTex))
+                        continue;
 
                     // grab texture id
                     int texid = TextureManager.GetGLID(imageBufferTextureIndex[displayTex.ImageData.ImageData]);
@@ -888,8 +889,11 @@ namespace HSDRawViewer.Rendering.Models
         /// <summary>
         /// 
         /// </summary>
-        public void PreLoadTexture(HSD_TOBJ tobj)
+        public bool PreLoadTexture(HSD_TOBJ tobj)
         {
+            if (tobj?.ImageData?.ImageData == null)
+                return false;
+
             if (!imageBufferTextureIndex.ContainsKey(tobj.ImageData.ImageData))
             {
                 byte[] rawImageData = tobj.ImageData.ImageData;
@@ -898,14 +902,22 @@ namespace HSDRawViewer.Rendering.Models
 
                 List<byte[]> mips = new();
 
-                if (tobj.LOD != null && tobj.ImageData.MaxLOD != 0)
+                try
                 {
-                    for (int i = 0; i < tobj.ImageData.MaxLOD - 1; i++)
-                        mips.Add(tobj.GetDecodedImageData(i));
+                    if (tobj.LOD != null && tobj.ImageData.MaxLOD != 0)
+                    {
+                        for (int i = 0; i < tobj.ImageData.MaxLOD - 1; i++)
+                            mips.Add(tobj.GetDecodedImageData(i));
+                    }
+                    else
+                    {
+                        mips.Add(tobj.GetDecodedImageData());
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    mips.Add(tobj.GetDecodedImageData());
+                    System.Diagnostics.Debug.WriteLine($"PreLoadTexture: skipped undecodable texture: {ex.Message}");
+                    return false;
                 }
 
                 int index = TextureManager.Add(mips, width, height);
@@ -916,6 +928,7 @@ namespace HSDRawViewer.Rendering.Models
                     + $"tobj={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tobj):x8} "
                     + $"arr={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rawImageData):x8}");
             }
+            return true;
         }
 
         /// <summary>

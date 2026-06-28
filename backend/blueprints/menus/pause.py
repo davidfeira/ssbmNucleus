@@ -34,7 +34,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import request, jsonify, send_file
 
-from core.config import HSDRAW_EXE
+from core.config import HSDRAW_EXE, BACKEND_ASSETS_DIR
 from core.state import get_project_files_dir, get_current_project_path
 
 from . import menus_bp
@@ -50,7 +50,7 @@ IMAGE_SUFFIXES = ('.png', '.jpg', '.jpeg', '.webp')
 
 # Vanilla GmPause textures (exported once from a clean 1.02 GmPause.usd) —
 # the base set for per-texture editing of mods that didn't ship a full dat.
-VANILLA_TEX_DIR = Path(__file__).resolve().parent.parent.parent / 'assets' / 'pause_vanilla'
+VANILLA_TEX_DIR = BACKEND_ASSETS_DIR / 'pause_vanilla'
 
 
 def _load_vanilla_manifest():

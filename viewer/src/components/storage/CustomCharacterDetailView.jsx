@@ -244,7 +244,7 @@ export default function CustomCharacterDetailView({
       active_csp_id: skin.active_csp_id || null,
       alternateCsps: (skin.alternate_csps || []).map(alt => ({
         id: alt.id,
-        url: `/storage/${charKey}/${alt.filename}`,
+        url: `${base}/storage/${charKey}/${alt.filename}`,
         poseName: alt.pose_name,
         isHd: alt.is_hd,
         timestamp: alt.timestamp
@@ -1350,7 +1350,7 @@ export default function CustomCharacterDetailView({
                 >
                   {costume.csp_url ? (
                     <img
-                      src={`${costume.csp_url}?t=${cspManager.lastImageUpdate}`}
+                      src={`${BACKEND_BASE}${costume.csp_url}?t=${cspManager.lastImageUpdate}`}
                       alt={costume.name}
                       draggable={false}
                       className="custom-char-csp"
@@ -1386,7 +1386,7 @@ export default function CustomCharacterDetailView({
                   <div className="custom-char-costume-info">
                     {costume.stock_url && (
                       <img
-                        src={costume.stock_url}
+                        src={`${BACKEND_BASE}${costume.stock_url}`}
                         alt="stock"
                         className="custom-char-stock"
                       />

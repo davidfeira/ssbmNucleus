@@ -45,6 +45,19 @@ else:
 # Backend directory (for local imports)
 BACKEND_DIR = Path(__file__).parent.parent
 
+# Bundled backend assets/data. In frozen builds these live inside the PyInstaller
+# bundle (_MEIPASS) — shipped via mex_backend.spec datas at 'backend/assets' and
+# 'backend/data'. Modules MUST resolve them through these constants, NOT via
+# Path(__file__)/'assets' (in a frozen build __file__ points into _MEIPASS at a
+# path that does NOT match the datas layout, so the asset is "missing" → broken
+# images / empty manifests in the installed app only).
+if getattr(sys, 'frozen', False):
+    BACKEND_ASSETS_DIR = Path(sys._MEIPASS) / 'backend' / 'assets'
+    BACKEND_DATA_DIR = Path(sys._MEIPASS) / 'backend' / 'data'
+else:
+    BACKEND_ASSETS_DIR = BACKEND_DIR / 'assets'
+    BACKEND_DATA_DIR = BACKEND_DIR / 'data'
+
 # Base path for bundled/dev assets
 if getattr(sys, 'frozen', False):
     BASE_PATH = RESOURCES_DIR

@@ -40,6 +40,9 @@ export function useBulkStageCapture({ onSaved } = {}) {
   const [selected, setSelected] = useState(() => new Set())  // keys chosen to capture
   const [progress, setProgress] = useState(null)      // { percentage, message }
   const [results, setResults] = useState([])          // [{..., ok, screenshot, reason}]
+  const [captureLog, setCaptureLog] = useState([])
+  const [captureFailures, setCaptureFailures] = useState([])
+  const [captureAttempts, setCaptureAttempts] = useState([])
   const [keep, setKeep] = useState(() => new Set())   // variantIds to save (review)
   const [saving, setSaving] = useState(false)
   const socketRef = useRef(null)
@@ -53,7 +56,8 @@ export function useBulkStageCapture({ onSaved } = {}) {
 
   const reset = () => {
     cleanupSocket()
-    setPhase('select'); setProgress(null); setResults([]); setKeep(new Set())
+    setPhase('select'); setProgress(null); setResults([]); setCaptureLog([])
+    setCaptureFailures([]); setCaptureAttempts([]); setKeep(new Set())
     setSelected(new Set()); setError(null); setSaving(false)
   }
 
@@ -103,6 +107,7 @@ export function useBulkStageCapture({ onSaved } = {}) {
 
     playSound('start')
     setPhase('capturing'); setError(null)
+    setCaptureLog([]); setCaptureFailures([]); setCaptureAttempts([])
     setProgress({ percentage: 0, message: `Starting capture of ${chosen.length}…` })
 
     cleanupSocket()
@@ -112,6 +117,9 @@ export function useBulkStageCapture({ onSaved } = {}) {
     socket.on('capture_batch_complete', (d) => {
       const rs = d.results || []
       setResults(rs)
+      setCaptureLog(d.log || [])
+      setCaptureFailures(d.failures || rs.filter((r) => !r.ok))
+      setCaptureAttempts(d.attempts || [])
       // default: keep every successful shot (the user can deselect before saving)
       setKeep(new Set(rs.filter((r) => r.ok && r.screenshot).map((r) => r.variantId)))
       setPhase('review')
@@ -120,6 +128,8 @@ export function useBulkStageCapture({ onSaved } = {}) {
     })
     socket.on('capture_error', (d) => {
       setError(d.error || 'Bulk capture failed')
+      setCaptureLog(d.log || [])
+      setCaptureAttempts(d.attempts || [])
       setPhase('select')
       playSound('error')
       cleanupSocket()
@@ -174,6 +184,7 @@ export function useBulkStageCapture({ onSaved } = {}) {
     phase, variants, loading, error,
     selected, toggle, setMany, clearSelection, keyOf,
     progress, results, keep, toggleKeep, saving,
+    captureLog, captureFailures, captureAttempts,
     loadVariants, startCapture, saveKept, reset, setError,
   }
 }

@@ -50,6 +50,7 @@ export default function CharactersGrid({ characters, allCharacters, isLoading, o
                   src={cssIconPath}
                   alt={characterName}
                   className="character-css-icon"
+                  draggable={false}
                   onError={(e) => {
                     e.target.style.display = 'none'
                     e.target.nextSibling.style.display = 'flex'

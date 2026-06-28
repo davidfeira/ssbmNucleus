@@ -106,7 +106,8 @@ export default function CustomStagesPanel({ cs }) {
                     disabled={cs.batchInstallingStages}
                   >
                     {cs.batchInstallingStages
-                      ? `Installing ${cs.batchStageProgress.current}/${cs.batchStageProgress.total}...`
+                      ? (cs.batchStageProgress.message
+                          || `Installing ${cs.batchStageProgress.current}/${cs.batchStageProgress.total}...`)
                       : `Install All Selected (${cs.selectedCustomStages.size})`}
                   </button>
                   <button

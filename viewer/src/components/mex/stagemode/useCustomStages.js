@@ -5,7 +5,9 @@
  * batch install (with auto SSS grid layout), and removal from project.
  */
 import { useState, useEffect } from 'react'
+import { io } from 'socket.io-client'
 import { appConfirm } from '../../../utils/appDialogs'
+import { BACKEND_URL } from '../../../config'
 
 export default function useCustomStages({ API_URL, onRefresh }) {
   const [vaultStages, setVaultStages] = useState([])
@@ -115,6 +117,17 @@ export default function useCustomStages({ API_URL, onRefresh }) {
     if (slugs.length === 0) return
     setBatchInstallingStages(true)
     setBatchStageProgress({ current: 0, total: slugs.length })
+    // Live progress via SocketIO so the bar moves instead of sitting at 0/N
+    // (single synchronous request otherwise).
+    const socket = io(BACKEND_URL)
+    socket.on('custom_stage_install_progress', (d) => {
+      setBatchStageProgress({
+        current: d.current ?? 0,
+        total: d.total ?? slugs.length,
+        message: d.message || null,
+        name: d.name || null,
+      })
+    })
     // ONE batch call: the backend folds add-stage + per-track add-music +
     // set-stage-playlist for every selected stage into a single workspace recompile
     // (~Nx faster than /install per stage). Output is byte-identical to the per-stage
@@ -137,6 +150,8 @@ export default function useCustomStages({ API_URL, onRefresh }) {
     } catch (err) {
       console.error('Batch stage install error:', err)
       alert(`Error: ${err.message}`)
+    } finally {
+      socket.disconnect()
     }
     // Re-fit the SSS grid to the new roster (places the new stages on the
     // stage-select grid), same step the per-stage path ran.

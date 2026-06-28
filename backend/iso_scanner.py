@@ -216,7 +216,9 @@ _INTERNAL_TO_EXTERNAL = [
 # bosses aren't selectable in normal play so showing them as importable skins
 # is just noise.
 SKIP_CHARACTERS = {
-    'Kirby',
+    # Kirby + G&W were skipped while their costume imports were broken; both are
+    # fixed now (see kirby-costume-fix / gw-csp-fix), so they scan like any other
+    # character. Only truly non-importable fighters stay here.
     'Male Wireframe', 'Female Wireframe',
     'Master Hand', 'Crazy Hand', 'Giga Bowser', 'Sandbag',
 }
@@ -280,11 +282,12 @@ class IsoScanJob:
     stats: dict = field(default_factory=lambda: {
         'existing': 0, 'vanilla': 0, 'dupes': 0,
         'slippi_matched': 0, 'data_mod': 0, 'custom_fighter': 0,
-        'unknown': 0, 'errors': 0,
+        'unknown': 0, 'errors': 0, 'preview_failed': 0,
         'stock_icons': 0,
         'total_files': 0,
     })
     candidates: dict[str, list[CandidateSkin]] = field(default_factory=dict)
+    preview_failures: list[dict] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     cancelled: bool = False
 
@@ -308,6 +311,7 @@ class IsoScanJob:
             'percent': self.percent,
             'error': self.error,
             'stats': self.stats,
+            'preview_failures': self.preview_failures,
             'characters': chars,
             'total_new': sum(len(v) for v in self.candidates.values()),
         }
@@ -515,6 +519,54 @@ def _ensure_dat_ext(name: str) -> str:
         return name
     stem, _ = os.path.splitext(name)
     return stem + '.dat'
+
+
+def _validate_csp_preview(path: str | Path) -> tuple[bool, str]:
+    """Reject renderer outputs that would create blank scan tiles.
+
+    HSDRawViewer can occasionally produce a PNG even when the model viewport did
+    not actually render. The importer should not surface those as selectable
+    skins, because users then import entries that looked blank in the scan grid.
+    Keep this conservative: reject fully transparent/tiny renders and solid
+    full-frame images, but allow flat silhouettes such as Mr. Game & Watch.
+    """
+    try:
+        from PIL import Image, ImageStat
+
+        with Image.open(path) as image:
+            rgba = image.convert('RGBA')
+            width, height = rgba.size
+            if width <= 0 or height <= 0:
+                return False, 'empty_image'
+
+            alpha = rgba.getchannel('A')
+            alpha_hist = alpha.histogram()
+            visible_pixels = sum(alpha_hist[17:])
+            total_pixels = width * height
+            min_visible = max(96, int(total_pixels * 0.03))
+            if visible_pixels < min_visible:
+                return False, 'transparent'
+
+            mask = alpha.point(lambda a: 255 if a > 16 else 0)
+            bbox = mask.getbbox()
+            if not bbox:
+                return False, 'transparent'
+            bbox_w = bbox[2] - bbox[0]
+            bbox_h = bbox[3] - bbox[1]
+            if bbox_w < max(8, int(width * 0.12)) or bbox_h < max(8, int(height * 0.12)):
+                return False, 'tiny_render'
+
+            # Blank renderer failures can come back as one opaque solid frame.
+            # Do not reject low-variance silhouettes unless they fill almost
+            # the entire CSP frame.
+            visible_ratio = visible_pixels / total_pixels
+            rgb_var = sum(ImageStat.Stat(rgba.convert('RGB'), mask).var)
+            if visible_ratio > 0.92 and rgb_var < 4:
+                return False, 'solid_frame'
+    except Exception as e:
+        return False, f'invalid_png:{e}'
+
+    return True, 'ok'
 
 
 def _stock_lookup_key(costume_code: str) -> str:
@@ -757,10 +809,48 @@ def _ic_color_suffix(costume_code: str) -> Optional[str]:
     return stem[-2:] if len(stem) >= 4 else None
 
 
-def _pair_ice_climbers(pre_candidates: list[dict]) -> list[dict]:
+# Vanilla Melee pairs IC costumes by a FIXED colour mapping, NOT matching codes:
+# Popo and Nana use different colour codes for the same costume slot (only the
+# 'Nr' default matches). Mirrors character_detector.POPO_TO_NANA. Matching by
+# raw suffix paired everything except Default wrong (or not at all).
+_POPO_TO_NANA_CODE = {'Nr': 'Nr', 'Re': 'Wh', 'Or': 'Aq', 'Gr': 'Ye'}
+
+
+def _expected_nana_sufs(popo_suf: Optional[str]) -> list[str]:
+    """Nana colour suffixes for a Popo colour, best-first: the canonical vanilla
+    pairing, then the same suffix (custom packs that name both halves alike)."""
+    out: list[str] = []
+    canon = _POPO_TO_NANA_CODE.get(popo_suf)
+    if canon:
+        out.append(canon)
+    if popo_suf and popo_suf not in out:
+        out.append(popo_suf)
+    return out
+
+
+def _ic_key(entry: dict) -> tuple[Optional[str], str]:
+    """(colour, slot) identity for an IC costume candidate, from its FILE name.
+    colour = last 2 chars of the PlPp/PlNn stem; slot = first char of the
+    extension (.dat->'d', .lat->'l', .rat->'r', ...). Popo↔Nana must match BOTH
+    the (canonical) colour AND the slot — 20XX ships several extension slots per
+    colour (PlPpRe.dat/.lat/.rat), so colour alone collides."""
+    name = os.path.basename(entry.get('path') or entry.get('costume_code') or '')
+    stem, ext = os.path.splitext(name)
+    colour = stem[-2:] if len(stem) >= 4 else None
+    slot = (ext.lstrip('.')[:1] or 'd').lower()
+    return colour, slot
+
+
+def _pair_ice_climbers(pre_candidates: list[dict],
+                       nana_pool: Optional[dict] = None) -> list[dict]:
     """Combine Popo + Nana DATs from the same (source_iso, color) into a single
     paired 'Ice Climbers' candidate. Unmatched halves pass through as solo
-    entries — never silently dropped."""
+    entries — never silently dropped.
+
+    nana_pool maps (source_iso, color_suffix) -> Nana DAT path for EVERY Nana in
+    the ISO (incl. vanilla ones filtered out of candidates). It lets a modded
+    Popo whose Nana is unchanged still pair with the correct same-colour Nana,
+    instead of rendering a Nana-less solo CSP."""
     popo = [c for c in pre_candidates if c['character'] == 'Ice Climbers']
     nana = [c for c in pre_candidates if c['character'] == 'Ice Climbers (Nana)']
     other = [c for c in pre_candidates
@@ -773,28 +863,30 @@ def _pair_ice_climbers(pre_candidates: list[dict]) -> list[dict]:
     for p in popo:
         logger.info(
             f"[iso-scan][ic]   Popo: code={p.get('costume_code')!r:14} "
-            f"suf={_ic_color_suffix(p.get('costume_code'))!r:6} "
-            f"source={p.get('source_iso')!r}"
+            f"key={_ic_key(p)!r} source={p.get('source_iso')!r}"
         )
     for n in nana:
         logger.info(
             f"[iso-scan][ic]   Nana: code={n.get('costume_code')!r:14} "
-            f"suf={_ic_color_suffix(n.get('costume_code'))!r:6} "
-            f"source={n.get('source_iso')!r}"
+            f"key={_ic_key(n)!r} source={n.get('source_iso')!r}"
         )
 
-    # Index Nana by (source, color suffix). Each Nana can be claimed once.
-    nana_index: dict[tuple[str, str], dict] = {}
+    # Index Nana by (source, colour, slot). Each Nana can be claimed once.
+    nana_index: dict[tuple, dict] = {}
     for n in nana:
-        suf = _ic_color_suffix(n['costume_code'])
-        if suf:
-            nana_index.setdefault((n['source_iso'], suf), n)
+        ncolour, nslot = _ic_key(n)
+        if ncolour:
+            nana_index.setdefault((n['source_iso'], ncolour, nslot), n)
 
     paired: list[dict] = []
     unmatched_popo: list[dict] = []
     for p in popo:
-        suf = _ic_color_suffix(p['costume_code'])
-        match = nana_index.pop((p['source_iso'], suf), None) if suf else None
+        pcolour, pslot = _ic_key(p)
+        match = None
+        for ecolour in _expected_nana_sufs(pcolour):
+            match = nana_index.pop((p['source_iso'], ecolour, pslot), None)
+            if match:
+                break
         if not match:
             unmatched_popo.append(p)
             continue
@@ -803,20 +895,47 @@ def _pair_ice_climbers(pre_candidates: list[dict]) -> list[dict]:
         out['paired_costume_code'] = match['costume_code']
         logger.info(
             f"[iso-scan][ic] PAIR {p.get('costume_code')} <-> "
-            f"{match.get('costume_code')}  (suf={suf!r}, "
-            f"source={p.get('source_iso')!r}) — exact suffix match"
+            f"{match.get('costume_code')}  (colour={pcolour!r} slot={pslot!r}, "
+            f"source={p.get('source_iso')!r}) — canonical colour+slot pairing"
         )
         paired.append(out)
 
-    # Fallback pairing for ISOs where Popo/Nana don't share suffixes
-    # (e.g. Akaneia ships PlPpNr + PlPpBu + PlNnGr — no shared suffix, but
-    # they're clearly meant to go together since the modder usually only
-    # adds 1-2 IC pairs per ISO). We can't *truly* match without ground-truth
-    # metadata, but greedy pairing-by-order within the same source ISO is
-    # the practical heuristic — the user said "we kind of just have to guess".
+    # Pool fallback: a modded Popo whose Nana is UNCHANGED has no Nana candidate
+    # (the vanilla Nana was filtered out as vanilla), so it would otherwise
+    # render a Nana-less solo CSP. Pull the same-colour Nana straight from the
+    # ISO's extracted files. This runs BEFORE the cross-colour guess so we use
+    # the *correct* colour Nana whenever the ISO has one.
+    still_unmatched: list[dict] = []
+    pool_pairs = 0
+    for p in unmatched_popo:
+        pcolour, pslot = _ic_key(p)
+        pool_nana = None
+        if nana_pool:
+            for ecolour in _expected_nana_sufs(pcolour):
+                pool_nana = nana_pool.get((p['source_iso'], ecolour, pslot))
+                if pool_nana:
+                    break
+        if not pool_nana:
+            still_unmatched.append(p)
+            continue
+        out = dict(p)
+        out['paired_path'] = pool_nana
+        out['paired_costume_code'] = os.path.splitext(os.path.basename(pool_nana))[0]
+        logger.info(
+            f"[iso-scan][ic] PAIR {p.get('costume_code')} <-> "
+            f"{os.path.basename(pool_nana)}  (colour={pcolour!r} slot={pslot!r}, "
+            f"source={p.get('source_iso')!r}) — canonical Nana from ISO"
+        )
+        paired.append(out)
+        pool_pairs += 1
+
+    # Guessed pairing for ISOs where Popo/Nana don't share suffixes AND the ISO
+    # has no same-colour Nana at all (e.g. Akaneia ships PlPpNr + PlPpBu +
+    # PlNnGr). Greedy pairing-by-order within the same source ISO is the
+    # practical heuristic — "we kind of just have to guess".
     leftover_nana = list(nana_index.values())
     by_source_popo: dict[str, list[dict]] = {}
-    for p in unmatched_popo:
+    for p in still_unmatched:
         by_source_popo.setdefault(p['source_iso'], []).append(p)
     by_source_nana: dict[str, list[dict]] = {}
     for n in leftover_nana:
@@ -865,11 +984,12 @@ def _pair_ice_climbers(pre_candidates: list[dict]) -> list[dict]:
             )
             paired.append(dict(n))
 
+    solo = sum(1 for x in paired if not x.get('paired_path'))
     logger.info(
         f"[iso-scan][ic] pairing done: {len(paired)} entries "
-        f"({len(paired) - guess_pairs - sum(1 for x in paired if not x.get('paired_path'))} exact-suffix pairs, "
-        f"{guess_pairs} guessed pairs, "
-        f"{sum(1 for x in paired if not x.get('paired_path'))} solo)"
+        f"({len(paired) - pool_pairs - guess_pairs - solo} exact-suffix pairs, "
+        f"{pool_pairs} same-colour-from-ISO pairs, "
+        f"{guess_pairs} guessed pairs, {solo} solo)"
     )
     return other + paired
 
@@ -1131,7 +1251,16 @@ def _run_scan(job: IsoScanJob, on_event):
             return
 
         # --- Phase 2b: pair Ice Climbers Popo + Nana by (source_iso, color suffix) ---
-        candidates = _pair_ice_climbers(pre_candidates)
+        # Pool of EVERY Nana DAT in each ISO (incl. vanilla ones filtered out as
+        # candidates) so a modded Popo with an unchanged Nana still gets the
+        # correct same-colour Nana in its CSP instead of rendering solo.
+        nana_pool: dict[tuple, str] = {}
+        for fp, source in all_files:
+            stem, ext = os.path.splitext(os.path.basename(fp))
+            if stem.startswith('PlNn') and len(stem) >= 6:
+                slot = (ext.lstrip('.')[:1] or 'd').lower()
+                nana_pool.setdefault((source, stem[-2:], slot), fp)
+        candidates = _pair_ice_climbers(pre_candidates, nana_pool)
 
         # --- Phase 3: Slippi-fixed hash check (against both vault AND vanilla) ---
         survivors: list[dict] = []
@@ -1158,7 +1287,7 @@ def _run_scan(job: IsoScanJob, on_event):
 
         results: dict[int, Optional[CandidateSkin]] = {}
         results_lock = threading.Lock()
-        completed_counter = {'n': 0, 'errors': 0}
+        completed_counter = {'n': 0, 'errors': 0, 'preview_failed': 0}
 
         total = len(survivors)
         _emit(job, on_event, 'csp',
@@ -1176,13 +1305,15 @@ def _run_scan(job: IsoScanJob, on_event):
                     break
                 idx = futures[fut]
                 try:
-                    candidate, had_error = fut.result()
+                    candidate, error_kind = fut.result()
                 except Exception as e:
                     logger.warning(f"CSP worker for #{idx} crashed: {e}")
-                    candidate, had_error = None, True
+                    candidate, error_kind = None, 'worker_crash'
                 with results_lock:
                     results[idx] = candidate
-                    if had_error:
+                    if error_kind == 'preview_failed':
+                        completed_counter['preview_failed'] += 1
+                    elif error_kind:
                         completed_counter['errors'] += 1
                     completed_counter['n'] += 1
                     n = completed_counter['n']
@@ -1197,6 +1328,7 @@ def _run_scan(job: IsoScanJob, on_event):
             if cand is not None:
                 job.candidates.setdefault(cand.character, []).append(cand)
         job.stats['errors'] += completed_counter['errors']
+        job.stats['preview_failed'] += completed_counter['preview_failed']
 
         _finalize(job, on_event, cancelled=job.cancelled)
 
@@ -1210,11 +1342,11 @@ def _run_scan(job: IsoScanJob, on_event):
             pass
 
 
-def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tuple[Optional[CandidateSkin], bool]:
+def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tuple[Optional[CandidateSkin], Optional[str]]:
     """Per-candidate worker: copy DAT(s) + run HSDRawViewer to generate a CSP.
-    Returns (candidate_or_None, had_error)."""
+    Returns (candidate_or_None, error_kind)."""
     if job.cancelled:
-        return None, False
+        return None, None
 
     worker = threading.current_thread().name
     t0 = time.time()
@@ -1228,7 +1360,7 @@ def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tup
         shutil.copy2(c['path'], dat_dest)
     except Exception as e:
         logger.warning(f"[iso-scan][csp][{worker}] copy fail {c['path']}: {e}")
-        return None, True
+        return None, 'copy_error'
 
     paired_dest: Optional[Path] = None
     if c.get('paired_path'):
@@ -1261,10 +1393,21 @@ def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tup
                     f"for launch slot before starting HSDRawViewer"
                 )
     try:
-        generated = generate_csp(str(dat_dest))
+        generated = generate_csp(
+            str(dat_dest),
+            paired_dat_filepath=str(paired_dest) if paired_dest else None,
+        )
         if generated and os.path.exists(generated):
             csp_dest = skin_folder / "csp.png"
             shutil.move(generated, csp_dest)
+            ok, reason = _validate_csp_preview(csp_dest)
+            if not ok:
+                csp_status = f'invalid:{reason}'
+                try:
+                    csp_dest.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                csp_dest = None
         else:
             csp_status = 'no_output'
     except Exception as e:
@@ -1275,6 +1418,21 @@ def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tup
         f"[iso-scan][csp][{worker}] #{idx:<3} {c['character']:22} "
         f"{primary_name:14} csp={csp_status:10} {elapsed_ms:>5}ms"
     )
+
+    if csp_dest is None:
+        job.preview_failures.append({
+            'key': key,
+            'character': c['character'],
+            'costume_code': c['costume_code'],
+            'source_iso': c['source_iso'],
+            'dat_hash': c['hash'][:12],
+            'status': csp_status,
+            'paired_costume_code': c.get('paired_costume_code'),
+        })
+        logger.warning(
+            f"[iso-scan][csp][{worker}] dropping {key}: preview failed ({csp_status})"
+        )
+        return None, 'preview_failed'
 
     stock_dest: Optional[Path] = None
     stock_path = c.get('stock_path')
@@ -1297,7 +1455,7 @@ def _build_candidate(idx: int, c: dict, skins_dir: Path, job: IsoScanJob) -> tup
         source_iso=c['source_iso'],
         paired_dat_path=str(paired_dest) if paired_dest else None,
         paired_costume_code=c.get('paired_costume_code'),
-    ), False
+    ), None
 
 
 def _finalize(job: IsoScanJob, on_event, cancelled: bool):

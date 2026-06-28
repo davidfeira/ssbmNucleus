@@ -46,7 +46,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import request, jsonify, send_file
 
-from core.config import HSDRAW_EXE
+from core.config import HSDRAW_EXE, BACKEND_ASSETS_DIR
 from core.state import get_project_files_dir, get_current_project_path
 
 from . import menus_bp
@@ -62,7 +62,7 @@ IMAGE_SUFFIXES = ('.png', '.jpg', '.jpeg', '.webp')
 
 # Vanilla IfAll slot manifests (exported once from clean 1.02 files with
 # --hud-textures; includes a raw-buffer md5 per slot for diffing).
-VANILLA_MANIFEST_DIR = Path(__file__).resolve().parent.parent.parent / 'assets' / 'hud_vanilla'
+VANILLA_MANIFEST_DIR = BACKEND_ASSETS_DIR / 'hud_vanilla'
 
 # Source formats that carry color; injecting them into a grayscale vanilla
 # slot as "original" would discard the color, so they re-encode as RGB5A3.

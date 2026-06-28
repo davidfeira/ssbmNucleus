@@ -48,7 +48,10 @@ export default function AddCharacterModal({ cc }) {
                   disabled={batchAddingChars}
                 >
                   {batchAddingChars
-                    ? `Adding ${batchCharProgress.current}/${batchCharProgress.total}...`
+                    ? (batchCharProgress.message
+                        || (batchCharProgress.total > 0
+                              ? `Preparing ${batchCharProgress.current}/${batchCharProgress.total}…`
+                              : 'Working…'))
                     : `Add Selected (${selectedVaultChars.size})`}
                 </button>
                 <button

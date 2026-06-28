@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +34,11 @@ test_in_game_bp = Blueprint('test_in_game', __name__)
 # One test at a time: two Dolphins would fight over the screen + pipe.
 _test_lock = threading.Lock()
 _test_running = False
+
+# In a bulk capture, if a packed ISO's boot leaves shots missing (Dolphin
+# crashed/hung), reboot the SAME ISO this many more times before giving up.
+# We never rebuild a per-variant ISO — that was slow and is what the user hated.
+MAX_DOLPHIN_RETRIES = 2
 
 
 def try_acquire_test_slot():
@@ -783,6 +789,8 @@ def start_capture_stage_batch():
 
     runs_root = STORAGE_PATH / 'test-runs'
     runs_root.mkdir(parents=True, exist_ok=True)
+    # Round ISOs are written here; ensure it exists or the very first build fails.
+    (STORAGE_PATH / 'test-builds').mkdir(parents=True, exist_ok=True)
 
     def run():
         global _test_running
@@ -793,12 +801,160 @@ def start_capture_stage_batch():
                 'stage': stage, 'percentage': percentage, 'message': message})
 
         results = []  # one entry per requested variant, in input order
+        capture_log = []
+        failure_attempts = []
         try:
             from test_build import build_stage_skin_multibatch_iso, BATCH_BUTTONS, DAS_STAGES
             from ingame.capture import capture_stage_batch
             from ingame.melee_sss import INTERNAL_STAGE_ID
 
             total = len(variants)
+            missing_reason_by_id = {}
+            max_log_lines = 300
+            # A background build and the foreground capture both log now, so
+            # guard the shared list (append + trim) against interleaving.
+            log_guard = threading.Lock()
+
+            def record_log(message):
+                line = str(message or '').strip()
+                if not line:
+                    return
+                logger.info("[capture-batch] %s", line)
+                with log_guard:
+                    capture_log.append(line[:500])
+                    if len(capture_log) > max_log_lines:
+                        del capture_log[:len(capture_log) - max_log_lines]
+
+            def capture_id(stage_code, variant_id):
+                return f"{stage_code}:{variant_id}"
+
+            def group_ids(stage_groups):
+                ids = []
+                for g in stage_groups:
+                    ids.extend(capture_id(g['stageCode'], vid)
+                               for vid in g.get('variantIds', []))
+                return ids
+
+            def remember_missing(ids, reason):
+                reason = reason or 'capture failed'
+                for cid in ids:
+                    if cid not in shots_by_id:
+                        missing_reason_by_id[cid] = reason
+
+            def log_tail(start, limit=28):
+                return capture_log[start:][-limit:]
+
+            def note_failed_attempt(label, ids, reason, log_start):
+                failure_attempts.append({
+                    'attempt': label,
+                    'variantIds': ids,
+                    'reason': reason or 'capture failed',
+                    'log': log_tail(log_start),
+                })
+
+            shots_by_id = {}   # "<stageCode>:<variantId>" -> png
+
+            def build_round_iso(round_groups, label):
+                """Build ONE multibatch ISO for a round. Returns a dict with the
+                ISO path + placement info, or {'error': ...}. Safe to run in a
+                background thread (writes a uniquely-named ISO, no shared state
+                except append-only logging)."""
+                ids = group_ids(round_groups)
+                out_iso = (STORAGE_PATH / 'test-builds'
+                           / f'capbatch_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.iso')
+                try:
+                    record_log(f"== {label}: building {len(ids)} variant(s) ==")
+                    placed = build_stage_skin_multibatch_iso(
+                        vanilla, round_groups, str(out_iso), log=record_log)
+                    placed_ids = [capture_id(p['stageCode'], p['variantId']) for p in placed]
+                    skipped_ids = [cid for cid in ids if cid not in placed_ids]
+                    return {'iso': out_iso, 'placed': placed, 'placed_ids': placed_ids,
+                            'skipped_ids': skipped_ids, 'ids': ids}
+                except Exception as e:
+                    reason = f"{type(e).__name__}: {e}"
+                    logger.exception("[capture-batch] %s build failed", label)
+                    record_log(f"{label}: build failed: {reason}")
+                    try:
+                        if out_iso.exists():
+                            out_iso.unlink()
+                    except Exception:
+                        pass
+                    return {'error': reason, 'ids': ids, 'iso': None}
+
+            def capture_round(build, label, base, span):
+                """Capture every placed variant from an ALREADY-BUILT ISO. If
+                some shots are missing (Dolphin crashed/hung), reboot the SAME
+                ISO up to MAX_DOLPHIN_RETRIES more times — we never rebuild a
+                per-variant ISO. A variant that crashes Dolphin is moved to the
+                end of the next boot so it can't block the ones queued behind
+                it. Whatever is still missing after the retries is reported, so
+                the user always gets what we did capture."""
+                log_start = len(capture_log)
+                if build.get('error'):
+                    remember_missing(build['ids'], build['error'])
+                    note_failed_attempt(label, build['ids'], build['error'], log_start)
+                    return
+                if build['skipped_ids']:
+                    remember_missing(build['skipped_ids'], 'variant was not placed into the ISO')
+                    record_log(f"{label}: {len(build['skipped_ids'])} variant(s) were not placed")
+                if not build['placed_ids']:
+                    remember_missing(build['ids'], 'no variants were placed into the ISO')
+                    note_failed_attempt(label, build['ids'], 'no variants were placed into the ISO', log_start)
+                    return
+
+                out_iso = build['iso']
+                cap_all = []
+                for pv in build['placed']:
+                    stage_name = DAS_STAGES[pv['stageCode']][1]
+                    cap_all.append({
+                        'id': capture_id(pv['stageCode'], pv['variantId']),
+                        'button': pv['button'],
+                        'internal_id': INTERNAL_STAGE_ID.get(stage_name),
+                        'framing_key': stage_name,
+                    })
+
+                try:
+                    crasher = None  # id that took Dolphin down last boot
+                    attempts = MAX_DOLPHIN_RETRIES + 1
+                    last_reason = ''
+                    for attempt in range(attempts):
+                        missing = [c for c in cap_all if c['id'] not in shots_by_id]
+                        if not missing:
+                            break
+                        # Move a known crasher to the end so it can't stall the rest.
+                        if crasher:
+                            missing.sort(key=lambda c: c['id'] == crasher)
+                        tag = '' if attempt == 0 else f' (retry {attempt}/{MAX_DOLPHIN_RETRIES})'
+                        emit('capturing', base,
+                             f'{label}{tag}: booting Dolphin ({len(missing)} variant(s))…')
+                        record_log(f"{label}{tag}: capturing {len(missing)} variant(s) from the same ISO")
+                        res = capture_stage_batch(
+                            str(out_iso), slippi, str(runs_root), missing,
+                            emit=lambda s, p, m: emit(s, base + int(span * (p / 100.0)), m),
+                            log=record_log)
+                        for shot in res.get('shots', []):
+                            if shot.get('png'):
+                                shots_by_id[shot['id']] = shot['png']
+                        crasher = res.get('crashed_id')
+                        last_reason = res.get('reason') or last_reason
+                        still = [c['id'] for c in cap_all if c['id'] not in shots_by_id]
+                        if not still:
+                            record_log(f"{label}: captured all {len(cap_all)} placed variant(s)")
+                            break
+                        record_log(f"{label}{tag}: still missing {len(still)} of {len(cap_all)}")
+                        if attempt == attempts - 1:
+                            remember_missing(still, last_reason or 'capture failed')
+                            for failure in res.get('failures', []):
+                                fid = failure.get('id')
+                                if fid:
+                                    remember_missing([fid], failure.get('reason') or last_reason)
+                            note_failed_attempt(label, still, last_reason, log_start)
+                finally:
+                    try:
+                        if out_iso and out_iso.exists():
+                            out_iso.unlink()
+                    except Exception:
+                        pass
 
             # Group by base stage (preserve input order within each).
             groups = {}
@@ -811,58 +967,51 @@ def start_capture_stage_batch():
                     for v in groups.pop(key):
                         unknown.add((v['stageCode'], v['variantId']))
 
-            # One ISO per ROUND packs up to BATCH_BUTTONS (6) variants of EACH base
+            # One ISO per ROUND packs up to BATCH_BUTTONS variants of EACH base
             # stage (the DAS framework loads all six stages), so a whole selection
-            # usually needs just ONE build + ONE boot -- a stage with >6 selected
-            # spills into extra rounds. Far fewer ISOs than one-per-stage.
+            # usually needs just ONE build + ONE boot -- a stage with >BATCH_BUTTONS
+            # selected spills into extra rounds.
             chunk = max(1, len(BATCH_BUTTONS))
-            rounds = max(((len(vs) + chunk - 1) // chunk for vs in groups.values()), default=0)
-            shots_by_id = {}   # "<stageCode>:<variantId>" -> png
-
-            for k in range(rounds):
+            round_specs = []
+            for k in range(max(((len(vs) + chunk - 1) // chunk for vs in groups.values()), default=0)):
                 round_groups = []
                 for (stage_code, stage_folder), vs in groups.items():
                     sub = vs[k * chunk:(k + 1) * chunk]
                     if sub:
                         round_groups.append({'stageCode': stage_code, 'stageFolder': stage_folder,
                                              'variantIds': [v['variantId'] for v in sub]})
-                if not round_groups:
-                    continue
-                base = 4 + int(90 * k / max(1, rounds))
-                n_round = sum(len(g['variantIds']) for g in round_groups)
-                emit('building', base,
-                     f'Building ISO {k + 1}/{rounds} ({n_round} variants across '
-                     f'{len(round_groups)} stage{"s" if len(round_groups) != 1 else ""})…')
-                out_iso = (STORAGE_PATH / 'test-builds'
-                           / f'capbatch_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.iso')
-                try:
-                    placed = build_stage_skin_multibatch_iso(
-                        vanilla, round_groups, str(out_iso),
-                        log=lambda m: logger.info(f"[capture-batch] {m}"))
-                    cap_variants = []
-                    for pv in placed:
-                        stage_name = DAS_STAGES[pv['stageCode']][1]
-                        cap_variants.append({
-                            'id': f"{pv['stageCode']}:{pv['variantId']}",
-                            'button': pv['button'],
-                            'internal_id': INTERNAL_STAGE_ID.get(stage_name),
-                            'framing_key': stage_name,
-                        })
-                    span = 90.0 / max(1, rounds)
-                    res = capture_stage_batch(
-                        str(out_iso), slippi, str(runs_root), cap_variants,
-                        emit=lambda s, p, m: emit(s, base + int(span * (p / 100.0)), m),
-                        log=lambda m: logger.info(f"[capture-batch] {m}"))
-                    for shot in res.get('shots', []):
-                        shots_by_id[shot['id']] = shot['png']
-                except Exception:
-                    logger.exception("[capture-batch] round failed")
-                finally:
+                if round_groups:
+                    round_specs.append(round_groups)
+
+            rounds = len(round_specs)
+            span = 90.0 / max(1, rounds)
+            # Pipeline: build the NEXT round's ISO in the background while the
+            # current round is being screenshotted in Dolphin (build = CPU/disk,
+            # capture = the GPU/Dolphin, so they don't contend). A single worker
+            # keeps builds from overlapping each other.
+            with ThreadPoolExecutor(max_workers=1) as build_pool:
+                def _label(k):
+                    return f"round {k + 1}/{rounds}"
+                next_future = build_pool.submit(build_round_iso, round_specs[0], _label(0)) if rounds else None
+                for k in range(rounds):
+                    base = 4 + int(90 * k / max(1, rounds))
+                    n_round = sum(len(g['variantIds']) for g in round_specs[k])
+                    emit('building', base,
+                         f'Round {k + 1}/{rounds} ({n_round} variants across '
+                         f'{len(round_specs[k])} stage{"s" if len(round_specs[k]) != 1 else ""})…')
                     try:
-                        if out_iso.exists():
-                            out_iso.unlink()
+                        build = next_future.result()
+                    except Exception as e:  # belt-and-suspenders; build_round_iso catches its own
+                        build = {'error': f"{type(e).__name__}: {e}",
+                                 'ids': group_ids(round_specs[k]), 'iso': None}
+                    # Kick off the next build now so it overlaps this capture.
+                    next_future = (build_pool.submit(build_round_iso, round_specs[k + 1], _label(k + 1))
+                                   if k + 1 < rounds else None)
+                    try:
+                        capture_round(build, _label(k), base, span)
                     except Exception:
-                        pass
+                        logger.exception("[capture-batch] %s capture crashed", _label(k))
+                        record_log(f"{_label(k)}: capture crashed; continuing with partial results")
 
             # Assemble a result for every requested variant, in input order.
             for v in variants:
@@ -875,16 +1024,26 @@ def start_capture_stage_batch():
                                     'screenshot': "data:image/png;base64,"
                                     + base64.b64encode(png).decode('ascii')})
                 else:
-                    results.append({**_vmeta(v), 'ok': False, 'reason': 'capture failed'})
+                    cid = f"{v['stageCode']}:{v['variantId']}"
+                    results.append({**_vmeta(v), 'ok': False,
+                                    'reason': missing_reason_by_id.get(cid) or 'capture failed'})
 
             ok_n = sum(1 for r in results if r.get('ok'))
+            failures = [r for r in results if not r.get('ok')]
             socketio.emit('capture_batch_complete', {
                 'success': ok_n > 0, 'results': results,
-                'captured': ok_n, 'total': total})
-            logger.info(f"[capture-batch] done: {ok_n}/{total} captured")
+                'captured': ok_n, 'total': total,
+                'failures': failures,
+                'attempts': failure_attempts[-20:],
+                'log': capture_log[-max_log_lines:]})
+            logger.info("[capture-batch] done: %s/%s captured", ok_n, total)
         except Exception as e:
             logger.exception("[capture-batch] failed")
-            socketio.emit('capture_error', {'success': False, 'error': str(e)})
+            socketio.emit('capture_error', {
+                'success': False, 'error': str(e),
+                'attempts': failure_attempts[-20:],
+                'log': capture_log[-300:],
+            })
         finally:
             with _test_lock:
                 _test_running = False

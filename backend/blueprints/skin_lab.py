@@ -29,12 +29,12 @@ import numpy as np
 from flask import Blueprint, current_app, jsonify, request, send_file
 from PIL import Image
 
-from core.config import HSDRAW_EXE, LOGS_PATH, STORAGE_PATH, get_subprocess_args
+from core.config import HSDRAW_EXE, LOGS_PATH, STORAGE_PATH, BACKEND_ASSETS_DIR, get_subprocess_args
 from skinlab import compose as compose_mod
 from skinlab import palette as palette_mod
 from skinlab.session import ViewerSession, ViewerSessionError
 
-TEXTURE_REGIONS_DIR = Path(__file__).parent.parent / 'assets' / 'texture_regions'
+TEXTURE_REGIONS_DIR = BACKEND_ASSETS_DIR / 'texture_regions'
 
 logger = logging.getLogger(__name__)
 
@@ -878,6 +878,118 @@ def _body_band(region_map):
     return _meta['bodyBand']
 
 
+def _material_band():
+    """Dominant MATERIAL hue band across ALL the open costume's textures — the
+    bulk body color. Robust where the body region's static indexes happen to
+    land on a costume's recolored accents (e.g. vanilla Pichu's blue/green
+    slots paint a few fur-region textures the slot color, but the BULK of the
+    body stays the natural yellow on the unmapped textures), so the per-region
+    body band would read the accent color and miss the real body."""
+    bins = _hue_histogram(_session, [t['index'] for t in _session.textures])
+    return _band_from_bins(bins) if bins.sum() >= 200 else None
+
+
+def _true_body_band(region_map):
+    """The character's real body hue band. For `approximate` costumes the body
+    REGION's static indexes may have landed on slot-recolored accents, so the
+    bulk MATERIAL band is the truer read; otherwise the body region is fine."""
+    if region_map and region_map.get('approximate'):
+        return _material_band() or _body_band(region_map)[1]
+    return _body_band(region_map)[1]
+
+
+def _hue_in_band(value, band, pad=0):
+    lo = (band['hueMin'] - pad) % 360
+    hi = (band['hueMax'] + pad) % 360
+    return lo <= value <= hi if lo <= hi else (value >= lo or value <= hi)
+
+
+def _classify_unmapped(region_map):
+    """Split the open costume's UNMAPPED textures (those no region/protected
+    index covers) into body textures vs body-padded feature textures, by hue.
+
+    A higher-texture variant costume carries parts the basis-authored map never
+    names. Two kinds matter for a body recolor:
+      - body: dominant hue IS the body color -> fold into the body region so
+        the recolor reaches them (else stock-colored patches, e.g. Pichu ears).
+      - feature: dominant hue is NOT the body color but the texture still has a
+        ring of body-colored PADDING around the feature (e.g. Pichu's pink
+        cheek decal on a yellow square) -> treat as protected so spillover
+        recolors just the padding, not the feature. Cached as (body, feature)."""
+    if _meta is None or region_map is None:
+        return [], []
+    if not region_map.get('approximate'):
+        return [], []
+    if 'unmappedSplit' in _meta:
+        return _meta['unmappedSplit']
+    band = _true_body_band(region_map)
+    if not band:
+        _meta['unmappedSplit'] = ([], [])
+        return [], []
+    mapped = set()
+    for idxs in (region_map.get('regions') or {}).values():
+        mapped.update(idxs)
+    mapped.update(region_map.get('protected') or [])
+    sat_min = max(12, band.get('satMin', 18) - 6)
+    body, feature = [], []
+    for t in _session.textures:
+        index = t['index']
+        if index in mapped or t.get('matAnim') or t.get('extra'):
+            continue
+        try:
+            # get_full_texture is always the ORIGINAL (pristine) texture
+            arr = np.array(Image.open(io.BytesIO(
+                _session.get_full_texture(index))).convert('RGBA'))
+        except Exception:
+            continue
+        h, s, l = palette_mod.rgb_to_hsl(arr[..., :3].astype(np.float64))
+        opaque = arr[..., 3] >= 128
+        keep = opaque & (s >= sat_min) & (l >= 12) & (l <= 92)
+        if keep.sum() < 64:
+            continue
+        # dominant hue = peak of the texture's own saturated-pixel histogram
+        peak = int(np.bincount(np.floor(h[keep]).astype(np.int64) % 360,
+                               minlength=360).argmax())
+        body_px = keep & _band_mask(h, band, pad=12)
+        body_frac = float(body_px.sum()) / float(max(1, opaque.sum()))
+        if _hue_in_band(peak, band, pad=12):
+            body.append(index)              # the texture itself is body
+        elif body_frac >= 0.06:
+            feature.append(index)           # feature decal with body padding
+    _meta['unmappedSplit'] = (body, feature)
+    if body or feature:
+        logger.info(f'[skin-lab] approximate costume: extra body textures '
+                    f'{body}, padded feature textures {feature}')
+    return body, feature
+
+
+def _band_mask(h, band, pad=0):
+    lo = (band['hueMin'] - pad) % 360
+    hi = (band['hueMax'] + pad) % 360
+    return (h >= lo) & (h <= hi) if lo <= hi else ((h >= lo) | (h <= hi))
+
+
+def _extra_body_textures(region_map):
+    """Indexes of UNMAPPED textures whose dominant hue matches the bulk body
+    material.
+
+    Region maps are authored against a basis costume's texture layout, but
+    higher-detail packs / alternate costumes carry MORE body textures than the
+    basis (vanilla textures keep their indexes; extra parts get appended). The
+    static region indexes miss those appended body textures, so a body recolor
+    leaves them stock-colored (e.g. Pichu's blue/green slots kept yellow patches
+    around the ears/eyes). Only kicks in for `approximate` costumes; matches
+    pristine pixels so it's stable regardless of when it's called. Cached."""
+    return _classify_unmapped(region_map)[0]
+
+
+def _extra_feature_textures(region_map):
+    """UNMAPPED feature textures (decals with a body-colored padding ring) the
+    basis map never named -- folded into `protected` so the body op's spillover
+    recolors just their padding, leaving the feature itself intact."""
+    return _classify_unmapped(region_map)[1]
+
+
 def _body_region(region_map):
     """The region whose color band represents the body, or None."""
     return _body_band(region_map)[0]
@@ -909,7 +1021,10 @@ def _feature_pad_masks():
     if 'featurePadMasks' not in _meta:
         masks = {}
         region_map = _load_region_map()
-        _, band = _body_band(region_map) if region_map else (None, None)
+        # use the TRUE body band: on approximate costumes the body region's
+        # static indexes can be slot-recolored accents, but feature padding is
+        # always the natural body color (the bulk material band)
+        band = _true_body_band(region_map) if region_map else None
         if band:
             # widen the band: feature borders anti-alias toward neighboring
             # hues (yellow fur -> orange ring around a red cheek) and at
@@ -917,7 +1032,10 @@ def _feature_pad_masks():
             band = {'hueMin': (band['hueMin'] - 10) % 360,
                     'hueMax': (band['hueMax'] + 10) % 360,
                     'satMin': max(10, band.get('satMin', 18) - 8)}
-            for index in (region_map.get('protected') or []):
+            # include UNMAPPED padded feature textures the basis map never named
+            pad_indexes = (list(region_map.get('protected') or [])
+                           + _extra_feature_textures(region_map))
+            for index in pad_indexes:
                 try:
                     # get_full_texture is always the ORIGINAL (edits live in
                     # the _edited overlay), so this is pristine by definition
@@ -1007,6 +1125,9 @@ def _resolve_targets(data, region_map):
     explicit {textures: [...]} or a {region: "fur"}. Returns
     (indexes, default_mask, protected, error)."""
     protected = set((region_map or {}).get('protected') or [])
+    # unmapped body-padded feature textures (approximate costumes) act as
+    # protected: the body op skips them but its spillover recolors their padding
+    protected.update(_extra_feature_textures(region_map))
     if data.get('textures') is not None:
         try:
             indexes = [int(i) for i in data['textures']]
@@ -1023,11 +1144,19 @@ def _resolve_targets(data, region_map):
     if not indexes:
         known = ', '.join((region_map.get('regions') or {}).keys())
         return None, None, None, f'Unknown region "{region}" (known: {known})'
+    indexes = list(indexes)
+    # an approximate costume (more textures than the map's basis) can carry
+    # extra body textures the static indexes miss -- fold them into the body
+    # region so a body recolor doesn't leave stock-colored patches
+    if region == _body_region(region_map):
+        for i in _extra_body_textures(region_map):
+            if i not in indexes:
+                indexes.append(i)
     # live hints follow the OPEN costume's actual colors (shipped hints only
     # describe the basis costume)
     default_mask = _region_hints().get(region) \
         or (region_map.get('maskHints') or {}).get(region)
-    return list(indexes), default_mask, protected, None
+    return indexes, default_mask, protected, None
 
 
 def _mask_kwargs(mask):

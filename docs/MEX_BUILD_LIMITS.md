@@ -11,7 +11,7 @@ and **why**. Every number here was confirmed **in-game** (Slippi Dolphin) via th
 | Thing | Limit | What happens past it | Mode |
 |---|---|---|---|
 | Costumes **per character** | **255** | count byte wraps → all costumes collapse to costume 0 | silent, no crash |
-| **Total** costumes (whole build) | **CSP-memory bound — NOT a fixed count**: ~510 with no CSP compression, **~1150 with the app's auto CSP-compression** | CSS **freezes** when CSP texture RAM overflows the heap | mitigated by CSP compression (auto) |
+| **Total** costumes (whole build) | **CSP-memory bound, not a fixed count**: console/local uses the offline VS CSS number (~1150); Dolphin/Slippi uses the online CSS number (healthy through 1500 so far) | CSS **freezes** when CSP texture RAM overflows the heap | mitigated by CSP compression (auto) |
 | Disc size (real hardware only) | **1,459,978,240 B** (1392.3 MiB) | won't boot on console / SD; **Dolphin runs over-disc fine** | hardware-only |
 | Total ISO size | **~4 GiB** (2³²) | ISO won't boot at all | hard |
 | DAS variants **per stage** | random pool; **no count cap** (healthy to 2048/stage) | only disc / the 4 GiB-ISO limit bounds it | — |
@@ -21,10 +21,11 @@ budget, not a fixed count — and CSP compression is the lever.** The CSS loads 
 portrait for *every* costume; it freezes when that texture memory `≈ (128+total)·r²`
 (r = CSP compression ratio; CSP sized 136r×188r) overflows the heap left for it
 (which itself shrinks as the costume tables grow). So the max count depends on r:
-**~510 with no compression (r=1.0), but ~1150 with the app's automatic CSP
-compression** (`core.helpers.calculate_auto_compression`, which scales r down as you
-add costumes — and the app applies it for you on export). Disc size and HD-texture
-mode do not change this.
+**~510 with no compression (r=1.0); with the app's automatic CSP compression,
+offline VS CSS is still pinned at ~1150 and the Slippi online CSS is healthy
+through 1500 so far** (`core.helpers.calculate_auto_compression`, which scales r
+down as you add costumes — and the app applies it for you on export). Disc size and
+HD-texture mode do not change this.
 
 > **Correction — this supersedes earlier versions of this doc.** A prior version
 > claimed a hard count cap of **511/512 (0x200)**. That was WRONG — an artifact of
@@ -32,7 +33,9 @@ mode do not change this.
 > texture RAM overflows near ~510 costumes (≈510 for *both* duplicate and distinct
 > costumes, because each costume loads its own CSP — the "0x200" was a coincidence,
 > not a table). Re-tested WITH the app's auto CSP-compression, **512 and 513 costumes
-> are healthy (60 fps)** and the ceiling is far higher (~1150). (An even earlier
+> are healthy (60 fps)** and the ceiling is far higher. The current split is
+> console/local offline VS CSS ~1150 and Dolphin/Slippi online CSS healthy through
+> 1500 so far. (An even earlier
 > version blamed *disc size*; also wrong — Dolphin runs over-disc fine.)
 
 ---
@@ -77,28 +80,46 @@ it *shrinks* as the costume tables grow. So the max number of costumes is set by
 **r**, not a magic number — and the app auto-picks r to stay safe
 (`core.helpers.calculate_auto_compression`).
 
-**Measured in-game** (offline VS CSS; ISOs all 1392 MiB so disc size is out of it):
+**Measured in-game** (ISOs all 1392 MiB unless noted, so disc size is out of it):
 
 | Build | CSP compression r | CSS |
 |---|---|---|
 | 511 total, **duplicate** costumes | **1.0 (none)** | healthy; 512 hung |
 | 509–513 total, **distinct** costumes | **1.0 (none)** | **all hung** (wall ≤ 509) |
 | 509–513 total, **distinct** costumes | **~0.39** (app auto for +378) | **all healthy — incl. 512 & 513** |
-| 800 / 1000 / 1200 total, distinct | auto (~0.31–0.36) | *(being pinned — high-ceiling ladder)* |
+| 1000 total, distinct, online CSS | auto (0.163) | healthy, 59.9 fps |
+| 1100 total, distinct, online CSS | auto (0.121) | healthy, 59.9 fps |
+| 1150 total, distinct, online CSS | auto (0.1 floor) | healthy, 59.9 fps |
+| 1200 total, distinct, online CSS | auto (0.1 floor) | healthy, 59.4 fps |
+| 1300 total, distinct, online CSS | auto (0.1 floor) | healthy, 59.9 fps |
+| 1400 total, distinct, online CSS | auto (0.1 floor) | healthy, 59.9 fps |
+| 1500 total, distinct, online CSS | auto (0.1 floor) | healthy, 59.1 fps |
+
+Capacity should be tracked by CSS mode:
+- **Console / local play:** use the offline VS CSS result.
+- **Dolphin / Slippi netplay:** use the online CSS result, because the Slippi
+  online character-select/matchmaking screen loads more memory.
+
+`backend/fps_batch.py` now supports `--mode offline`, `--mode online`, and
+`--mode both` so the same count ladder can pin the console and Dolphin numbers
+side by side. The online probe enters the unranked CSS only long enough to load
+CSPs and watch the frame counter, then holds B to leave before matchmaking.
 
 The two uncompressed (r=1.0) rows show the wall sits at **~510 regardless of
 count-vs-content** (duplicate ≈511, distinct ≈509) — because each costume loads its
 own full-size CSP, so it is a **memory** wall, not a count cap. Dropping r to the
 app's auto value (~0.39) makes **512 and 513 healthy**, proving there is no 512-slot
-table. The real ceiling — where even the r=0.1 floor can't fit — is **~1150** by the
-formula; the high-count ladder pins it empirically.
+table. The old formula expectation that the r=0.1 floor would fail around ~1150 is
+too conservative for the Slippi online CSS: that path is healthy through 1500 total
+costumes so far, and the ceiling has not been found yet.
 
-> `calculate_auto_compression(added)` is the team's own empirically-derived crash
-> boundary (from the **online** CSS, the memory worst case): the CSS crashes when
-> `(128+added)·r² ≳ 135 − 0.12·added`; the function keeps a 15% margin and scales r
-> from 1.0 (few costumes) down toward 0.1 (~1000+). Quick Export and the install page
-> apply it automatically — which is why a normally-built mod does **not** hit the
-> ~510 uncompressed wall.
+> `calculate_auto_compression(added)` is the team's empirically-derived safety curve
+> from low/mid-count **online** CSS crash tests: it keeps a 15% margin below
+> `(128+added)·r² ≳ 135 − 0.12·added` until it reaches the 0.1 floor (~1000+).
+> The 1500-costume online ladder shows that high-count linear extrapolation was
+> conservative after the floor. Quick Export and the install page apply it
+> automatically, which is why a normally-built mod does **not** hit the ~510
+> uncompressed wall.
 
 What it is **not**:
 - **Not a fixed count / 0x200 table.** 512 and 513 costumes run fine once CSPs are
@@ -193,11 +214,13 @@ independent axes**:
 total = Σ fighter.costumeCount
 r     = CSP compression used on export; the app auto-picks
         calculate_auto_compression(total - 128), scaling 1.0 -> ~0.1 as count grows
-# CSS freezes when CSP RAM overflows:   (128 + total) * r^2  >  ~(135 - 0.12*(total-128))
-#   with AUTO r  -> safe up to total ~1150 (r floors at 0.1)   [empirically pinned]
+# Low/mid-count fit: CSS freezes when CSP RAM overflows:
+#   (128 + total) * r^2  >  ~(135 - 0.12*(total-128))
+#   with AUTO r  -> offline pinned around 1150; online healthy through 1500 so far
 #   with r = 1.0 (no compression) -> walls at only ~510
-COSTUME_HANG  ~= 1150     # ceiling WITH the app's auto-compression
-COSTUME_SAFE  ~= 1000     # warn approaching it
+CONSOLE_COSTUME_HANG  ~= 1150  # offline VS CSS ceiling with auto-compression
+DOLPHIN_COSTUME_HANG  ~= 1500  # online CSS tested-safe floor; ceiling not found
+COSTUME_SAFE          ~= 1000  # warn approaching either ceiling
 
 # SECONDARY — disc size, two thresholds:
 CONSOLE_DISC  = 1_459_978_240 bytes             # real hardware / SD; over => won't boot on console
@@ -205,10 +228,12 @@ DOLPHIN_LIMIT = 4 GiB (2^32 = 4_294_967_296)    # ISO-format wall; over => won't
 used          = size(project/files/)
 ```
 
-The indicator shows the console + Dolphin disc bars plus the costume-count gauge.
-The costume ceiling **depends on the CSP compression used**: the app applies
-auto-compression, so a normal build is safe to ~1150; an *uncompressed* (r=1.0) export
-walls at ~510. Disc-space tools (strip video) move only the secondary axis.
+The indicator shows console + Dolphin disc bars and caps each "more costumes"
+estimate with the matching CSS-memory ceiling: offline VS CSS for console/local
+play, online CSS for Dolphin/Slippi. The costume ceiling **depends on the CSP
+compression used**: the app applies auto-compression, so a normal build is safe
+to the currently pinned value for each use case; an *uncompressed* (r=1.0) export walls at ~510.
+Disc-space tools (strip video) move only the secondary axis.
 
 ## Bonus findings
 - **Install speed:** every `mexcli import-costume` re-runs the full
@@ -234,11 +259,14 @@ walls at ~510. Disc-space tools (strip video) move only the secondary axis.
   the wall is composition-near-independent at r=1.0).
 - `backend/count_compressed.py` — distinct costumes exported WITH auto CSP-compression
   (the realistic case): 512/513 healthy → **no count cap**.
-- `backend/count_compressed_high.py` — distinct + auto-compression at 800/1000/1200 to
-  pin the real (~1150) ceiling. `backend/csp_sweep.py` — one count, many r levels.
+- `backend/count_compressed_high.py` — distinct + auto-compression high-count
+  ladders. The online CSS ladder is healthy through 1500 so far; continue above
+  that to find the hang point. `backend/csp_sweep.py` — one count, many r levels.
 - `backend/fps_batch.py` — boot a list of ISOs in sequence and score each
-  HEALTHY / DEGRADED / HUNG by the CSS frame rate. `backend/fps_check.py` is the
-  single-ISO version.
+  HEALTHY / DEGRADED / HUNG by the CSS frame rate. Use `--mode offline` for the
+  console/local-play number, `--mode online` for the Dolphin/Slippi number, or
+  `--mode both` to compare both for the same ladder. `backend/fps_check.py` is
+  the single-ISO offline version.
 - `backend/stress_probe.py` — boot an ISO, memory-select a solo match as
   `(ckind,color)`, read the runtime costume id (`ft+0x619`).
 - `backend/css_cycle_probe.py` — count CSS-selectable costumes via the X-cycler.

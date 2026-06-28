@@ -27,20 +27,23 @@ namespace HSDRawViewer.Converters.SBM
         /// 
         /// </summary>
         /// <param name="image"></param>
-        public static void MakeCSP(Image<Rgba32> image)
+        public static void MakeCSP(Image<Rgba32> image, bool drawShadow = true)
         {
             int width = image.Width;
             int height = image.Height;
 
-            // Create a shadow image to store shadow data
-            Image<Rgba32> shadow = image.Clone();
+            // Create a shadow image to store shadow data (only when drawing it)
+            Image<Rgba32> shadow = drawShadow ? image.Clone() : null;
 
             // Scale shadow offset based on image size (base is 136x188 at 1x)
             int scale = Math.Max(1, width / 136);
             int sx = 10 * scale; // Shadow offset X
             int sy = 10 * scale; // Shadow offset Y
 
-            // Apply Outline
+            // Apply Outline (always), and build the shadow silhouette when wanted.
+            // drawShadow=false keeps the outline but drops the synthetic drop
+            // shadow — used for the Popo half of an Ice Climbers composite so the
+            // combined render shows a single shadow (Nana's), not two.
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -48,15 +51,18 @@ namespace HSDRawViewer.Converters.SBM
                     Rgba32 pixel = image[x, y];
                     float alpha = pixel.A / 255f;
 
-                    // Calculate shadow position
-                    int shadowX = x - sx;
-                    int shadowY = y + sy;
-
-                    if (shadowX >= 0 && shadowX < width && shadowY >= 0 && shadowY < height)
+                    if (drawShadow)
                     {
-                        shadow[shadowX, shadowY] = new Rgba32(
-                            0, 0, 0, (byte)(109 * alpha) // Apply shadow opacity
-                        );
+                        // Calculate shadow position
+                        int shadowX = x - sx;
+                        int shadowY = y + sy;
+
+                        if (shadowX >= 0 && shadowX < width && shadowY >= 0 && shadowY < height)
+                        {
+                            shadow[shadowX, shadowY] = new Rgba32(
+                                0, 0, 0, (byte)(109 * alpha) // Apply shadow opacity
+                            );
+                        }
                     }
 
                     // Blend pixel colors
@@ -68,6 +74,9 @@ namespace HSDRawViewer.Converters.SBM
                     );
                 }
             }
+
+            if (!drawShadow)
+                return;
 
             // Apply Shadow
             for (int y = 0; y < height; y++)
