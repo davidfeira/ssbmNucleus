@@ -117,3 +117,6 @@ duel/*/exports/
 duel/**/_probe/
 duel/**/*.pid
 duel/**/*.port
+
+# build.bat packaging staging dir (build output)
+build-package-staging/
