@@ -25,9 +25,18 @@ INCOMPAT_OUTPUT = '''{
 
 GENERIC_OUTPUT = '{"success": false, "error": "Disc read error: bad sector"}'
 
+# mexLib NullReferenceException on a build it can't parse (e.g. MEME builds) —
+# should be treated as an incompatible ISO (quiet skip), not a red error.
+NRE_OUTPUT = ('{"success": false, "error": "Failed to import ISO: '
+              'Object reference not set to an instance of an object."}')
+
 
 def test_incompatible_build_is_detected():
     assert is_incompatible_iso_error(INCOMPAT_OUTPUT) is True
+
+
+def test_null_reference_crash_is_treated_as_incompatible():
+    assert is_incompatible_iso_error(NRE_OUTPUT) is True
 
 
 def test_generic_error_is_not_incompatible():

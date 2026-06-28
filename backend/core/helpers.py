@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 # MexCLI import-iso markers that mean "this ISO just isn't a vanilla/m-ex build"
 # (a custom build like 20XX) — an EXPECTED incompatibility, not a real failure.
-_INCOMPAT_ISO_MARKERS = ('not vanilla', 'm-ex build', 'mxdt', 'dol patch')
+# 'object reference not set' = a mexLib NullReferenceException while parsing a
+# heavily-modified build (e.g. MEME builds) it can't read — same outcome as an
+# incompatible ISO, so a bulk scan skips it quietly instead of showing a red error.
+_INCOMPAT_ISO_MARKERS = ('not vanilla', 'm-ex build', 'mxdt', 'dol patch',
+                         'object reference not set')
 
 
 def _mexcli_error_detail(raw_output: str) -> str:
