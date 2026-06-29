@@ -91,6 +91,22 @@ def start_export():
                 mex = get_mex_manager()
                 work_mex = mex   # what we export from; a TEMP copy in texture-pack mode
 
+                # Heal legacy DAS folders on the LIVE project before any temp copy:
+                # older versions wrote Pokemon Stadium alts as .usd, which the m-ex
+                # loader rejects -> "no valid alts found" assert (dynamicAlts.c) and
+                # a crash at stage load. Renaming them to .dat fixes this build and
+                # the on-disk project permanently. Idempotent (no-op once clean).
+                try:
+                    from blueprints.das import migrate_das_folder_extensions
+                    das_heal = migrate_das_folder_extensions(
+                        Path(current_project_path).parent / 'files')
+                    if das_heal['renamed'] or das_heal['removed']:
+                        logger.info(
+                            f"DAS folder heal: renamed {len(das_heal['renamed'])} "
+                            f"+ removed {len(das_heal['removed'])} legacy .usd alt(s)")
+                except Exception as e:
+                    logger.warning(f"DAS extension migration skipped: {e}")
+
                 # Texture-pack mode does ALL its work (placeholder swap, recompile,
                 # export) on an isolated COPY of the project, so a crash — even an
                 # OOM kill mid-export — can NEVER leave the real project full of

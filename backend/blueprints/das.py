@@ -157,6 +157,71 @@ def find_stage_screenshot(folder_path: Path, variant_id: str):
     return True, Path(best), os.path.splitext(best)[1].lower()
 
 
+def migrate_das_folder_extensions(project_files, stage_codes=None):
+    """Heal legacy DAS stage folders so the m-ex loader accepts their alts.
+
+    Older Nucleus versions wrote Pokemon Stadium DAS alternates (and the
+    in-folder ``vanilla`` base) into ``files/GrPs/`` with a ``.usd`` extension.
+    The m-ex Dynamic Alternate Stages loader only treats ``.dat`` files in the
+    folder as valid alternates -- a folder whose alts are all ``.usd`` makes it
+    assert "no valid alts found in GrPs folder / alts must end in the correct
+    file extension" (dynamicAlts.c) and the stage crashes on load. (Stadium is
+    the only stage affected: it's the one whose root file is ``.usd``.)
+
+    Rename every stray ``*.usd`` alt in a DAS stage folder to ``*.dat`` -- the
+    archive format is identical, so this recovers the variant rather than
+    discarding it. When a ``*.dat`` of the same stem already exists, drop the
+    ``.usd`` as a redundant leftover if it's the ``vanilla`` base or byte-for-byte
+    identical, otherwise keep it under a unique ``_N`` name. Idempotent: once a
+    folder is clean it does nothing, so it's cheap to call on every build /
+    panel load.
+
+    Returns ``{'renamed': [(old, new), ...], 'removed': [name, ...]}``.
+    """
+    project_files = Path(project_files)
+    codes = stage_codes if stage_codes is not None else list(DAS_STAGES)
+    renamed, removed = [], []
+
+    for stage_code in codes:
+        folder = project_files / stage_code
+        if not folder.is_dir():
+            continue
+
+        for usd in sorted(folder.glob('*.usd')):
+            target = folder / f"{usd.stem}.dat"
+            if target.exists():
+                # A .dat of the same stem is already present (e.g. the project
+                # was re-imported under current code). Drop the .usd if it's the
+                # vanilla base or identical content; otherwise keep both.
+                redundant = usd.stem.lower() == 'vanilla'
+                if not redundant:
+                    try:
+                        redundant = (usd.stat().st_size == target.stat().st_size
+                                     and usd.read_bytes() == target.read_bytes())
+                    except OSError:
+                        redundant = False
+                if redundant:
+                    try:
+                        usd.unlink()
+                        removed.append(usd.name)
+                    except OSError as e:
+                        logger.warning(f"DAS migrate: could not remove {usd}: {e}")
+                    continue
+                n = 1
+                while target.exists():
+                    target = folder / f"{usd.stem}_{n}.dat"
+                    n += 1
+            try:
+                usd.rename(target)
+                renamed.append((usd.name, target.name))
+            except OSError as e:
+                logger.warning(f"DAS migrate: could not rename {usd} -> {target}: {e}")
+
+    if renamed or removed:
+        logger.info(f"DAS extension migration: renamed={renamed} removed={removed}")
+    return {'renamed': renamed, 'removed': removed}
+
+
 @das_bp.route('/api/mex/das/status', methods=['GET'])
 def das_get_status():
     """Check if DAS framework is installed"""
@@ -248,6 +313,10 @@ def das_install():
             else:
                 logger.warning(f"  DAS loader not found: {loader_src}")
 
+        # Heal any legacy .usd alts left by older versions so a re-install
+        # repairs an existing project, not just fresh ones.
+        migrate_das_folder_extensions(project_files)
+
         logger.info("DAS framework installed successfully")
 
         return jsonify({
@@ -296,6 +365,11 @@ def das_get_stage_variants(stage_code):
             }), 400
 
         project_files = get_project_files_dir()
+        # Heal any legacy .usd alts before enumerating: older versions wrote
+        # Stadium variants as .usd, which the m-ex loader rejects (and which the
+        # .dat-only glob below would hide). This normalizes them to .dat so they
+        # appear in the panel and the next build won't crash.
+        migrate_das_folder_extensions(project_files, [stage_code])
         stage_folder = project_files / stage_code
         variants = []
 

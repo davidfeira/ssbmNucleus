@@ -82,7 +82,10 @@ def main():
         z = zips[i % len(zips)]              # cycle (rename copies) if count > available
         try:
             with zipfile.ZipFile(z) as zf:
-                dats = [n for n in zf.namelist() if n.lower().endswith(".dat")]
+                # Match das.py's import filter: stadium variants are packaged as
+                # .usd, other stages as .dat (the live import accepts both).
+                dats = [n for n in zf.namelist()
+                        if n.lower().endswith(".dat") or n.lower().endswith(".usd")]
                 if not dats:
                     continue
                 data = zf.read(dats[0])
