@@ -5,9 +5,12 @@
  * - Export vault as backup (downloads .zip)
  * - Import vault from backup
  * - Replace or merge modes for restore
- * - Progress/error messages
+ * - Live restore progress: upload % (XHR) then extract/merge % (socketio)
  */
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { io } from 'socket.io-client'
+import { BACKEND_URL } from '../../config'
+import ProgressPanel from '../export/ProgressPanel'
 import { playSound, playHoverSound } from '../../utils/sounds'
 
 export default function BackupRestore({ API_URL }) {
@@ -18,6 +21,43 @@ export default function BackupRestore({ API_URL }) {
   const [restoreFile, setRestoreFile] = useState(null)
   const [restoreMode, setRestoreMode] = useState('replace') // 'replace' or 'merge'
   const [backupMessage, setBackupMessage] = useState({ text: '', type: '' })
+
+  // Live restore progress
+  const [restoreProgress, setRestoreProgress] = useState(0)
+  const [restoreTitle, setRestoreTitle] = useState('Restoring vault…')
+  const [restoreStatus, setRestoreStatus] = useState('')
+  const restoreIdRef = useRef(null)
+
+  // Subscribe to restore progress events (the slow extract/merge runs server-side
+  // in a background thread and streams progress over the socket).
+  useEffect(() => {
+    const socket = io(BACKEND_URL)
+
+    socket.on('vault_restore_progress', (data) => {
+      if (data.restore_id !== restoreIdRef.current) return
+      setRestoreTitle(restoreMode === 'merge' ? 'Merging vault…' : 'Restoring vault…')
+      if (typeof data.percentage === 'number') setRestoreProgress(data.percentage)
+      if (data.message) setRestoreStatus(data.message)
+    })
+
+    socket.on('vault_restore_complete', (data) => {
+      if (data.restore_id !== restoreIdRef.current) return
+      setRestoreProgress(100)
+      setRestoreStatus(data.message || 'Done!')
+      playSound('start')
+      // Reload after a beat so the refreshed metadata is picked up.
+      setTimeout(() => window.location.reload(), 1500)
+    })
+
+    socket.on('vault_restore_error', (data) => {
+      if (data.restore_id !== restoreIdRef.current) return
+      restoreIdRef.current = null
+      setRestoring(false)
+      setBackupMessage({ text: `Restore failed: ${data.error}`, type: 'error' })
+    })
+
+    return () => socket.disconnect()
+  }, [restoreMode])
 
   // Handlers
   const handleBackupVault = async () => {
@@ -69,40 +109,55 @@ export default function BackupRestore({ API_URL }) {
     }
   }
 
-  const confirmRestore = async () => {
+  const confirmRestore = () => {
     if (!restoreFile) return
 
     setShowRestoreModal(false)
     setRestoring(true)
-    setBackupMessage({ text: 'Restoring vault...', type: '' })
+    setBackupMessage({ text: '', type: '' })
+    setRestoreProgress(0)
+    setRestoreTitle('Uploading backup…')
+    setRestoreStatus('Sending backup to the app…')
+    restoreIdRef.current = null
 
-    try {
-      const formData = new FormData()
-      formData.append('file', restoreFile)
-      formData.append('mode', restoreMode)
+    const formData = new FormData()
+    formData.append('file', restoreFile)
+    formData.append('mode', restoreMode)
 
-      const response = await fetch(`${API_URL}/storage/restore`, {
-        method: 'POST',
-        body: formData,
-      })
+    // Use XHR (not fetch) so we can show real upload progress for a multi-GB
+    // backup; once uploaded, the server returns a restore_id and the socket
+    // events drive the extract/merge portion of the bar.
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_URL}/storage/restore`)
 
-      const data = await response.json()
-
-      if (data.success) {
-        setBackupMessage({ text: data.message || 'Vault restored successfully!', type: 'success' })
-        playSound('start')
-        // Reload page after 1.5 seconds to refresh metadata
-        setTimeout(() => {
-          window.location.reload()
-        }, 1500)
-      } else {
-        setBackupMessage({ text: `Restore failed: ${data.error}`, type: 'error' })
-        setRestoring(false)
-      }
-    } catch (err) {
-      setBackupMessage({ text: `Error: ${err.message}`, type: 'error' })
-      setRestoring(false)
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return
+      const pct = Math.round((e.loaded / e.total) * 100)
+      setRestoreProgress(pct)
+      setRestoreStatus(`Uploading backup… ${pct}%`)
     }
+
+    xhr.onload = () => {
+      let data = {}
+      try { data = JSON.parse(xhr.responseText) } catch { /* ignore */ }
+      if (xhr.status === 200 && data.success && data.restore_id) {
+        // Hand off to the socket-driven processing phase.
+        restoreIdRef.current = data.restore_id
+        setRestoreProgress(0)
+        setRestoreTitle(restoreMode === 'merge' ? 'Merging vault…' : 'Restoring vault…')
+        setRestoreStatus('Backup received — processing…')
+      } else {
+        setRestoring(false)
+        setBackupMessage({ text: `Restore failed: ${data.error || `HTTP ${xhr.status}`}`, type: 'error' })
+      }
+    }
+
+    xhr.onerror = () => {
+      setRestoring(false)
+      setBackupMessage({ text: 'Error: upload failed', type: 'error' })
+    }
+
+    xhr.send(formData)
   }
 
   const cancelRestore = () => {
@@ -139,6 +194,15 @@ export default function BackupRestore({ API_URL }) {
             {restoring ? 'Restoring...' : 'Import Vault'}
           </button>
         </div>
+
+        {restoring && (
+          <ProgressPanel
+            title={restoreTitle}
+            label="Restore progress"
+            progressValue={restoreProgress}
+            messageText={restoreStatus || 'Working…'}
+          />
+        )}
 
         {backupMessage.text && (
           <div className={`message ${backupMessage.type}`}>

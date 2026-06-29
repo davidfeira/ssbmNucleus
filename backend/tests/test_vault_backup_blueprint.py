@@ -29,10 +29,31 @@ from blueprints import vault_backup  # noqa: E402
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
+class _RecordingSocket:
+    """Captures socketio.emit calls so tests can assert progress/complete events."""
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event, data=None):
+        self.events.append((event, data))
+
+
+class _SyncThread:
+    """Stand-in for threading.Thread that runs the target inline on start(), so
+    the restore worker completes synchronously within the request under test."""
+    def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+        self._target, self._args, self._kwargs = target, args, kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
 @pytest.fixture
 def vault_env(tmp_path, monkeypatch):
     """Redirect the blueprint's storage/project/logs paths into tmp_path and
-    return a Flask test client plus the patched paths."""
+    return a Flask test client plus the patched paths. The restore worker thread
+    is run synchronously and its socketio events are captured."""
     project_root = tmp_path / 'project'
     storage_path = project_root / 'storage'
     logs_path = project_root / 'logs'
@@ -43,6 +64,10 @@ def vault_env(tmp_path, monkeypatch):
     monkeypatch.setattr(vault_backup, 'STORAGE_PATH', storage_path)
     monkeypatch.setattr(vault_backup, 'LOGS_PATH', logs_path)
 
+    sock = _RecordingSocket()
+    monkeypatch.setattr(vault_backup, 'get_socketio', lambda: sock)
+    monkeypatch.setattr(vault_backup.threading, 'Thread', _SyncThread)
+
     app = Flask(__name__)
     app.register_blueprint(vault_backup.vault_backup_bp)
     client = app.test_client()
@@ -52,7 +77,13 @@ def vault_env(tmp_path, monkeypatch):
         'project_root': project_root,
         'storage_path': storage_path,
         'logs_path': logs_path,
+        'socket': sock,
     })
+
+
+def _restore_event(env, name):
+    """Return the payload of the most recent captured restore event of ``name``."""
+    return next((d for e, d in reversed(env.socket.events) if e == name), None)
 
 
 def _write_metadata(storage_path, metadata):
@@ -266,9 +297,40 @@ def test_restore_merge_reports_added_count(vault_env):
         content_type='multipart/form-data',
     )
 
-    body = resp.get_json()
-    assert body['added']['characters'] == 2
-    assert '2 new item' in body['message']
+    # The route returns a restore_id immediately; the added count + message land
+    # in the vault_restore_complete socket event.
+    assert resp.status_code == 200
+    assert resp.get_json()['restore_id']
+    done = _restore_event(vault_env, 'vault_restore_complete')
+    assert done['added']['characters'] == 2
+    assert '2 new item' in done['message']
+
+
+def test_restore_emits_progress_and_completion_events(vault_env):
+    _write_metadata(vault_env.storage_path, {'characters': {'Marth': {'skins': [_skin('marth-black')]}}})
+    backup = _make_backup_zip(
+        {'characters': {'Fox': {'skins': [_skin('fox-red')]}}},
+        extra_files={f'Fox/file{i}.bin': b'x' * 8 for i in range(5)},
+    )
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'replace', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    events = vault_env.socket.events
+    progress = [d for e, d in events if e == 'vault_restore_progress']
+    assert progress, 'expected progress events'
+    # Percentages are non-decreasing and bounded.
+    pcts = [p['percentage'] for p in progress]
+    assert pcts == sorted(pcts)
+    assert all(0 <= p <= 100 for p in pcts)
+    assert all(p.get('message') for p in progress)
+    # Finishes with a single completion event, no error.
+    assert [e for e, _ in events].count('vault_restore_complete') == 1
+    assert not [e for e, _ in events if e == 'vault_restore_error']
 
 
 # ---------------------------------------------------------------------------

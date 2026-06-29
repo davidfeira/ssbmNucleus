@@ -7,19 +7,53 @@ Handles creating backups of the storage vault and restoring from backups.
 import os
 import copy
 import json
+import uuid
 import shutil
 import zipfile
 import tempfile
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
 from core.config import PROJECT_ROOT, STORAGE_PATH, LOGS_PATH
+from core.state import get_socketio
 
 logger = logging.getLogger(__name__)
 
 vault_backup_bp = Blueprint('vault_backup', __name__)
+
+
+def _emit_restore(restore_id, event, **payload):
+    """Emit a vault-restore socketio event (no-op if socketio isn't wired)."""
+    socketio = get_socketio()
+    if socketio is None:
+        return
+    try:
+        socketio.emit(event, {'restore_id': restore_id, **payload})
+    except Exception as e:
+        logger.debug(f"restore emit failed: {e}")
+
+
+def _extract_zip_with_progress(zipf, dest, restore_id, lo, hi,
+                               skip=(), phase='Extracting files'):
+    """Extract every member of an open ZipFile into ``dest``, emitting
+    ``vault_restore_progress`` percentages mapped onto the [lo, hi] band. Members
+    in ``skip`` (posix relative paths) are not written. Returns the temp/extract
+    root used so callers can post-process."""
+    members = [m for m in zipf.namelist() if m not in skip]
+    total = len(members) or 1
+    last_pct = -1
+    for i, member in enumerate(members, 1):
+        zipf.extract(member, dest)
+        pct = lo + int((i / total) * (hi - lo))
+        # Throttle: only emit when the integer percent advances.
+        if pct != last_pct:
+            last_pct = pct
+            _emit_restore(restore_id, 'vault_restore_progress',
+                          percentage=pct,
+                          message=f'{phase}… ({i}/{total})')
 
 
 @vault_backup_bp.route('/api/mex/storage/stats', methods=['GET'])
@@ -166,16 +200,20 @@ def merge_vault_metadata(current, incoming):
     return merged, stats
 
 
-def _merge_restore(zip_path):
+def _merge_restore(zip_path, restore_id=None):
     """Restore a backup ZIP in *merge* mode: keep the current vault and add new
     items from the backup. The backup's ``metadata.json`` is deep-merged with the
     current one (never overwritten), and data files are copied in additively
     without clobbering existing items. Returns the merge ``stats`` dict.
+
+    Progress (when ``restore_id`` is given): extract 5->50%, copy 50->95%,
+    metadata merge 95->100%.
     """
     with tempfile.TemporaryDirectory() as extract_dir:
         extract_root = Path(extract_dir)
         with zipfile.ZipFile(zip_path, 'r') as zipf:
-            zipf.extractall(extract_root)
+            _extract_zip_with_progress(zipf, extract_root, restore_id, 5, 50,
+                                       phase='Reading backup')
 
         # Merge metadata.json rather than letting extractall overwrite it.
         incoming_meta = {}
@@ -195,27 +233,101 @@ def _merge_restore(zip_path):
         # Copy data files additively. Skip metadata.json (merged separately) and
         # never overwrite an existing file, so current items always win.
         STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-        for src in extract_root.rglob('*'):
-            if not src.is_file():
-                continue
+        files = [s for s in extract_root.rglob('*')
+                 if s.is_file() and s.relative_to(extract_root).as_posix() != 'metadata.json']
+        total = len(files) or 1
+        copied = 0
+        last_pct = -1
+        for i, src in enumerate(files, 1):
             rel = src.relative_to(extract_root)
-            if rel.as_posix() == 'metadata.json':
-                continue
             dest = STORAGE_PATH / rel
-            if dest.exists():
-                continue
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
+            if not dest.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                copied += 1
+            if restore_id:
+                pct = 50 + int((i / total) * 45)
+                if pct != last_pct:
+                    last_pct = pct
+                    _emit_restore(restore_id, 'vault_restore_progress',
+                                  percentage=pct,
+                                  message=f'Adding new items… ({copied} added)')
 
+        if restore_id:
+            _emit_restore(restore_id, 'vault_restore_progress',
+                          percentage=95, message='Updating vault catalog…')
         with open(current_meta_path, 'w', encoding='utf-8') as f:
             json.dump(merged_meta, f, indent=2)
 
         return stats
 
 
+def run_vault_restore(restore_id, tmp_path, restore_mode):
+    """Background worker: restore a backup ZIP, emitting socketio progress.
+
+    Events (all carry ``restore_id``):
+      vault_restore_progress  {percentage, message}
+      vault_restore_complete  {mode, message, added?}
+      vault_restore_error     {error}
+    The uploaded temp ZIP is deleted when finished.
+    """
+    tmp_path = Path(tmp_path)
+    try:
+        _emit_restore(restore_id, 'vault_restore_progress',
+                      percentage=2, message='Reading backup…')
+        logger.info(f"Restore mode: {restore_mode}")
+
+        if restore_mode == 'merge':
+            logger.info("Merging backup into existing vault...")
+            stats = _merge_restore(tmp_path, restore_id=restore_id)
+            added = sum(stats.values())
+            logger.info(f"Merge added {added} new item(s): {stats}")
+            message = (
+                f'Vault merged successfully ({added} new item(s) added)'
+                if added else 'Vault merged successfully (no new items found)'
+            )
+            logger.info("=== VAULT RESTORE COMPLETE ===")
+            _emit_restore(restore_id, 'vault_restore_complete',
+                          mode=restore_mode, message=message, added=stats)
+            return
+
+        # Replace mode.
+        _emit_restore(restore_id, 'vault_restore_progress',
+                      percentage=3, message='Clearing current vault…')
+        logger.info("Clearing existing storage...")
+        if STORAGE_PATH.exists():
+            shutil.rmtree(STORAGE_PATH)
+        STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Extracting backup...")
+        with zipfile.ZipFile(tmp_path, 'r') as zipf:
+            _extract_zip_with_progress(zipf, STORAGE_PATH, restore_id, 5, 99,
+                                       phase='Restoring files')
+
+        logger.info("=== VAULT RESTORE COMPLETE ===")
+        _emit_restore(restore_id, 'vault_restore_complete',
+                      mode=restore_mode,
+                      message='Vault restored successfully (replace mode)')
+    except Exception as e:
+        logger.error(f"Vault restore error: {str(e)}", exc_info=True)
+        _emit_restore(restore_id, 'vault_restore_error', error=str(e))
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+
+
 @vault_backup_bp.route('/api/mex/storage/restore', methods=['POST'])
 def restore_vault():
-    """Restore vault from a backup ZIP file"""
+    """Receive a backup ZIP, validate it, and kick off the restore in a
+    background thread. Returns a ``restore_id`` immediately; the client follows
+    progress via the ``vault_restore_progress/complete/error`` socketio events.
+
+    The upload (saving the multi-GB ZIP) happens during this request, so the
+    client can show upload progress via XHR; the slow extract/merge then streams
+    progress over the socket."""
     try:
         logger.info("=== VAULT RESTORE REQUEST ===")
 
@@ -236,51 +348,32 @@ def restore_vault():
             file.save(tmp.name)
             tmp_path = Path(tmp.name)
 
+        # Validate before spawning the worker, so obvious errors return inline.
+        # Close the zip BEFORE unlinking -- Windows can't delete an open file.
+        validation_error = None
         try:
             with zipfile.ZipFile(tmp_path, 'r') as zipf:
-                file_list = zipf.namelist()
-                if 'metadata.json' not in file_list:
-                    return jsonify({'success': False, 'error': 'Invalid backup file: metadata.json not found'}), 400
+                if 'metadata.json' not in zipf.namelist():
+                    validation_error = 'Invalid backup file: metadata.json not found'
+        except zipfile.BadZipFile:
+            validation_error = 'Invalid backup file: not a valid ZIP'
+        if validation_error:
+            tmp_path.unlink(missing_ok=True)
+            return jsonify({'success': False, 'error': validation_error}), 400
 
-            logger.info(f"Restore mode: {restore_mode}")
+        restore_id = str(uuid.uuid4())[:8]
+        threading.Thread(
+            target=run_vault_restore,
+            args=(restore_id, str(tmp_path), restore_mode),
+            daemon=True,
+        ).start()
 
-            if restore_mode == 'merge':
-                logger.info("Merging backup into existing vault...")
-                stats = _merge_restore(tmp_path)
-                added = sum(stats.values())
-                logger.info(f"Merge added {added} new item(s): {stats}")
-                message = (
-                    f'Vault merged successfully ({added} new item(s) added)'
-                    if added else 'Vault merged successfully (no new items found)'
-                )
-
-                logger.info("=== VAULT RESTORE COMPLETE ===")
-                return jsonify({
-                    'success': True,
-                    'message': message,
-                    'mode': restore_mode,
-                    'added': stats,
-                })
-
-            logger.info("Clearing existing storage...")
-            if STORAGE_PATH.exists():
-                shutil.rmtree(STORAGE_PATH)
-            STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-
-            logger.info("Extracting backup...")
-            with zipfile.ZipFile(tmp_path, 'r') as zipf:
-                zipf.extractall(STORAGE_PATH)
-
-            logger.info("=== VAULT RESTORE COMPLETE ===")
-
-            return jsonify({
-                'success': True,
-                'message': 'Vault restored successfully (replace mode)',
-                'mode': restore_mode
-            })
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+        return jsonify({
+            'success': True,
+            'message': 'Vault restore started',
+            'restore_id': restore_id,
+            'mode': restore_mode,
+        })
     except Exception as e:
         logger.error(f"Vault restore error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
