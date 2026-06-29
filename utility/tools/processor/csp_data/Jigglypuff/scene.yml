@@ -20,29 +20,29 @@ settings:
   outlineSelected: false
   renderSplines: false
   renderCustomLightPositions: false
-  lightSource: Camera
+  lightSource: Custom
   lights:
-  - enabled: false
+  - enabled: true
     type: AMBIENT
     diffuse: true
     specular: true
     x: 0
     y: 0
     z: 0
-    r: 255
-    g: 255
-    b: 255
+    r: 235
+    g: 225
+    b: 226
     a: 255
-  - enabled: false
-    type: AMBIENT
+  - enabled: true
+    type: INFINITE
     diffuse: true
     specular: true
-    x: 0
-    y: 0
-    z: 0
-    r: 255
-    g: 255
-    b: 255
+    x: -8
+    y: 10
+    z: 18
+    r: 153
+    g: 146
+    b: 147
     a: 255
   - enabled: false
     type: AMBIENT

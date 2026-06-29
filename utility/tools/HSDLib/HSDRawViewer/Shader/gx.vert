@@ -192,7 +192,15 @@ void main()
 	normal = normalize(normal);
 	if (perPixelLighting == 0)
 	{
-		CalculateDiffuseShading(vertPosition, normal, ambientLight, diffuseLight, specularLight);
+		// two-sided lighting: orient the normal toward the viewer so geometry
+		// authored with reversed/back-facing normals (e.g. Jigglypuff's
+		// separate-root hat models) still receives diffuse light instead of
+		// going dark. Front-facing surfaces (dot>=0) are unaffected.
+		vec3 Nl = normal;
+		vec3 Vl = normalize(cameraPos - vertPosition);
+		if (dot(Nl, Vl) < 0.0)
+			Nl = -Nl;
+		CalculateDiffuseShading(vertPosition, Nl, ambientLight, diffuseLight, specularLight);
 	}
 	else
 	{

@@ -590,6 +590,58 @@ namespace HSDRawViewer
                     }
                 }
 
+                // Costume accessories can ship as SEPARATE JOBJ roots (e.g.
+                // Jigglypuff's alt-costume hats: Ply*Hat_TopN_joint). The render
+                // model only walks the selected character root, so without this
+                // the hat is MISSING from the portrait. Splice the other
+                // (non-matanim) JOBJ roots in as the LAST CHILDREN of the body
+                // root so they render. They are appended AFTER the whole body
+                // subtree, so the body's joint indices -- and the CSP animation
+                // tracks -- stay aligned (the hat joints get no track).
+                //
+                // A *_TopN_joint hat is rigged in game to FOLLOW a head bone
+                // (shared joint); the CSP scene poses the head, so a hat left at
+                // its bind transform detaches and falls off-frame. hatFollowDescs
+                // collects those roots; after the body is posed we re-anchor each
+                // hat to its bind offset from the head bone and carry it with the
+                // head's POSED transform (see the head-bone block below).
+                var hatFollowDescs = new List<HSDRaw.Common.HSD_JOBJ>();
+                if (characterJobjNode != null && characterJobjNode.Accessor is HSDRaw.Common.HSD_JOBJ bodyRoot)
+                {
+                    var accessoryRoots = rawFile.Roots
+                        .Where(r => r.Data is HSDRaw.Common.HSD_JOBJ
+                                    && !ReferenceEquals(r.Data, bodyRoot)
+                                    && !(r.Name?.Contains("matanim") ?? false))
+                        .Select(r => (HSDRaw.Common.HSD_JOBJ)r.Data)
+                        .ToList();
+                    foreach (var r in rawFile.Roots)
+                        if (accessoryRoots.Contains(r.Data) && (r.Name?.Contains("Hat") ?? false))
+                            hatFollowDescs.Add((HSDRaw.Common.HSD_JOBJ)r.Data);
+                    if (accessoryRoots.Count > 0)
+                    {
+                        // walk to the end of the root's existing child-sibling chain
+                        HSDRaw.Common.HSD_JOBJ tail = bodyRoot.Child;
+                        if (tail == null)
+                        {
+                            bodyRoot.Child = accessoryRoots[0];
+                            tail = accessoryRoots[0];
+                        }
+                        else
+                        {
+                            while (tail.Next != null) tail = tail.Next;
+                            tail.Next = accessoryRoots[0];
+                            tail = accessoryRoots[0];
+                        }
+                        for (int ai = 1; ai < accessoryRoots.Count; ai++)
+                        {
+                            while (tail.Next != null) tail = tail.Next;
+                            tail.Next = accessoryRoots[ai];
+                            tail = accessoryRoots[ai];
+                        }
+                        Console.WriteLine($"Spliced {accessoryRoots.Count} accessory root(s) for portrait render");
+                    }
+                }
+
                 // Wait for editor to open
                 System.Threading.Thread.Sleep(1000);
 
@@ -1344,6 +1396,51 @@ namespace HSDRawViewer
                         catch (Exception ex)
                         {
                             Console.WriteLine($"Head bone projection failed: {ex.Message}");
+                        }
+                    }
+
+                    // Shared-joint follow for separate-root hats: the body is now
+                    // posed (the head bone has moved from its bind position), so a
+                    // hat left at its bind transform has detached. Re-anchor each
+                    // hat to its bind offset from the head bone, then carry it with
+                    // the head's POSED world transform -- mirroring the in-game rig
+                    // so the accessory stays on the head in the CSP pose. We bake
+                    // the result into the hat joint's SRT so it survives the
+                    // screenshot's per-frame transform recalc.
+                    if (hatFollowDescs.Count > 0 && headBoneIndex >= 0 && renderJObj?.RootJObj != null)
+                    {
+                        try
+                        {
+                            var head = renderJObj.RootJObj.GetJObjAtIndex(headBoneIndex);
+                            if (head != null)
+                            {
+                                // head pose delta in world space (bind -> posed)
+                                var headDelta = head.InvertedTransform * head.WorldTransform;
+                                var rootInv = renderJObj.RootJObj.WorldTransform.Inverted();
+                                foreach (var desc in hatFollowDescs)
+                                {
+                                    var hat = renderJObj.RootJObj.GetJObjFromDesc(desc);
+                                    if (hat == null) continue;
+                                    var hatBind = hat.InvertedTransform.Inverted();
+                                    // follow the head's motion, then express as a
+                                    // local transform under the (posed) root joint
+                                    var hatWorld = hatBind * headDelta;
+                                    var hatLocal = hatWorld * rootInv;
+                                    var s = hatLocal.ExtractScale();
+                                    var rot = hatLocal.ExtractRotationEuler();
+                                    var t = hatLocal.ExtractTranslation();
+                                    hat.Scale = s;
+                                    hat.Rotation = new OpenTK.Mathematics.Vector4(rot.X, rot.Y, rot.Z, 0);
+                                    hat.Translation = t;
+                                }
+                                renderJObj.RootJObj.RecalculateTransforms(viewport.Camera, true);
+                                viewport.Render();
+                                Console.WriteLine($"Applied head-follow to {hatFollowDescs.Count} hat root(s)");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Hat head-follow failed: {ex.Message}");
                         }
                     }
 

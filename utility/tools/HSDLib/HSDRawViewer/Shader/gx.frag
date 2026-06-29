@@ -101,7 +101,15 @@ void main()
 	vec3 finalSpecLight = specularLight;
 	if (perPixelLighting == 1)
 	{
-		CalculateDiffuseShading(vertPosition, normalize(normal), finalAmbLight, finalDiffLight, finalSpecLight);
+		// two-sided lighting: orient the normal toward the viewer so geometry
+		// authored with reversed/back-facing normals (e.g. Jigglypuff's
+		// separate-root hat models) still receives diffuse light instead of
+		// going dark. Front-facing surfaces (dot>=0) are unaffected.
+		vec3 Np = normalize(normal);
+		vec3 Vp = normalize(cameraPos - vertPosition);
+		if (dot(Np, Vp) < 0.0)
+			Np = -Np;
+		CalculateDiffuseShading(vertPosition, Np, finalAmbLight, finalDiffLight, finalSpecLight);
 	}
 
 	// get toon shading

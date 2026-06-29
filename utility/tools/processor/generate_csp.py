@@ -5,6 +5,7 @@ Takes a DAT file and generates a CSP using the native 3D rendering pipeline
 """
 
 import os
+import re
 import sys
 import subprocess
 from pathlib import Path
@@ -660,10 +661,65 @@ def _find_ftdata(dat_filepath, character):
     return None
 
 
-def low_poly_dobjs(dat_filepath, character):
-    """Comma-joined costume-0 LowPoly DObj indices to hide in a portrait render,
-    or None if the visibility table can't be read (then the caller falls back to
-    whatever hiddenNodes the scene carries)."""
+# Vanilla CSS costume color order is authoritative for mapping a costume's color
+# to its slot index (slot 0 = default). Pulled from core.constants so there's one
+# source of truth; the embedded fallback covers exactly the fighters whose ALT
+# costumes use a different visibility config (so the fix still works if the
+# import ever fails -- everyone else has a single config and the slot is moot).
+_COLOR_ORDER_CACHE = None
+_FALLBACK_COLOR_ORDER = {
+    'Pikachu': ['Nr', 'Re', 'Bu', 'Gr'],
+    'Pichu':   ['Nr', 'Re', 'Bu', 'Gr'],
+    'Peach':   ['Nr', 'Ye', 'Wh', 'Bu', 'Gr'],
+}
+
+
+def _vanilla_color_order(character):
+    """Ordered list of color codes for a character's vanilla costumes, or None."""
+    global _COLOR_ORDER_CACHE
+    if _COLOR_ORDER_CACHE is None:
+        order = None
+        for attempt in (1, 2):
+            try:
+                from core.constants import VANILLA_CSS_COLOR_ORDER
+                order = dict(VANILLA_CSS_COLOR_ORDER)
+                break
+            except Exception as e:
+                if attempt == 1:
+                    backend = str(SCRIPT_DIR.parents[2] / "backend")
+                    if backend not in sys.path:
+                        sys.path.insert(0, backend)
+                    continue
+                logger.info(f"vanilla color order: using fallback ({e})")
+        _COLOR_ORDER_CACHE = order or dict(_FALLBACK_COLOR_ORDER)
+    return _COLOR_ORDER_CACHE.get(character)
+
+
+def costume_slot_for_color(character, color):
+    """Vanilla CSS slot index (0 = default) for a costume color NAME (e.g.
+    'Blue'), or 0 when unknown. Only fighters whose alt costumes add geometry
+    (Pikachu/Pichu/Peach) actually depend on this; for everyone else every slot
+    maps to the same single visibility config."""
+    order = _vanilla_color_order(character)
+    code = COLOR_CODES.get(color)
+    if order and code and code in order:
+        return order.index(code)
+    return 0
+
+
+def _low_poly_set(dat_filepath, character, costume_slot=0):
+    """Set of LowPoly DObj indices to hide for the costume in `costume_slot`, or
+    None if the fighter's visibility table can't be read.
+
+    Melee stores a PER-COSTUME visibility table at ftData+0x08
+    (`SBM_PlayerModelLookupTables`): an int Count followed by an array of
+    `SBM_CostumeLookupTable` entries (0x10 bytes EACH), whose LowPoly accessor is
+    at +0x04. The costume's config index is min(costume_slot, Count-1) -- the
+    engine clamps the costume's VisibilityLookupIndex to the table length, so e.g.
+    Pikachu has 4 costumes but only 2 configs and its hat costumes all use config
+    1. Vanilla also leaves higher configs null when only one costume needs the
+    extra geometry (Peach: only Daisy uses config 1, the rest reuse config 0); a
+    null config means "reuse config 0"."""
     ft_dat = _find_ftdata(dat_filepath, character)
     if not ft_dat:
         logger.info(f"low-poly hide: no ftData found for {character}")
@@ -685,34 +741,98 @@ def low_poly_dobjs(dat_filepath, character):
             # the lookup arrays with non-pointer garbage words)
             return d.u32(off) if off in d.relocs else None
 
+        length = d.u32(lookups + 0x00)
         vis_arr = rptr(lookups + 0x04)
-        if vis_arr is None:
+        if vis_arr is None or length < 1:
             return None
-        table = rptr(vis_arr + 0x04)            # costume 0, LowPoly table
-        if table is None:
-            return None
-        count = d.u32(table + 0x00)
-        arr = rptr(table + 0x04)
-        if arr is None or count > 64:
-            return None
-        idx = set()
-        for i in range(count):
-            le = arr + i * 0x8
-            n = d.u32(le + 0x00)
-            data = rptr(le + 0x04)
-            if data is not None and n <= 256:
-                idx.update(d.raw[0x20 + data:0x20 + data + n])
+
+        def low_set(config):
+            # SBM_CostumeLookupTable stride 0x10; LowPoly table at +0x04.
+            table = rptr(vis_arr + config * 0x10 + 0x04)
+            if table is None:
+                return None
+            count = d.u32(table + 0x00)
+            arr = rptr(table + 0x04)
+            if arr is None or count > 64:
+                return None
+            idx = set()
+            for i in range(count):
+                le = arr + i * 0x8
+                n = d.u32(le + 0x00)
+                data = rptr(le + 0x04)
+                if data is not None and n <= 256:
+                    idx.update(d.raw[0x20 + data:0x20 + data + n])
+            return idx
+
+        config = min(max(costume_slot, 0), length - 1)
+        idx = low_set(config)
+        if idx is None and config != 0:
+            idx = low_set(0)            # null config -> reuse costume 0
         if not idx:
             return None
-        result = ",".join(str(i) for i in sorted(idx))
-        logger.info(f"low-poly hide for {character} ({Path(ft_dat).name}): {result}")
-        return result
+        logger.info(f"low-poly hide for {character} ({Path(ft_dat).name}) "
+                    f"slot {costume_slot}->cfg {config}: {sorted(idx)}")
+        return idx
     except Exception as e:
         logger.info(f"low-poly hide: derive failed for {character}: {e}")
         return None
 
 
-def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False):
+def low_poly_dobjs(dat_filepath, character, costume_slot=0):
+    """Comma-joined LowPoly DObj indices to hide for the costume in `costume_slot`
+    (slot 0 = default), or None if the visibility table can't be read (then the
+    caller falls back to whatever hiddenNodes the scene carries)."""
+    idx = _low_poly_set(dat_filepath, character, costume_slot)
+    if not idx:
+        return None
+    return ",".join(str(i) for i in sorted(idx))
+
+
+def _scene_hidden_nodes(yml_path):
+    """Parse the `hiddenNodes:` DObj-index list out of a curated CSP scene/pose
+    YAML (same block Program.cs reads), or None if it can't be read."""
+    try:
+        nodes = set()
+        parsing = False
+        with open(yml_path, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                s = line.rstrip('\n')
+                if s.startswith('hiddenNodes:'):
+                    parsing = True
+                    continue
+                if parsing:
+                    m = re.match(r'\s*-\s*(\d+)\s*$', s)
+                    if m:
+                        nodes.add(int(m.group(1)))
+                    elif s and not s[0].isspace():
+                        break
+        return nodes
+    except Exception:
+        return None
+
+
+def curated_hide_override(dat_filepath, character, costume_slot, scene_yml):
+    """For a curated-scene costume, return the `--hide-dobjs` CSV that swaps the
+    costume-0 LowPoly set baked into the scene's `hiddenNodes` for the costume's
+    OWN visibility-config LowPoly set, while KEEPING any extra curated hides the
+    scene author added (e.g. Peach's parasol/dress parts that aren't in the
+    visibility table). Returns None when nothing needs to change -- the default
+    costume, a single-config fighter, an alt that reuses config 0, or an
+    unreadable table -- so the scene's own hiddenNodes are used unchanged (no
+    regression)."""
+    slot_low = _low_poly_set(dat_filepath, character, costume_slot)
+    base_low = _low_poly_set(dat_filepath, character, 0)
+    if not slot_low or not base_low or slot_low == base_low:
+        return None
+    yml_hidden = _scene_hidden_nodes(scene_yml) if scene_yml else None
+    extras = (yml_hidden - base_low) if yml_hidden else set()
+    final = sorted(slot_low | extras)
+    logger.info(f"curated hide override for {character} slot {costume_slot}: "
+                f"{final}")
+    return ",".join(str(i) for i in final)
+
+
+def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=0):
     """Internal function to generate a single CSP
 
     Used by both normal CSP generation and Ice Climbers composite generation.
@@ -724,6 +844,9 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
         anim_file: Optional animation file
         camera_file: Optional camera/scene YAML file
         scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
+        costume_slot: Vanilla CSS slot index of this costume (0 = default). Picks
+            the per-costume low-poly visibility config; alt costumes that add
+            geometry (Pikachu/Pichu hats, Peach's Daisy) need a different set.
     """
     # Generate output filename
     dat_dir = os.path.dirname(os.path.abspath(dat_filepath))
@@ -763,19 +886,29 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     if head_bone is not None:
         cmd.extend(["--head-bone", str(head_bone)])
 
-    # Hiding the off-screen low-poly mesh. A character rendered with its OWN
-    # curated CSP scene/camera yml already carries the correct hiddenNodes
-    # (authored per character -- e.g. Kirby's copy-ability meshes, Peach's alt
-    # parts). The auto-derived low-poly set is only a SUBSET of that, so
-    # overriding the curated list UNDER-hides and leaves stray meshes in the
-    # portrait. Use the auto set only when there is NO curated yml (custom /
-    # model imports) or the scene is BORROWED from another fighter (Giga Bowser
-    # poses with Bowser's scene, whose hiddenNodes are wrong for the Giga model).
+    # Hiding the off-screen low-poly mesh.
+    #
+    # A character rendered with its OWN curated CSP scene/camera yml carries
+    # hand-authored hiddenNodes (e.g. Kirby's copy-ability meshes, Peach's alt
+    # parts). Those are baked from COSTUME 0's low-poly set, so they over/under-
+    # hide on ALT costumes that use a different per-costume visibility config
+    # (Pikachu/Pichu hats, Peach's Daisy). curated_hide_override() swaps in the
+    # costume's OWN config low set while preserving the curated extras; it returns
+    # None (-> keep the scene's hiddenNodes unchanged) for the default costume,
+    # single-config fighters, and alts that reuse config 0, so the common path is
+    # byte-identical to before.
+    #
+    # Without a curated yml (custom / model imports) or with a BORROWED scene
+    # (Giga Bowser poses with Bowser's scene, whose hiddenNodes are wrong for the
+    # Giga model) we apply the auto-derived per-costume low set directly.
     has_curated_scene = bool(anim_file or camera_file) and character not in SCENE_BORROWERS
-    if not has_curated_scene:
-        hide = low_poly_dobjs(dat_filepath, character)
-        if hide:
-            cmd.extend(["--hide-dobjs", hide])
+    if has_curated_scene:
+        hide = curated_hide_override(dat_filepath, character, costume_slot,
+                                     camera_file or anim_file)
+    else:
+        hide = low_poly_dobjs(dat_filepath, character, costume_slot)
+    if hide:
+        cmd.extend(["--hide-dobjs", hide])
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -888,6 +1021,7 @@ def generate_head_shot(dat_filepath):
     try:
         parser.read_dat()
         character, _symbol = parser.detect_character()
+        color = parser.detect_costume_color()
     except Exception as e:
         logger.error(f"Head shot: failed to parse DAT: {e}")
         return None, None
@@ -908,8 +1042,9 @@ def generate_head_shot(dat_filepath):
     if arm_bones:
         cmd.extend(["--collapse-bones", f"{arm_bones[0]},{arm_bones[1]}"])
     # Hide the low-poly mesh so it can't bleed into the head crop (the head-shot
-    # has no scene yml, so this is the only way to hide it here).
-    hide = low_poly_dobjs(dat_filepath, character)
+    # has no scene yml, so this is the only way to hide it here). Use the
+    # costume's own per-costume visibility config (slot from its color).
+    hide = low_poly_dobjs(dat_filepath, character, costume_slot_for_color(character, color))
     if hide:
         cmd.extend(["--hide-dobjs", hide])
     if os.name != 'nt':
@@ -1006,8 +1141,11 @@ def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
     if camera_file:
         logger.info(f"Found camera file: {Path(camera_file).name}")
 
-    # 3. Generate CSP using internal function
-    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file, scale)
+    # 3. Generate CSP using internal function. The costume's vanilla CSS slot
+    # selects its per-costume low-poly visibility config (matters for alt
+    # costumes that add geometry -- Pikachu/Pichu hats, Peach's Daisy).
+    costume_slot = costume_slot_for_color(character, color)
+    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file, scale, costume_slot=costume_slot)
 
     if output_csp:
         # Apply character-specific layers (e.g., Fox gun layer)
