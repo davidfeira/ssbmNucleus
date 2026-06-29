@@ -445,13 +445,11 @@ def import_file():
                             'message': 'You already have this stage!'
                         }), 200
 
-                # Import each detected stage
-                from .screenshot_backfill import enqueue_stage_screenshot
-                vanilla_iso_path = request.form.get('vanillaIsoPath')
-                slippi_dolphin_path = request.form.get('slippiDolphinPath')
-
+                # Import each detected stage. Stages imported without a bundled
+                # screenshot stay previewless on purpose — previews are generated
+                # via the bulk DAS "capture screenshots" flow, which is far less
+                # disruptive than booting Dolphin once per stage during import.
                 results = []
-                backfill_queued = []
                 for stage_info in stage_infos:
                     logger.info(f"  - Importing {stage_info['stage_name']}")
                     result = import_stage_mod(temp_zip_path, stage_info, file.filename, custom_name=custom_title)
@@ -460,26 +458,14 @@ def import_file():
                             'stage': stage_info['stage_name'],
                             'variant': result.get('variant_id')
                         })
-                        # No screenshot in the zip → capture one in-game in the
-                        # background (clean solo-stage shot via the test harness).
-                        if not stage_info.get('screenshot'):
-                            if enqueue_stage_screenshot(
-                                    stage_info.get('stage_code'),
-                                    stage_info['folder'],
-                                    result.get('variant_id'),
-                                    vanilla_iso_path, slippi_dolphin_path):
-                                backfill_queued.append(result.get('variant_id'))
 
                 message = f"Imported {len(results)} stage variant(s)"
-                if backfill_queued:
-                    message += ' — capturing screenshot in the background'
 
                 return jsonify({
                     'success': True,
                     'type': 'stage',
                     'imported_count': len(results),
                     'stages': results,
-                    'screenshot_backfill': backfill_queued,
                     'message': message
                 })
 

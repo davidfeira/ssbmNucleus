@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { io } from 'socket.io-client'
 import './StorageViewer.css'
 import './IsoBuilder.css'
 import { DEFAULT_CHARACTERS } from '../defaultCharacters'
@@ -525,18 +524,6 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
       fetchCustomCharacters()
     }
   }, [mode, metadata])
-
-  // Refresh the stage grid when a background screenshot backfill lands (a
-  // stage imported without a screenshot gets an in-game capture minutes
-  // later — the backend emits this when the preview is saved).
-  useEffect(() => {
-    const socket = io(BACKEND_URL)
-    socket.on('stage_screenshot_backfilled', () => {
-      fetchStageVariants()
-      setLastImageUpdate(Date.now())
-    })
-    return () => socket.disconnect()
-  }, [])
 
   // Bundle handlers
   const handleDownloadBundle = (bundleId) => {
