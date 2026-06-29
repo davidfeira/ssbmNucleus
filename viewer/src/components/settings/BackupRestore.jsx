@@ -26,6 +26,7 @@ export default function BackupRestore({ API_URL }) {
   const [restoreProgress, setRestoreProgress] = useState(0)
   const [restoreTitle, setRestoreTitle] = useState('Restoring vault…')
   const [restoreStatus, setRestoreStatus] = useState('')
+  const [restoreReport, setRestoreReport] = useState(null) // merge result, shown after finish
   const restoreIdRef = useRef(null)
 
   // Subscribe to restore progress events (the slow extract/merge runs server-side
@@ -42,11 +43,17 @@ export default function BackupRestore({ API_URL }) {
 
     socket.on('vault_restore_complete', (data) => {
       if (data.restore_id !== restoreIdRef.current) return
+      restoreIdRef.current = null
       setRestoreProgress(100)
       setRestoreStatus(data.message || 'Done!')
       playSound('start')
-      // Reload after a beat so the refreshed metadata is picked up.
-      setTimeout(() => window.location.reload(), 1500)
+      if (data.report) {
+        // Merge: show what was added vs. kept; user dismisses to reload.
+        setRestoreReport(data.report)
+      } else {
+        // Replace: nothing to review, just refresh.
+        setTimeout(() => window.location.reload(), 1500)
+      }
     })
 
     socket.on('vault_restore_error', (data) => {
@@ -166,6 +173,39 @@ export default function BackupRestore({ API_URL }) {
     setRestoreMode('replace')
   }
 
+  // Render one side of the merge report (added / kept): named custom
+  // characters/stages, then a count line for the bulkier item types.
+  const renderReportSide = (title, side, kind) => {
+    if (!side) return null
+    const named = [...(side.custom_characters || []), ...(side.custom_stages || [])]
+    const counts = []
+    if (side.skins?.length) counts.push(`${side.skins.length} skin${side.skins.length === 1 ? '' : 's'}`)
+    if (side.variants?.length) counts.push(`${side.variants.length} stage variant${side.variants.length === 1 ? '' : 's'}`)
+    if (side.xdelta?.length) counts.push(`${side.xdelta.length} patch${side.xdelta.length === 1 ? '' : 'es'}`)
+    if (side.bundles?.length) counts.push(`${side.bundles.length} bundle${side.bundles.length === 1 ? '' : 's'}`)
+    const total = named.length + (side.skins?.length || 0) + (side.variants?.length || 0) +
+      (side.xdelta?.length || 0) + (side.bundles?.length || 0)
+    if (total === 0) {
+      return (
+        <div className={`report-side report-${kind}`}>
+          <strong>{title} (0)</strong>
+          <p className="report-empty">{kind === 'kept' ? 'No conflicts.' : 'Nothing new.'}</p>
+        </div>
+      )
+    }
+    return (
+      <div className={`report-side report-${kind}`}>
+        <strong>{title} ({total})</strong>
+        {named.length > 0 && (
+          <ul className="report-names">
+            {named.map((n) => <li key={n}>{n}</li>)}
+          </ul>
+        )}
+        {counts.length > 0 && <p className="report-counts">{counts.join(' · ')}</p>}
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Main Section */}
@@ -195,13 +235,28 @@ export default function BackupRestore({ API_URL }) {
           </button>
         </div>
 
-        {restoring && (
+        {restoring && !restoreReport && (
           <ProgressPanel
             title={restoreTitle}
             label="Restore progress"
             progressValue={restoreProgress}
             messageText={restoreStatus || 'Working…'}
           />
+        )}
+
+        {restoreReport && (
+          <div className="restore-report">
+            <h4>{restoreStatus || 'Merge complete'}</h4>
+            {renderReportSide('Added to your vault', restoreReport.added, 'added')}
+            {renderReportSide('Kept your version (skipped backup’s)', restoreReport.kept, 'kept')}
+            <button
+              className="backup-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('start'); window.location.reload(); }}
+            >
+              Done
+            </button>
+          </div>
         )}
 
         {backupMessage.text && (

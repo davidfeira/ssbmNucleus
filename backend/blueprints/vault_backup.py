@@ -200,11 +200,98 @@ def merge_vault_metadata(current, incoming):
     return merged, stats
 
 
+def merge_plan(current, incoming):
+    """Compare current vs incoming vault metadata and classify every backup item
+    as NEW (not in the vault) or a CONFLICT (already present -- we keep ours).
+
+    Returns ``(report, skip_prefixes)``:
+
+    * ``report`` = ``{'added': {...}, 'kept': {...}}`` where each is a dict of
+      per-type display-name lists, so the UI can show exactly what happened.
+    * ``skip_prefixes`` = relative-path prefixes of CONFLICTING items' files. The
+      file copy skips anything under these so a kept item's folder is never
+      polluted by the backup's (possibly different) copy of the same item. Each
+      content type maps to a path prefix:
+        - custom_characters / custom_stages -> ``<kind>/<slug>/`` (whole folder)
+        - skins   -> ``<Character>/<id>.`` and ``<Character>/<id>_``
+        - variants-> ``das/<stage>/<id>.`` and ``das/<stage>/<id>_``
+      (xdelta / bundles are single-file items, so plain skip-existing is already
+      atomic for them -- no prefix needed, only a report entry.)
+    """
+    current = current or {}
+    incoming = incoming or {}
+    added = {k: [] for k in ('custom_characters', 'custom_stages',
+                             'skins', 'variants', 'xdelta', 'bundles')}
+    kept = {k: [] for k in added}
+    skip = set()
+
+    # Folder-per-slug items: skip the WHOLE folder on conflict.
+    for key in ('custom_characters', 'custom_stages'):
+        cur_slugs = {i.get('slug') for i in (current.get(key) or []) if isinstance(i, dict)}
+        for item in (incoming.get(key) or []):
+            if not isinstance(item, dict):
+                continue
+            slug = item.get('slug')
+            name = item.get('name') or slug
+            if slug in cur_slugs:
+                kept[key].append(name)
+                skip.add(f'{key}/{slug}/')
+            else:
+                added[key].append(name)
+
+    # Single-file top-level items keyed by id (skip-existing is already atomic).
+    for key in ('xdelta', 'bundles'):
+        cur_ids = {i.get('id') for i in (current.get(key) or []) if isinstance(i, dict)}
+        for item in (incoming.get(key) or []):
+            if not isinstance(item, dict):
+                continue
+            label = item.get('name') or item.get('id')
+            (kept if item.get('id') in cur_ids else added)[key].append(label)
+
+    # Skins: flat files <Character>/<id>.* -- skip that id's files on conflict.
+    cur_chars = current.get('characters') or {}
+    for char, data in (incoming.get('characters') or {}).items():
+        cur_ids = {s.get('id') for s in ((cur_chars.get(char) or {}).get('skins') or [])
+                   if isinstance(s, dict)}
+        for s in ((data or {}).get('skins') or []):
+            if not isinstance(s, dict) or s.get('type') == 'folder':
+                continue  # folder markers are metadata-only (no files)
+            sid = s.get('id')
+            label = f"{char} {s.get('color') or sid}"
+            if sid in cur_ids:
+                kept['skins'].append(label)
+                skip.add(f'{char}/{sid}.')
+                skip.add(f'{char}/{sid}_')
+            else:
+                added['skins'].append(label)
+
+    # Stage variants: flat files das/<stage>/<id>.* -- skip that id's files.
+    cur_stages = current.get('stages') or {}
+    for stage, data in (incoming.get('stages') or {}).items():
+        cur_ids = {v.get('id') for v in ((cur_stages.get(stage) or {}).get('variants') or [])
+                   if isinstance(v, dict)}
+        for v in ((data or {}).get('variants') or []):
+            if not isinstance(v, dict):
+                continue
+            vid = v.get('id')
+            label = f"{stage}: {v.get('name') or vid}"
+            if vid in cur_ids:
+                kept['variants'].append(label)
+                skip.add(f'das/{stage}/{vid}.')
+                skip.add(f'das/{stage}/{vid}_')
+            else:
+                added['variants'].append(label)
+
+    return {'added': added, 'kept': kept}, skip
+
+
 def _merge_restore(zip_path, restore_id=None):
-    """Restore a backup ZIP in *merge* mode: keep the current vault and add new
-    items from the backup. The backup's ``metadata.json`` is deep-merged with the
-    current one (never overwritten), and data files are copied in additively
-    without clobbering existing items. Returns the merge ``stats`` dict.
+    """Restore a backup ZIP in *merge* mode: keep the current vault and add only
+    items it doesn't already have. The backup's ``metadata.json`` is deep-merged
+    with the current one (never overwritten). Data files for items you ALREADY
+    have are skipped ATOMICALLY -- the whole conflicting item is left untouched,
+    so a kept custom character/stage/skin can't end up as a mix of your build and
+    the backup's. Returns ``(stats, report)``.
 
     Progress (when ``restore_id`` is given): extract 5->50%, copy 50->95%,
     metadata merge 95->100%.
@@ -228,10 +315,13 @@ def _merge_restore(zip_path, restore_id=None):
             with open(current_meta_path, 'r', encoding='utf-8') as f:
                 current_meta = json.load(f)
 
+        report, skip_prefixes = merge_plan(current_meta, incoming_meta)
         merged_meta, stats = merge_vault_metadata(current_meta, incoming_meta)
 
-        # Copy data files additively. Skip metadata.json (merged separately) and
-        # never overwrite an existing file, so current items always win.
+        # Copy data files for NEW items only. Files belonging to an item you
+        # already have are skipped wholesale (skip_prefixes) so your version is
+        # kept intact -- no leaking the backup's extra files into your folder.
+        # The dest-exists guard is a final safety for loose/shared files.
         STORAGE_PATH.mkdir(parents=True, exist_ok=True)
         files = [s for s in extract_root.rglob('*')
                  if s.is_file() and s.relative_to(extract_root).as_posix() != 'metadata.json']
@@ -240,8 +330,10 @@ def _merge_restore(zip_path, restore_id=None):
         last_pct = -1
         for i, src in enumerate(files, 1):
             rel = src.relative_to(extract_root)
+            rel_posix = rel.as_posix()
+            owned_by_conflict = any(rel_posix.startswith(p) for p in skip_prefixes)
             dest = STORAGE_PATH / rel
-            if not dest.exists():
+            if not owned_by_conflict and not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dest)
                 copied += 1
@@ -259,7 +351,7 @@ def _merge_restore(zip_path, restore_id=None):
         with open(current_meta_path, 'w', encoding='utf-8') as f:
             json.dump(merged_meta, f, indent=2)
 
-        return stats
+        return stats, report
 
 
 def run_vault_restore(restore_id, tmp_path, restore_mode):
@@ -279,16 +371,24 @@ def run_vault_restore(restore_id, tmp_path, restore_mode):
 
         if restore_mode == 'merge':
             logger.info("Merging backup into existing vault...")
-            stats = _merge_restore(tmp_path, restore_id=restore_id)
+            stats, report = _merge_restore(tmp_path, restore_id=restore_id)
             added = sum(stats.values())
-            logger.info(f"Merge added {added} new item(s): {stats}")
-            message = (
-                f'Vault merged successfully ({added} new item(s) added)'
-                if added else 'Vault merged successfully (no new items found)'
-            )
+            kept = sum(len(v) for v in report['kept'].values())
+            logger.info(f"Merge added {added} new item(s), kept {kept} conflict(s): {stats}")
+            if added and kept:
+                message = (f'Vault merged: added {added} new item(s), '
+                           f'kept your version of {kept} conflict(s)')
+            elif added:
+                message = f'Vault merged: added {added} new item(s)'
+            elif kept:
+                message = (f'Vault merged: no new items — kept your version of '
+                           f'{kept} item(s) already in your vault')
+            else:
+                message = 'Vault merged successfully (no new items found)'
             logger.info("=== VAULT RESTORE COMPLETE ===")
             _emit_restore(restore_id, 'vault_restore_complete',
-                          mode=restore_mode, message=message, added=stats)
+                          mode=restore_mode, message=message,
+                          added=stats, report=report)
             return
 
         # Replace mode.

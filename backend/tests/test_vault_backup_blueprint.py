@@ -306,6 +306,78 @@ def test_restore_merge_reports_added_count(vault_env):
     assert '2 new item' in done['message']
 
 
+def test_restore_merge_does_not_leak_backup_files_into_kept_custom_character(vault_env):
+    # The vault has custom character 'wolf' with 2 costumes; the backup has a
+    # DIFFERENT 'wolf' build with extra costume files. Merge must keep ours
+    # ATOMICALLY -- the backup's extra files must NOT leak into wolf's folder.
+    _write_metadata(vault_env.storage_path, {
+        'characters': {}, 'stages': {},
+        'custom_characters': [{'slug': 'wolf', 'name': 'Wolf', 'costume_count': 2}],
+    })
+    wolf = vault_env.storage_path / 'custom_characters' / 'wolf'
+    (wolf / 'costumes').mkdir(parents=True)
+    (wolf / 'fighter.dat').write_bytes(b'CURRENT')
+    (wolf / 'costumes' / 'red.png').write_bytes(b'cur-red')
+
+    backup = _make_backup_zip(
+        {'custom_characters': [
+            {'slug': 'wolf', 'name': 'Wolf', 'costume_count': 4},
+            {'slug': 'fawful', 'name': 'Fawful'},
+        ]},
+        extra_files={
+            'custom_characters/wolf/fighter.dat': b'BACKUP',         # conflict -> skip
+            'custom_characters/wolf/costumes/green.png': b'bak-green',  # would leak
+            'custom_characters/wolf/costumes/yellow.png': b'bak-yel',   # would leak
+            'custom_characters/fawful/fighter.dat': b'new-fawful',      # new -> copy
+        },
+    )
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+    assert resp.status_code == 200
+
+    # Wolf is untouched: original files only, no backup leakage.
+    assert (wolf / 'fighter.dat').read_bytes() == b'CURRENT'
+    assert sorted(p.name for p in (wolf / 'costumes').iterdir()) == ['red.png']
+    # The genuinely-new character came in whole.
+    assert (vault_env.storage_path / 'custom_characters' / 'fawful' / 'fighter.dat').exists()
+
+    done = _restore_event(vault_env, 'vault_restore_complete')
+    assert done['report']['kept']['custom_characters'] == ['Wolf']
+    assert done['report']['added']['custom_characters'] == ['Fawful']
+
+
+def test_merge_plan_classifies_added_vs_kept_per_type():
+    current = {
+        'custom_characters': [{'slug': 'wolf', 'name': 'Wolf'}],
+        'characters': {'Fox': {'skins': [{'id': 'fox-a', 'color': 'red'}]}},
+        'stages': {'dreamland': {'variants': [{'id': 'dl-a', 'name': 'Cotton'}]}},
+    }
+    incoming = {
+        'custom_characters': [{'slug': 'wolf', 'name': 'Wolf'},
+                              {'slug': 'geno', 'name': 'Geno'}],
+        'characters': {'Fox': {'skins': [{'id': 'fox-a', 'color': 'red'}, {'id': 'fox-b', 'color': 'blue'}]}},
+        'stages': {'dreamland': {'variants': [{'id': 'dl-a', 'name': 'Cotton'}, {'id': 'dl-b', 'name': 'Neon'}]}},
+    }
+
+    report, skip = vault_backup.merge_plan(current, incoming)
+
+    assert report['added']['custom_characters'] == ['Geno']
+    assert report['kept']['custom_characters'] == ['Wolf']
+    assert report['added']['skins'] == ['Fox blue']
+    assert report['kept']['skins'] == ['Fox red']
+    assert report['added']['variants'] == ['dreamland: Neon']
+    assert report['kept']['variants'] == ['dreamland: Cotton']
+    # Conflicting items contribute skip prefixes; new ones do not.
+    assert 'custom_characters/wolf/' in skip
+    assert 'custom_characters/geno/' not in skip
+    assert 'Fox/fox-a.' in skip and 'Fox/fox-a_' in skip
+    assert 'das/dreamland/dl-a.' in skip
+
+
 def test_restore_emits_progress_and_completion_events(vault_env):
     _write_metadata(vault_env.storage_path, {'characters': {'Marth': {'skins': [_skin('marth-black')]}}})
     backup = _make_backup_zip(
