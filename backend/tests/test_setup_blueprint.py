@@ -184,6 +184,9 @@ def test_logs_zip_includes_slippi_dolphin_logs(tmp_path, monkeypatch, setup_modu
     (slippi / 'User' / 'exception.dmp').write_bytes(b'DMP')
     (slippi / 'User' / 'Slippi' / 'Game_20260101.slp').write_bytes(b'REPLAY')
     (slippi.parent / 'launcher.log').write_text('launcher', encoding='utf-8')
+    # Dolphin distro .txt files at the netplay root — not logs, must be skipped.
+    (slippi / 'license.txt').write_text('GPL', encoding='utf-8')
+    (slippi / 'portable.txt').write_text('', encoding='utf-8')
 
     app = Flask(__name__)
     app.register_blueprint(setup_module.setup_bp)
@@ -197,3 +200,30 @@ def test_logs_zip_includes_slippi_dolphin_logs(tmp_path, monkeypatch, setup_modu
         assert 'slippi-dolphin/launcher/launcher.log' in names
         # the replay must NOT be in the zip
         assert not any(n.endswith('.slp') for n in names)
+        # Dolphin distro files must NOT be in the zip
+        assert not any(n.endswith(('license.txt', 'portable.txt')) for n in names)
+
+
+def test_logs_zip_denylists_dolphin_distro_files_and_notes_logging_off(tmp_path, monkeypatch, setup_module):
+    """A Slippi folder holding only Dolphin's distro .txt files (license.txt,
+    portable.txt) has no real logs: those files must not be bundled or counted,
+    and diagnostics must report 0 and tell the reporter to enable Dolphin's
+    'Write to File' logging."""
+    monkeypatch.setattr(setup_module, 'LOGS_PATH', tmp_path / 'applogs')
+
+    slippi = tmp_path / 'Slippi Launcher' / 'netplay'
+    slippi.mkdir(parents=True)
+    (slippi / 'license.txt').write_text('GPL', encoding='utf-8')
+    (slippi / 'portable.txt').write_text('', encoding='utf-8')
+
+    app = Flask(__name__)
+    app.register_blueprint(setup_module.setup_bp)
+    resp = app.test_client().get(f'/api/mex/logs/download?slippiPath={slippi}')
+
+    assert resp.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
+        names = set(zf.namelist())
+        assert not any(n.startswith('slippi-dolphin/') for n in names)
+        diag = zf.read('diagnostics.txt').decode('utf-8')
+    assert 'Slippi log/dump files: 0' in diag
+    assert 'Write to File' in diag

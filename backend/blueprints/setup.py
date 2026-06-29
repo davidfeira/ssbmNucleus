@@ -498,6 +498,15 @@ def verify_vanilla_iso():
 _SLIPPI_LOG_MAX_FILE = 25 * 1024 * 1024     # 25 MB per file
 _SLIPPI_LOG_MAX_TOTAL = 100 * 1024 * 1024   # 100 MB total
 
+# Dolphin ships these .txt files in its install root — they're distribution files,
+# not logs. The top-level scan must skip them so a bug report doesn't end up
+# counting e.g. license.txt + portable.txt as "Slippi logs" and mislead triage.
+_SLIPPI_NON_LOG_FILES = frozenset({
+    'license.txt',
+    'portable.txt',
+    'readme.txt',
+})
+
 
 def _add_slippi_dolphin_logs(zf: zipfile.ZipFile, slippi_path: str) -> int:
     """Add the user's Slippi Dolphin logs + crash dumps to the zip under
@@ -539,7 +548,9 @@ def _add_slippi_dolphin_logs(zf: zipfile.ZipFile, slippi_path: str) -> int:
     for base, prefix in ((root, 'netplay'), (user, 'User'), (root.parent, 'launcher')):
         if base.is_dir():
             for p in sorted(base.iterdir()):
-                if p.is_file() and p.suffix.lower() in ('.dmp', '.log', '.txt'):
+                if (p.is_file()
+                        and p.suffix.lower() in ('.dmp', '.log', '.txt')
+                        and p.name.lower() not in _SLIPPI_NON_LOG_FILES):
                     _add(p, f"slippi-dolphin/{prefix}/{p.name}")
 
     return added
@@ -562,6 +573,17 @@ def _build_diagnostics_text(slippi_path: str = '', app_logs: int = 0,
         f'Slippi Dolphin path: {slippi_path or "(not provided)"}',
         f'Slippi log/dump files: {slippi_logs}',
     ]
+    # If we were pointed at a Slippi folder but found no actual logs, say why:
+    # Dolphin doesn't log to disk by default, and an in-game Melee crash leaves
+    # no host minidump — so "0" is normal, not a collection failure. Tell the
+    # next reporter how to get real logs.
+    if slippi_path and slippi_logs == 0:
+        lines.append(
+            'Note: no Dolphin file logs found. Dolphin does not write logs to '
+            'disk by default -- enable Config -> Logging -> "Write to File" in '
+            'Slippi Dolphin and reproduce to capture them. (An in-game Melee '
+            'crash also produces no host minidump.)'
+        )
     return '\n'.join(lines) + '\n'
 
 
