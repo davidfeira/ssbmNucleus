@@ -2,6 +2,17 @@
 
 All notable changes to SSBM Nucleus are documented here.
 
+## 0.4.1
+
+### 🐛 Fixes
+- **Ice Climbers no longer crash in Classic mode and online.** Nana's intro/result
+  demo animations were exported empty, which made her T-pose on the VS banner and
+  crash the game when starting a 1P or netplay match. Existing projects are repaired
+  automatically on the next export.
+- **Imported Jigglypuff costumes no longer crash the game.** The importer grabbed
+  Jigglypuff's hat model (1 joint) instead of the body (50 joints), which crashed on
+  load. Re-import affected Puff skins to fix existing ones.
+
 ## 0.4.0
 
 The big update is finally here.

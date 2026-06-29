@@ -177,6 +177,22 @@ namespace mexLib.Types
                 SongID2 = (short)FighterMusic2,
             });
 
+            // Nana (internal 11) is the Ice Climbers' sub-character. Her ftDemo motion
+            // symbols are required by the result / 1P-intro / online VS-banner scenes
+            // (the game renders the partner through ftDemo). A bug in ToExternalID
+            // inflates her external id past the demo-read guard in FromDOL, so older
+            // projects stored these as empty -> Nana T-poses and the demo scene
+            // dereferences the empty symbols and crashes. Restore the vanilla values
+            // here so existing (already-broken) projects are repaired on export. Nana
+            // has no DViWait file of her own, so ViWait shares Popo's (as in vanilla).
+            if (internalId == 11 && string.IsNullOrEmpty(Files.DemoResult))
+            {
+                Files.DemoResult = "ftDemoResultMotionFileNana";
+                Files.DemoIntro = "ftDemoIntroMotionFileNana";
+                Files.DemoEnding = "ftDemoEndingMotionFileNana";
+                Files.DemoWait = "ftDemoViWaitMotionFilePopo";
+            }
+
             fd.FtDemo_SymbolNames.Set(internalId, new MEX_FtDemoSymbolNames()
             {
                 Intro = Files.DemoIntro,
@@ -426,6 +442,15 @@ namespace mexLib.Types
             if (exid < 0x21 - 7)
             {
                 Files.DemoFile = dol.GetStruct<string>(0x803FFFA8, exid);
+            }
+            // The demo motion-file table (0x803C2468) is indexed by INTERNAL id, so it
+            // is read separately from the exid-guarded DemoFile above. Nana (internal
+            // 11) is mapped to an inflated external id (characterCount-1) by
+            // ToExternalID, which pushes her past the exid guard -- but she still has a
+            // valid demo entry and the result/1P-intro/online scenes require it, or she
+            // T-poses and the game crashes. Read her demo symbols by internal id too.
+            if (exid < 0x21 - 7 || index == 11)
+            {
                 uint demoOffset = dol.GetStruct<uint>(0x803C2468, index);
                 Files.DemoResult = dol.GetStruct<string>(demoOffset + 0x00, 0, 0x10);
                 Files.DemoIntro = dol.GetStruct<string>(demoOffset + 0x04, 0, 0x10);

@@ -126,6 +126,7 @@ namespace mexLib.Types
             JointSymbol = "";
             MaterialSymbol = "";
             bool passing = false;
+            bool foundShare = false;
             foreach (string symbol in ArchiveTools.GetSymbols(s))
             {
                 if (symbol.EndsWith("matanim_joint"))
@@ -133,8 +134,25 @@ namespace mexLib.Types
                 else
                 if (symbol.EndsWith("_joint"))
                 {
-                    passing = true;
-                    JointSymbol = symbol;
+                    // The costume's body model is conventionally named
+                    // "Ply<Char>..._Share_joint". Jigglypuff's colored costumes append
+                    // a SEPARATE hat model ("PlyPurin<Col>Hat_TopN_joint") AFTER the
+                    // body, so blindly taking the LAST _joint symbol grabbed the
+                    // 1-joint hat instead of the 50-joint body -> the game crashed on
+                    // ftparts.c's joint-count assert ("has 1 joints, should have 50").
+                    // Prefer the _Share_ body; only fall back to other _joint symbols
+                    // when no _Share_joint exists (preserves prior behaviour for those).
+                    if (symbol.EndsWith("_Share_joint"))
+                    {
+                        passing = true;
+                        foundShare = true;
+                        JointSymbol = symbol;
+                    }
+                    else if (!foundShare)
+                    {
+                        passing = true;
+                        JointSymbol = symbol;
+                    }
                 }
             }
 
