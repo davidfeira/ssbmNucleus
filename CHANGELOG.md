@@ -2,6 +2,32 @@
 
 All notable changes to SSBM Nucleus are documented here.
 
+## 0.4.2
+
+### 🐛 Fixes
+- **Character select portraits render alt costumes correctly.** Recolor/alt
+  costumes were drawn with the default costume's low-poly mask, so accessories
+  vanished or low-poly geometry poked through — Pikachu's blue/green hats were
+  missing and the red cap showed an artifact, Pichu's backpack/cheeks were wrong,
+  and Peach's Daisy sleeves were blocky. Each costume now uses its own visibility
+  data. Regenerate CSPs to refresh existing portraits.
+- **Jigglypuff's costume hats now show up in portraits.** Hats that ship as a
+  separate model are spliced into the render and follow the posed head.
+- **Merging a vault backup no longer corrupts custom characters you already have.**
+  A conflicting item is now kept entirely as-is — the backup's copy of it (and any
+  stray extra files) is skipped — instead of leaking files into your version. The
+  merge also shows a report of what was added vs. kept.
+
+### 🚀 Improvements
+- **Vault restore now shows live progress.** Importing a vault backup displays an
+  upload bar and then a per-file extract/merge status instead of an indefinite
+  wait with no feedback.
+- CSP rendering uses two-sided lighting so back-facing surfaces no longer go dark.
+
+### 🔧 Changes
+- Stages imported without a bundled screenshot no longer boot Dolphin to capture
+  one during import. Use the bulk DAS "capture screenshots" flow instead.
+
 ## 0.4.1
 
 ### 🐛 Fixes
