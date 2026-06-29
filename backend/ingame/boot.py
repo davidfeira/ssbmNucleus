@@ -19,7 +19,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .melee_pipe import pipe_in_use, pipe_open
+from .melee_pipe import Pipe, pipe_in_use, pipe_open
 
 _k32_creationflags = 0
 if os.name == "nt":
@@ -455,6 +455,20 @@ class DolphinBoot:
     @property
     def pid(self):
         return self.proc.pid if self.proc else None
+
+    def alive(self):
+        """True while the launched Dolphin process is still running."""
+        return self.proc is not None and self.proc.poll() is None
+
+    def open_pipe(self, timeout=12.0):
+        r"""Open the controller pipe (Pipe(self.pipe_index)) the ROBUST way:
+        retrying across the brief windows where Dolphin has torn the pipe down to
+        re-arm it on a controller refresh (game boot / stage load). wait_for_pipe
+        only confirms the pipe was up at one earlier moment; by the time we open
+        it for real -- after the up-to-20s memory-attach loop -- it may be mid
+        re-arm, which used to surface as "CreateFile(...slippibot1) failed: 2".
+        Bails fast if Dolphin has exited. Raises OSError if it never comes up."""
+        return Pipe(self.pipe_index, open_timeout=timeout, alive=self.alive)
 
     def wait_for_pipe(self, timeout=45.0):
         r"""Dolphin only creates \\.\pipe\slippibot<N> once its input plugin

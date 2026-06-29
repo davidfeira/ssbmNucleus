@@ -48,7 +48,7 @@ d = Dolphin(boot.pid)
 while not d.locate(): ...                     # find MEM1 base
 
 match_setup.patch_one_player(d)               # CSS gate cmpwi r4,2 -> r4,1 (allow solo)
-p = Pipe(boot.pipe_index)
+p = boot.open_pipe()                          # controller pipe, retried across Dolphin's re-arm windows
 nav.nav_to_css(d, p)                          # Slippi online menu -> offline VS CSS
 nav.wait_css_ready(d, Cursor(d, p))
 match_setup.force_time_infinite(d)            # Time / no limit, so a solo match sustains
@@ -72,6 +72,12 @@ a build whose only custom fighter is Metal Mario, `ckind = 0x1A`. Confirm with
 `mexcli list-fighters <project.mexproj>` (the `externalId`).
 
 ### Driving inputs (`Pipe`)
+Open the pipe with **`boot.open_pipe()`** (not `Pipe(...)` directly): Slippi
+Dolphin tears its controller pipe down and re-arms it on controller refreshes
+(game boot / stage load), so a single-shot open can land in that gap and die with
+`CreateFile(...slippibot1) failed: 2`. `open_pipe()` retries across the gap and
+bails fast if Dolphin actually exited.
+
 `press/release/tap(btn,hold)`, `main(x,y)` / `c(x,y)` control & C sticks
 (0.0–1.0, 0.5 center; y=0 up, x=1 right), `tilt(x,y,hold)`, `center()`,
 `neutral()`, and `frame([...])` for one raw atomic frame.

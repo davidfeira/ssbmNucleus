@@ -28,7 +28,6 @@ import time
 
 from .boot import DolphinBoot
 from .melee_mem import Dolphin
-from .melee_pipe import Pipe
 from .melee_css import Cursor
 from .melee_sss import StageCursor, INTERNAL_STAGE_ID, norm as _norm_stage
 from .observe import Observer, wait_in_game, wait_game_frames
@@ -403,7 +402,14 @@ def run_test(iso_path, slippi_path, runs_root, manifest=None, emit=None, log=Non
         # disturb the check. Falls back to a 2nd player if the patch doesn't apply.
         solo = match_setup.patch_one_player(d, log=log)
 
-        p = Pipe(boot.pipe_index)
+        try:
+            p = boot.open_pipe()
+        except OSError as e:
+            log(f"controller pipe never reopened: {e}")
+            result.update(verdict="crashed",
+                          reason="Dolphin's controller pipe didn't come back up "
+                                 "(it may have failed to boot); please retry.")
+            return result
         obs = Observer(d)
 
         # Drive to the OFFLINE character-select screen (never online).

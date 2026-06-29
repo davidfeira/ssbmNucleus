@@ -25,7 +25,6 @@ import time
 
 from .boot import DOLPHIN_OPEN_MSG, DolphinBoot, wait_until_no_dolphin
 from .melee_mem import Dolphin
-from .melee_pipe import Pipe
 from .melee_css import Cursor
 from .melee_sss import StageCursor
 from . import nav
@@ -161,7 +160,13 @@ def capture_stage(iso_path, slippi_path, runs_root, internal_id, hold=None,
         _apply_code_patches(d, log=log)               # clean-shot patches (persist)
         solo = match_setup.patch_one_player(d, log=log)  # load in alone if possible
 
-        p = Pipe(boot.pipe_index)
+        try:
+            p = boot.open_pipe()
+        except OSError as e:
+            log(f"controller pipe never reopened: {e}")
+            result["reason"] = ("Dolphin's controller pipe didn't come back up "
+                                "(it may have been mid-restart) — please retry.")
+            return result
         cur = Cursor(d, p)
         sc = StageCursor(d, p)
 
@@ -354,7 +359,13 @@ def capture_pause(iso_path, slippi_path, runs_root, emit=None, log=None, settle=
         # patches made the pause shot look empty.)
         solo = match_setup.patch_one_player(d, log=log)
 
-        p = Pipe(boot.pipe_index)
+        try:
+            p = boot.open_pipe()
+        except OSError as e:
+            log(f"controller pipe never reopened: {e}")
+            result["reason"] = ("Dolphin's controller pipe didn't come back up "
+                                "(it may have been mid-restart) — please retry.")
+            return result
         cur = Cursor(d, p)
         sc = StageCursor(d, p)
 
@@ -470,7 +481,13 @@ def capture_stage_batch(iso_path, slippi_path, runs_root, variants,
 
         _apply_code_patches(d, log=log)
         solo = match_setup.patch_one_player(d, log=log)
-        p = Pipe(boot.pipe_index)
+        try:
+            p = boot.open_pipe()
+        except OSError as e:
+            log(f"controller pipe never reopened: {e}")
+            result["reason"] = ("Dolphin's controller pipe didn't come back up "
+                                "(it may have been mid-restart) — please retry.")
+            return result
         cur = Cursor(d, p)
         sc = StageCursor(d, p)
 

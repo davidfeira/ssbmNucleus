@@ -33,6 +33,10 @@ GENERIC_WRITE = 0x40000000
 OPEN_EXISTING = 3
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
+# CreateFile error codes seen while Slippi Dolphin is (re-)arming the pipe.
+ERROR_FILE_NOT_FOUND = 2     # the pipe isn't present this instant (being recreated)
+ERROR_PIPE_BUSY = 231        # the pipe exists but every instance is busy
+
 _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _k32.CreateFileW.restype = wt.HANDLE
 _k32.CreateFileW.argtypes = [
@@ -44,18 +48,52 @@ _k32.WriteFile.argtypes = [
 ]
 _k32.CloseHandle.restype = wt.BOOL
 _k32.CloseHandle.argtypes = [wt.HANDLE]
+_k32.WaitNamedPipeW.restype = wt.BOOL
+_k32.WaitNamedPipeW.argtypes = [wt.LPCWSTR, wt.DWORD]
 
 
 def pipe_open(port=1):
-    """Try to open the slippibot<port> pipe for writing. Returns a handle, or
-    None if the pipe doesn't exist yet (Dolphin's input plugin not up). Used
-    both by Pipe and by the boot code to probe pipe-readiness / pick a free
-    pipe index without creating a Pipe object."""
+    """Try to open the slippibot<port> pipe for writing ONCE (non-blocking).
+    Returns a handle, or None if the pipe doesn't exist this instant (Dolphin's
+    input plugin not up, or mid re-arm). Used by the boot code to probe
+    pipe-readiness / pick a free pipe index without creating a Pipe object. To
+    actually open a pipe for driving, prefer pipe_open_wait (it rides over the
+    transient gaps)."""
     path = rf"\\.\pipe\slippibot{port}"
     h = _k32.CreateFileW(path, GENERIC_WRITE, 0, None, OPEN_EXISTING, 0, None)
     if not h or h == INVALID_HANDLE_VALUE:
         return None
     return h
+
+
+def pipe_open_wait(port=1, timeout=12.0, alive=None, poll=0.12):
+    r"""Open \\.\pipe\slippibot<port> for writing, RETRYING across the brief
+    windows where the pipe is momentarily unavailable.
+
+    Slippi Dolphin tears the named pipe down and re-arms it whenever it refreshes
+    controllers -- notably around game boot and stage load. A single-shot
+    CreateFile that happens to land in that window fails with
+    ERROR_FILE_NOT_FOUND(2) (pipe not present) or ERROR_PIPE_BUSY(231) (all
+    instances busy) even though Dolphin is perfectly healthy -- which is why a
+    screenshot/test would intermittently die with "CreateFile(...slippibot1)
+    failed: 2". We instead retry with a short backoff until the pipe opens,
+    `timeout` seconds elapse, or `alive()` (if given) reports Dolphin has exited.
+    Returns a handle, or None on timeout / dead Dolphin."""
+    path = rf"\\.\pipe\slippibot{port}"
+    deadline = time.time() + timeout
+    while True:
+        h = _k32.CreateFileW(path, GENERIC_WRITE, 0, None, OPEN_EXISTING, 0, None)
+        if h and h != INVALID_HANDLE_VALUE:
+            return h
+        err = ctypes.get_last_error()
+        if alive is not None and not alive():
+            return None                      # Dolphin died -- stop waiting
+        if time.time() >= deadline:
+            return None
+        if err == ERROR_PIPE_BUSY:
+            _k32.WaitNamedPipeW(path, 500)   # block (<=0.5s) for a free instance
+        else:
+            time.sleep(poll)                 # not up yet -- brief backoff, retry
 
 
 def pipe_in_use(port):
@@ -70,14 +108,21 @@ def pipe_in_use(port):
 
 
 class Pipe:
-    def __init__(self, port=1):
+    def __init__(self, port=1, open_timeout=12.0, alive=None):
+        """open_timeout: seconds to keep retrying the initial open across
+        Dolphin's pipe re-arm windows (see pipe_open_wait). alive: optional
+        callable -> bool; when it returns False the open/reconnect bails
+        immediately instead of waiting out the timeout on a dead Dolphin."""
         self.port = port
         self.path = rf"\\.\pipe\slippibot{port}"
+        self._open_timeout = open_timeout
+        self._alive = alive
         self._h = None
         self._open()
 
-    def _open(self):
-        h = pipe_open(self.port)
+    def _open(self, timeout=None):
+        t = self._open_timeout if timeout is None else timeout
+        h = pipe_open_wait(self.port, timeout=t, alive=self._alive)
         if h is None:
             raise OSError(f"CreateFile({self.path}) failed: {ctypes.get_last_error()}")
         self._h = h
@@ -89,14 +134,16 @@ class Pipe:
         return bool(ok)
 
     def frame(self, lines):
-        """Write one input frame to the persistent connection (reconnect once
-        if the handle has gone stale, e.g. Dolphin restarted)."""
+        """Write one input frame to the persistent connection (reconnect if the
+        handle has gone stale, e.g. Dolphin re-armed the pipe on a controller
+        refresh). The reconnect retries briefly so a re-arm mid-run doesn't drop
+        the frame, but stays bounded so a genuinely dead Dolphin fails fast."""
         data = ("\n".join(lines) + "\n").encode("ascii")
         try:
             if not self._write(data):
                 raise OSError("WriteFile failed")
         except Exception:
-            self._open()
+            self._open(timeout=3.0)
             self._write(data)
 
     def close(self):
