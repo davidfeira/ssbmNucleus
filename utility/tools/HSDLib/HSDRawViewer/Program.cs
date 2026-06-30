@@ -1799,16 +1799,42 @@ namespace HSDRawViewer
                                 var acc = renderJObj.RootJObj.GetJObjFromDesc(descRoot);
                                 var bone = renderJObj.RootJObj.GetJObjAtIndex(attachBone);
                                 if (acc == null || bone == null) continue;
-                                // The accessory is authored in MODEL space at its
-                                // bind location (its bind world already coincides
-                                // with AttachBone), so apply the bone's bind->posed
-                                // DELTA to carry it along -- exactly the separate-root
-                                // hat-follow. (Multiplying by the bone's full posed
-                                // world instead double-counts the bone height and
-                                // throws the accessory off-frame.)
+                                // Two authoring conventions for the accessory RootJoint:
+                                //  (A) OFFSET in model space from its AttachBone (e.g.
+                                //      Link's cap sits above its attach bone): carry it
+                                //      by the bone's bind->posed DELTA so its offset is
+                                //      preserved. (Multiplying by the bone's full posed
+                                //      world instead double-counts the bone height and
+                                //      throws it off-frame -- the original Link bug.)
+                                //  (B) COINCIDENT with the AttachBone (accBind == boneBind
+                                //      in translation, e.g. Jigglypuff's nurse hat
+                                //      AttachBone=6, Falco's hair AttachBone=39): the
+                                //      accessory "sits on" the bone with the mesh authored
+                                //      relative to it. Here the DELTA path rotates the
+                                //      coincident point by the bone's bind orientation and
+                                //      throws the accessory off-head (hat rendered low/
+                                //      invisible). Inherit the bone's full POSED world
+                                //      instead. Discriminate by bind-translation distance
+                                //      so case (A)/Link is untouched.
                                 var boneDelta = bone.InvertedTransform * bone.WorldTransform;
                                 var accBind = acc.InvertedTransform.Inverted();
-                                var local = (accBind * boneDelta) * rootInv;
+                                var boneBindW = bone.InvertedTransform.Inverted();
+                                var accBindT = accBind.ExtractTranslation();
+                                // Bone-RELATIVE authoring (mesh sits "on" the bone) shows
+                                // up two ways: accBind coincident with the bone's bind
+                                // (Jigglypuff nurse hat: accBind==boneBind), or accBind at
+                                // the model ORIGIN (Falco hair: accBind~=0, mesh authored
+                                // at origin = relative to the head bone). Both want the
+                                // bone's full POSED world. Only a genuine model-space
+                                // OFFSET accessory (Link's cap, accBind far from both the
+                                // bone and the origin) keeps the bind->posed delta so its
+                                // offset is preserved.
+                                bool coincident = (accBindT - boneBindW.ExtractTranslation()).Length < 0.5f;
+                                bool atOrigin = accBindT.Length < 0.5f;
+                                bool boneRelative = coincident || atOrigin;
+                                OpenTK.Mathematics.Matrix4 local = boneRelative
+                                    ? bone.WorldTransform * rootInv          // (B) inherit bone posed world
+                                    : (accBind * boneDelta) * rootInv;       // (A) model-space bind->posed delta
                                 acc.Scale = local.ExtractScale();
                                 var rot = local.ExtractRotationEuler();
                                 acc.Rotation = new OpenTK.Mathematics.Vector4(rot.X, rot.Y, rot.Z, 0);
