@@ -108,6 +108,7 @@ def build_csp_and_stock(
     is_nana: bool = False,
     popo_csp: bytes | None = None,
     popo_stock: bytes | None = None,
+    allow_stock_gen: bool = True,
     log: logging.Logger | None = None,
 ) -> dict:
     """Return {csp, csp_source, stock, stock_source} for one costume.
@@ -123,6 +124,11 @@ def build_csp_and_stock(
       stock  -- existing wins; else Nana copies Popo (popo_stock); else recolor
                 the vanilla icon via generate_stock (aligned to our own render
                 when we just generated the CSP); else vanilla / default fallback.
+
+    `allow_stock_gen=False` skips the recolor step: a missing stock falls
+    straight back to the vanilla icon (Nana still copies Popo). The ISO-scan
+    bulk import uses this -- generate_stock is the slow part of a 90-skin batch
+    and its result is approximate anyway.
     """
     log = log or logger
     tmp_dir = tempfile.mkdtemp(prefix="csp_assets_")
@@ -172,13 +178,25 @@ def build_csp_and_stock(
 
         # ---- stock -----------------------------------------------------------
         if stock_data is None:
-            # only our OWN render (vanilla pose => pixel-aligned) may feed the
-            # csp-diff path; community/custom CSPs must not.
-            aligned_csp = csp_data if csp_source == "generated" else None
-            stock_data, stock_source, _ = build_stock(
-                character, costume_code, dat_data, dat_path=dat_path,
-                aligned_csp=aligned_csp, is_nana=is_nana, popo_stock=popo_stock,
-                vanilla_fallback=True, log=log)
+            if not allow_stock_gen:
+                # Fast path (ISO-scan bulk import): skip the texture-diff /
+                # head-shot stock generator entirely. Nana still copies Popo's
+                # icon; everyone else falls straight back to the vanilla stock
+                # for this costume (the character's default colour if the exact
+                # slot has none).
+                if is_nana:
+                    stock_data = popo_stock
+                    stock_source = "copied_from_popo" if popo_stock else "missing"
+                else:
+                    stock_data, stock_source = _vanilla_stock(character, costume_code)
+            else:
+                # only our OWN render (vanilla pose => pixel-aligned) may feed the
+                # csp-diff path; community/custom CSPs must not.
+                aligned_csp = csp_data if csp_source == "generated" else None
+                stock_data, stock_source, _ = build_stock(
+                    character, costume_code, dat_data, dat_path=dat_path,
+                    aligned_csp=aligned_csp, is_nana=is_nana, popo_stock=popo_stock,
+                    vanilla_fallback=True, log=log)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

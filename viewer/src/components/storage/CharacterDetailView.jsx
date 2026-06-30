@@ -123,6 +123,11 @@ export default function CharacterDetailView({
     discardGeneratedStock,
     pendingGeneratedStock,
     generatingStock,
+    handleRetakeCsp,
+    confirmGeneratedCsp,
+    discardGeneratedCsp,
+    pendingGeneratedCsp,
+    generatingCsp,
     handleSave,
     handleDelete,
     handleExport,
@@ -384,8 +389,6 @@ export default function CharacterDetailView({
           >
             <div className="create-mod-image-area">
               <span className="create-mod-icon">+</span>
-            </div>
-            <div className="create-mod-info">
               <span className="create-mod-label">Create New Mod</span>
             </div>
           </div>
@@ -419,6 +422,11 @@ export default function CharacterDetailView({
         onDiscardGeneratedStock={discardGeneratedStock}
         pendingGeneratedStock={pendingGeneratedStock}
         generatingStock={generatingStock}
+        onRetakeCsp={handleRetakeCsp}
+        onConfirmGeneratedCsp={confirmGeneratedCsp}
+        onDiscardGeneratedCsp={discardGeneratedCsp}
+        pendingGeneratedCsp={pendingGeneratedCsp}
+        generatingCsp={generatingCsp}
         onScreenshotChange={handleScreenshotChange}
         onSlippiRetest={handleSlippiRetest}
         onSlippiOverride={handleSlippiOverride}

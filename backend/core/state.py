@@ -20,6 +20,15 @@ from .config import PROJECT_ROOT
 # custom-stage blueprints write the SAME metadata.json, so they share this lock.
 metadata_lock = threading.RLock()
 
+# Serializes operations that open + save the MexManager workspace (reorder,
+# import, remove, set-team-color, export). Two MexCLI processes touching the
+# same project concurrently corrupt the workspace, so these are mutually
+# exclusive. This matters now that costume reordering applies in the BACKGROUND
+# (optimistic UI): while a background reorder is mid-save, any other workspace
+# write (e.g. the user hitting Export) must wait for it instead of racing it.
+# RLock so a single request thread can nest acquisitions safely.
+mexcli_lock = threading.RLock()
+
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "tools"))
 from mex_bridge import MexManager, MexManagerError
 

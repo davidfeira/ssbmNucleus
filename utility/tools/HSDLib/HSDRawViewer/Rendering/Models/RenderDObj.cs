@@ -111,10 +111,26 @@ namespace HSDRawViewer.Rendering.Models
                 // get attributes
                 GX_Attribute[] attrs = pobj.ToGXAttributes();
 
-                // skip if attributes are incomplete
-                // incomplete attributes don't end with null
-                if (attrs[attrs.Length - 1].AttributeName != GXAttribName.GX_VA_NULL)
+                // A truly empty attribute list is unusable.
+                if (attrs.Length == 0)
                     continue;
+
+                // Repair a MISSING GX_VA_NULL terminator. Some imported / re-exported
+                // models ship an otherwise-valid attribute list (POS, NRM, TEX0...) with
+                // no trailing NULL sentinel. GX_DisplayList.Open() then reads ZERO
+                // primitives, so the pobj contributes no geometry and the whole model
+                // renders blank or only partially (custom Slippy, pink Luigi). Append the
+                // sentinel so the list parses exactly like a well-formed one instead of
+                // discarding the geometry.
+                if (attrs[attrs.Length - 1].AttributeName != GXAttribName.GX_VA_NULL)
+                {
+                    var repaired = new GX_Attribute[attrs.Length + 1];
+                    System.Array.Copy(attrs, repaired, attrs.Length);
+                    var term = new GX_Attribute { _s = new HSDRaw.HSDStruct(new byte[0x18]) };
+                    term.AttributeName = GXAttribName.GX_VA_NULL;
+                    repaired[attrs.Length] = term;
+                    attrs = repaired;
+                }
 
                 // get display list
                 GX_DisplayList dl = pobj.ToDisplayList(attrs);

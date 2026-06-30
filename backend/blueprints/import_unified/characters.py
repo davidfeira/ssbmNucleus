@@ -81,7 +81,7 @@ def fix_ice_climbers_pairing(character_infos: list, imported_skin_ids: dict):
         logger.error(f"Failed to fix Ice Climbers pairing: {e}", exc_info=True)
 
 
-def import_character_costume(zip_path: str, char_info: dict, original_filename: str, auto_fix: bool = False, custom_name: str = None) -> dict:
+def import_character_costume(zip_path: str, char_info: dict, original_filename: str, auto_fix: bool = False, custom_name: str = None, allow_stock_gen: bool = True) -> dict:
     """
     Import a character costume to storage.
 
@@ -91,6 +91,9 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         original_filename: Original filename of the upload
         auto_fix: If True, apply slippi fixes to the DAT file
         custom_name: Optional custom name to use instead of extracting from filename
+        allow_stock_gen: If False, skip the recolor stock generator and fall back
+            to the vanilla icon when no stock came in with the costume. The
+            ISO-scan bulk import passes False to keep a 90-skin import fast.
     """
     try:
         # Load metadata
@@ -209,7 +212,8 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
                     existing_csp=existing_csp, existing_stock=existing_stock,
                     paired_dat_data=paired_dat_data,
                     is_nana=bool(char_info.get('is_nana')),
-                    popo_csp=popo_csp, popo_stock=popo_stock, log=logger)
+                    popo_csp=popo_csp, popo_stock=popo_stock,
+                    allow_stock_gen=allow_stock_gen, log=logger)
                 csp_data, csp_source = assets['csp'], assets['csp_source']
                 stock_data, stock_source = assets['stock'], assets['stock_source']
 

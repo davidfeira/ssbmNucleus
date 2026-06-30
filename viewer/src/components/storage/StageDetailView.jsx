@@ -336,10 +336,6 @@ export default function StageDetailView({
                     </button>
                   </div>
                 </div>
-
-                <div className="skin-info">
-                  <div className="skin-color">{variant.name}</div>
-                </div>
               </div>
             )
           })}

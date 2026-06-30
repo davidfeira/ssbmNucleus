@@ -28,7 +28,7 @@ from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, BACKEND_ASSETS_DIR, get_subprocess_args
 from core.helpers import friendly_iso_open_error, is_incompatible_iso_error
-from core.state import get_current_project_path, reload_mex_manager, metadata_lock, get_socketio
+from core.state import get_current_project_path, reload_mex_manager, metadata_lock, get_socketio, mexcli_lock
 
 logger = logging.getLogger(__name__)
 
@@ -453,16 +453,35 @@ def _sync_costume_meta(entry, char_dir, fighter_data):
     return changed
 
 
+# MexCLI commands that open+save the project workspace. These must hold the
+# project lock so they can't run concurrently with a background costume reorder
+# or an export. Read-only commands (ssm-info, sem-resolve, ssm-to-wav, …) are
+# intentionally omitted so they never block behind a long export.
+_MUTATING_MEXCLI_CMDS = {
+    'add-music', 'set-fighter-music', 'set-fighter-announcer',
+    'set-fighter-announcer-id', 'set-stage-playlist', 'add-series',
+    'import-ssm',
+}
+
+
 def _run_mexcli(*cli_args):
     """Run a MexCLI command, returning the parsed JSON output (or {})."""
-    result = subprocess.run(
-        [str(MEXCLI_PATH), *[str(a) for a in cli_args]],
-        capture_output=True, text=True,
-        cwd=str(PROJECT_ROOT), **get_subprocess_args()
-    )
-    out = _parse_cli_json(result.stdout)
-    out['_returncode'] = result.returncode
-    return out
+    cmd = str(cli_args[0]) if cli_args else ''
+
+    def _exec():
+        result = subprocess.run(
+            [str(MEXCLI_PATH), *[str(a) for a in cli_args]],
+            capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
+        out = _parse_cli_json(result.stdout)
+        out['_returncode'] = result.returncode
+        return out
+
+    if cmd in _MUTATING_MEXCLI_CMDS:
+        with mexcli_lock:
+            return _exec()
+    return _exec()
 
 
 def _find_existing_fighter_with_announcer_call(project_path, announcer_call, skip_internal_id=None):
@@ -1684,10 +1703,11 @@ def _resolve_install_series(entry, char_dir, project_path, mexcli_path):
         if emblem.exists():
             cmd.append(str(emblem))
         logger.info(f"Creating series '{name}' in project: {' '.join(cmd)}")
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
         if result.returncode == 0:
             out = _parse_cli_json(result.stdout)
             if 'seriesId' in out:
@@ -1779,10 +1799,11 @@ def install_custom_character():
         cmd = [mexcli_path, 'add-fighter', str(project_path), str(install_zip)]
         logger.info(f"Installing custom character '{slug}': {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout or 'Unknown error'
@@ -2048,9 +2069,10 @@ def install_custom_characters_batch():
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f)
-            result = subprocess.run(
-                [mexcli_path, 'add-fighters', str(project_path), manifest_path],
-                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+            with mexcli_lock:
+                result = subprocess.run(
+                    [mexcli_path, 'add-fighters', str(project_path), manifest_path],
+                    capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
         finally:
             try:
                 os.unlink(manifest_path)
@@ -2136,10 +2158,11 @@ def install_custom_character_skin():
             install_zip = temp_zip
 
         cmd = [mexcli_path, 'import-costume', str(project_path), fighter_name, str(install_zip)]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
         if result.returncode != 0:
             err = result.stderr or result.stdout or 'unknown error'
             logger.warning(f"import-costume failed for skin '{skin_id}' of '{slug}': {err}")
@@ -2176,10 +2199,11 @@ def remove_custom_character_from_project():
         cmd = [mexcli_path, 'remove-fighter', str(project_path), fighter_name]
         logger.info(f"Removing fighter '{fighter_name}': {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout or 'Unknown error'

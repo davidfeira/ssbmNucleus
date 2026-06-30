@@ -22,6 +22,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
   const [exporting, setExporting] = useState(false)
   const [generatingStock, setGeneratingStock] = useState(false)
   const [pendingGeneratedStock, setPendingGeneratedStock] = useState(null) // { dataUri, method }
+  const [generatingCsp, setGeneratingCsp] = useState(false)
+  const [pendingGeneratedCsp, setPendingGeneratedCsp] = useState(null) // { dataUri, poseName }
 
   // Confirm dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -57,6 +59,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     setNewStock(null)
     setStockPreview(null)
     setPendingGeneratedStock(null)
+    setPendingGeneratedCsp(null)
     setEditSlippiSafe(type === 'stage' ? data.slippi_safe : null)
     setShowEditModal(true)
   }
@@ -395,6 +398,85 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     playSound('back')
   }
 
+  // Re-render ("retake") the costume's character-select portrait with the
+  // headless renderer, using whichever pose is currently active (the default
+  // pose unless a custom-pose alternate is active). Nothing is written yet --
+  // the fresh render is held in pendingGeneratedCsp until confirm/discard.
+  const handleRetakeCsp = async () => {
+    if (!editingItem || editingItem.type !== 'costume') return
+    setGeneratingCsp(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/generate-csp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id
+        })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        playSound('error')
+        alert(`Portrait render failed: ${data.error}`)
+        return
+      }
+
+      // Clear any pending manual CSP upload; the retake preview takes over
+      setNewCsp(null)
+      setCspPreview(null)
+      setPendingGeneratedCsp({ dataUri: data.dataUri, poseName: data.poseName })
+      playSound('boop')
+    } catch (err) {
+      playSound('error')
+      alert(`Portrait render error: ${err.message}`)
+    } finally {
+      setGeneratingCsp(false)
+    }
+  }
+
+  // Write the previewed portrait for real (replaces the active portrait -- the
+  // original CSP, or the active pose alternate -- on the backend).
+  const confirmGeneratedCsp = async () => {
+    if (!editingItem || !pendingGeneratedCsp) return
+    setGeneratingCsp(true)
+    try {
+      const response = await fetch(`${API_URL}/storage/costumes/generate-csp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: editingItem.data.character,
+          skinId: editingItem.data.id,
+          apply: true,
+          imageData: pendingGeneratedCsp.dataUri
+        })
+      })
+      const data = await response.json()
+      if (!data.success) {
+        playSound('error')
+        alert(`Portrait save failed: ${data.error}`)
+        return
+      }
+      setPendingGeneratedCsp(null)
+      setEditingItem(prev => prev ? {
+        ...prev,
+        data: { ...prev.data, has_csp: true }
+      } : prev)
+      await onRefresh()
+      setLastImageUpdate(Date.now())
+      playSound('camera')
+    } catch (err) {
+      playSound('error')
+      alert(`Portrait save error: ${err.message}`)
+    } finally {
+      setGeneratingCsp(false)
+    }
+  }
+
+  const discardGeneratedCsp = () => {
+    setPendingGeneratedCsp(null)
+    playSound('back')
+  }
+
   // Delete item - shows confirmation dialog
   const handleDelete = () => {
     const itemName = editingItem.type === 'costume'
@@ -538,6 +620,7 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     setNewStock(null)
     setStockPreview(null)
     setPendingGeneratedStock(null)
+    setPendingGeneratedCsp(null)
     setEditSlippiSafe(null)
   }
 
@@ -554,6 +637,8 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     exporting,
     generatingStock,
     pendingGeneratedStock,
+    generatingCsp,
+    pendingGeneratedCsp,
     newScreenshot,
     screenshotPreview,
     newCsp,
@@ -580,6 +665,9 @@ export function useEditModal({ API_URL, onRefresh, fetchStageVariants, setLastIm
     handleGenerateStock,
     confirmGeneratedStock,
     discardGeneratedStock,
+    handleRetakeCsp,
+    confirmGeneratedCsp,
+    discardGeneratedCsp,
     handleSave,
     handleDelete,
     handleExport,

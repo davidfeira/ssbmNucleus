@@ -5966,6 +5966,17 @@
   transition: color 0.2s ease;
 }
 
+/* Label placed inside the image box (character "Create New Mod" card): anchor
+   it to the bottom so the card stays the same height as the skin cards, while
+   the + icon remains centered in the box. */
+.create-mod-image-area > .create-mod-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--space-3);
+  pointer-events: none;
+}
+
 .create-mod-card:hover .create-mod-label {
   color: var(--color-cyan);
 }

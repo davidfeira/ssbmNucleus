@@ -8,7 +8,6 @@
 import { useState } from 'react'
 import { hasExtras } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
-import HexagonLoader from '../../shared/HexagonLoader'
 import PaginationBar from '../../shared/PaginationBar'
 import usePagination from '../../shared/usePagination'
 import SoundPacksModal from '../../storage/SoundPacksModal'
@@ -56,7 +55,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
     batchProgress,
     draggedIndex,
     dragOverIndex,
-    reordering,
+    syncingOrder,
     selectedTeamColor,
     availableListRef,
     handleTeamColorClick,
@@ -116,6 +115,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
               <h3>
                 In ISO ({dataReady ? `${mexCostumes.length}/${PER_FIGHTER_COSTUME_CAP}` : 'Loading...'})
                 {selectedInstalledCostumes.size > 0 && ` - ${selectedInstalledCostumes.size} selected`}
+                {syncingOrder && <span className="order-saving-badge" title="Saving the new costume order to the project — other actions are locked until this finishes.">Saving order…</span>}
               </h3>
               <div className="iso-mod-actions">
                 {selectedInstalledCostumes.size > 0 && (
@@ -124,7 +124,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                       className="btn-batch-import btn-batch-delete"
                       onMouseEnter={playHoverSound}
                       onClick={() => { playSound('start'); handleBatchRemoveCostumes(); }}
-                      disabled={removing || reordering || selectedTeamColor !== null}
+                      disabled={removing || syncingOrder || selectedTeamColor !== null}
                     >
                       Delete Selected ({selectedInstalledCostumes.size})
                     </button>
@@ -132,7 +132,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                       className="btn-clear-selection"
                       onMouseEnter={playHoverSound}
                       onClick={() => { playSound('boop'); clearInstalledCostumeSelection(); }}
-                      disabled={removing || reordering}
+                      disabled={removing || syncingOrder}
                     >
                       Clear
                     </button>
@@ -143,6 +143,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     className="btn-extras-mode"
                     onMouseEnter={playHoverSound}
                     onClick={() => { playSound('boop'); onEnterExtras(); }}
+                    disabled={syncingOrder}
                   >
                     Extras
                   </button>
@@ -152,7 +153,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     className="btn-pose-all"
                     onClick={() => { playSound('boop'); onApplyPose(); }}
                     onMouseEnter={playHoverSound}
-                    disabled={!dataReady || mexCostumes.length === 0}
+                    disabled={!dataReady || mexCostumes.length === 0 || syncingOrder}
                     title="Apply a pose to all portraits"
                   >
                     <PoseIcon />
@@ -177,18 +178,18 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                 ].map(c => (
                   <div
                     key={c.id}
-                    className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''}`}
+                    className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''} ${syncingOrder ? 'disabled' : ''}`}
                     style={{ '--token-color': c.color }}
-                    onClick={() => handleTeamColorClick(c.id)}
+                    onClick={() => { if (!syncingOrder) handleTeamColorClick(c.id) }}
                     onMouseEnter={playHoverSound}
-                    title={`${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click to assign`}
+                    title={syncingOrder ? 'Saving order… team colors are locked until it finishes' : `${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click to assign`}
                   >
                     {c.label}
                   </div>
                 ))}
               </div>
             </div>
-            <div className={`costume-list existing ${reordering ? 'processing' : ''} ${loadingFighter ? 'processing' : ''}`}>
+            <div className={`costume-list existing ${loadingFighter ? 'processing' : ''}`}>
               {mexCostumes.slice(inIsoPager.start, inIsoPager.end).map((costume, i) => {
                 const idx = inIsoPager.start + i
                 const isDragging = draggedIndex === idx
@@ -201,7 +202,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     key={idx}
                     className={`costume-card existing-costume ${isDeleteSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
                     style={{ animationDelay: dataReady ? `${Math.min(i * 30, 990)}ms` : '0ms' }}
-                    draggable={!removing && !reordering && !isTeamAssignable}
+                    draggable={!removing && !isTeamAssignable}
                     onMouseEnter={playHoverSound}
                     onClick={isTeamAssignable ? () => handleCostumeTeamAssign(idx) : undefined}
                     onDragStart={(e) => !isTeamAssignable && handleDragStart(e, idx)}
@@ -218,7 +219,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                         checked={isDeleteSelected}
                         onClick={(e) => e.stopPropagation()}
                         onChange={() => { playSound('boop'); toggleInstalledCostumeSelection(selectedFighter.name, idx); }}
-                        disabled={removing || reordering || isTeamAssignable}
+                        disabled={removing || syncingOrder || isTeamAssignable}
                         title="Select for delete"
                       />
                       {costume.cspUrl && (
@@ -234,7 +235,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                           e.stopPropagation()
                           handleRemoveCostume(selectedFighter.name, idx, costume.name)
                         }}
-                        disabled={removing}
+                        disabled={removing || syncingOrder}
                         title="Remove costume"
                       >
                         ×
@@ -276,12 +277,6 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
               )}
             </div>
             <PaginationBar pager={inIsoPager} />
-            {reordering && (
-              <div className="reorder-overlay">
-                <HexagonLoader className="reorder-loader" size={46} decorative />
-                <span>Reordering...</span>
-              </div>
-            )}
           </div>
 
           <div className="costumes-section">
@@ -296,7 +291,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                     className="btn-select-all"
                     onMouseEnter={playHoverSound}
                     onClick={() => { playSound('boop'); selectAllCostumes(); }}
-                    disabled={loadingFighter || batchImporting}
+                    disabled={loadingFighter || batchImporting || syncingOrder}
                   >
                     Select All
                   </button>
@@ -307,7 +302,7 @@ export default function CostumesPanel({ selectedFighter, refreshing, cm, API_URL
                       className="btn-batch-import"
                       onMouseEnter={playHoverSound}
                       onClick={() => { playSound('start'); handleBatchImport(); }}
-                      disabled={batchImporting || loadingFighter}
+                      disabled={batchImporting || loadingFighter || syncingOrder}
                     >
                       {batchImporting
                         ? `Importing ${batchProgress.current}/${batchProgress.total}...`

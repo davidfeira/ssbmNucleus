@@ -278,20 +278,39 @@ def delete_storage_costume():
             return jsonify({'success': False, 'error': f'Skin {skin_id} not found for {character}'}), 404
 
         char_folder = STORAGE_PATH / character
-        zip_file = char_folder / skin_to_delete['filename']
-        csp_file = char_folder / f"{skin_id}_csp.png"
-        stc_file = char_folder / f"{skin_id}_stc.png"
+
+        # Every on-disk file this skin owns: the costume zip plus ALL derived
+        # portraits — SD CSP, HD CSP, stock, and every alternate-pose CSP.
+        # Older deletes only removed _csp.png/_stc.png, which orphaned the HD
+        # and alternate PNGs in the character folder; collect them all here.
+        names = {
+            skin_to_delete.get('filename') or f"{skin_id}.zip",
+            skin_to_delete.get('csp_filename') or f"{skin_id}_csp.png",
+            skin_to_delete.get('hd_csp_filename') or f"{skin_id}_csp_hd.png",
+            f"{skin_id}_csp.png",
+            f"{skin_id}_csp_hd.png",
+            f"{skin_id}_stc.png",
+        }
+        for alt in skin_to_delete.get('alternate_csps', []):
+            if alt.get('filename'):
+                names.add(alt['filename'])
 
         deleted_files = []
-        if zip_file.exists():
-            zip_file.unlink()
-            deleted_files.append(str(zip_file))
-        if csp_file.exists():
-            csp_file.unlink()
-            deleted_files.append(str(csp_file))
-        if stc_file.exists():
-            stc_file.unlink()
-            deleted_files.append(str(stc_file))
+        for name in names:
+            f = char_folder / name
+            if f.exists():
+                f.unlink()
+                deleted_files.append(str(f))
+
+        # Belt-and-suspenders: sweep any alternate CSP PNGs that match this
+        # skin's id but weren't tracked in metadata. The literal `_csp_alt_`
+        # anchor keeps it from matching a longer sibling id; glob.escape guards
+        # ids containing glob specials (e.g. "plmrbu[mrsonic]").
+        import glob as _glob
+        for p in _glob.glob(_glob.escape(str(char_folder / skin_id)) + '_csp_alt_*.png'):
+            if p not in deleted_files:
+                os.unlink(p)
+                deleted_files.append(p)
 
         skins.pop(skin_index)
 
@@ -992,6 +1011,202 @@ def generate_costume_stock():
                                    + base64.b64encode(stock_data).decode('ascii')})
     except Exception as e:
         logger.error(f"Generate stock error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _resolve_active_portrait(skin_meta):
+    """Resolve the costume's currently active portrait from metadata.
+
+    Returns (active_alt, pose_name): the active alternate dict (None when the
+    original/default CSP is active) and its pose name (None = default pose). A
+    swap stores active_csp_id pointing at the SD member of a pose group, but we
+    fold an HD pointer back to its SD sibling just in case.
+    """
+    skin_meta = skin_meta or {}
+    alt_csps = skin_meta.get('alternate_csps', [])
+    active_csp_id = skin_meta.get('active_csp_id')
+    if not active_csp_id:
+        return None, None
+    active_alt = next((a for a in alt_csps if a.get('id') == active_csp_id), None)
+    if active_alt and active_alt.get('is_hd'):
+        active_alt = next((a for a in alt_csps
+                           if a.get('pose_name') == active_alt.get('pose_name')
+                           and not a.get('is_hd')), active_alt)
+    pose_name = active_alt.get('pose_name') if active_alt else None
+    return active_alt, pose_name
+
+
+@storage_costumes_bp.route('/api/mex/storage/costumes/generate-csp', methods=['POST'])
+def generate_costume_csp():
+    """Re-render ("retake") a vault costume's character-select portrait with the
+    headless HSDRaw renderer, using whichever pose is currently active for the
+    skin -- the original/default pose unless a custom-pose alternate is the
+    active portrait in the CSP manager.
+
+    Two-step flow so nothing is overwritten without the user's say-so (mirrors
+    generate-stock):
+      {character, skinId}                   -> preview: {dataUri, poseName};
+                                               nothing is written
+      {character, skinId, apply, imageData} -> writes the previewed portrait to
+                                               the active portrait (original CSP
+                                               + HD, or the active pose alternate)
+    """
+    try:
+        import base64
+
+        data = request.json or {}
+        character = data.get('character')
+        skin_id = data.get('skinId')
+
+        if not character or not skin_id:
+            return jsonify({'success': False, 'error': 'Missing character or skinId parameter'}), 400
+
+        char_folder = STORAGE_PATH / character
+        zip_path = char_folder / f"{skin_id}.zip"
+        if not zip_path.exists():
+            return jsonify({'success': False, 'error': f'Costume zip not found: {skin_id}'}), 404
+
+        metadata = load_metadata()
+        skin_meta = None
+        if metadata is not None:
+            char_data = get_char_data(metadata, character)
+            if char_data is not None:
+                skin_meta = next((s for s in char_data.get('skins', [])
+                                  if s['id'] == skin_id), None)
+
+        active_alt, pose_name = _resolve_active_portrait(skin_meta)
+
+        # ---- apply: write the render the user already previewed -------------
+        if data.get('apply'):
+            image_data = data.get('imageData') or ''
+            if ',' in image_data:
+                image_data = image_data.split(',', 1)[1]
+            try:
+                raw = base64.b64decode(image_data)
+            except Exception:
+                raw = b''
+            if not raw:
+                return jsonify({'success': False, 'error': 'No previewed portrait to apply'}), 400
+
+            # The preview is the HD render; split it into the in-game SD texture
+            # and the (capped) HD vault preview, exactly like a manual upload.
+            sd_data, hd_data = derive_csp_versions(raw)
+            alt_csps = (skin_meta or {}).get('alternate_csps', [])
+
+            if active_alt:
+                # Active custom-pose alternate: overwrite its SD (+ HD) in place.
+                sd_filename = active_alt.get('filename')
+                (char_folder / sd_filename).write_bytes(sd_data)
+                active_alt['timestamp'] = datetime.now().isoformat()
+                if hd_data:
+                    hd_alt = next((a for a in alt_csps
+                                   if a.get('pose_name') == pose_name and a.get('is_hd')), None)
+                    if hd_alt:
+                        (char_folder / hd_alt.get('filename')).write_bytes(hd_data)
+                        hd_alt['timestamp'] = datetime.now().isoformat()
+                    else:
+                        hd_filename = f"{skin_id}_csp_alt_{len(alt_csps) + 1}_hd.png"
+                        (char_folder / hd_filename).write_bytes(hd_data)
+                        alt_csps.append({
+                            'id': f"alt_{int(time.time())}_hd",
+                            'filename': hd_filename,
+                            'pose_name': pose_name,
+                            'is_hd': True,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                if metadata is not None:
+                    save_metadata(metadata)
+                logger.info(f"[OK] Retook CSP for {character} - {skin_id} (pose '{pose_name}')")
+                return jsonify({'success': True,
+                                'cspUrl': f"/storage/{character}/{sd_filename}"})
+
+            # Original/default portrait: SD into standalone + zip, HD standalone.
+            csp_filename = f"{skin_id}_csp.png"
+            (char_folder / csp_filename).write_bytes(sd_data)
+            temp_zip = char_folder / f"{skin_id}_temp.zip"
+            with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as dest_zip:
+                    for item in source_zip.infolist():
+                        if item.filename.lower() not in ['csp.png', 'csp']:
+                            dest_zip.writestr(item, source_zip.read(item.filename))
+                    dest_zip.writestr('csp.png', sd_data)
+            zip_path.unlink()
+            temp_zip.rename(zip_path)
+
+            hd_filename = None
+            hd_size = None
+            if hd_data:
+                hd_filename = f"{skin_id}_csp_hd.png"
+                (char_folder / hd_filename).write_bytes(hd_data)
+                from PIL import Image
+                from io import BytesIO
+                with Image.open(BytesIO(hd_data)) as img:
+                    hd_size = f"{img.size[0]}x{img.size[1]}"
+
+            if metadata is not None and skin_meta is not None:
+                skin_meta['has_csp'] = True
+                skin_meta['csp_source'] = 'generated'
+                skin_meta['csp_filename'] = csp_filename
+                skin_meta.pop('csp_pose_name', None)
+                if hd_filename:
+                    skin_meta['has_hd_csp'] = True
+                    skin_meta['hd_csp_source'] = 'generated'
+                    skin_meta['hd_csp_filename'] = hd_filename
+                    skin_meta['hd_csp_resolution'] = '4x'
+                    skin_meta['hd_csp_size'] = hd_size
+                save_metadata(metadata)
+
+            logger.info(f"[OK] Retook CSP for {character} - {skin_id} (default pose)")
+            return jsonify({'success': True,
+                            'cspUrl': f"/storage/{character}/{csp_filename}",
+                            'hasHd': bool(hd_data)})
+
+        # ---- preview: render now at HD, return a data URI, write nothing ----
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tdir = Path(temp_dir)
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(tdir)
+            dat_file = find_extracted_costume_archive(tdir)
+            if not dat_file:
+                return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 400
+
+            scale = 4  # render HD; the in-game SD is derived from it on apply
+
+            # A custom pose drives the render through its saved scene YAML + the
+            # character's AJ animations (same path the CSP manager's HD regen
+            # uses); the default portrait goes through the canonical generator
+            # (character auto-detect, per-costume low-poly slot, Fox gun, ICs).
+            csp_output = None
+            if pose_name:
+                pose_path = VANILLA_ASSETS_DIR / 'custom_poses' / character / f"{pose_name}.yml"
+                if pose_path.exists():
+                    camera_file = None
+                    char_prefix = get_char_prefix(character)
+                    if char_prefix:
+                        aj_file = VANILLA_ASSETS_DIR / character / f"{char_prefix}AJ.dat"
+                        if aj_file.exists():
+                            camera_file = str(aj_file)
+                    csp_output = generate_single_csp_internal(
+                        str(dat_file), character, str(pose_path), camera_file, scale)
+                    if csp_output and Path(csp_output).exists():
+                        apply_character_specific_layers(csp_output, character, scale)
+            if not csp_output:
+                # default pose, or pose YAML missing -> fall back to default
+                csp_output = generate_csp(str(dat_file), scale=scale)
+
+            if not csp_output or not Path(csp_output).exists():
+                return jsonify({'success': False,
+                                'error': 'Failed to render a portrait for this costume'}), 500
+
+            png_bytes = Path(csp_output).read_bytes()
+
+        pose_label = pose_name or 'Default'
+        logger.info(f"[OK] Previewed retaken CSP for {character} - {skin_id} (pose '{pose_label}')")
+        return jsonify({'success': True, 'poseName': pose_label,
+                        'dataUri': 'data:image/png;base64,'
+                                   + base64.b64encode(png_bytes).decode('ascii')})
+    except Exception as e:
+        logger.error(f"Generate CSP error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

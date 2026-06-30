@@ -48,6 +48,11 @@ export default function EditModal({
   onDiscardGeneratedStock,
   pendingGeneratedStock,
   generatingStock,
+  onRetakeCsp,
+  onConfirmGeneratedCsp,
+  onDiscardGeneratedCsp,
+  pendingGeneratedCsp,
+  generatingCsp,
   onScreenshotChange,
   onSlippiRetest,
   onSlippiOverride,
@@ -168,7 +173,14 @@ export default function EditModal({
               <div className="edit-modal-csp-section">
                 <div className="edit-modal-csp-stage">
                 <div className="edit-modal-csp-container" style={{ '--panel-aspect': panelAspect || 0.75 }}>
-                  {cspPreview ? (
+                  {pendingGeneratedCsp ? (
+                    <img
+                      src={pendingGeneratedCsp.dataUri}
+                      alt="Retaken portrait preview"
+                      className="edit-modal-csp-image"
+                      onLoad={handleHeroImageLoad}
+                    />
+                  ) : cspPreview ? (
                     <img
                       src={cspPreview}
                       alt="New CSP preview"
@@ -186,6 +198,22 @@ export default function EditModal({
                   ) : (
                     <div className="edit-modal-csp-placeholder">
                       <span>{editingItem.data.color[0]}</span>
+                    </div>
+                  )}
+                  {generatingCsp && (
+                    <div
+                      className="edit-modal-csp-rendering-overlay"
+                      style={{
+                        position: 'absolute', inset: 0, zIndex: 5,
+                        display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                        alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(8,8,16,0.78)', borderRadius: 'inherit'
+                      }}
+                    >
+                      <HexagonLoader size={72} label="Rendering" />
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85em' }}>
+                        Rendering portrait…
+                      </span>
                     </div>
                   )}
                   <input
@@ -209,6 +237,34 @@ export default function EditModal({
                 </div>
                 </div>
                 <div className="edit-modal-csp-label">Character Select Portrait</div>
+
+                {/* Retaken portrait: confirm before the active portrait is
+                    replaced (the hero above already shows the fresh render) */}
+                {pendingGeneratedCsp && (
+                  <div className="edit-modal-stock-confirm">
+                    <div className="edit-modal-csp-confirm-note">
+                      New render{pendingGeneratedCsp.poseName ? ` · ${pendingGeneratedCsp.poseName} pose` : ''}
+                    </div>
+                    <div className="edit-modal-stock-confirm-actions">
+                      <button
+                        className="edit-modal-stock-confirm-btn edit-modal-stock-confirm-btn--yes"
+                        onClick={onConfirmGeneratedCsp}
+                        disabled={generatingCsp}
+                        title="Replace the portrait with this fresh render"
+                      >
+                        ✓ Use it
+                      </button>
+                      <button
+                        className="edit-modal-stock-confirm-btn"
+                        onClick={onDiscardGeneratedCsp}
+                        disabled={generatingCsp}
+                        title="Keep the current portrait"
+                      >
+                        ✗ Discard
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Stock Icon under the CSP */}
                 <div className="edit-modal-stock-container edit-modal-stock-container--under-csp">
@@ -347,6 +403,27 @@ export default function EditModal({
                       <path d="M7 12l5 2 5-2"></path>
                     </svg>
                     <span>Manage Poses</span>
+                  </button>
+                )}
+
+                {/* Retake CSP Button — re-render the portrait with the active pose */}
+                {onRetakeCsp && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={onRetakeCsp}
+                    disabled={saving || deleting || exporting || testingInGame || generatingCsp}
+                    title="Re-render the character-select portrait from this costume using the active pose (usually the default pose)"
+                  >
+                    {generatingCsp ? (
+                      <span className="edit-modal-action-spinner"></span>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                      </svg>
+                    )}
+                    <span>{generatingCsp ? 'Rendering…' : 'Retake CSP'}</span>
                   </button>
                 )}
 

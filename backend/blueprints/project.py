@@ -17,7 +17,7 @@ from core.config import (
 )
 from core.state import (
     get_mex_manager, set_project_path, get_current_project_path, clear_project_path,
-    get_project_files_dir, reload_mex_manager
+    get_project_files_dir, reload_mex_manager, mexcli_lock
 )
 from core.constants import VANILLA_COSTUME_COUNT
 from core.helpers import calculate_auto_compression
@@ -117,16 +117,19 @@ def project_strip():
         return jsonify({'success': False, 'error': str(e)}), 400
     freed, removed = 0, 0
     try:
-        for p in list(files_dir.rglob('*')):
-            if p.is_file() and _disc_category(p.name) in targets:
-                try:
-                    sz = p.stat().st_size
-                    p.unlink()
-                    freed += sz
-                    removed += 1
-                except OSError as fe:
-                    logger.warning(f"strip: could not remove {p.name}: {fe}")
-        reload_mex_manager()  # next export/status re-reads files/ from disk
+        # Hold the project lock: this rewrites the workspace's files/ dir, so it
+        # must not run while a background reorder / export has the project open.
+        with mexcli_lock:
+            for p in list(files_dir.rglob('*')):
+                if p.is_file() and _disc_category(p.name) in targets:
+                    try:
+                        sz = p.stat().st_size
+                        p.unlink()
+                        freed += sz
+                        removed += 1
+                    except OSError as fe:
+                        logger.warning(f"strip: could not remove {p.name}: {fe}")
+            reload_mex_manager()  # next export/status re-reads files/ from disk
         logger.info(f"strip {sorted(targets)}: removed {removed} files, freed {freed} bytes")
         return jsonify({'success': True, 'removed': removed, 'freedBytes': freed,
                         'targets': sorted(targets)})
@@ -786,9 +789,12 @@ def set_team_color(fighter_name):
         field_name = f'{color}CostumeIndex'
         fighter_data[field_name] = costume_index
 
-        # Write back to file
-        with open(fighter_json_path, 'w', encoding='utf-8') as f:
-            json.dump(fighter_data, f, indent=2)
+        # Write back to file. Take the workspace lock so this fighter-JSON write
+        # can't land in the middle of a background reorder's workspace save
+        # (which rewrites the same fighter JSONs).
+        with mexcli_lock:
+            with open(fighter_json_path, 'w', encoding='utf-8') as f:
+                json.dump(fighter_data, f, indent=2)
 
         logger.info(f"Set {color} team color for {fighter_name} to costume index {costume_index}")
 
@@ -840,7 +846,8 @@ def set_build_info():
         if not payload:
             return jsonify({'success': False, 'error': 'No fields to update'}), 400
 
-        result = get_mex_manager().set_build(payload)
+        with mexcli_lock:
+            result = get_mex_manager().set_build(payload)
         logger.info("Updated disc banner info: %s",
                     [k for k in payload if k != 'bannerPngBase64'])
         return jsonify(result)

@@ -79,7 +79,16 @@ namespace HSDRawViewer.Rendering.Models
         public Vector3 OverlayColor { get; set; } = Vector3.One;
 
 
-        private readonly Dictionary<byte[], int> imageBufferTextureIndex = new();
+        // Keyed on (image data, TLUT data). Palettized textures frequently SHARE
+        // one image-data blob -- e.g. an exporter dedupes identical all-zero "color
+        // swatch" pixels -- while each carries a DIFFERENT TLUT holding its real
+        // color. Keying on image data alone collapsed them to a single decode, so
+        // every part drew the first palette's color (Vader's per-part swatches all
+        // rendered dark -> a black silhouette). The TLUT must be part of the key.
+        private readonly Dictionary<(byte[] img, byte[] tlut), int> imageBufferTextureIndex = new();
+
+        private static (byte[], byte[]) TexCacheKey(HSD_TOBJ t)
+            => (t?.ImageData?.ImageData, t?.TlutData?.TlutData);
 
         /// <summary>
         /// collection of renderable dobjs
@@ -570,6 +579,22 @@ namespace HSDRawViewer.Rendering.Models
         /// </summary>
         private void RenderJObjDisplay(Camera camera)
         {
+            if (Environment.GetEnvironmentVariable("CSP_DOBJ_DEBUG") == "1")
+            {
+                int tot = RenderDobjs.Count, noP = 0, hid = 0, br = 0, op = 0, xl = 0, ne = 0;
+                foreach (var e in RenderDobjs)
+                {
+                    if (e.PObjs.Count == 0) noP++;
+                    if (!DisplayObject(e.Visible, e.Selected)) hid++;
+                    if (!e.Parent.BranchVisible) br++;
+                    bool mx = e._dobj.Mobj.RenderFlags.HasFlag(RENDER_MODE.XLU);
+                    bool inOpa = !mx && e.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.OPA);
+                    bool inXlu = mx && (e.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.XLU) || e.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.TEXEDGE));
+                    if (inOpa) op++; else if (inXlu) xl++; else ne++;
+                }
+                Console.WriteLine($"[cspdbg] dobjs={tot} noPobj={noP} hidden={hid} branchHidden={br} opaPass={op} xluPass={xl} neither={ne}");
+            }
+
             // render opaque dobjs first
             foreach (RenderDObj opa in RenderDobjs.Where(e => !e._dobj.Mobj.RenderFlags.HasFlag(RENDER_MODE.XLU) && e.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.OPA)))
             {
@@ -634,6 +659,8 @@ namespace HSDRawViewer.Rendering.Models
                 // render pobjs
                 foreach (RenderPObj p in dobj.PObjs)
                 {
+                    if (Environment.GetEnvironmentVariable("CSP_DOBJ_DEBUG") == "1" && p.DisplayLists.Count == 0)
+                        Console.WriteLine($"[cspdbg] pobj has 0 display lists");
                     // get flags
                     POBJ_FLAG pobjflags = p.pobj.Flags;
 
@@ -679,6 +706,10 @@ namespace HSDRawViewer.Rendering.Models
                     foreach (CachedDL dl in p.DisplayLists)
                         GL.DrawArrays(dl.PrimType, dl.Offset, dl.Count);
                 }
+            }
+            else if (Environment.GetEnvironmentVariable("CSP_DOBJ_DEBUG") == "1")
+            {
+                Console.WriteLine($"[cspdbg] EnableBuffers FAILED (pobjs={dobj.PObjs.Count})");
             }
         }
 
@@ -736,6 +767,15 @@ namespace HSDRawViewer.Rendering.Models
 
             // all flag
             bool enableAll = mobj.RenderFlags.HasFlag(RENDER_MODE.DF_ALL);
+            // # of TObjs actually in this material's chain. DF_ALL (RenderMode bit 28)
+            // -- and even a stray RenderMode TEX bit -- must NOT enable a texture UNIT
+            // that has no TObj: the shader would then sample an unbound (black) unit
+            // and the TEV combine multiplies the whole surface to black. (Seen on a
+            // Sonic-over-Mario costume whose body MObj sets DF_ALL but ships a single
+            // texture -> body rendered pure black.) Gate hasTEX by the texture count;
+            // the bind loop below additionally turns on every TObj it actually loads,
+            // covering chains whose real skin sits past the RenderMode TEX bits.
+            int texCount = mobj.Textures?.List?.Count ?? 0;
 
             _shader.SetBoolToInt("no_zupdate", mobj.RenderFlags.HasFlag(RENDER_MODE.NO_ZUPDATE));
             _shader.SetBoolToInt("enableSpecular", parentJOBJ.Flags.HasFlag(JOBJ_FLAG.SPECULAR) && mobj.RenderFlags.HasFlag(RENDER_MODE.SPECULAR));
@@ -747,7 +787,7 @@ namespace HSDRawViewer.Rendering.Models
             // Textures
             for (int i = 0; i < MAX_TEX; i++)
             {
-                _shader.SetBoolToInt($"hasTEX[{i}]", enableAll || mobj.RenderFlags.HasFlag((RENDER_MODE)(1 << (i + 4))));
+                _shader.SetBoolToInt($"hasTEX[{i}]", i < texCount && (enableAll || mobj.RenderFlags.HasFlag((RENDER_MODE)(1 << (i + 4)))));
             }
 
             // initialize bump texture to unused
@@ -812,7 +852,7 @@ namespace HSDRawViewer.Rendering.Models
                         continue;
 
                     // grab texture id
-                    int texid = TextureManager.GetGLID(imageBufferTextureIndex[displayTex.ImageData.ImageData]);
+                    int texid = TextureManager.GetGLID(imageBufferTextureIndex[TexCacheKey(displayTex)]);
 
                     // set texture
                     GL.ActiveTexture(TextureUnit.Texture0 + i);
@@ -827,6 +867,19 @@ namespace HSDRawViewer.Rendering.Models
                     {
                         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureLodBias, tex.LOD.Bias); //640×548
                     }
+
+                    // A texture actually present (and loaded) in the material's TObj
+                    // chain is sampled by the game regardless of the MOBJ RenderMode
+                    // TEX0..7 bits: Melee's HSD_TObjSetup walks the whole chain and the
+                    // TEV stages combine every TObj. Some re-exported/"scrambled"
+                    // costumes carry MORE TObjs than RenderMode TEX flags -- e.g. a
+                    // body material flagged RM=TEX0 but whose real skin is a shared
+                    // atlas at TObj index 3. Gating hasTEX by RenderMode alone then
+                    // samples only TEX0 (a tiny stub) and renders the body flat white
+                    // (cause G). Enabling each present slot here makes its TEV stage
+                    // run, matching the game. (No effect on normal models: their
+                    // RenderMode TEX bits already match the TObjs that load here.)
+                    _shader.SetBoolToInt($"hasTEX[{i}]", true);
 
                     TOBJ_FLAGS flags = tex.Flags;
 
@@ -894,7 +947,7 @@ namespace HSDRawViewer.Rendering.Models
             if (tobj?.ImageData?.ImageData == null)
                 return false;
 
-            if (!imageBufferTextureIndex.ContainsKey(tobj.ImageData.ImageData))
+            if (!imageBufferTextureIndex.ContainsKey(TexCacheKey(tobj)))
             {
                 byte[] rawImageData = tobj.ImageData.ImageData;
                 short width = tobj.ImageData.Width;
@@ -916,13 +969,21 @@ namespace HSDRawViewer.Rendering.Models
                 }
                 catch (Exception ex)
                 {
+                    if (Environment.GetEnvironmentVariable("CSP_DOBJ_DEBUG") == "1")
+                        Console.WriteLine($"[texfail] {width}x{height} fmt={tobj.ImageData.Format} tlut={tobj.TlutData?.ColorCount}: {ex.Message}");
                     System.Diagnostics.Debug.WriteLine($"PreLoadTexture: skipped undecodable texture: {ex.Message}");
                     return false;
                 }
 
+                if (Environment.GetEnvironmentVariable("CSP_DOBJ_DEBUG") == "1" && mips.Count > 0 && mips[0].Length >= 4)
+                {
+                    var _p = mips[0];
+                    Console.WriteLine($"[texdbg] {width}x{height} fmt={tobj.ImageData.Format} tlut={tobj.TlutData?.ColorCount} px0=({_p[0]},{_p[1]},{_p[2]},{_p[3]})");
+                }
+
                 int index = TextureManager.Add(mips, width, height);
 
-                imageBufferTextureIndex.Add(rawImageData, index);
+                imageBufferTextureIndex.Add((rawImageData, tobj.TlutData?.TlutData), index);
                 UpdateLog?.Invoke($"PreLoadTexture: NEW GL texture tmi={index} glId={TextureManager.GetGLID(index)} "
                     + $"{width}x{height} dataLen={rawImageData.Length} "
                     + $"tobj={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(tobj):x8} "
@@ -1275,7 +1336,7 @@ namespace HSDRawViewer.Rendering.Models
 
                     // Get OpenGL texture ID
                     int glTextureId = -1;
-                    if (imageBufferTextureIndex.TryGetValue(tobj.ImageData.ImageData, out int texIndex))
+                    if (imageBufferTextureIndex.TryGetValue(TexCacheKey(tobj), out int texIndex))
                     {
                         glTextureId = TextureManager.GetGLID(texIndex);
                     }
@@ -1723,7 +1784,13 @@ namespace HSDRawViewer.Rendering.Models
             // next frame -- the one refresh path that works for all instances.
             foreach (var arr in oldArrays)
             {
-                imageBufferTextureIndex.Remove(arr);
+                // composite-keyed cache: drop every (image, tlut) entry that shares
+                // this image array so each palette variant rebuilds on next frame.
+                var staleKeys = new List<(byte[] img, byte[] tlut)>();
+                foreach (var k in imageBufferTextureIndex.Keys)
+                    if (ReferenceEquals(k.img, arr)) staleKeys.Add(k);
+                foreach (var k in staleKeys)
+                    imageBufferTextureIndex.Remove(k);
                 _mergedGlIndexes.Remove(arr);
             }
 

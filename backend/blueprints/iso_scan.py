@@ -242,6 +242,12 @@ def import_selected(job_id):
                     result = import_character_costume(
                         tmp_zip, ci, inner_name,
                         auto_fix=auto_fix, custom_name=None,
+                        # Skip the recolor stock generator for bulk scan
+                        # imports -- it is the slow per-skin step. Stocks the
+                        # scan already pulled from the ISO's IfAll table are
+                        # still packed (existing_stock wins); everything else
+                        # gets the vanilla icon instead of a generated one.
+                        allow_stock_gen=False,
                     )
                     if result.get('success'):
                         imported += 1

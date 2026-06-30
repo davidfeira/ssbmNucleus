@@ -132,10 +132,6 @@ export default function SkinCard({
           ✎
         </button>
       </div>
-
-      <div className="skin-info">
-        <div className="skin-color">{skin.color}</div>
-      </div>
     </div>
   )
 }

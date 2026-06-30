@@ -10,7 +10,7 @@ import logging
 from flask import Blueprint, request, jsonify
 
 from core.config import PROJECT_ROOT
-from core.state import get_mex_manager, reload_mex_manager
+from core.state import get_mex_manager, reload_mex_manager, mexcli_lock
 
 # Import MexManagerError for proper exception handling
 import sys
@@ -74,17 +74,18 @@ def import_costume():
         # Nana zip → fighter "Nana" (internalId 11, which is MexCLI's view
         # onto the Nana half of the IC slot). That's the correct path.
         logger.info(f"Calling MexCLI to import costume...")
-        mex = get_mex_manager()
-        result = mex.import_costume(fighter_name, str(full_costume_path))
+        with mexcli_lock:
+            mex = get_mex_manager()
+            result = mex.import_costume(fighter_name, str(full_costume_path))
 
-        logger.info(f"Import result: {json.dumps(result, indent=2)}")
+            logger.info(f"Import result: {json.dumps(result, indent=2)}")
 
-        # Small delay to ensure file system has flushed the write
-        time.sleep(0.15)
+            # Small delay to ensure file system has flushed the write
+            time.sleep(0.15)
 
-        # Force reload to pick up file changes for subsequent requests
-        reload_mex_manager()
-        logger.info(f"Reloaded MEX manager to pick up changes")
+            # Force reload to pick up file changes for subsequent requests
+            reload_mex_manager()
+            logger.info(f"Reloaded MEX manager to pick up changes")
 
         logger.info(f"=== IMPORT COMPLETE ===")
 
@@ -142,10 +143,11 @@ def import_costumes_batch():
 
         logger.info(f"=== BATCH IMPORT ({sum(len(v) for v in manifest.values())} costumes, "
                     f"{len(manifest)} fighters) ===")
-        mex = get_mex_manager()
-        result = mex.import_costumes(manifest)
-        time.sleep(0.15)
-        reload_mex_manager()
+        with mexcli_lock:
+            mex = get_mex_manager()
+            result = mex.import_costumes(manifest)
+            time.sleep(0.15)
+            reload_mex_manager()
         return jsonify({'success': True, 'result': result})
     except MexManagerError as e:
         logger.error(f"Batch import MexManagerError: {e}", exc_info=True)
@@ -191,14 +193,15 @@ def remove_costume():
             }), 400
 
         logger.info(f"Calling MexCLI to remove costume...")
-        mex = get_mex_manager()
-        result = mex.remove_costume(fighter_name, costume_index)
+        with mexcli_lock:
+            mex = get_mex_manager()
+            result = mex.remove_costume(fighter_name, costume_index)
 
-        logger.info(f"Remove result: {json.dumps(result, indent=2)}")
+            logger.info(f"Remove result: {json.dumps(result, indent=2)}")
 
-        # Force reload to pick up file changes for subsequent requests
-        reload_mex_manager()
-        logger.info(f"Reloaded MEX manager to pick up changes")
+            # Force reload to pick up file changes for subsequent requests
+            reload_mex_manager()
+            logger.info(f"Reloaded MEX manager to pick up changes")
 
         logger.info(f"=== REMOVE COMPLETE ===")
 
@@ -256,10 +259,11 @@ def remove_costumes_batch():
 
         logger.info(f"=== BATCH REMOVE ({sum(len(v) for v in manifest.values())} costumes, "
                     f"{len(manifest)} fighters) ===")
-        mex = get_mex_manager()
-        result = mex.remove_costumes(manifest)
-        time.sleep(0.15)
-        reload_mex_manager()
+        with mexcli_lock:
+            mex = get_mex_manager()
+            result = mex.remove_costumes(manifest)
+            time.sleep(0.15)
+            reload_mex_manager()
         return jsonify({'success': True, 'result': result})
     except MexManagerError as e:
         logger.error(f"Batch remove MexManagerError: {e}", exc_info=True)
@@ -317,14 +321,17 @@ def reorder_costume():
             }), 400
 
         logger.info(f"Calling MexCLI to reorder costume...")
-        mex = get_mex_manager()
-        result = mex.reorder_costume(fighter_name, from_index, to_index)
+        # Hold the workspace lock for the whole open+save+reload so a concurrent
+        # export/import/remove can't run a second MexCLI process on the project.
+        with mexcli_lock:
+            mex = get_mex_manager()
+            result = mex.reorder_costume(fighter_name, from_index, to_index)
 
-        logger.info(f"Reorder result: {json.dumps(result, indent=2)}")
+            logger.info(f"Reorder result: {json.dumps(result, indent=2)}")
 
-        # Force reload to pick up file changes for subsequent requests
-        reload_mex_manager()
-        logger.info(f"Reloaded MEX manager to pick up changes")
+            # Force reload to pick up file changes for subsequent requests
+            reload_mex_manager()
+            logger.info(f"Reloaded MEX manager to pick up changes")
 
         logger.info(f"=== REORDER COMPLETE ===")
 

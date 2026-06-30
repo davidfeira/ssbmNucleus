@@ -36,6 +36,9 @@ export function useFileImport({
   const [pendingFile, setPendingFile] = useState(null)
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
   const [duplicateDialogData, setDuplicateDialogData] = useState(null)
+  // Slippi/duplicate actions already chosen for the pending single-file import,
+  // carried across dialogs when a skin trips BOTH gates.
+  const [pendingActions, setPendingActions] = useState({})
 
   const importSingleFile = async (file, slippiAction = null, duplicateAction = null) => {
     const formData = new FormData()
@@ -96,32 +99,10 @@ export function useFileImport({
     return []
   }
 
-  const handleFileImport = async (eventOrFiles, slippiAction = null) => {
-    // Handle slippi action continuation (single file)
-    if (slippiAction && pendingFile) {
-      setImporting(true)
-      setImportMessage('Applying Slippi fix...')
-      try {
-        const data = await importSingleFile(pendingFile, slippiAction)
-        if (data.success) {
-          playSound(data.camera_sound ? 'camera' : 'newSkin')
-          setImportMessage(successMessage(data))
-          await refreshForTypes(new Set([data.type]))
-        } else {
-          playSound('error')
-          setImportMessage(`✗ Import failed: ${data.error}`)
-        }
-      } catch (err) {
-        playSound('error')
-        setImportMessage(`✗ Error: ${err.message}`)
-      }
-      setPendingFile(null)
-      finishSoon(2000)
-      return
-    }
-
+  const handleFileImport = async (eventOrFiles) => {
     const files = normalizeFiles(eventOrFiles)
     if (files.length === 0) return
+    setPendingActions({})
 
     setImporting(true)
     let successCount = 0
@@ -236,47 +217,82 @@ export function useFileImport({
     if (eventOrFiles?.target) eventOrFiles.target.value = null
   }
 
-  const handleSlippiChoice = (choice) => {
-    setShowSlippiDialog(false)
-    if (choice === 'cancel') {
-      setPendingFile(null)
-      setSlippiDialogData(null)
-      return
+  // Re-run a single-file import after a dialog choice, carrying forward any
+  // action already chosen. A skin can trip BOTH gates (a duplicate that's also
+  // not Slippi-safe); answering one dialog then surfaces the OTHER as a fresh
+  // {type, success:false} response. Re-show that dialog instead of rendering it
+  // as "Import failed: undefined" (the old bug). Mirrors useDownloadQueue.
+  const continueImport = async (file, actions) => {
+    if (!file) return
+    setImporting(true)
+    setImportMessage('Importing...')
+    try {
+      const data = await importSingleFile(
+        file, actions.slippiAction || null, actions.duplicateAction || null)
+
+      if (data.type === 'slippi_dialog') {
+        setSlippiDialogData(data)
+        setPendingFile(file)
+        setPendingActions(actions)
+        setShowSlippiDialog(true)
+        setImporting(false)
+        setImportMessage('')
+        return
+      }
+      if (data.type === 'duplicate_dialog') {
+        setDuplicateDialogData(data)
+        setPendingFile(file)
+        setPendingActions(actions)
+        setShowDuplicateDialog(true)
+        setImporting(false)
+        setImportMessage('')
+        return
+      }
+
+      if (data.success) {
+        playSound(data.camera_sound ? 'camera' : 'newSkin')
+        setImportMessage(successMessage(data))
+        await refreshForTypes(new Set([data.type]))
+      } else {
+        playSound('error')
+        setImportMessage(`✗ Import failed: ${data.error || 'Unknown error'}`)
+      }
+    } catch (err) {
+      playSound('error')
+      setImportMessage(`✗ Error: ${err.message}`)
     }
-    handleFileImport(null, choice)
+    setPendingFile(null)
+    setPendingActions({})
+    finishSoon(2000)
   }
 
-  const handleDuplicateChoice = async (choice) => {
-    setShowDuplicateDialog(false)
+  const handleSlippiChoice = (choice) => {
+    setShowSlippiDialog(false)
+    setSlippiDialogData(null)
     const file = pendingFile
-    setPendingFile(null)
-    setDuplicateDialogData(null)
-
-    if (choice === 'import_anyway') {
-      setImporting(true)
-      setImportMessage('Importing...')
-      try {
-        const data = await importSingleFile(file, null, 'import_anyway')
-        if (data.success) {
-          playSound(data.camera_sound ? 'camera' : 'newSkin')
-          setImportMessage(successMessage(data))
-          await refreshForTypes(new Set([data.type]))
-        } else {
-          playSound('error')
-          setImportMessage(`✗ Import failed: ${data.error}`)
-        }
-      } catch (err) {
-        playSound('error')
-        setImportMessage(`✗ Error: ${err.message}`)
-      }
-      finishSoon(2000)
-    } else {
-      // skip
-      setImportMessage('Skipped (already owned)')
-      setTimeout(() => {
-        setImportMessage('')
-      }, 2000)
+    const actions = pendingActions
+    if (choice === 'cancel') {
+      setPendingFile(null)
+      setPendingActions({})
+      return
     }
+    continueImport(file, { ...actions, slippiAction: choice })
+  }
+
+  const handleDuplicateChoice = (choice) => {
+    setShowDuplicateDialog(false)
+    setDuplicateDialogData(null)
+    const file = pendingFile
+    const actions = pendingActions
+    if (choice !== 'import_anyway') {
+      // skip
+      setPendingFile(null)
+      setPendingActions({})
+      setImportMessage('Skipped (already owned)')
+      setTimeout(() => setImportMessage(''), 2000)
+      return
+    }
+    continueImport(file, { ...actions, duplicateAction: 'import_anyway' })
   }
 
   return {

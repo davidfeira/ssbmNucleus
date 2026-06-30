@@ -29,7 +29,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
-from core.state import get_current_project_path
+from core.state import get_current_project_path, mexcli_lock
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +135,15 @@ def _set_stage_playlist(project_file, stage_name, entries):
     """Run set-stage-playlist (entries JSON on stdin). Empty list clears
     the playlist, restoring vanilla default music."""
     from blueprints.custom_characters import _parse_cli_json
-    result = subprocess.run(
-        [str(MEXCLI_PATH), 'set-stage-playlist', str(project_file), stage_name],
-        input=json.dumps(entries),
-        capture_output=True, text=True,
-        cwd=str(PROJECT_ROOT), **get_subprocess_args()
-    )
+    # Workspace-mutating MexCLI call -- hold the project lock (shared with the
+    # background costume reorder / export) so two MexCLI processes can't run at once.
+    with mexcli_lock:
+        result = subprocess.run(
+            [str(MEXCLI_PATH), 'set-stage-playlist', str(project_file), stage_name],
+            input=json.dumps(entries),
+            capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), **get_subprocess_args()
+        )
     out = _parse_cli_json(result.stdout)
     out['_returncode'] = result.returncode
     return out

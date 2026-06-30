@@ -21,7 +21,7 @@ from core.config import STORAGE_PATH, VANILLA_ASSETS_DIR, PROCESSOR_DIR
 from core.constants import CHAR_PREFIXES
 from core.costume_files import find_extracted_costume_archive
 from core.metadata import load_metadata, save_metadata, get_char_data, custom_character_slug
-from core.state import get_mex_manager, reload_mex_manager
+from core.state import get_mex_manager, reload_mex_manager, mexcli_lock
 from generate_csp import generate_single_csp_internal, apply_character_specific_layers
 
 logger = logging.getLogger(__name__)
@@ -1067,9 +1067,10 @@ def apply_pose_finish():
         if mex is None:
             return jsonify({'success': False, 'error': 'No MEX project loaded'}), 400
 
-        result = mex._run_command('recompile-csps', str(mex.project_path))
-        time.sleep(0.15)
-        reload_mex_manager()
+        with mexcli_lock:
+            result = mex._run_command('recompile-csps', str(mex.project_path))
+            time.sleep(0.15)
+            reload_mex_manager()
 
         if not result.get('success'):
             return jsonify({'success': False,

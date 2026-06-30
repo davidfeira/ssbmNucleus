@@ -642,6 +642,44 @@ namespace HSDRawViewer
                     }
                 }
 
+                // m-ex costume accessories (MEX_CostumeSymbol.Accessories[]):
+                // caps, Navi, capes, companions etc. live INSIDE the "mexCostume"
+                // root, NOT as separate JOBJ roots, so the hat splice above never
+                // sees them and they are MISSING from the portrait (e.g. Link-over-
+                // Fox loses his cap + Navi). Each accessory is a standalone model
+                // (RootJoint) authored RELATIVE TO a body bone (AttachBone) -- in
+                // game it follows that bone. The RootJoint is authored in MODEL
+                // space at its bind location (its bind world already sits on
+                // AttachBone). Splice each RootJoint as a top-level child of the
+                // body root (appended AFTER the whole body subtree, so body joint
+                // indices / CSP anim tracks stay aligned) and remember its
+                // AttachBone so we can carry it with that bone's bind->posed delta
+                // after posing (mirrors the hat-follow below, but per-accessory
+                // instead of a single head bone).
+                var mexAccessoryFollow = new List<(HSDRaw.Common.HSD_JOBJ root, int attachBone)>();
+                if (characterJobjNode != null && characterJobjNode.Accessor is HSDRaw.Common.HSD_JOBJ mexBodyRoot)
+                {
+                    var mexRoot = rawFile.Roots.FirstOrDefault(r => r.Name == "mexCostume");
+                    if (mexRoot?.Data is HSDRaw.MEX.MEX_CostumeSymbol mexSym && mexSym.Accessories != null)
+                    {
+                        var accArr = mexSym.Accessories.Array;
+                        int accN = Math.Min(mexSym.AccessoryCount, accArr.Length);
+                        HSDRaw.Common.HSD_JOBJ tail = mexBodyRoot.Child;
+                        for (int ai = 0; ai < accN; ai++)
+                        {
+                            var rj = accArr[ai]?.RootJoint;
+                            if (rj == null) continue;
+                            if (tail == null) { mexBodyRoot.Child = rj; }
+                            else { while (tail.Next != null) tail = tail.Next; tail.Next = rj; }
+                            tail = rj;
+                            mexAccessoryFollow.Add((rj, accArr[ai].AttachBone));
+                            Console.WriteLine($"Spliced mex accessory {ai}: AttachBone={accArr[ai].AttachBone}");
+                        }
+                        if (mexAccessoryFollow.Count > 0)
+                            Console.WriteLine($"Spliced {mexAccessoryFollow.Count} mex costume accessory(ies) for portrait render");
+                    }
+                }
+
                 // Wait for editor to open
                 System.Threading.Thread.Sleep(1000);
 
@@ -655,6 +693,23 @@ namespace HSDRawViewer
                     Console.WriteLine("Creating RenderJObj...");
                     renderJObj = new HSDRawViewer.Rendering.Models.RenderJObj(jobj);
                     Console.WriteLine($"RenderJObj created. DOBJs loaded: {renderJObj.DObjCount}");
+
+                    // The model's material animation (eye / blink texture swaps) lives
+                    // in a SEPARATE *_matanim_joint root that loading the body root
+                    // does NOT pull in. Apply it alongside whichever joint-animation
+                    // path runs below so eye materials show their matanim texture and
+                    // not a stale base placeholder (Tails-over-Fox -> blank grey eyes).
+                    // The CSP renders at frame 0 = the neutral/open eye, so this is
+                    // safe for vanilla costumes (their open-eye base == matanim frame 0).
+                    HSDRaw.Common.Animation.HSD_MatAnimJoint cspMatAnim = null;
+                    {
+                        var cspMatRoot = rawFile.Roots.FirstOrDefault(
+                            r => (r.Name?.Contains("matanim") ?? false)
+                                 && r.Data is HSDRaw.Common.Animation.HSD_MatAnimJoint);
+                        if (cspMatRoot != null)
+                            cspMatAnim = (HSDRaw.Common.Animation.HSD_MatAnimJoint)cspMatRoot.Data;
+                        Console.WriteLine($"CSP matanim: {(cspMatAnim != null ? "found -> will apply" : "none")}");
+                    }
 
                     // Note: We'll hide bones and nodes after loading YAML settings
 
@@ -672,7 +727,7 @@ namespace HSDRawViewer
                             if (sceneSettings.Animation != null)
                             {
                                 Console.WriteLine($"Loading animation from scene file (FrameCount: {sceneSettings.Animation.FrameCount})");
-                                renderJObj.LoadAnimation(sceneSettings.Animation, null, null);
+                                renderJObj.LoadAnimation(sceneSettings.Animation, cspMatAnim, null);
                                 Console.WriteLine("Animation loaded from scene");
                             }
                             else
@@ -740,7 +795,7 @@ namespace HSDRawViewer
                                     if (animRawFile.Roots.Count > 0 && animRawFile.Roots[0].Data is HSD_FigaTree tree)
                                     {
                                         var jointAnim = new JointAnimManager(tree);
-                                        renderJObj.LoadAnimation(jointAnim, null, null);
+                                        renderJObj.LoadAnimation(jointAnim, cspMatAnim, null);
                                         Console.WriteLine($"Animation loaded from AJ file (FrameCount: {jointAnim.FrameCount})");
                                     }
                                     else
@@ -772,7 +827,7 @@ namespace HSDRawViewer
                                 if (animManager != null)
                                 {
                                     Console.WriteLine("Animation loaded successfully");
-                                    renderJObj.LoadAnimation(animManager, null, null);
+                                    renderJObj.LoadAnimation(animManager, cspMatAnim, null);
                                 }
                                 else
                                 {
@@ -1441,6 +1496,53 @@ namespace HSDRawViewer
                         catch (Exception ex)
                         {
                             Console.WriteLine($"Hat head-follow failed: {ex.Message}");
+                        }
+                    }
+
+                    // m-ex accessory follow: each spliced accessory was authored in
+                    // MODEL space at its bind location but is now an inert top-level
+                    // child of the render root, so the posed body left it behind.
+                    // Carry each one along its AttachBone's bind->posed delta and
+                    // bake the result into its SRT so it survives the screenshot's
+                    // per-frame recalc. Same family as the hat-follow above, but
+                    // each accessory tracks its OWN bone.
+                    if (mexAccessoryFollow.Count > 0 && renderJObj?.RootJObj != null)
+                    {
+                        try
+                        {
+                            var rootInv = renderJObj.RootJObj.WorldTransform.Inverted();
+                            int applied = 0;
+                            foreach (var (descRoot, attachBone) in mexAccessoryFollow)
+                            {
+                                var acc = renderJObj.RootJObj.GetJObjFromDesc(descRoot);
+                                var bone = renderJObj.RootJObj.GetJObjAtIndex(attachBone);
+                                if (acc == null || bone == null) continue;
+                                // The accessory is authored in MODEL space at its
+                                // bind location (its bind world already coincides
+                                // with AttachBone), so apply the bone's bind->posed
+                                // DELTA to carry it along -- exactly the separate-root
+                                // hat-follow. (Multiplying by the bone's full posed
+                                // world instead double-counts the bone height and
+                                // throws the accessory off-frame.)
+                                var boneDelta = bone.InvertedTransform * bone.WorldTransform;
+                                var accBind = acc.InvertedTransform.Inverted();
+                                var local = (accBind * boneDelta) * rootInv;
+                                acc.Scale = local.ExtractScale();
+                                var rot = local.ExtractRotationEuler();
+                                acc.Rotation = new OpenTK.Mathematics.Vector4(rot.X, rot.Y, rot.Z, 0);
+                                acc.Translation = local.ExtractTranslation();
+                                applied++;
+                            }
+                            if (applied > 0)
+                            {
+                                renderJObj.RootJObj.RecalculateTransforms(viewport.Camera, true);
+                                viewport.Render();
+                                Console.WriteLine($"Applied attach-bone follow to {applied} mex accessory(ies)");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Mex accessory follow failed: {ex.Message}");
                         }
                     }
 

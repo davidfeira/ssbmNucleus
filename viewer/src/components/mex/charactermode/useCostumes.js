@@ -30,7 +30,15 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   const [draggedIndex, setDraggedIndex] = useState(null)
   const [dragOverIndex, setDragOverIndex] = useState(null)
-  const [reordering, setReordering] = useState(false)
+  // True while costume order changes are being saved to the project in the
+  // BACKGROUND. The UI updates optimistically on drop and never blocks on the
+  // (slow) MexCLI reorder; this just flags that a save is still settling so the
+  // panel can show a subtle indicator and disable conflicting actions.
+  const [syncingOrder, setSyncingOrder] = useState(false)
+  // Pending reorder moves ({ fighter, fromIndex, toIndex }) waiting to be saved,
+  // and a single-flight guard so only one MexCLI reorder runs at a time.
+  const reorderQueueRef = useRef([])
+  const reorderProcessingRef = useRef(false)
 
   // Zelda/Sheik combined view: both fighters' MEX costumes + team colors
   const [pairCostumes, setPairCostumes] = useState({ Zelda: [], Sheik: [] })
@@ -751,57 +759,94 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     }
   }
 
-  const handleDrop = async (e, toIndex) => {
+  // Is `name` the fighter currently on screen? (Zelda/Sheik share one panel, so
+  // either counts as showing the other.)
+  const isVisibleFighter = (name) => !!selectedFighter && (
+    selectedFighter.name === name ||
+    (isZeldaSheikName(selectedFighter.name) && isZeldaSheikName(name))
+  )
+
+  // Drain the pending-reorder queue in the background, one MexCLI reorder at a
+  // time (never two at once -- concurrent MexCLI processes corrupt the project;
+  // the backend also holds a workspace lock as a hard guard). A drag is a SPLICE
+  // move; the /reorder endpoint does adjacent SWAPS, so we replay each move as a
+  // run of adjacent swaps -- the net effect is identical and leaves the saved
+  // order matching the optimistic UI exactly, even across chained drags.
+  const processReorderQueue = async () => {
+    if (reorderProcessingRef.current) return
+    reorderProcessingRef.current = true
+    setSyncingOrder(true)
+    try {
+      while (reorderQueueRef.current.length > 0) {
+        const { fighter, fromIndex, toIndex } = reorderQueueRef.current[0]
+        const step = fromIndex < toIndex ? 1 : -1
+        let failed = false
+        for (let i = fromIndex; i !== toIndex; i += step) {
+          try {
+            const response = await fetch(`${API_URL}/reorder`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fighter, fromIndex: i, toIndex: i + step })
+            })
+            const data = await response.json()
+            if (!data.success) {
+              console.error('Background reorder failed:', data.error)
+              failed = true
+              break
+            }
+          } catch (err) {
+            console.error('Background reorder error:', err)
+            failed = true
+            break
+          }
+        }
+        reorderQueueRef.current.shift()
+        if (failed) {
+          // The saved order no longer matches the optimistic UI. Drop the rest
+          // of the queue and reconcile the view with the real on-disk order.
+          reorderQueueRef.current = []
+          playSound('error')
+          if (isVisibleFighter(fighter)) {
+            await refreshMexCostumes(fighter)
+          }
+          alert('Saving the new costume order failed — restored the last saved order.')
+          break
+        }
+      }
+    } finally {
+      reorderProcessingRef.current = false
+      setSyncingOrder(false)
+    }
+  }
+
+  const handleDrop = (e, toIndex) => {
     e.preventDefault()
 
-    if (draggedIndex === null || draggedIndex === toIndex || reordering) {
+    if (draggedIndex === null || draggedIndex === toIndex) {
+      setDraggedIndex(null)
+      setDragOverIndex(null)
       return
     }
 
     const fromIndex = draggedIndex
 
-    // Optimistically update UI
-    const newCostumes = [...mexCostumes]
-    const [movedItem] = newCostumes.splice(fromIndex, 1)
-    newCostumes.splice(toIndex, 0, movedItem)
-    setMexCostumes(newCostumes)
+    // Optimistically update the visible order -- the user never waits on the
+    // slow save.
+    setMexCostumes(prev => {
+      const next = [...prev]
+      const [movedItem] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, movedItem)
+      return next
+    })
 
     // Clear drag state
     setDraggedIndex(null)
     setDragOverIndex(null)
+    playSound('boop')
 
-    setReordering(true)
-
-    try {
-      const response = await fetch(`${API_URL}/reorder`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fighter: selectedFighter.name,
-          fromIndex: fromIndex,
-          toIndex: toIndex
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        console.log(`✓ Successfully reordered costume from ${fromIndex} to ${toIndex}`)
-        playSound('boop')
-        await fetchMexCostumes(selectedFighter.name)
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-        await fetchMexCostumes(selectedFighter.name)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
-      await fetchMexCostumes(selectedFighter.name)
-    } finally {
-      setReordering(false)
-    }
+    // Queue the save and kick the background drainer.
+    reorderQueueRef.current.push({ fighter: selectedFighter.name, fromIndex, toIndex })
+    processReorderQueue()
   }
 
   const handleDragEnd = () => {
@@ -823,46 +868,28 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     setDragOverIndex(fighterName === draggedRow ? index : null)
   }
 
-  const handlePairDrop = async (e, fighterName, toIndex) => {
+  const handlePairDrop = (e, fighterName, toIndex) => {
     e.preventDefault()
     const fromIndex = draggedIndex
     const sameRow = draggedRow === fighterName
     setDraggedIndex(null)
     setDragOverIndex(null)
     setDraggedRow(null)
-    if (!sameRow || fromIndex === null || fromIndex === toIndex || reordering) {
+    if (!sameRow || fromIndex === null || fromIndex === toIndex) {
       return
     }
 
-    // Optimistically reorder the row
+    // Optimistically reorder the row -- save happens in the background.
     setPairCostumes(prev => {
       const row = [...(prev[fighterName] || [])]
       const [moved] = row.splice(fromIndex, 1)
       row.splice(toIndex, 0, moved)
       return { ...prev, [fighterName]: row }
     })
+    playSound('boop')
 
-    setReordering(true)
-    try {
-      const response = await fetch(`${API_URL}/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fighter: fighterName, fromIndex, toIndex })
-      })
-      const data = await response.json()
-      if (data.success) {
-        console.log(`✓ Reordered ${fighterName} costume from ${fromIndex} to ${toIndex}`)
-        playSound('boop')
-      } else {
-        alert(`Reorder failed: ${data.error}`)
-      }
-    } catch (err) {
-      console.error('Reorder error:', err)
-      alert(`Reorder error: ${err.message}`)
-    } finally {
-      await fetchPair()
-      setReordering(false)
-    }
+    reorderQueueRef.current.push({ fighter: fighterName, fromIndex, toIndex })
+    processReorderQueue()
   }
 
   const getCostumesForFighter = (fighterName) => {
@@ -940,7 +967,7 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
     batchProgress,
     draggedIndex,
     dragOverIndex,
-    reordering,
+    syncingOrder,
     isZeldaSheik,
     pairCostumes,
     draggedRow,

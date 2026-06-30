@@ -15,7 +15,6 @@
 import { useState } from 'react'
 import { hasExtras } from '../../../config/extraTypes'
 import { playSound, playHoverSound } from '../../../utils/sounds'
-import HexagonLoader from '../../shared/HexagonLoader'
 import PaginationBar from '../../shared/PaginationBar'
 import usePagination from '../../shared/usePagination'
 import SoundPacksModal from '../../storage/SoundPacksModal'
@@ -51,7 +50,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
     draggedIndex,
     dragOverIndex,
     draggedRow,
-    reordering,
+    syncingOrder,
     selectedTeamColor,
     availableListRef,
     handleTeamColorClick,
@@ -132,7 +131,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
       <div
         className={`costume-card existing-costume ${isDeleteSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${dataReady ? 'card-visible' : 'card-hidden'} ${isTeamAssignable ? 'team-assignable' : ''}`}
         style={{ animationDelay: dataReady ? `${animDelay}ms` : '0ms' }}
-        draggable={!removing && !reordering && !isTeamAssignable}
+        draggable={!removing && !isTeamAssignable}
         onMouseEnter={playHoverSound}
         onClick={isTeamAssignable ? () => handlePairCostumeTeamAssign(fighterName, idx) : undefined}
         onDragStart={(e) => !isTeamAssignable && handlePairDragStart(e, fighterName, idx)}
@@ -149,7 +148,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
             checked={isDeleteSelected}
             onClick={(e) => e.stopPropagation()}
             onChange={() => { playSound('boop'); toggleInstalledCostumeSelection(fighterName, idx); }}
-            disabled={removing || reordering || isTeamAssignable}
+            disabled={removing || syncingOrder || isTeamAssignable}
             title="Select for delete"
           />
           <span className={`zs-fighter-tag zs-${fighterName.toLowerCase()}`}>{fighterName}</span>
@@ -166,7 +165,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
               e.stopPropagation()
               handleRemoveCostume(fighterName, idx, costume.name)
             }}
-            disabled={removing}
+            disabled={removing || syncingOrder}
             title="Remove costume"
           >
             ×
@@ -211,6 +210,9 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
           {selectedInstalledCostumes.size > 0 && (
             <span className="selection-count-badge">{selectedInstalledCostumes.size} selected</span>
           )}
+          {syncingOrder && (
+            <span className="order-saving-badge" title="Saving the new costume order to the project — other actions are locked until this finishes.">Saving order…</span>
+          )}
           {mismatch && (
             <span
               className="zs-mismatch"
@@ -226,7 +228,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                   className="btn-batch-import btn-batch-delete"
                   onMouseEnter={playHoverSound}
                   onClick={() => { playSound('start'); handleBatchRemoveCostumes(); }}
-                  disabled={removing || reordering || isTeamAssignable}
+                  disabled={removing || syncingOrder || isTeamAssignable}
                 >
                   Delete Selected ({selectedInstalledCostumes.size})
                 </button>
@@ -234,7 +236,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                   className="btn-clear-selection"
                   onMouseEnter={playHoverSound}
                   onClick={() => { playSound('boop'); clearInstalledCostumeSelection(); }}
-                  disabled={removing || reordering}
+                  disabled={removing || syncingOrder}
                 >
                   Clear
                 </button>
@@ -249,6 +251,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                 className="btn-extras-mode"
                 onMouseEnter={playHoverSound}
                 onClick={() => { playSound('boop'); onEnterExtras(); }}
+                disabled={syncingOrder}
               >
                 Extras
               </button>
@@ -264,7 +267,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                   className={`btn-pose-all btn-pose-zs zs-${name.toLowerCase()}`}
                   onClick={() => { playSound('boop'); onApplyPose({ name }); }}
                   onMouseEnter={playHoverSound}
-                  disabled={!dataReady || count === 0}
+                  disabled={!dataReady || count === 0 || syncingOrder}
                   title={`Apply a pose to all ${name} portraits`}
                 >
                   <PoseIcon />
@@ -289,18 +292,18 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
             ].map(c => (
               <div
                 key={c.id}
-                className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''}`}
+                className={`team-color-token ${selectedTeamColor === c.id ? 'selected' : ''} ${syncingOrder ? 'disabled' : ''}`}
                 style={{ '--token-color': c.color }}
-                onClick={() => handleTeamColorClick(c.id)}
+                onClick={() => { if (!syncingOrder) handleTeamColorClick(c.id) }}
                 onMouseEnter={playHoverSound}
-                title={`${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click a Zelda or Sheik costume to assign`}
+                title={syncingOrder ? 'Saving order… team colors are locked until it finishes' : `${c.id.charAt(0).toUpperCase() + c.id.slice(1)} Team - click a Zelda or Sheik costume to assign`}
               >
                 {c.label}
               </div>
             ))}
           </div>
         </div>
-        <div className={`costume-list existing zs-ladder ${reordering ? 'processing' : ''} ${loadingFighter ? 'processing' : ''}`}>
+        <div className={`costume-list existing zs-ladder ${loadingFighter ? 'processing' : ''}`}>
           {Array.from({ length: ladderPager.end - ladderPager.start }, (_, col) => {
             const i = ladderPager.start + col
             const zc = zelda[i]
@@ -332,12 +335,6 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
           )}
         </div>
         <PaginationBar pager={ladderPager} />
-        {reordering && (
-          <div className="reorder-overlay">
-            <HexagonLoader className="reorder-loader" size={46} decorative />
-            <span>Reordering...</span>
-          </div>
-        )}
       </div>
 
       <div className="costumes-section">
@@ -352,7 +349,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                 className="btn-select-all"
                 onMouseEnter={playHoverSound}
                 onClick={() => { playSound('boop'); selectAllCostumes(); }}
-                disabled={loadingFighter || batchImporting}
+                disabled={loadingFighter || batchImporting || syncingOrder}
               >
                 Select All
               </button>
@@ -363,7 +360,7 @@ export default function ZeldaSheikPanel({ refreshing, cm, API_URL, selectedFight
                   className="btn-batch-import"
                   onMouseEnter={playHoverSound}
                   onClick={() => { playSound('start'); handleBatchImport(); }}
-                  disabled={batchImporting || loadingFighter}
+                  disabled={batchImporting || loadingFighter || syncingOrder}
                 >
                   {batchImporting
                     ? `Importing ${batchProgress.current}/${batchProgress.total}...`

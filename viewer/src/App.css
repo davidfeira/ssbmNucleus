@@ -1000,6 +1000,12 @@
   border-radius: var(--radius-lg);
 }
 
+.edit-modal-csp-confirm-note {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 .edit-modal-stock-confirm-compare {
   display: flex;
   align-items: center;

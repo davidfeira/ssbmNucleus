@@ -30,7 +30,7 @@ from flask import Blueprint, request, jsonify, send_file
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
 from core.helpers import friendly_iso_open_error
 from core.state import metadata_lock
-from core.state import get_current_project_path, reload_mex_manager, get_socketio
+from core.state import get_current_project_path, reload_mex_manager, get_socketio, mexcli_lock
 
 logger = logging.getLogger(__name__)
 
@@ -903,10 +903,13 @@ def install_custom_stage():
         cmd = [mexcli_path, 'add-stage', str(project_path), str(zip_path)]
         logger.info(f"Installing custom stage '{slug}': {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        # Workspace-mutating MexCLI call -- hold the project lock so it can't run
+        # concurrently with a background costume reorder / export.
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout or 'Unknown error'
@@ -934,19 +937,21 @@ def install_custom_stage():
                 if not hps.exists() or not track.get('name'):
                     warnings.append(f"Track '{track.get('name')}' file missing, skipped")
                     continue
-                music_out = _run_mexcli('add-music', project_path, hps, track['name'])
+                with mexcli_lock:
+                    music_out = _run_mexcli('add-music', project_path, hps, track['name'])
                 if music_out.get('success') and 'musicId' in music_out:
                     cli_entries.append({'musicId': music_out['musicId'],
                                         'chance': track.get('chance', 50)})
                 else:
                     warnings.append(f"Track '{track['name']}' could not be added")
             if cli_entries:
-                pl_result = subprocess.run(
-                    [str(MEXCLI_PATH), 'set-stage-playlist', str(project_path), stage_name],
-                    input=json.dumps(cli_entries),
-                    capture_output=True, text=True,
-                    cwd=str(PROJECT_ROOT), **get_subprocess_args()
-                )
+                with mexcli_lock:
+                    pl_result = subprocess.run(
+                        [str(MEXCLI_PATH), 'set-stage-playlist', str(project_path), stage_name],
+                        input=json.dumps(cli_entries),
+                        capture_output=True, text=True,
+                        cwd=str(PROJECT_ROOT), **get_subprocess_args()
+                    )
                 if pl_result.returncode == 0 and _parse_cli_json(pl_result.stdout).get('success'):
                     playlist_ported = len(cli_entries)
                     logger.info(f"Ported {playlist_ported} playlist track(s) for stage '{stage_name}'")
@@ -1058,9 +1063,10 @@ def install_custom_stages_batch():
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump({'stages': manifest_stages}, f)
-            result = subprocess.run(
-                [mexcli_path, 'add-stages', str(project_path), manifest_path],
-                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+            with mexcli_lock:
+                result = subprocess.run(
+                    [mexcli_path, 'add-stages', str(project_path), manifest_path],
+                    capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
         finally:
             try:
                 os.unlink(manifest_path)
@@ -1116,10 +1122,11 @@ def remove_custom_stage_from_project():
         cmd = [mexcli_path, 'remove-stage', str(project_path), stage_name]
         logger.info(f"Removing stage '{stage_name}': {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(PROJECT_ROOT), **get_subprocess_args()
-        )
+        with mexcli_lock:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=str(PROJECT_ROOT), **get_subprocess_args()
+            )
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout or 'Unknown error'
@@ -1163,9 +1170,10 @@ def remove_custom_stages_batch():
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump({'stages': names}, f)
-            result = subprocess.run(
-                [mexcli_path, 'remove-stages', str(project_path), manifest_path],
-                capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
+            with mexcli_lock:
+                result = subprocess.run(
+                    [mexcli_path, 'remove-stages', str(project_path), manifest_path],
+                    capture_output=True, text=True, cwd=str(PROJECT_ROOT), **get_subprocess_args())
         finally:
             try:
                 os.unlink(manifest_path)

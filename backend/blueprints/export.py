@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
 from core.config import OUTPUT_PATH
-from core.state import get_mex_manager, get_socketio, get_current_project_path
+from core.state import get_mex_manager, get_socketio, get_current_project_path, mexcli_lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,12 @@ def start_export():
             socketio = get_socketio()
             current_project_path = get_current_project_path()
 
+            # Hold the workspace lock for the entire export so a background
+            # costume reorder (optimistic UI, applied asynchronously) can't run a
+            # second MexCLI process on the project mid-build. If a reorder is
+            # still in flight, this blocks until it finishes — i.e. the export
+            # waits for pending order changes to settle first.
+            mexcli_lock.acquire()
             try:
                 def progress_callback(percentage, message):
                     socketio.emit('export_progress', {
@@ -249,6 +255,7 @@ def start_export():
                 if temp_root and Path(temp_root).exists():
                     shutil.rmtree(temp_root, ignore_errors=True)
                     logger.info("Cleaned up temp texture-pack project copy")
+                mexcli_lock.release()
 
         # Start export in background thread
         thread = threading.Thread(target=export_with_progress)
