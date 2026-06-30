@@ -802,14 +802,16 @@ export default function useCostumes({ API_URL, fighters, storageCostumes, select
         }
         reorderQueueRef.current.shift()
         if (failed) {
-          // The saved order no longer matches the optimistic UI. Drop the rest
-          // of the queue and reconcile the view with the real on-disk order.
+          // A swap reported failure, but in practice the move usually did reach
+          // disk (the bridge just surfaced a non-fatal MexCLI result). Don't
+          // alarm the user with an error sound + popup that contradicts the
+          // order they can see — drop the rest of the queue and quietly
+          // reconcile the view with the real on-disk order. The console.error
+          // above keeps the diagnostic trail.
           reorderQueueRef.current = []
-          playSound('error')
           if (isVisibleFighter(fighter)) {
             await refreshMexCostumes(fighter)
           }
-          alert('Saving the new costume order failed — restored the last saved order.')
           break
         }
       }
