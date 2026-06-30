@@ -63,3 +63,61 @@ def test_delete_variant_with_filename_key(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert resp.get_json()['success'] is True
     assert not (das / 'custom_name.zip').exists()
+
+
+def test_reorder_with_disk_only_variants(tmp_path, monkeypatch):
+    """Regression for "Invalid fromIndex or toIndex": the DAS variants endpoint
+    shows metadata variants present on disk PLUS on-disk zips that have no
+    metadata entry, so the frontend can send an index past the raw metadata list.
+    Reorder must operate on that same display order (and persist a moved
+    disk-only variant so its position sticks)."""
+    meta = {'stages': {'battlefield': {'variants': [{'id': 'A', 'name': 'A'}]}}}
+    monkeypatch.setattr(ss, 'load_metadata', lambda: meta)
+    monkeypatch.setattr(ss, 'save_metadata', lambda m: None)
+    monkeypatch.setattr(ss, 'STORAGE_PATH', tmp_path)
+    das = tmp_path / 'das' / 'battlefield'
+    das.mkdir(parents=True)
+    for v in ('A', 'D', 'E'):          # D, E are disk-only (no metadata entry)
+        (das / f'{v}.zip').write_bytes(b'ZIP')
+
+    # display order = [A, D, E]; move E (idx 2) to front. Old code validated the
+    # index against len(metadata variants)=1 -> 2 >= 1 -> 400.
+    resp = _client().post('/api/mex/storage/stages/reorder',
+                          json={'stageFolder': 'battlefield', 'fromIndex': 2, 'toIndex': 0})
+    assert resp.status_code == 200, resp.get_json()
+    assert [v['id'] for v in resp.get_json()['variants']] == ['E', 'A', 'D']
+    # moved disk-only variants are now persisted in metadata
+    assert {'D', 'E'} <= {v['id'] for v in meta['stages']['battlefield']['variants']}
+
+
+def test_reorder_normal_metadata_only(tmp_path, monkeypatch):
+    """Healthy vault (every variant in metadata + on disk) reorders normally."""
+    meta = {'stages': {'battlefield': {'variants': [
+        {'id': 'A', 'name': 'A'}, {'id': 'B', 'name': 'B'}, {'id': 'C', 'name': 'C'},
+    ]}}}
+    monkeypatch.setattr(ss, 'load_metadata', lambda: meta)
+    monkeypatch.setattr(ss, 'save_metadata', lambda m: None)
+    monkeypatch.setattr(ss, 'STORAGE_PATH', tmp_path)
+    das = tmp_path / 'das' / 'battlefield'
+    das.mkdir(parents=True)
+    for v in ('A', 'B', 'C'):
+        (das / f'{v}.zip').write_bytes(b'ZIP')
+
+    resp = _client().post('/api/mex/storage/stages/reorder',
+                          json={'stageFolder': 'battlefield', 'fromIndex': 0, 'toIndex': 2})
+    assert resp.status_code == 200, resp.get_json()
+    assert [v['id'] for v in resp.get_json()['variants']] == ['B', 'C', 'A']
+
+
+def test_reorder_genuinely_out_of_range_rejected(tmp_path, monkeypatch):
+    """An index past the display list still 400s (the guard isn't just removed)."""
+    meta = {'stages': {'battlefield': {'variants': [{'id': 'A', 'name': 'A'}]}}}
+    monkeypatch.setattr(ss, 'load_metadata', lambda: meta)
+    monkeypatch.setattr(ss, 'save_metadata', lambda m: None)
+    monkeypatch.setattr(ss, 'STORAGE_PATH', tmp_path)
+    das = tmp_path / 'das' / 'battlefield'
+    das.mkdir(parents=True)
+    (das / 'A.zip').write_bytes(b'ZIP')
+    resp = _client().post('/api/mex/storage/stages/reorder',
+                          json={'stageFolder': 'battlefield', 'fromIndex': 5, 'toIndex': 0})
+    assert resp.status_code == 400
