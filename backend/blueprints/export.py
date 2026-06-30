@@ -11,12 +11,34 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 
-from core.config import OUTPUT_PATH
+from core.config import OUTPUT_PATH, STORAGE_PATH
 from core.state import get_mex_manager, get_socketio, get_current_project_path, mexcli_lock
 
 logger = logging.getLogger(__name__)
 
 export_bp = Blueprint('export', __name__)
+
+
+def _resolve_project_dat(files_dir, file_name):
+    """Locate a costume's model DAT in a project's files/ dir.
+
+    Handles region-resolved names (Red Falcon's costume fileName is 'PlCaRe.' --
+    a trailing dot, no extension; the game appends usd/dat by region). Prefers
+    .dat (the model) over .usd. Returns a Path or None.
+    """
+    from pathlib import Path
+    if not file_name:
+        return None
+    files_dir = Path(files_dir)
+    direct = files_dir / file_name
+    if direct.is_file():
+        return direct
+    stem = file_name.rstrip('.')
+    for ext in ('.dat', '.usd', ''):
+        cand = files_dir / f"{stem}{ext}"
+        if cand.is_file():
+            return cand
+    return None
 
 
 @export_bp.route('/api/mex/export/start', methods=['POST'])
@@ -121,8 +143,11 @@ def start_export():
                     from texture_pack import (
                         save_encoded_placeholder,
                         TexturePackMapping,
-                        CostumeMapping
+                        CostumeMapping,
+                        find_hd_csp_by_hash,
                     )
+                    from skinlab.hd_csp_cache import (
+                        get_or_render_hd, hash_dat, get_cached, effective_key_hash)
                     from mex_bridge import MexManager
                     from core.config import MEXCLI_PATH
 
@@ -156,41 +181,109 @@ def start_export():
                         created_at=datetime.now().isoformat()
                     )
 
-                    # Get all fighters and their costumes (from the temp copy)
-                    fighters = work_mex.list_fighters()
-                    global_index = 0
+                    temp_files_dir = temp_project_dir / "files"
 
+                    # Pass 1: enumerate every costume slot that has a CSP, so HD
+                    # render progress can be reported against a known total.
+                    fighters = work_mex.list_fighters()
+                    slots = []  # ordered; global index = position in this list
                     for fighter in fighters:
                         try:
                             result = work_mex._run_command("get-costumes", str(work_mex.project_path), fighter['name'])
-                            costumes = result.get('costumes', [])
-
-                            for costume_idx, costume in enumerate(costumes):
-                                if costume.get('csp'):
-                                    csp_ref = costume['csp'].replace('\\', '/')
-                                    csp_name = f"{csp_ref.split('/')[-1]}.png"
-                                    temp_csp_path = temp_csp_dir / csp_name
-
-                                    if temp_csp_path.exists():
-                                        # The REAL HD CSP lives in the LIVE project, which we
-                                        # never modify — the texture pack reads it from there.
-                                        mapping.add_costume(CostumeMapping(
-                                            index=global_index,
-                                            character=fighter['name'],
-                                            costume_index=costume_idx,
-                                            skin_id=costume.get('name', f"costume_{costume_idx}"),
-                                            real_csp_path=str(live_csp_dir / csp_name)
-                                        ))
-
-                                        # Replace the COPY's CSP with the encoded placeholder (16x16)
-                                        save_encoded_placeholder(global_index, temp_csp_path)
-                                        global_index += 1
-
                         except Exception as e:
-                            logger.warning(f"Error processing {fighter['name']}: {e}")
+                            logger.warning(f"Error listing costumes for {fighter['name']}: {e}")
                             continue
+                        for costume_idx, costume in enumerate(result.get('costumes', [])):
+                            if not costume.get('csp'):
+                                continue
+                            csp_ref = costume['csp'].replace('\\', '/')
+                            csp_name = f"{csp_ref.split('/')[-1]}.png"
+                            if not (temp_csp_dir / csp_name).exists():
+                                continue
+                            slots.append({
+                                'character': fighter['name'],
+                                'costume_index': costume_idx,
+                                'skin_id': costume.get('name', f"costume_{costume_idx}"),
+                                'csp_name': csp_name,
+                                'file_name': costume.get('fileName') or '',
+                            })
 
-                    logger.info(f"Created {global_index} placeholder CSPs (in temp copy)")
+                    total_slots = len(slots)
+                    logger.info(f"Texture-pack: {total_slots} costume CSP slots to process")
+
+                    # Pass 2: for each slot resolve an HD CSP and swap in the 16x16
+                    # placeholder. HD priority: the user's vault HD CSP, then the
+                    # DAT-hash cache, then a fresh 4x render (patch costumes are
+                    # custom art with no vault/vanilla match -> render once, cached
+                    # by DAT hash so every later export is instant). A failed render
+                    # leaves hd_csp_path=None -> SD fallback (never breaks a build).
+                    rendered = 0
+                    for global_index, slot in enumerate(slots):
+                        csp_name = slot['csp_name']
+                        temp_csp_path = temp_csp_dir / csp_name
+                        live_sd_csp = str(live_csp_dir / csp_name)
+
+                        hd_csp_path = None
+                        dat_hash = None
+                        try:
+                            vault_hd = find_hd_csp_by_hash(STORAGE_PATH, live_sd_csp, slot['character'])
+                        except Exception:
+                            vault_hd = None
+                        if vault_hd:
+                            hd_csp_path = str(vault_hd)
+                        else:
+                            dat_path = _resolve_project_dat(temp_files_dir, slot['file_name'])
+                            if dat_path is not None:
+                                dat_hash = hash_dat(dat_path)
+
+                                # Ice Climbers: composite Nana onto Popo so the HD
+                                # portrait matches the in-game both-climbers CSP.
+                                # find_ice_climbers_pair locates the partner DAT in
+                                # the same files/ dir by color/slot; for a Nana-primary
+                                # slot generate_csp renders nothing (no CSS portrait)
+                                # and we fall back to SD.
+                                paired_dat_path = None
+                                if dat_path.name[:4].lower() in ('plpp', 'plnn'):
+                                    try:
+                                        from generate_csp import find_ice_climbers_pair
+                                        _ct, pair_path, _pc, _nc = find_ice_climbers_pair(str(dat_path))
+                                        if pair_path:
+                                            paired_dat_path = pair_path
+                                    except Exception as e:
+                                        logger.warning(f"ICs pair lookup failed for {dat_path.name}: {e}")
+
+                                eff_hash = effective_key_hash(
+                                    dat_path, paired_dat_path=paired_dat_path, dat_hash=dat_hash)
+                                miss = bool(eff_hash) and get_cached(eff_hash) is None
+                                pct = 1 + int(4 * (global_index + 1) / max(1, total_slots))
+                                progress_callback(
+                                    pct,
+                                    f"{'Rendering' if miss else 'Preparing'} HD portraits "
+                                    f"({global_index + 1}/{total_slots})…")
+                                hd = get_or_render_hd(
+                                    dat_path, dat_hash=dat_hash, paired_dat_path=paired_dat_path)
+                                if hd:
+                                    hd_csp_path = str(hd)
+                                    if miss:
+                                        rendered += 1
+
+                        mapping.add_costume(CostumeMapping(
+                            index=global_index,
+                            character=slot['character'],
+                            costume_index=slot['costume_index'],
+                            skin_id=slot['skin_id'],
+                            real_csp_path=live_sd_csp,
+                            hd_csp_path=hd_csp_path,
+                            dat_hash=dat_hash,
+                        ))
+
+                        # Replace the COPY's CSP with the encoded placeholder (16x16)
+                        save_encoded_placeholder(global_index, temp_csp_path)
+
+                    global_index = total_slots
+                    logger.info(
+                        f"Created {global_index} placeholder CSPs (in temp copy); "
+                        f"{rendered} HD portraits rendered this export")
 
                     # Save a debug sample so user can verify the placeholder format
                     debug_placeholder = OUTPUT_PATH / "debug_placeholder_sample.png"

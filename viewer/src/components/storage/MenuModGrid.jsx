@@ -76,6 +76,7 @@ export default function MenuModGrid({
                   <img
                     src={src}
                     alt={mod.name}
+                    draggable={false}
                     onError={(e) => { e.target.style.visibility = 'hidden' }}
                   />
                 )}

@@ -36,6 +36,10 @@ export function useDragAndDrop({
     setDraggedItem({ index, id: items[index].id })
     setDragStartIndex(index) // Track original position for returning to same spot
     e.dataTransfer.effectAllowed = 'move'
+    // Suppress the global "Drop to import" overlay for this in-app reorder drag.
+    // Electron reports 'Files' in dataTransfer.types even for element drags, so
+    // ImportFab keys off this flag to tell internal drags from OS file drops.
+    document.documentElement.dataset.nucInternalDrag = '1'
   }
 
   const handleDragOver = (e) => {
@@ -336,6 +340,8 @@ export function useDragAndDrop({
   }
 
   const handleDragEnd = () => {
+    // Re-enable the import overlay now that the in-app drag is over.
+    delete document.documentElement.dataset.nucInternalDrag
     // If drop is in progress, let the drop handler clean up
     // This prevents the flash when previewOrder is cleared before refresh completes
     if (!dropInProgressRef.current) {

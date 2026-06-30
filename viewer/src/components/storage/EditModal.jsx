@@ -72,10 +72,42 @@ export default function EditModal({
   testMode,
   onResetTest,
 
+  // Animelee convert (costumes only) — makes a NEW copy, original untouched
+  onConverted,
+
   API_URL
 }) {
   // Aspect ratio of the loaded hero image, so the grid panel hugs it
   const [panelAspect, setPanelAspect] = useState(null)
+
+  // Animelee convert: add/remove the inverted-hull outline as a new costume copy
+  const [animeleeBusy, setAnimeleeBusy] = useState(null)   // 'add' | 'remove' | null
+  const [animeleeError, setAnimeleeError] = useState(null)
+
+  const convertAnimelee = async (mode) => {
+    const d = editingItem?.data
+    if (!d?.character || !d?.id || animeleeBusy) return
+    setAnimeleeBusy(mode)
+    setAnimeleeError(null)
+    try {
+      const res = await fetch(`${API_URL}/storage/animelee/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: d.character, skinId: d.id, mode }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        playSound('newSkin')
+        onConverted?.(j.skin)
+      } else {
+        setAnimeleeError(j.error || 'Conversion failed')
+      }
+    } catch (e) {
+      setAnimeleeError(String(e))
+    } finally {
+      setAnimeleeBusy(null)
+    }
+  }
 
   useEffect(() => {
     setPanelAspect(null)
@@ -473,6 +505,52 @@ export default function EditModal({
                     </svg>
                     <span>Test in Game</span>
                   </button>
+                )}
+
+                {/* Animelee outline — add/remove as a NEW copy (original kept).
+                    Gated on onConverted so it only shows where fully wired (the
+                    vanilla-character vault), not custom-character costumes. */}
+                {onConverted && editingItem.data?.character && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={() => convertAnimelee('add')}
+                    disabled={saving || deleting || exporting || testingInGame || !!animeleeBusy}
+                    title="Make a copy of this costume with the Animelee black outline added"
+                  >
+                    {animeleeBusy === 'add' ? (
+                      <span className="edit-modal-action-spinner"></span>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z"></path>
+                      </svg>
+                    )}
+                    <span>{animeleeBusy === 'add' ? 'Working…' : 'Animelee Copy'}</span>
+                  </button>
+                )}
+
+                {onConverted && editingItem.data?.character && (
+                  <button
+                    className="edit-modal-view3d-btn"
+                    onClick={() => convertAnimelee('remove')}
+                    disabled={saving || deleting || exporting || testingInGame || !!animeleeBusy}
+                    title="Make a copy of this costume with the Animelee outline removed"
+                  >
+                    {animeleeBusy === 'remove' ? (
+                      <span className="edit-modal-action-spinner"></span>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                      </svg>
+                    )}
+                    <span>{animeleeBusy === 'remove' ? 'Working…' : 'Remove Outline'}</span>
+                  </button>
+                )}
+
+                {animeleeError && (
+                  <div style={{ color: 'var(--color-danger, #e66)', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
+                    {animeleeError}
+                  </div>
                 )}
               </div>
 

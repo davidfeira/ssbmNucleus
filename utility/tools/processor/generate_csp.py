@@ -319,52 +319,11 @@ def apply_character_specific_layers(csp_path, character_name, scale=1):
                 logger.error(f"Failed to flip Ness CSP: {e}")
                 return False
 
-    # Fox gun layer
-    if character_name == 'Fox':
-        gun_layer_path = os.path.join(CSP_BASE_PATH, 'Fox', 'gunlayer.png')
-
-        if os.path.exists(gun_layer_path) and os.path.exists(csp_path):
-            try:
-                # Open the base CSP and the gun layer
-                base_csp = Image.open(csp_path)
-                gun_layer = Image.open(gun_layer_path)
-
-                logger.info(f"Base CSP size: {base_csp.size}, Gun layer size: {gun_layer.size}")
-
-                # Ensure both images are in RGBA mode
-                if base_csp.mode != 'RGBA':
-                    base_csp = base_csp.convert('RGBA')
-                if gun_layer.mode != 'RGBA':
-                    gun_layer = gun_layer.convert('RGBA')
-
-                # Scale the gun layer to match HD CSP if needed
-                if scale > 1:
-                    new_size = (gun_layer.width * scale, gun_layer.height * scale)
-                    gun_layer = gun_layer.resize(new_size, Image.NEAREST)
-                    logger.info(f"Scaled Fox gun layer to {new_size[0]}x{new_size[1]} for {scale}x CSP")
-
-                logger.info(f"After scaling - Base CSP: {base_csp.size}, Gun layer: {gun_layer.size}")
-
-                # Check if sizes match
-                if base_csp.size != gun_layer.size:
-                    logger.warning(f"Size mismatch! Resizing gun layer from {gun_layer.size} to {base_csp.size}")
-                    gun_layer = gun_layer.resize(base_csp.size, Image.NEAREST)
-
-                # Composite the gun layer on top of the CSP
-                # The gun layer should have transparency where Fox's body should show through
-                result = Image.alpha_composite(base_csp, gun_layer)
-
-                # Save the result back to the same path
-                result.save(csp_path)
-                logger.info(f"Saved composited CSP to {csp_path}")
-
-                base_csp.close()
-                gun_layer.close()
-                return True
-            except Exception as e:
-                # If compositing fails, just continue without the layer
-                logger.error(f"Failed to apply Fox gun layer: {e}")
-                return False
+    # Fox gun: SUPERSEDED. The blaster is now rendered as the real 3D article
+    # model during CSP generation (see generate_single_csp_internal -> the
+    # `--gun` flags / _fox_gun_args), so it tracks the pose/lighting instead of
+    # being a fixed 2D overlay. The old `gunlayer.png` composite is intentionally
+    # no longer applied here (applying it too would double the gun).
 
     return False
 
@@ -1108,6 +1067,35 @@ def skeleton_is_deformed(dat_filepath, character):
     return False
 
 
+# Fox's blaster, rendered as the real 3D article model (from PlFx.dat) attached
+# to the right-hand bone, replacing the old flat gunlayer.png composite. The
+# orientation/offset were calibrated against the vanilla CSP with the interactive
+# aligner; they're camera/world-space, so scale-independent (verified scale 1 == 4).
+FOX_GUN = {
+    "bone": "68",
+    "view": "47,-47,-114",
+    "offset": "-0.15,-0.8,0.05",
+    "scale": "0.85",
+}
+
+
+def _fox_gun_args():
+    """`--gun ...` CLI args that render Fox's 3D blaster, or [] if PlFx.dat is
+    missing (then the portrait just renders without a gun rather than failing)."""
+    def _winpath(p):
+        return p.replace('/mnt/c/', 'C:\\').replace('/', '\\') if p.startswith('/mnt/c/') else p
+    for d in _test_base_files_dirs():
+        plfx = Path(d) / "PlFx.dat"
+        if plfx.exists():
+            return ["--gun", _winpath(str(plfx.resolve())),
+                    "--gun-bone", FOX_GUN["bone"],
+                    "--gun-view", FOX_GUN["view"],
+                    "--gun-offset", FOX_GUN["offset"],
+                    "--gun-scale", FOX_GUN["scale"]]
+    logger.warning("Fox gun: PlFx.dat not found in test-base/files; rendering CSP without the 3D gun")
+    return []
+
+
 def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=None):
     """Internal function to generate a single CSP
 
@@ -1220,6 +1208,12 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
             hide = low_poly_dobjs(dat_filepath, character, costume_slot)
         if hide:
             cmd.extend(["--hide-dobjs", hide])
+
+    # Fox: render the real 3D blaster attached to his hand (replaces the old 2D
+    # gunlayer.png composite). The renderer pulls the gun model from PlFx.dat and
+    # pins it to the thumb bone; params are scale-independent (see FOX_GUN).
+    if character == 'Fox':
+        cmd.extend(_fox_gun_args())
 
     # Costumes with a deliberately deformed skeleton (edited bind transforms)
     # render normal under the curated pose because it overwrites their bone

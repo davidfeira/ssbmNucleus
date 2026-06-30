@@ -50,6 +50,9 @@ export default function CustomStagesGrid({
     setDraggedItem({ id: items[index].id })
     setDragStartIndex(index)
     e.dataTransfer.effectAllowed = 'move'
+    // Suppress the global "Drop to import" overlay for this in-app reorder drag
+    // (Electron tags element drags with 'Files' otherwise — see ImportFab).
+    document.documentElement.dataset.nucInternalDrag = '1'
   }
 
   const handleDragOver = (e) => {
@@ -172,6 +175,7 @@ export default function CustomStagesGrid({
   }
 
   const handleDragEnd = () => {
+    delete document.documentElement.dataset.nucInternalDrag
     if (!dropInProgressRef.current) cleanupDrag()
     else setDragTargetFolder(null)
     justDraggedRef.current = true

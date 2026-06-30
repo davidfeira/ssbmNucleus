@@ -38,7 +38,7 @@ function CoverCard({
         {showImg ? (
           <>
             <div className="cover-art-blur" style={{ backgroundImage: `url("${imageUrl}")` }} />
-            <img className="cover-img" src={imageUrl} alt={name} onError={() => setImgError(true)} />
+            <img className="cover-img" src={imageUrl} alt={name} draggable={false} onError={() => setImgError(true)} />
           </>
         ) : (
           <div className="cover-placeholder">

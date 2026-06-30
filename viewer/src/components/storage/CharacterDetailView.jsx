@@ -30,6 +30,7 @@ import PoseManagerModal from './PoseManagerModal'
 import { getDefaultCostumeCode } from './posemanager/animData'
 import SoundPacksModal from './SoundPacksModal'
 import ExtrasPageView from './ExtrasPageView'
+import AnimeleeDetectModal from './AnimeleeDetectModal'
 import { hasExtras } from '../../config/extraTypes'
 
 export default function CharacterDetailView({
@@ -232,6 +233,9 @@ export default function CharacterDetailView({
   // Pose manager state
   const [showPoseManager, setShowPoseManager] = useState(false)
 
+  // Animelee auto-detect (geometry inverted-hull outline detector) state
+  const [showAnimelee, setShowAnimelee] = useState(false)
+
   // Sound pack (vanilla character sound bank) state
   const [showSoundBank, setShowSoundBank] = useState(false)
   const isSharedSoundBank = selectedCharacter === 'Zelda' || selectedCharacter === 'Sheik'
@@ -311,6 +315,14 @@ export default function CharacterDetailView({
                 Extras
               </button>
             )}
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowAnimelee(true); }}
+              title="Scan this character's costumes for Animelee skins and move them into a folder"
+            >
+              Find Animelee
+            </button>
             <button
               className="character-action-button"
               onMouseEnter={playHoverSound}
@@ -445,6 +457,7 @@ export default function CharacterDetailView({
         testError={inGameTest.testError}
         testMode={inGameTest.testMode}
         onResetTest={inGameTest.resetTest}
+        onConverted={aiStudioEnabled ? (() => { inGameTest.resetTest(); handleCancel(); onRefresh && onRefresh(); }) : undefined}
         API_URL={API_URL}
       />
       {show3DViewer && editingItem && editingItem.type === 'costume' && (
@@ -553,6 +566,15 @@ export default function CharacterDetailView({
         API_URL={API_URL}
         onClose={() => setShowSoundBank(false)}
       />
+
+      {showAnimelee && (
+        <AnimeleeDetectModal
+          character={selectedCharacter}
+          API_URL={API_URL}
+          onClose={() => setShowAnimelee(false)}
+          onApplied={onRefresh}
+        />
+      )}
     </div>
   )
 }

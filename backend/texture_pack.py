@@ -193,9 +193,14 @@ class CostumeMapping:
     character: str                # Character name
     costume_index: int            # Costume index within character
     skin_id: str                  # Storage skin ID (for lookup)
-    real_csp_path: str            # Path to the actual high-res CSP
+    real_csp_path: str            # Path to the actual high-res CSP (SD fallback)
     matched: bool = False         # Whether texture was matched
     dumped_filename: Optional[str] = None  # TEX_0x... filename when matched
+    # HD source resolved at export time (vault HD CSP, or a 4x render of a patch
+    # costume cached by DAT hash). When set, the texture pack uses this instead of
+    # the SD real_csp_path. None -> fall back to the live vault-hash match / SD.
+    hd_csp_path: Optional[str] = None
+    dat_hash: Optional[str] = None  # md5 of the costume DAT (HD cache key)
 
 
 @dataclass
@@ -551,15 +556,33 @@ def find_hd_csp_by_hash(storage_path: Path, backup_csp_path: str, character: str
 
 def place_costume_csp(costume: Dict, dest_filename: str, load_subdir: Path,
                       storage_path: Optional[Path]) -> bool:
-    """Copy a costume's real (or HD) CSP into load_subdir as dest_filename.
-    Same resolution the live watcher uses, but the filename comes from the
-    harvested table instead of a freshly dumped texture. Returns True on copy."""
-    real_csp_path = _to_local_csp_path(costume['real_csp_path'])
-    if storage_path:
-        hd = find_hd_csp_by_hash(storage_path, real_csp_path, costume['character'])
-        if hd:
-            real_csp_path = str(hd)
-    real_csp = Path(real_csp_path)
+    """Copy a costume's best available CSP into load_subdir as dest_filename.
+    Resolution priority (highest first):
+      1. hd_csp_path -- HD resolved at export time (vault HD CSP, or a 4x render
+         of a patch costume cached by DAT hash). The right answer for costumes
+         that have no vault identity, e.g. Animelee-patch slots.
+      2. live vault perceptual-hash match -- legacy path for mappings written
+         before export-time resolution existed.
+      3. real_csp_path -- the project's SD CSP (always present; last resort).
+    Returns True on copy."""
+    src = None
+
+    pre = costume.get('hd_csp_path')
+    if pre:
+        pre = _to_local_csp_path(pre)
+        if Path(pre).exists():
+            src = pre
+
+    if src is None:
+        base = _to_local_csp_path(costume['real_csp_path'])
+        if storage_path:
+            hd = find_hd_csp_by_hash(storage_path, base, costume['character'])
+            if hd:
+                src = str(hd)
+        if src is None:
+            src = base
+
+    real_csp = Path(src)
     if not real_csp.exists():
         logger.warning(f"Real CSP not found for offline naming: {real_csp}")
         return False

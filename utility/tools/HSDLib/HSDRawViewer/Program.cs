@@ -520,6 +520,186 @@ namespace HSDRawViewer
                     Console.WriteLine("Bind-pose mode: scene camera kept, joint pose skipped (honor custom rig)");
                 }
 
+                // --gun <fighterFile> [--gun-bone N] [--gun-article N] [--gun-scale F]:
+                // render Fox/Falco's blaster, which is a FIGHTER ARTICLE living in
+                // PlFx.dat / PlFc.dat (NOT the costume DAT the renderer loads),
+                // attached to the right-thumb bone exactly as the game does
+                // (FtPart_RThumbNb, item model scale 0.85 — see the decomp
+                // ftFx_SpecialN.c / itfoxblaster.c). The model is spliced in like a
+                // costume accessory, then pinned to the thumb's posed world after
+                // the body is posed. The thumb bone index defaults to 49 (the
+                // FtPart enum position of RThumbNb) and is tunable via --gun-bone
+                // while we confirm where Fox's part->joint table actually maps.
+                string gunPath = null;
+                int gunThumbBone = 49;
+                float gunScale = 0.85f;
+                int gunArticleIndex = 1;
+                HSDRaw.HSDRawFile gunFile = null;            // keep the fighter file alive for render
+                HSDRaw.Common.HSD_JOBJ gunRootDesc = null;   // spliced gun model root
+                HSDRaw.Common.HSD_JOBJ gunAttachDesc = null; // gun's internal attach bone (BoneAttachID)
+                int gunBoneAttachId = 0;
+                int gunArg = argsList.IndexOf("--gun");
+                if (gunArg >= 0 && gunArg + 1 < argsList.Count)
+                {
+                    gunPath = argsList[gunArg + 1];
+                    argsList.RemoveAt(gunArg + 1);
+                    argsList.RemoveAt(gunArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun mode: model from {gunPath}");
+                }
+                int gunBoneArg = argsList.IndexOf("--gun-bone");
+                if (gunBoneArg >= 0 && gunBoneArg + 1 < argsList.Count)
+                {
+                    if (int.TryParse(argsList[gunBoneArg + 1], out int gb)) gunThumbBone = gb;
+                    argsList.RemoveAt(gunBoneArg + 1);
+                    argsList.RemoveAt(gunBoneArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun thumb bone index: {gunThumbBone}");
+                }
+                int gunArticleArg = argsList.IndexOf("--gun-article");
+                if (gunArticleArg >= 0 && gunArticleArg + 1 < argsList.Count)
+                {
+                    if (int.TryParse(argsList[gunArticleArg + 1], out int ga)) gunArticleIndex = ga;
+                    argsList.RemoveAt(gunArticleArg + 1);
+                    argsList.RemoveAt(gunArticleArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun article index: {gunArticleIndex}");
+                }
+                int gunScaleArg = argsList.IndexOf("--gun-scale");
+                if (gunScaleArg >= 0 && gunScaleArg + 1 < argsList.Count)
+                {
+                    if (float.TryParse(argsList[gunScaleArg + 1], System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float gs)) gunScale = gs;
+                    argsList.RemoveAt(gunScaleArg + 1);
+                    argsList.RemoveAt(gunScaleArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun scale: {gunScale}");
+                }
+                // Corrective offset applied in the thumb bone's local frame
+                // (rotate then translate) BEFORE placing the gun, so we can seat
+                // it naturally when the CSP pose's hand isn't a gun-grip pose.
+                // --gun-rot "rx,ry,rz" (degrees), --gun-offset "x,y,z" (units).
+                OpenTK.Mathematics.Vector3 gunRot = OpenTK.Mathematics.Vector3.Zero;   // radians, screen/model aim
+                OpenTK.Mathematics.Vector3 gunOff = OpenTK.Mathematics.Vector3.Zero;
+                OpenTK.Mathematics.Vector3 gunRoll = OpenTK.Mathematics.Vector3.Zero;  // radians, in-place roll (gun's own frame, applied before aim)
+                int gunRotArg = argsList.IndexOf("--gun-rot");
+                if (gunRotArg >= 0 && gunRotArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunRotArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunRot = new OpenTK.Mathematics.Vector3(
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(0)),
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(1)),
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(2)));
+                    argsList.RemoveAt(gunRotArg + 1);
+                    argsList.RemoveAt(gunRotArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun rot (rad): ({gunRot.X:F3},{gunRot.Y:F3},{gunRot.Z:F3})");
+                }
+                int gunOffArg = argsList.IndexOf("--gun-offset");
+                if (gunOffArg >= 0 && gunOffArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunOffArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunOff = new OpenTK.Mathematics.Vector3(Pf(0), Pf(1), Pf(2));
+                    argsList.RemoveAt(gunOffArg + 1);
+                    argsList.RemoveAt(gunOffArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun offset: {gunOff}");
+                }
+                // --gun-roll "rx,ry,rz" (deg): roll the gun IN PLACE about its own
+                // (mapped) axes, applied BEFORE the aim — so it spins about the grip
+                // without changing where the barrel points. Sweep to find the barrel
+                // axis (the one that rolls in place) for the "gangster" sideways tilt.
+                int gunRollArg = argsList.IndexOf("--gun-roll");
+                if (gunRollArg >= 0 && gunRollArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunRollArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunRoll = new OpenTK.Mathematics.Vector3(
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(0)),
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(1)),
+                        OpenTK.Mathematics.MathHelper.DegreesToRadians(Pf(2)));
+                    argsList.RemoveAt(gunRollArg + 1);
+                    argsList.RemoveAt(gunRollArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine($"Gun roll (rad): ({gunRoll.X:F3},{gunRoll.Y:F3},{gunRoll.Z:F3})");
+                }
+                // --gun-tilt <deg> [--gun-tilt-dir <screenDeg>]: the "gangster" roll.
+                // Rolls the placed gun about its barrel's SCREEN-direction axis (built
+                // from the camera basis) through the grip, so the muzzle keeps aiming
+                // the same way while the gun's face tilts sideways. --gun-tilt-dir is
+                // the barrel's screen angle (deg, +x right / +y down); default 132 =
+                // the measured aligned-gun barrel direction.
+                // --gun-aim "x,y,z" + --gun-face "x,y,z": orient the gun by WORLD
+                // directions instead of Euler — barrel (model +Z) points along gun-aim,
+                // flat face (model +X) toward gun-face. Built as an orthonormal basis.
+                // Most controllable way to aim the gun + pick which face shows.
+                // --gun-view "screen,roll,pitch" (deg): intuitive camera-relative
+                // orientation for the interactive aligner. screen = in-plane rotation,
+                // roll = spin about the barrel ("gangster" tilt / which face shows),
+                // pitch = tip the barrel toward/away from the camera.
+                OpenTK.Mathematics.Vector3? gunView = null;
+                int gunViewArg = argsList.IndexOf("--gun-view");
+                if (gunViewArg >= 0 && gunViewArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunViewArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunView = new OpenTK.Mathematics.Vector3(Pf(0), Pf(1), Pf(2));
+                    argsList.RemoveAt(gunViewArg + 1); argsList.RemoveAt(gunViewArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun view: {gunView}");
+                }
+                // --gun-mirror <mask>: reflect the gun across an axis (1=face X, 2=Y,
+                // 4=barrel Z; combinable) for when it's the wrong-handed side.
+                int gunMirror = 0;
+                int gunMirrorArg = argsList.IndexOf("--gun-mirror");
+                if (gunMirrorArg >= 0 && gunMirrorArg + 1 < argsList.Count)
+                {
+                    int.TryParse(argsList[gunMirrorArg + 1], out gunMirror);
+                    argsList.RemoveAt(gunMirrorArg + 1); argsList.RemoveAt(gunMirrorArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun mirror mask: {gunMirror}");
+                }
+                OpenTK.Mathematics.Vector3? gunAim = null, gunFace = null;
+                int gunAimArg = argsList.IndexOf("--gun-aim");
+                if (gunAimArg >= 0 && gunAimArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunAimArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunAim = new OpenTK.Mathematics.Vector3(Pf(0), Pf(1), Pf(2));
+                    argsList.RemoveAt(gunAimArg + 1); argsList.RemoveAt(gunAimArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun aim: {gunAim}");
+                }
+                int gunFaceArg = argsList.IndexOf("--gun-face");
+                if (gunFaceArg >= 0 && gunFaceArg + 1 < argsList.Count)
+                {
+                    var p = argsList[gunFaceArg + 1].Split(',');
+                    float Pf(int i) => (p.Length > i && float.TryParse(p[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                    gunFace = new OpenTK.Mathematics.Vector3(Pf(0), Pf(1), Pf(2));
+                    argsList.RemoveAt(gunFaceArg + 1); argsList.RemoveAt(gunFaceArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun face: {gunFace}");
+                }
+                // --gun-align-loop: after the first render, stay warm and re-render
+                // on each stdin line "screen,roll,pitch,ox,oy,oz,gscale" (prints
+                // RENDERED when the PNG is ready). Powers the interactive aligner with
+                // near-instant updates (no per-frame process spawn / DAT load / GL init).
+                bool gunAlignLoop = argsList.IndexOf("--gun-align-loop") >= 0;
+                if (gunAlignLoop) { argsList.Remove("--gun-align-loop"); args = argsList.ToArray(); }
+                float gunTilt = 0f, gunTiltDir = 132f;
+                int gunTiltArg = argsList.IndexOf("--gun-tilt");
+                if (gunTiltArg >= 0 && gunTiltArg + 1 < argsList.Count)
+                {
+                    float.TryParse(argsList[gunTiltArg + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out gunTilt);
+                    argsList.RemoveAt(gunTiltArg + 1); argsList.RemoveAt(gunTiltArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun tilt: {gunTilt} deg");
+                }
+                int gunTiltDirArg = argsList.IndexOf("--gun-tilt-dir");
+                if (gunTiltDirArg >= 0 && gunTiltDirArg + 1 < argsList.Count)
+                {
+                    float.TryParse(argsList[gunTiltDirArg + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out gunTiltDir);
+                    argsList.RemoveAt(gunTiltDirArg + 1); argsList.RemoveAt(gunTiltDirArg); args = argsList.ToArray();
+                    Console.WriteLine($"Gun tilt dir: {gunTiltDir} deg");
+                }
+
                 // Apply scale to CSP dimensions
                 if (cspScale > 1)
                 {
@@ -715,6 +895,68 @@ namespace HSDRawViewer
                         }
                         if (mexAccessoryFollow.Count > 0)
                             Console.WriteLine($"Spliced {mexAccessoryFollow.Count} mex costume accessory(ies) for portrait render");
+                    }
+                }
+
+                // --gun: splice Fox/Falco's blaster article model (which lives in
+                // the fighter file PlFx.dat/PlFc.dat, NOT in the costume DAT) into
+                // the render so it shows in the portrait. Open the fighter file,
+                // walk to its first ftData root, pull the article gun model
+                // (Articles[gunArticleIndex] -> Model -> RootModelJoint), and
+                // splice it as the LAST child of the body root (after the whole
+                // body subtree so body joint indices / CSP anim tracks stay
+                // aligned). BoneAttachID is the gun's own internal bone the game
+                // constrains to the hand; we record it to pin after posing.
+                if (!string.IsNullOrEmpty(gunPath))
+                {
+                    try
+                    {
+                        if (!System.IO.File.Exists(gunPath))
+                        {
+                            Console.WriteLine($"Gun: fighter file not found: {gunPath}");
+                        }
+                        else if (characterJobjNode != null && characterJobjNode.Accessor is HSDRaw.Common.HSD_JOBJ gunBodyRoot)
+                        {
+                            gunFile = new HSDRaw.HSDRawFile();
+                            gunFile.Open(gunPath);
+                            var ftRoot = gunFile.Roots.FirstOrDefault(r => r.Name != null && r.Name.StartsWith("ftData"));
+                            if (ftRoot == null)
+                            {
+                                Console.WriteLine("Gun: no ftData root found in fighter file");
+                            }
+                            else
+                            {
+                                string gunModelPath = $"{ftRoot.Name}/Articles/Articles_{gunArticleIndex}/Model_/RootModelJoint";
+                                var gunNav = NavigateToJOBJWithParent(gunFile, gunModelPath);
+                                gunRootDesc = gunNav.jobj;
+                                var gunItemModel = gunNav.parent as HSDRaw.Melee.Pl.SBM_ItemModel;
+                                if (gunRootDesc == null)
+                                {
+                                    Console.WriteLine($"Gun: could not resolve {gunModelPath}");
+                                }
+                                else
+                                {
+                                    gunBoneAttachId = gunItemModel?.BoneAttachID ?? 0;
+                                    int gunBoneCount = gunItemModel?.BoneCount ?? -1;
+                                    gunAttachDesc = (gunBoneAttachId <= 0)
+                                        ? gunRootDesc
+                                        : (GetJObjDescAtIndex(gunRootDesc, gunBoneAttachId) ?? gunRootDesc);
+
+                                    // splice as last child of the body root
+                                    gunRootDesc.Next = null;
+                                    HSDRaw.Common.HSD_JOBJ gtail = gunBodyRoot.Child;
+                                    if (gtail == null) { gunBodyRoot.Child = gunRootDesc; }
+                                    else { while (gtail.Next != null) gtail = gtail.Next; gtail.Next = gunRootDesc; }
+                                    Console.WriteLine($"Gun: spliced article {gunArticleIndex} model from {ftRoot.Name} " +
+                                        $"(BoneAttachID={gunBoneAttachId}, BoneCount={gunBoneCount}, thumbBone={gunThumbBone}, scale={gunScale})");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Gun splice failed: {ex.Message}");
+                        gunRootDesc = null;
                     }
                 }
 
@@ -1586,6 +1828,115 @@ namespace HSDRawViewer
                         }
                     }
 
+                    // CSP_DUMP_BONES=1: log every posed bone's index + world
+                    // translation so we can identify which joint a part maps to
+                    // (e.g. find Fox's right-thumb bone for gun attach).
+                    if (Environment.GetEnvironmentVariable("CSP_DUMP_BONES") == "1" && renderJObj?.RootJObj != null)
+                    {
+                        try
+                        {
+                            int bi = 0;
+                            while (true)
+                            {
+                                var jb = renderJObj.RootJObj.GetJObjAtIndex(bi);
+                                if (jb == null) break;
+                                var w = jb.WorldTransform.ExtractTranslation();
+                                Console.WriteLine($"[bone] {bi}: ({w.X:F2}, {w.Y:F2}, {w.Z:F2})");
+                                bi++;
+                            }
+                            Console.WriteLine($"[bone] total {bi}");
+                        }
+                        catch (Exception ex) { Console.WriteLine($"Bone dump failed: {ex.Message}"); }
+                    }
+
+                    // --gun follow: the spliced blaster is an inert child of the
+                    // render root, authored in its OWN model space, so the posed
+                    // body left it behind. Pin the gun's internal attach bone
+                    // (BoneAttachID) to the right-thumb bone's POSED world — the
+                    // same rigid constraint the game applies each frame
+                    // (lb_8000C2F8 in the decomp) — and bake the result into the
+                    // gun root's SRT so it survives the screenshot's per-frame
+                    // recalc. Math mirrors the accessory follow but anchors on the
+                    // gun's internal attach bone rather than its root:
+                    //   Ia^-1 = gunRootBind * gunAttachBind^-1   (Identity if attach==root)
+                    //   gunRoot.world = Ia^-1 * scale(0.85) * thumb.posedWorld
+                    //   gunRoot.local = gunRoot.world * rootInv
+                    if (gunRootDesc != null && renderJObj?.RootJObj != null)
+                    {
+                        try
+                        {
+                            var gun = renderJObj.RootJObj.GetJObjFromDesc(gunRootDesc);
+                            var gunAttach = renderJObj.RootJObj.GetJObjFromDesc(gunAttachDesc ?? gunRootDesc);
+                            var thumb = renderJObj.RootJObj.GetJObjAtIndex(gunThumbBone);
+                            if (gun == null || thumb == null)
+                            {
+                                Console.WriteLine($"Gun follow: missing node (gun={gun != null}, thumb={thumb != null} idx {gunThumbBone})");
+                            }
+                            else
+                            {
+                                if (gunAttach == null) gunAttach = gun;
+                                var rootInv = renderJObj.RootJObj.WorldTransform.Inverted();
+                                var S = OpenTK.Mathematics.Matrix4.CreateScale(gunScale);
+                                // Place the gun by its geometric center with EXPLICIT model-space
+                                // Euler orientation. The gun model's axes are known (from gun.dae):
+                                // barrel runs along model +Z, the flat faces are ±X, grip/up is Y.
+                                // So --gun-rot maps cleanly: rx/ry aim the barrel, **rz rolls the
+                                // gun about its barrel** -- that's the "gangster" tilt. Pinned to the
+                                // thumb bone's POSITION; --gun-offset nudges in world space.
+                                var center = new OpenTK.Mathematics.Vector3(0f, -0.609f, -0.024f); // gun.dae centroid
+                                var Tc = OpenTK.Mathematics.Matrix4.CreateTranslation(-center);
+                                OpenTK.Mathematics.Matrix4 R;
+                                if (gunView.HasValue)
+                                {
+                                    // camera-relative orientation (gimbal-safe axis-angle build)
+                                    var Vm = viewport.Camera.ModelViewMatrix;
+                                    var camRight = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M11, Vm.M21, Vm.M31));
+                                    var camUp = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M12, Vm.M22, Vm.M32));
+                                    var camFwd = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M13, Vm.M23, Vm.M33));
+                                    R = BuildGunOrient(gunView.Value.X, gunView.Value.Y, gunView.Value.Z, gunMirror, camRight, camUp, camFwd);
+                                }
+                                else if (gunAim.HasValue && gunFace.HasValue)
+                                {
+                                    // build an orthonormal model->world basis: model +Z -> aim
+                                    // (barrel), model +X -> face (orthogonalized), Y = Z x X.
+                                    var zc = OpenTK.Mathematics.Vector3.Normalize(gunAim.Value);
+                                    var f = gunFace.Value;
+                                    var xc = f - zc * OpenTK.Mathematics.Vector3.Dot(f, zc);
+                                    if (xc.LengthSquared < 1e-6f) xc = OpenTK.Mathematics.Vector3.UnitX;
+                                    xc = OpenTK.Mathematics.Vector3.Normalize(xc);
+                                    var yc = OpenTK.Mathematics.Vector3.Cross(zc, xc);
+                                    // row-vector convention: (1,0,0)*R = row0 => rows are the
+                                    // world images of model X, Y, Z.
+                                    R = new OpenTK.Mathematics.Matrix4(
+                                        xc.X, xc.Y, xc.Z, 0,
+                                        yc.X, yc.Y, yc.Z, 0,
+                                        zc.X, zc.Y, zc.Z, 0,
+                                        0, 0, 0, 1);
+                                }
+                                else
+                                {
+                                    R = Math3D.CreateMatrix4FromEuler(gunRot);
+                                }
+                                var thumbPos = thumb.WorldTransform.ExtractTranslation();
+                                var Tpos = OpenTK.Mathematics.Matrix4.CreateTranslation(thumbPos + gunOff);
+                                var world = Tc * S * R * Tpos;
+                                var local = world * rootInv;
+                                gun.Scale = local.ExtractScale();
+                                var grot = local.ExtractRotationEuler();
+                                gun.Rotation = new OpenTK.Mathematics.Vector4(grot.X, grot.Y, grot.Z, 0);
+                                gun.Translation = local.ExtractTranslation();
+                                renderJObj.RootJObj.RecalculateTransforms(viewport.Camera, true);
+                                viewport.Render();
+                                var tw = thumb.WorldTransform.ExtractTranslation();
+                                Console.WriteLine($"Gun follow: pinned attach bone (id {gunBoneAttachId}) to thumb bone {gunThumbBone} at ({tw.X:F2},{tw.Y:F2},{tw.Z:F2})");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Gun follow failed: {ex.Message}");
+                        }
+                    }
+
                     // Set up the screenshot callback to capture the output
                     string actualOutputFile = System.IO.Path.GetFullPath(outputFile);
                     bool screenshotTaken = false;
@@ -1634,6 +1985,64 @@ namespace HSDRawViewer
                     else
                     {
                         Console.WriteLine("Screenshot was not taken successfully");
+                    }
+
+                    // Warm interactive loop for the gun aligner: re-pose + re-shoot on
+                    // each stdin line without tearing down the renderer.
+                    if (gunAlignLoop && gunRootDesc != null && renderJObj?.RootJObj != null)
+                    {
+                        string datDir2 = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(datFile));
+                        string defaultPath2 = System.IO.Path.Combine(datDir2, "csp_" + System.IO.Path.GetFileNameWithoutExtension(datFile) + ".png");
+                        var center2 = new OpenTK.Mathematics.Vector3(0f, -0.609f, -0.024f);
+                        Console.WriteLine("GUNLOOP READY");
+                        Console.Out.Flush();
+                        string line;
+                        while ((line = Console.ReadLine()) != null)
+                        {
+                            if (line.Trim() == "quit") break;
+                            var parts = line.Split(',');
+                            float F(int i) => (parts.Length > i && float.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) ? v : 0f;
+                            float scn = F(0), rll = F(1), ptc = F(2), ox = F(3), oy = F(4), oz = F(5), gsc = F(6);
+                            int mir = (int)F(7);
+                            try
+                            {
+                                var gunL = renderJObj.RootJObj.GetJObjFromDesc(gunRootDesc);
+                                var thumbL = renderJObj.RootJObj.GetJObjAtIndex(gunThumbBone);
+                                if (gunL != null && thumbL != null)
+                                {
+                                    var rootInv2 = renderJObj.RootJObj.WorldTransform.Inverted();
+                                    var Vm = viewport.Camera.ModelViewMatrix;
+                                    var camRight = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M11, Vm.M21, Vm.M31));
+                                    var camUp = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M12, Vm.M22, Vm.M32));
+                                    var camFwd = OpenTK.Mathematics.Vector3.Normalize(new OpenTK.Mathematics.Vector3(Vm.M13, Vm.M23, Vm.M33));
+                                    var Rm = BuildGunOrient(scn, rll, ptc, mir, camRight, camUp, camFwd);
+                                    var Tc2 = OpenTK.Mathematics.Matrix4.CreateTranslation(-center2);
+                                    var S2 = OpenTK.Mathematics.Matrix4.CreateScale(gsc);
+                                    var thumbPos2 = thumbL.WorldTransform.ExtractTranslation();
+                                    var Tpos2 = OpenTK.Mathematics.Matrix4.CreateTranslation(thumbPos2 + new OpenTK.Mathematics.Vector3(ox, oy, oz));
+                                    var world2 = Tc2 * S2 * Rm * Tpos2;
+                                    var local2 = world2 * rootInv2;
+                                    gunL.Scale = local2.ExtractScale();
+                                    var gr = local2.ExtractRotationEuler();
+                                    gunL.Rotation = new OpenTK.Mathematics.Vector4(gr.X, gr.Y, gr.Z, 0);
+                                    gunL.Translation = local2.ExtractTranslation();
+                                    renderJObj.RootJObj.RecalculateTransforms(viewport.Camera, true);
+                                    viewport.Render();
+                                }
+                                screenshotTaken = false;
+                                viewport.Screenshot();
+                                int at = 0;
+                                while (!screenshotTaken && at < 300) { System.Threading.Thread.Sleep(10); System.Windows.Forms.Application.DoEvents(); at++; }
+                                if (System.IO.File.Exists(defaultPath2))
+                                {
+                                    if (System.IO.File.Exists(actualOutputFile)) System.IO.File.Delete(actualOutputFile);
+                                    System.IO.File.Move(defaultPath2, actualOutputFile);
+                                }
+                            }
+                            catch (Exception ex) { Console.WriteLine("loop err: " + ex.Message); }
+                            Console.WriteLine("RENDERED");
+                            Console.Out.Flush();
+                        }
                     }
                 }
 
@@ -5616,6 +6025,68 @@ namespace HSDRawViewer
         {
             var result = NavigateToJOBJWithParent(rawFile, path);
             return result.jobj;
+        }
+
+        /// <summary>
+        /// Depth-first (child-before-sibling) descendant of <paramref name="root"/>
+        /// at <paramref name="index"/>, matching the LiveJObj render indexer
+        /// (index 0 == root). Used to resolve an article model's internal attach
+        /// bone (SBM_ItemModel.BoneAttachID) by position within its own subtree.
+        /// </summary>
+        static HSDRaw.Common.HSD_JOBJ GetJObjDescAtIndex(HSDRaw.Common.HSD_JOBJ root, int index)
+        {
+            int counter = 0;
+            return DfsFindJObj(root, index, ref counter);
+        }
+
+        static HSDRaw.Common.HSD_JOBJ DfsFindJObj(HSDRaw.Common.HSD_JOBJ node, int target, ref int counter)
+        {
+            if (node == null) return null;
+            if (counter == target) return node;
+            counter++;
+            for (var c = node.Child; c != null; c = c.Next)
+            {
+                var r = DfsFindJObj(c, target, ref counter);
+                if (r != null) return r;
+            }
+            return null;
+        }
+
+        // transform a DIRECTION by a row-vector rotation matrix (3x3 part)
+        static OpenTK.Mathematics.Vector3 TDir(OpenTK.Mathematics.Vector3 v, OpenTK.Mathematics.Matrix4 m)
+            => new OpenTK.Mathematics.Vector3(
+                v.X * m.M11 + v.Y * m.M21 + v.Z * m.M31,
+                v.X * m.M12 + v.Y * m.M22 + v.Z * m.M32,
+                v.X * m.M13 + v.Y * m.M23 + v.Z * m.M33);
+
+        /// <summary>
+        /// Build the gun's model->world rotation for the aligner from 3 camera-relative
+        /// angles, composed as axis-angle rotations so it NEVER gimbal-flips (the old
+        /// Gram-Schmidt-against-camFwd build snapped at pitch=90). Base: barrel (model +Z)
+        /// along camRight, flat face (model +X) toward camera; roll spins the face about the
+        /// barrel; pitch turns about camUp; screen spins about camFwd. mirrorMask reflects an
+        /// axis (1=X face, 2=Y, 4=Z barrel) for the wrong-handed-side case.
+        /// </summary>
+        static OpenTK.Mathematics.Matrix4 BuildGunOrient(float scrDeg, float rollDeg, float pitchDeg, int mirrorMask,
+            OpenTK.Mathematics.Vector3 camRight, OpenTK.Mathematics.Vector3 camUp, OpenTK.Mathematics.Vector3 camFwd)
+        {
+            float s = OpenTK.Mathematics.MathHelper.DegreesToRadians(scrDeg);
+            float rl = OpenTK.Mathematics.MathHelper.DegreesToRadians(rollDeg);
+            float pt = OpenTK.Mathematics.MathHelper.DegreesToRadians(pitchDeg);
+            var M = OpenTK.Mathematics.Matrix4.CreateFromAxisAngle(camUp, pt)
+                  * OpenTK.Mathematics.Matrix4.CreateFromAxisAngle(camFwd, s);
+            var barrel0 = camRight;
+            var face0 = -camFwd;
+            var faceRolled = face0 * (float)Math.Cos(rl) + OpenTK.Mathematics.Vector3.Cross(barrel0, face0) * (float)Math.Sin(rl);
+            var zc = OpenTK.Mathematics.Vector3.Normalize(TDir(barrel0, M));
+            var face = TDir(faceRolled, M);
+            var xc = OpenTK.Mathematics.Vector3.Normalize(face - zc * OpenTK.Mathematics.Vector3.Dot(face, zc));
+            var yc = OpenTK.Mathematics.Vector3.Cross(zc, xc);
+            if ((mirrorMask & 1) != 0) xc = -xc;
+            if ((mirrorMask & 2) != 0) yc = -yc;
+            if ((mirrorMask & 4) != 0) zc = -zc;
+            return new OpenTK.Mathematics.Matrix4(
+                xc.X, xc.Y, xc.Z, 0, yc.X, yc.Y, yc.Z, 0, zc.X, zc.Y, zc.Z, 0, 0, 0, 0, 1);
         }
 
         /// <summary>

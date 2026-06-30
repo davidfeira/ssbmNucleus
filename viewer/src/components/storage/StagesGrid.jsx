@@ -50,6 +50,7 @@ export default function StagesGrid({ stageVariants, isLoading, onSelectStage, cu
                   src={vanillaImagePath}
                   alt={stage.name}
                   className="stage-icon"
+                  draggable={false}
                   onError={(e) => {
                     e.target.style.display = 'none'
                     e.target.nextSibling.style.display = 'flex'

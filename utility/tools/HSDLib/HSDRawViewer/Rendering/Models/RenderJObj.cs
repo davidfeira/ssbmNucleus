@@ -764,6 +764,9 @@ namespace HSDRawViewer.Rendering.Models
                 _shader.SetFloat("alphaRef0", MaterialState.Ref0);
                 _shader.SetFloat("alphaRef1", MaterialState.Ref1);
             }
+            // TEMP DIAG: force a render-override mode + no blend/alpha-discard (for isolating eyes)
+            { string _ro = Environment.GetEnvironmentVariable("CSP_RENDER_OVERRIDE"); if (_ro != null && int.TryParse(_ro, out int _rov)) { _shader.SetInt("renderOverride", _rov); GL.Disable(EnableCap.Blend); GL.Disable(EnableCap.AlphaTest); } }
+            if (Environment.GetEnvironmentVariable("CSP_NO_ALPHAKILL") == "1") { GL.Disable(EnableCap.Blend); GL.Disable(EnableCap.AlphaTest); }
 
             // all flag
             bool enableAll = mobj.RenderFlags.HasFlag(RENDER_MODE.DF_ALL);
@@ -806,6 +809,46 @@ namespace HSDRawViewer.Rendering.Models
                     // get texture
                     HSD_TOBJ tex = textures[i];
                     HSD_TOBJ_TEV tev = tex.TEV;
+
+                    // TexAnim-frame skip: a material whose chain stacks MULTIPLE TObjs
+                    // on the SAME GX_TEXMAP with IDENTICAL dimensions is not doing
+                    // multi-texturing -- those extra TObjs are texture-ANIMATION frames
+                    // (eye-blink: open / half / closed) that the game's MatAnim selects
+                    // ONE of per frame. The CSP has no matanim driving this material (on
+                    // flattened imports the blink matanim_joint targets the ORIGINAL
+                    // skeleton joint, not the flattened body joint), so the bind loop
+                    // would light up every frame TObj (see the hasTEX force below) and the
+                    // TEV combine (REPLACE the open-eye base, then the closed-frame masks)
+                    // crushes the eye to black -- the "empty/black eye socket" seen on
+                    // Wario-over-Mario and similar imports (geometry + open-eye texture are
+                    // both fine; only the wrongful multi-frame combine is black). Keep only
+                    // the FIRST TObj per (texmap, size) = frame 0 = the open eye. Genuine
+                    // multi-resolution layers on one texmap (e.g. a 128 detail over a 512
+                    // base) have DIFFERENT sizes and are left to combine exactly as before.
+                    if (tex.ImageData != null)
+                    {
+                        bool isFrameDup = false;
+                        for (int j = 0; j < i; j++)
+                        {
+                            HSD_TOBJ pj = textures[j];
+                            if (pj.ImageData != null
+                                && pj.TexMapID == tex.TexMapID
+                                && pj.ImageData.Width == tex.ImageData.Width
+                                && pj.ImageData.Height == tex.ImageData.Height)
+                            { isFrameDup = true; break; }
+                        }
+                        if (isFrameDup)
+                        {
+                            // also make sure this unit is OFF: if the material's
+                            // RenderMode happened to set this TEX bit, leaving it on
+                            // with no bound texture would sample an unbound (black)
+                            // unit and the TEV combine would crush the surface (the
+                            // cause-G black-body trap). Skipping the bind below would
+                            // otherwise leave hasTEX[i] at its RenderMode value.
+                            _shader.SetBoolToInt($"hasTEX[{i}]", false);
+                            continue;
+                        }
+                    }
 
                     // texture state info
                     HSD_TOBJ displayTex;
@@ -937,10 +980,49 @@ namespace HSDRawViewer.Rendering.Models
                     _shader.SetVector4($"Tev[{i}].tev1", tev1);
                 }
             }
+
+            // ===== TEMP DIAG (CSP_MAT_DEBUG=1): per-dobj material + per-tobj summary =====
+            if (Environment.GetEnvironmentVariable("CSP_MAT_DEBUG") == "1")
+            {
+                int gi = RenderDobjs.IndexOf(dobj);
+                int ji = RootJObj != null ? RootJObj.GetIndexOfDesc(dobj.Parent.Desc) : -1;
+                HSD_PEDesc ped = mobj.PEDesc;
+                string pe = ped == null ? "PE=null" : $"PE[bm={ped.BlendMode} aOp={ped.AlphaOp} c0={ped.AlphaComp0} r0={ped.AlphaRef0}]";
+                int totDL = 0; foreach (RenderPObj rp in dobj.PObjs) totDL += rp.DisplayLists.Count;
+                bool jOpa = dobj.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.OPA);
+                bool jXlu = dobj.Parent.Desc.Flags.HasFlag(JOBJ_FLAG.XLU);
+                Console.WriteLine($"[mat] gi={gi} j={ji} pobjs={dobj.PObjs.Count} DLs={totDL} RM={mobj.RenderFlags} matA={MaterialState.Alpha:0.##} difA={MaterialState.Diffuse.W:0.##} jOPA={jOpa} jXLU={jXlu} {pe}");
+                if (mobj.Textures != null)
+                {
+                    int ti = 0;
+                    foreach (HSD_TOBJ t in mobj.Textures.List)
+                    {
+                        string a = "a=?";
+                        try
+                        {
+                            if (t.ImageData?.ImageData != null)
+                            {
+                                byte[] dec = t.GetDecodedImageData();
+                                int mn = 255, mx = 0;
+                                for (int k = 3; k < dec.Length; k += 4) { if (dec[k] < mn) mn = dec[k]; if (dec[k] > mx) mx = dec[k]; }
+                                a = $"alpha={mn}-{mx}";
+                            }
+                            else a = "alpha=noimg";
+                        }
+                        catch (Exception ex) { a = "alpha=err:" + ex.Message; }
+                        int cop = ((int)t.Flags >> 16) & 0xF, aop = ((int)t.Flags >> 20) & 0xF;
+                        string fmt = t.ImageData != null ? t.ImageData.Format.ToString() : "null";
+                        string lm = (t.Flags.HasFlag(TOBJ_FLAGS.LIGHTMAP_DIFFUSE) ? "DIFF " : "") + (t.Flags.HasFlag(TOBJ_FLAGS.LIGHTMAP_AMBIENT) ? "AMB " : "") + (t.Flags.HasFlag(TOBJ_FLAGS.LIGHTMAP_SPECULAR) ? "SPEC " : "") + (t.Flags.HasFlag(TOBJ_FLAGS.LIGHTMAP_EXT) ? "EXT " : "");
+                        Console.WriteLine($"   tobj{ti} fmt={fmt} {t.ImageData?.Width}x{t.ImageData?.Height} texmap={t.TexMapID} cOP={cop} aOP={aop} lm=[{lm}] {a} TEV={t.TEV != null}");
+                        ti++;
+                    }
+                }
+            }
+            // ===== END TEMP DIAG =====
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         public bool PreLoadTexture(HSD_TOBJ tobj)
         {

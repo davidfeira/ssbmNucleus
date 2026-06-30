@@ -16,7 +16,7 @@ from core.metadata import load_metadata, save_metadata
 from dat_processor import validate_for_slippi
 from skinlab.costume_assets import build_csp_and_stock
 
-from .helpers import compute_dat_hash, extract_custom_name_from_filename
+from .helpers import compute_dat_hash, extract_custom_name_from_filename, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +129,13 @@ def import_character_costume(zip_path: str, char_info: dict, original_filename: 
         dat_name_clean = re.sub(r'[\s_]+', '-', dat_name_clean)  # Replace spaces/underscores with hyphens
         dat_name_clean = dat_name_clean.lower().strip('-')  # Lowercase and remove leading/trailing hyphens
 
-        # Generate base ID: use custom name if found, otherwise use DAT filename
+        # Generate base ID: use custom name if found, otherwise use DAT filename.
+        # The base ID becomes a filename on disk, so strip characters Windows
+        # forbids (e.g. a '|' in a post title like "Akaneia Pichu | Animelee"
+        # previously produced an illegal path -> OSError [Errno 22], silently
+        # failing the import). The pretty custom_name is kept for display below.
         if custom_name:
-            base_id = f"{custom_name}-{dat_name_clean}"
+            base_id = f"{sanitize_filename(custom_name)}-{dat_name_clean}"
             logger.info(f"Using custom name from filename: '{custom_name}' -> '{base_id}'")
         else:
             base_id = dat_name_clean

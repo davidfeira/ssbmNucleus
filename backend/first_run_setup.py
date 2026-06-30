@@ -1038,6 +1038,23 @@ class FirstRunSetup:
                 logger.warning(f"Sound extraction had issues: {result.get('error')}")
                 # Don't fail setup, just warn - sounds are supplementary
 
+            # Warm the HD CSP cache from the freshly-extracted vanilla costumes,
+            # so the first texture-pack/bundle export doesn't have to render the
+            # vanilla slots. Background + idempotent; failures are non-fatal (the
+            # export renders any missing HD CSP on demand). Patch-derived projects
+            # are custom art and won't hit this, but mixed/vault projects do.
+            if os.environ.get('NUCLEUS_HD_CSP_PRESEED', '1') != '0':
+                try:
+                    from skinlab.hd_csp_cache import preseed_vanilla_hd_csps
+                    threading.Thread(
+                        target=preseed_vanilla_hd_csps,
+                        name='hd-csp-preseed',
+                        daemon=True,
+                    ).start()
+                    logger.info("Started background HD CSP cache pre-seed")
+                except Exception as e:
+                    logger.warning(f"Could not start HD CSP pre-seed: {e}")
+
             # Success
             if progress_callback:
                 progress_callback('complete', 100, 'Setup complete!', 100, 100)

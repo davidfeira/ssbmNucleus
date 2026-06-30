@@ -30,6 +30,10 @@ namespace MexCLI
                         return Commands.ListFightersCommand.Execute(args);
                     case "func-probe":
                         return Commands.FuncProbeCommand.Execute(args);
+                    case "detect-outline":
+                        return Commands.DetectOutlineCommand.Execute(args);
+                    case "convert-outline":
+                        return Commands.ConvertOutlineCommand.Execute(args);
                     case "copy-root":
                         return Commands.CopyRootCommand.Execute(args);
                     case "get-costumes":
