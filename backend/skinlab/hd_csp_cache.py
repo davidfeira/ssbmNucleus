@@ -30,19 +30,13 @@ import os
 import re
 import shutil
 import tempfile
-import threading
 from pathlib import Path
 from typing import Callable, Optional
 
 from core.config import STORAGE_PATH
+from skinlab.csp_concurrency import staggered_launch
 
 logger = logging.getLogger(__name__)
-
-# Serialize the actual headless renders. The vanilla pre-seed runs in a
-# background thread while the user may trigger a texture-pack export; this keeps
-# the two from spawning overlapping HSDRawViewer renders through this path. Cache
-# HITS never take the lock, so a warm cache stays fully parallel.
-_render_lock = threading.Lock()
 
 # HD CSPs are always 4x (544x752) -- see the csp-manager HD rework. Scale is part
 # of the cache key so a future change can coexist with already-cached renders.
@@ -139,7 +133,11 @@ def get_or_render_hd(
             paired_local = tmp / Path(paired_dat_path).name
             shutil.copy2(paired_dat_path, paired_local)
 
-        with _render_lock:
+        # Render under a staggered launch instead of a full lock: concurrent
+        # callers (e.g. the parallel texture-pack export) get spaced HSDRawViewer
+        # launches to avoid the init race, then render in parallel. Cache HITS
+        # return above and never reach here.
+        with staggered_launch():
             out = generate_csp(
                 str(local),
                 scale=scale,

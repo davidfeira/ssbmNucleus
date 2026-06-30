@@ -32,6 +32,39 @@ def find_folder_in_variants(variants, folder_id):
     return None, -1
 
 
+def display_ordered_stage_variants(stage_data, stage_folder):
+    """Rebuild a stage's variant list in the SAME order the DAS variants endpoint
+    shows it, so reorder fromIndex/toIndex (which the frontend computes against
+    that displayed list) line up with what we mutate here.
+
+    Order mirrors das_list_storage_variants: folder entries + metadata variants
+    that exist on disk, in metadata order, followed by any on-disk zips that have
+    no metadata entry yet ("disk-only" variants, appended at the end). Returns
+    (display, hidden) where `hidden` are metadata variants whose zip is missing
+    (not shown by the endpoint) so the caller can keep them instead of dropping
+    them. Disk-only entries come back as fresh {'id','name'} dicts; persisting
+    them after a move promotes them to real metadata variants so the order sticks.
+    """
+    variants = stage_data.get('variants', [])
+    storage_path = STORAGE_PATH / "das" / stage_folder
+    if not storage_path.exists():
+        return list(variants), []
+    zip_files = {p.stem: p for p in storage_path.glob('*.zip')}
+    display, hidden, consumed = [], [], set()
+    for item in variants:
+        if item.get('type') == 'folder':
+            display.append(item)
+        elif item.get('id') in zip_files:
+            display.append(item)
+            consumed.add(item.get('id'))
+        else:
+            hidden.append(item)  # metadata variant with no zip on disk → not shown
+    for zid in zip_files:
+        if zid not in consumed:
+            display.append({'id': zid, 'name': zid})  # disk-only → synth entry
+    return display, hidden
+
+
 @storage_stages_bp.route('/api/mex/storage/stages/delete', methods=['POST'])
 def delete_storage_stage():
     """Delete stage variant from storage"""
@@ -255,18 +288,27 @@ def reorder_stages():
             return jsonify({'success': False, 'error': f'Stage folder {stage_folder} not found in metadata'}), 404
 
         stage_data = metadata['stages'][stage_folder]
-        variants = stage_data.get('variants', [])
 
-        if from_index < 0 or from_index >= len(variants) or to_index < 0 or to_index >= len(variants):
+        # Reorder against the SAME ordered view the frontend sees (metadata
+        # variants present on disk + disk-only zips appended), not the raw
+        # metadata list. Otherwise dragging — or dropping onto — a disk-only
+        # variant sends an index past the metadata list and 400s here.
+        display, hidden = display_ordered_stage_variants(stage_data, stage_folder)
+
+        if from_index < 0 or from_index >= len(display) or to_index < 0 or to_index >= len(display):
             return jsonify({'success': False, 'error': 'Invalid fromIndex or toIndex'}), 400
 
-        variant = variants.pop(from_index)
-        variants.insert(to_index, variant)
+        entry = display.pop(from_index)
+        display.insert(to_index, entry)
 
+        # Persist the new order. A moved disk-only entry is now a real metadata
+        # variant (so its position sticks); metadata variants whose zip is
+        # missing (not shown) are kept at the end so they aren't lost.
+        stage_data['variants'] = display + hidden
         save_metadata(metadata)
 
         logger.info(f"[OK] Reordered {stage_folder} variants: moved index {from_index} to {to_index}")
-        return jsonify({'success': True, 'variants': variants})
+        return jsonify({'success': True, 'variants': stage_data['variants']})
     except Exception as e:
         logger.error(f"Reorder stages error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

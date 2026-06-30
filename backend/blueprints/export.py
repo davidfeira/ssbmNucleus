@@ -148,6 +148,8 @@ def start_export():
                     )
                     from skinlab.hd_csp_cache import (
                         get_or_render_hd, hash_dat, get_cached, effective_key_hash)
+                    from skinlab.csp_concurrency import csp_workers
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
                     from mex_bridge import MexManager
                     from core.config import MEXCLI_PATH
 
@@ -211,62 +213,85 @@ def start_export():
                     total_slots = len(slots)
                     logger.info(f"Texture-pack: {total_slots} costume CSP slots to process")
 
-                    # Pass 2: for each slot resolve an HD CSP and swap in the 16x16
-                    # placeholder. HD priority: the user's vault HD CSP, then the
-                    # DAT-hash cache, then a fresh 4x render (patch costumes are
-                    # custom art with no vault/vanilla match -> render once, cached
+                    # Pass 2: resolve each slot's HD CSP, then swap in the 16x16
+                    # placeholder. HD priority per slot: the user's vault HD CSP,
+                    # then the DAT-hash cache, then a fresh 4x render (patch costumes
+                    # are custom art with no vault/vanilla match -> render once, cached
                     # by DAT hash so every later export is instant). A failed render
                     # leaves hd_csp_path=None -> SD fallback (never breaks a build).
-                    rendered = 0
-                    for global_index, slot in enumerate(slots):
-                        csp_name = slot['csp_name']
-                        temp_csp_path = temp_csp_dir / csp_name
-                        live_sd_csp = str(live_csp_dir / csp_name)
-
-                        hd_csp_path = None
-                        dat_hash = None
+                    # Renders are the slow part and independent per slot, so resolve
+                    # them in parallel (worker count auto-sized to the machine); the
+                    # mapping + placeholder write is cheap and done serially after.
+                    def _resolve_slot_hd(slot):
+                        """Resolve (hd_csp_path, dat_hash, was_miss) for one slot.
+                        Thread-safe: only reads shared inputs and renders via
+                        get_or_render_hd (own temp dir + atomic cache publish +
+                        staggered launch)."""
+                        live_sd = str(live_csp_dir / slot['csp_name'])
                         try:
-                            vault_hd = find_hd_csp_by_hash(STORAGE_PATH, live_sd_csp, slot['character'])
+                            vault_hd = find_hd_csp_by_hash(STORAGE_PATH, live_sd, slot['character'])
                         except Exception:
                             vault_hd = None
                         if vault_hd:
-                            hd_csp_path = str(vault_hd)
-                        else:
-                            dat_path = _resolve_project_dat(temp_files_dir, slot['file_name'])
-                            if dat_path is not None:
-                                dat_hash = hash_dat(dat_path)
+                            return str(vault_hd), None, False
+                        dat_path = _resolve_project_dat(temp_files_dir, slot['file_name'])
+                        if dat_path is None:
+                            return None, None, False
+                        dat_hash = hash_dat(dat_path)
 
-                                # Ice Climbers: composite Nana onto Popo so the HD
-                                # portrait matches the in-game both-climbers CSP.
-                                # find_ice_climbers_pair locates the partner DAT in
-                                # the same files/ dir by color/slot; for a Nana-primary
-                                # slot generate_csp renders nothing (no CSS portrait)
-                                # and we fall back to SD.
-                                paired_dat_path = None
-                                if dat_path.name[:4].lower() in ('plpp', 'plnn'):
-                                    try:
-                                        from generate_csp import find_ice_climbers_pair
-                                        _ct, pair_path, _pc, _nc = find_ice_climbers_pair(str(dat_path))
-                                        if pair_path:
-                                            paired_dat_path = pair_path
-                                    except Exception as e:
-                                        logger.warning(f"ICs pair lookup failed for {dat_path.name}: {e}")
+                        # Ice Climbers: composite Nana onto Popo so the HD portrait
+                        # matches the in-game both-climbers CSP. For a Nana-primary
+                        # slot generate_csp renders nothing and we fall back to SD.
+                        paired_dat_path = None
+                        if dat_path.name[:4].lower() in ('plpp', 'plnn'):
+                            try:
+                                from generate_csp import find_ice_climbers_pair
+                                _ct, pair_path, _pc, _nc = find_ice_climbers_pair(str(dat_path))
+                                if pair_path:
+                                    paired_dat_path = pair_path
+                            except Exception as e:
+                                logger.warning(f"ICs pair lookup failed for {dat_path.name}: {e}")
 
-                                eff_hash = effective_key_hash(
-                                    dat_path, paired_dat_path=paired_dat_path, dat_hash=dat_hash)
-                                miss = bool(eff_hash) and get_cached(eff_hash) is None
-                                pct = 1 + int(4 * (global_index + 1) / max(1, total_slots))
+                        eff_hash = effective_key_hash(
+                            dat_path, paired_dat_path=paired_dat_path, dat_hash=dat_hash)
+                        was_miss = bool(eff_hash) and get_cached(eff_hash) is None
+                        hd = get_or_render_hd(
+                            dat_path, dat_hash=dat_hash, paired_dat_path=paired_dat_path)
+                        return (str(hd) if hd else None), dat_hash, was_miss
+
+                    rendered = 0
+                    hd_by_index = {}  # global_index -> (hd_csp_path, dat_hash)
+                    workers = csp_workers()
+                    done = 0
+                    progress_callback(
+                        1, f"Rendering HD portraits (0/{total_slots}, ×{workers} workers)…")
+                    with ThreadPoolExecutor(max_workers=workers) as pool:
+                        futs = {pool.submit(_resolve_slot_hd, s): i
+                                for i, s in enumerate(slots)}
+                        for fut in as_completed(futs):
+                            gi = futs[fut]
+                            try:
+                                hd_csp_path, dat_hash, was_miss = fut.result()
+                            except Exception as e:
+                                logger.warning(
+                                    f"HD resolve failed for slot {gi} "
+                                    f"({slots[gi]['character']}/{slots[gi]['skin_id']}): {e}")
+                                hd_csp_path, dat_hash, was_miss = None, None, False
+                            hd_by_index[gi] = (hd_csp_path, dat_hash)
+                            if was_miss and hd_csp_path:
+                                rendered += 1
+                            done += 1
+                            if done % 4 == 0 or done == total_slots:
+                                pct = 1 + int(4 * done / max(1, total_slots))
                                 progress_callback(
                                     pct,
-                                    f"{'Rendering' if miss else 'Preparing'} HD portraits "
-                                    f"({global_index + 1}/{total_slots})…")
-                                hd = get_or_render_hd(
-                                    dat_path, dat_hash=dat_hash, paired_dat_path=paired_dat_path)
-                                if hd:
-                                    hd_csp_path = str(hd)
-                                    if miss:
-                                        rendered += 1
+                                    f"Rendering HD portraits "
+                                    f"({done}/{total_slots}, ×{workers} workers)…")
 
+                    # Assemble the mapping + placeholders in slot order (cheap, ordered).
+                    for global_index, slot in enumerate(slots):
+                        hd_csp_path, dat_hash = hd_by_index.get(global_index, (None, None))
+                        live_sd_csp = str(live_csp_dir / slot['csp_name'])
                         mapping.add_costume(CostumeMapping(
                             index=global_index,
                             character=slot['character'],
@@ -276,9 +301,8 @@ def start_export():
                             hd_csp_path=hd_csp_path,
                             dat_hash=dat_hash,
                         ))
-
                         # Replace the COPY's CSP with the encoded placeholder (16x16)
-                        save_encoded_placeholder(global_index, temp_csp_path)
+                        save_encoded_placeholder(global_index, temp_csp_dir / slot['csp_name'])
 
                     global_index = total_slots
                     logger.info(
