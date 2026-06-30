@@ -162,12 +162,21 @@ namespace HSDRawViewer.Rendering.Models
                 switch ((TexTrackType)t.TrackType)
                 {
                     case TexTrackType.HSD_A_T_TIMG:
+                        HSD_TOBJ swap = null;
                         if (value < textures.Count)
-                            TOBJ = textures[(int)value];
+                            swap = textures[(int)value];
                         else if (textures.Count > 0)
-                            TOBJ = textures[0];
-                        else
-                            TOBJ = null;
+                            swap = textures[0];
+                        // Only swap when the frame image is VALID. Some imported
+                        // costumes ship empty eye-blink matanim frames (0x0
+                        // ImageData); swapping to one replaces the material's
+                        // valid base texture and leaves white "empty sockets" in
+                        // the CSP, even though the eye renders fine in-game off
+                        // the base material. Keep the current (base) TOBJ then.
+                        if (swap?.ImageData?.ImageData != null
+                            && swap.ImageData.Width > 0
+                            && swap.ImageData.Height > 0)
+                            TOBJ = swap;
                         break;
                     case TexTrackType.HSD_A_T_BLEND:
                     case TexTrackType.HSD_A_T_TS_BLEND:
