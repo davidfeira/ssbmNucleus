@@ -469,17 +469,55 @@ namespace HSDRawViewer
                 // model. Works in both the normal CSP and --head-shot paths.
                 // Derive the set from the fighter's ftData visibility table
                 // (costume-0 LowPoly set) — see docs/CSP_LOWPOLY_HIDING.md.
+                //
+                // The special value "--hide-dobjs none" means hide NOTHING and
+                // DROP any scene hiddenNodes: a swapped-in custom model (Sonic
+                // over Mario) has a different DObj layout, so the fighter's
+                // low-poly indices point at real visible geometry (Sonic's eyes)
+                // rather than an off-screen mesh. The Python side detects that
+                // (DObj count != vanilla) and passes "none" to suppress hiding.
                 var hideDObjs = new List<int>();
+                bool suppressHide = false;
                 int hideArg = argsList.IndexOf("--hide-dobjs");
                 if (hideArg >= 0 && hideArg + 1 < argsList.Count)
                 {
-                    foreach (var part in argsList[hideArg + 1].Split(','))
-                        if (int.TryParse(part.Trim(), out int dobj))
-                            hideDObjs.Add(dobj);
+                    string hideVal = argsList[hideArg + 1];
+                    if (hideVal.Trim().Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        suppressHide = true;
+                    }
+                    else
+                    {
+                        foreach (var part in hideVal.Split(','))
+                            if (int.TryParse(part.Trim(), out int dobj))
+                                hideDObjs.Add(dobj);
+                    }
                     argsList.RemoveAt(hideArg + 1);
                     argsList.RemoveAt(hideArg);
                     args = argsList.ToArray();
-                    Console.WriteLine($"Hide DObjs (overrides scene hiddenNodes): {string.Join(",", hideDObjs)}");
+                    Console.WriteLine(suppressHide
+                        ? "Hide DObjs: none (suppressing scene hiddenNodes — replaced model)"
+                        : $"Hide DObjs (overrides scene hiddenNodes): {string.Join(",", hideDObjs)}");
+                }
+
+                // --bind-pose: load the scene/anim for its CAMERA + hidden nodes
+                // (and the eye matanim) but DON'T apply the joint pose, so the
+                // model renders in its own bind pose. Costumes authored with a
+                // deliberately deformed skeleton (altered bind transforms, same
+                // bone count) look normal under the curated CSP pose because the
+                // pose's per-bone tracks overwrite the custom rotation/scale/
+                // translation; rendering at bind pose reveals the real rig. The
+                // caller (generate_csp.py) sets this only after detecting a
+                // skeleton that deviates from vanilla, so the common path is
+                // unaffected.
+                bool bindPose = false;
+                int bindPoseArg = argsList.IndexOf("--bind-pose");
+                if (bindPoseArg >= 0)
+                {
+                    bindPose = true;
+                    argsList.RemoveAt(bindPoseArg);
+                    args = argsList.ToArray();
+                    Console.WriteLine("Bind-pose mode: scene camera kept, joint pose skipped (honor custom rig)");
                 }
 
                 // Apply scale to CSP dimensions
@@ -727,8 +765,8 @@ namespace HSDRawViewer
                             if (sceneSettings.Animation != null)
                             {
                                 Console.WriteLine($"Loading animation from scene file (FrameCount: {sceneSettings.Animation.FrameCount})");
-                                renderJObj.LoadAnimation(sceneSettings.Animation, cspMatAnim, null);
-                                Console.WriteLine("Animation loaded from scene");
+                                renderJObj.LoadAnimation(bindPose ? null : sceneSettings.Animation, cspMatAnim, null);
+                                Console.WriteLine(bindPose ? "Bind-pose: scene pose skipped, matanim applied" : "Animation loaded from scene");
                             }
                             else
                             {
@@ -795,8 +833,8 @@ namespace HSDRawViewer
                                     if (animRawFile.Roots.Count > 0 && animRawFile.Roots[0].Data is HSD_FigaTree tree)
                                     {
                                         var jointAnim = new JointAnimManager(tree);
-                                        renderJObj.LoadAnimation(jointAnim, cspMatAnim, null);
-                                        Console.WriteLine($"Animation loaded from AJ file (FrameCount: {jointAnim.FrameCount})");
+                                        renderJObj.LoadAnimation(bindPose ? null : jointAnim, cspMatAnim, null);
+                                        Console.WriteLine(bindPose ? "Bind-pose: AJ pose skipped, matanim applied" : $"Animation loaded from AJ file (FrameCount: {jointAnim.FrameCount})");
                                     }
                                     else
                                     {
@@ -826,8 +864,8 @@ namespace HSDRawViewer
 
                                 if (animManager != null)
                                 {
-                                    Console.WriteLine("Animation loaded successfully");
-                                    renderJObj.LoadAnimation(animManager, cspMatAnim, null);
+                                    Console.WriteLine(bindPose ? "Bind-pose: .anim pose skipped, matanim applied" : "Animation loaded successfully");
+                                    renderJObj.LoadAnimation(bindPose ? null : animManager, cspMatAnim, null);
                                 }
                                 else
                                 {
@@ -1298,7 +1336,9 @@ namespace HSDRawViewer
                         // The scene may have ALREADY hidden its own nodes on the
                         // renderJObj, so reset every DObj visible first — then
                         // hiding only our set is a true replacement, not a union.
-                        if (hideDObjs.Count > 0)
+                        // suppressHide ("--hide-dobjs none") takes the same reset
+                        // path with an EMPTY set, so nothing is hidden at all.
+                        if (hideDObjs.Count > 0 || suppressHide)
                         {
                             hiddenNodes.Clear();
                             hiddenNodes.AddRange(hideDObjs);

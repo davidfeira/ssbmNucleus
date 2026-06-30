@@ -87,6 +87,28 @@ CHARACTER_CODES = {
     'Dr. Mario': 'Dr',
 }
 
+# detect_character() returns a few names that aren't CHARACTER_CODES keys (the
+# same variants CHARACTER_HEAD_BONES / CHARACTER_ARM_BONES alias inline below).
+# Without these, char-code resolution silently no-ops for those fighters --
+# dropping low-poly mesh hiding (_find_ftdata, used for both CSP and head-shot /
+# stock renders) and the deformed-rig check (_vanilla_skeleton_ref). 'Ice
+# Climbers (Nana)' already resolves via CHARACTER_CODES; it's kept here so this
+# stays the single complete alias set.
+_CHAR_CODE_ALIASES = {
+    'C. Falcon': 'Ca',
+    'DK': 'Dk',
+    'Ice Climbers (Nana)': 'Nn',
+    'Young Link (Girl)': 'Zd',
+}
+
+
+def _resolve_char_code(character):
+    """The 2-letter Pl<XX> code for a character name, accepting both
+    CHARACTER_CODES keys and the detect_character() name variants (e.g.
+    'C. Falcon', 'DK', 'Young Link (Girl)'). None for unknown / custom names."""
+    return CHARACTER_CODES.get(character) or _CHAR_CODE_ALIASES.get(character)
+
+
 COLOR_CODES = {
     'Default': 'Nr',
     'Blue': 'Bu',
@@ -644,6 +666,30 @@ def composite_ice_climbers_csp(nana_csp_path, popo_csp_path, output_path):
 # Pl<XX>.dat. It beats the hand-authored per-scene `hiddenNodes`, which are
 # calibrated for one model and don't transfer to a borrowed scene (Giga Bowser
 # posed with Bowser's scene). See docs/CSP_LOWPOLY_HIDING.md.
+def _test_base_files_dirs():
+    """Candidate `test-base/files` dirs holding the vanilla Pl<XX>.dat fighter
+    data + costume DATs, most-correct first.
+
+    The installed/frozen app keeps these in the WRITABLE vault
+    (`core.config.STORAGE_PATH` = %LOCALAPPDATA%\\SSBM Nucleus\\storage). Resolving
+    via `SCRIPT_DIR.parents[2]` instead points into the PyInstaller _MEIPASS temp
+    in a frozen build (which has no `storage/`) -- that's why low-poly hiding
+    silently logged "no ftData found" and skipped `--hide-dobjs` in the PACKAGED
+    app only, so CSP low-poly cheeks were never hidden there. Try the frozen-aware
+    path first, then the dev/repo path."""
+    dirs = []
+    try:
+        backend = str(SCRIPT_DIR.parents[2] / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        from core.config import STORAGE_PATH  # installed vault when frozen
+        dirs.append(Path(STORAGE_PATH) / "test-base" / "files")
+    except Exception:
+        pass
+    dirs.append(SCRIPT_DIR.parents[2] / "storage" / "test-base" / "files")
+    return dirs
+
+
 def _find_ftdata(dat_filepath, character):
     """Locate the fighter ftData (Pl<XX>.dat) for a costume model dat: a sibling
     Pl<XX>.dat next to the model, else the vanilla copy in test-base/files."""
@@ -653,11 +699,12 @@ def _find_ftdata(dat_filepath, character):
         cand = p.parent / f"{stem[:4]}.dat"
         if cand.exists() and cand.resolve() != p.resolve():
             return cand
-    code = CHARACTER_CODES.get(character)
+    code = _resolve_char_code(character)
     if code:
-        vb = SCRIPT_DIR.parents[2] / "storage" / "test-base" / "files" / f"Pl{code}.dat"
-        if vb.exists():
-            return vb
+        for base in _test_base_files_dirs():
+            vb = base / f"Pl{code}.dat"
+            if vb.exists():
+                return vb
     return None
 
 
@@ -832,7 +879,236 @@ def curated_hide_override(dat_filepath, character, costume_slot, scene_yml):
     return ",".join(str(i) for i in final)
 
 
-def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=0):
+# --------------------------------------------------------------------------- #
+# Replaced-model detection (suppress low-poly hiding for full model imports)   #
+# --------------------------------------------------------------------------- #
+# Low-poly hiding -- whether from the scene's baked hiddenNodes or the ftData
+# visibility table -- is a list of DObj INDICES into the fighter's stock model.
+# A recolor reuses that model, so the indices still point at the off-screen
+# magnifier/LowPoly mesh. A full model import (Sonic over Mario, Rayman, Sans...)
+# swaps in geometry with a DIFFERENT DObj layout, so those same indices land on
+# real visible parts -- e.g. Sonic-over-Mario hides DObjs 37-52, which in Mario
+# are the LowPoly body but in Sonic are the EYES (the costume only looked fine
+# in-game because the engine hides that set only in the magnifier/far view).
+#
+# Detect it by comparing the costume's body-model DObj count to the counts of
+# the fighter's vanilla color costumes. A recolor (any slot, incl. alt-geometry
+# ones like Peach's Daisy or Pikachu's hats) matches one of those counts; a
+# replaced model matches none. When replaced, pass `--hide-dobjs none` so the
+# renderer drops the (now-wrong) hide entirely -- nothing valid to hide, and
+# hiding does active harm. Any read failure -> not flagged (no behavior change).
+def _body_root_offset(d):
+    """Offset of the costume's main body JOBJ root (the *_Share_joint the
+    renderer selects), skipping matanim/shapeanim roots. None if absent."""
+    roots = [(nm, o) for nm, o in d.roots if nm.endswith('_joint')
+             and 'matanim' not in nm and 'shapeanim' not in nm]
+    if not roots:
+        return None
+    for nm, o in roots:
+        if 'Share_joint' in nm:
+            return o
+    return roots[0][1]
+
+
+def _model_dobj_count(dat_path):
+    """Global render DObj count of a costume's body model -- matches
+    RenderJObj.DObjCount: walk the JOBJ tree (child @0x08 / next @0x0C) and sum
+    each JOBJ's DObj chain (linked by next @0x04). Returns None if unreadable.
+
+    NOTE: count every JOBJ's DObjs -- do NOT skip SPLINE/PTCL-flagged JOBJs; the
+    renderer counts those too, and some imports park real geometry under them
+    (Sonic's extra 15 DObjs), which is exactly the layout change we detect."""
+    try:
+        backend = str(SCRIPT_DIR.parents[2] / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        from skinlab.datprobe import DatFile
+
+        d = DatFile(str(dat_path))
+        root = _body_root_offset(d)
+        if root is None:
+            return None
+        seen = set()
+        stack = [root]
+        total = 0
+        while stack:
+            node = stack.pop()
+            if node is None or node in seen:
+                continue
+            seen.add(node)
+            stack.append(d.ptr(node + 0x0C))   # next sibling
+            stack.append(d.ptr(node + 0x08))   # first child
+            dobj = d.ptr(node + 0x10)
+            dseen = set()
+            while dobj is not None and dobj not in dseen:
+                dseen.add(dobj)
+                total += 1
+                dobj = d.ptr(dobj + 0x04)
+        return total
+    except Exception as e:
+        logger.info(f"dobj count failed for {Path(dat_path).name}: {e}")
+        return None
+
+
+_VANILLA_DOBJ_COUNTS = {}
+
+
+def _vanilla_dobj_counts(character):
+    """Set of body-model DObj counts across this fighter's vanilla color
+    costumes (Pl<code><cc>.dat in test-base/files), cached per character. A
+    costume whose count matches none of these has a replaced model. Empty set
+    (no vanilla costumes found) disables the check for that fighter."""
+    if character in _VANILLA_DOBJ_COUNTS:
+        return _VANILLA_DOBJ_COUNTS[character]
+    counts = set()
+    code = _resolve_char_code(character)
+    if code:
+        for base in _test_base_files_dirs():
+            hits = sorted(base.glob(f"Pl{code}??.dat"))
+            for p in hits:
+                c = _model_dobj_count(p)   # AJ/anim files have no body root -> None
+                if c:
+                    counts.add(c)
+            if counts:
+                break
+    _VANILLA_DOBJ_COUNTS[character] = counts
+    return counts
+
+
+def model_is_replacement(dat_filepath, character):
+    """True when the costume swaps in a model whose DObj layout differs from
+    every vanilla color costume of this fighter (a full import, not a recolor),
+    so the fighter's low-poly DObj indices no longer line up. Conservative: any
+    failure or no vanilla reference -> False (keep existing hide behavior)."""
+    van = _vanilla_dobj_counts(character)
+    if not van:
+        return False
+    cnt = _model_dobj_count(dat_filepath)
+    if cnt is None:
+        return False
+    return cnt not in van
+
+
+# --------------------------------------------------------------------------- #
+# Deformed-skeleton detection (render such costumes at their own bind pose)    #
+# --------------------------------------------------------------------------- #
+# A normal recolor/reskin -- even a full model import (Rayman, Sans) -- reuses
+# the fighter's vanilla skeleton with byte-identical bind transforms, because
+# the shared fighter animations require it. A handful of "joke" costumes instead
+# EDIT the bind transforms (stretched / displaced bones) while keeping the same
+# bone COUNT. Under the curated CSP pose those edits are invisible: the pose's
+# per-bone tracks overwrite the costume's own rotation/scale/translation
+# (LiveJObj.ApplyAnimation resets to the costume's SRT then applies each track),
+# so the portrait looks like a clean vanilla pose and HIDES the custom rig.
+# Detect that case by comparing the costume's per-bone bind transforms against
+# the vanilla skeleton; when it deviates, pass --bind-pose so HSDRawViewer
+# renders the costume's OWN rig (keeping the scene camera + low-poly hide).
+#
+# Two things make a NAIVE comparison false-positive on normal costumes, so we
+# guard against both (verified against all ~1600 vault costumes -> only the
+# joke rigs flag):
+#   * Rotation must be compared as a MATRIX, not raw RX/RY/RZ: HSDRaw re-export
+#     canonicalizes Euler angles via the double-cover (x,y,z)==(x+pi, pi-y, z+pi),
+#     so a re-exported costume's raw components differ by ~pi from the raw-ISO
+#     vanilla while the actual orientation is identical.
+#   * Vanilla color SLOTS aren't byte-identical skeletons (Captain Falcon slots
+#     differ by ~0.2 translation, Pikachu's by ~0.19 scale), so thresholds sit
+#     well above that per-slot variation. The joke rigs deviate by whole units
+#     (4-7 translation, 1.0 scale), an order of magnitude clear of the noise.
+# Any detection failure returns False -> normal posed render (no regression).
+
+# JOBJ bind-transform field offsets (HSD_JOBJ): R @0x14, S @0x20, T @0x2C.
+_SRT_OFFSETS = (0x14, 0x18, 0x1C, 0x20, 0x24, 0x28, 0x2C, 0x30, 0x34)
+# Deviation thresholds: rotation = max abs element of (Rmtx_a - Rmtx_b); scale
+# and translation = max abs component delta. Above vanilla per-slot variation
+# (<=0.033 rotMtx / 0.19 scale / 0.21 trans), below the joke rigs (>=1.0).
+_ROT_EPS, _SCALE_EPS, _TRANS_EPS = 0.3, 0.5, 1.0
+
+
+def _euler_rot_matrix(rx, ry, rz):
+    """3x3 rotation matrix (Rz*Ry*Rx) for an Euler triple, as nested tuples.
+    Comparing matrices instead of raw angles makes the deviation check immune to
+    the Euler double-cover re-encoding HSDRaw applies on re-export."""
+    import math
+    cx, cy, cz = math.cos(rx), math.cos(ry), math.cos(rz)
+    sx, sy, sz = math.sin(rx), math.sin(ry), math.sin(rz)
+    return (
+        (cz*cy, cz*sy*sx - sz*cx, cz*sy*cx + sz*sx),
+        (sz*cy, sz*sy*sx + cz*cx, sz*sy*cx - cz*sx),
+        (-sy,   cy*sx,            cy*cx),
+    )
+
+
+def _bind_srt_list(dat_path):
+    """Depth-first per-bone (RX,RY,RZ,SX,SY,SZ,TX,TY,TZ) of the body JOBJ root,
+    or None. Reuses the skinlab DAT reader (same one low-poly hiding uses)."""
+    import struct
+    try:
+        backend = str(SCRIPT_DIR.parents[2] / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        from skinlab.datprobe import DatFile, HEADER_SIZE
+
+        d = DatFile(str(dat_path))
+        roots = [(n, o) for n, o in d.roots if n.endswith('_joint')
+                 and 'matanim' not in n and 'shapeanim' not in n]
+        if not roots:
+            return None
+        # match the body root Program.cs selects for the render (Share_joint)
+        root = next((o for n, o in roots if 'Share_joint' in n), roots[0][1])
+        out = []
+        for b in d._iter_tree(root, 0x08, 0x0C):   # JOBJ child @0x08, next @0x0C
+            out.append(tuple(
+                struct.unpack_from('>f', d.raw, HEADER_SIZE + b + off)[0]
+                for off in _SRT_OFFSETS))
+        return out
+    except Exception as e:
+        logger.info(f"bind-srt read failed for {Path(dat_path).name}: {e}")
+        return None
+
+
+def _vanilla_skeleton_ref(character):
+    """A vanilla costume DAT for this character (the skeleton is identical across
+    every color slot), used as the bind-pose reference. None if unavailable."""
+    code = _resolve_char_code(character)
+    if not code:
+        return None
+    slots = ['Nr', 'Re', 'Bu', 'Gr', 'Ye', 'Wh', 'Bk', 'Aq', 'Pi', 'La', 'Gy', 'Or']
+    for base in _test_base_files_dirs():
+        for slot in slots:
+            p = base / f"Pl{code}{slot}.dat"
+            if p.exists():
+                return p
+    return None
+
+
+def skeleton_is_deformed(dat_filepath, character):
+    """True when the costume's bind transforms deviate from the vanilla skeleton
+    (same bone count, edited SRT) -- a deliberately deformed 'joke' rig that the
+    curated CSP pose would otherwise hide. Any failure returns False so the
+    normal posed render is used (no regression)."""
+    ref = _vanilla_skeleton_ref(character)
+    if not ref:
+        return False
+    van = _bind_srt_list(ref)
+    cos = _bind_srt_list(dat_filepath)
+    if not van or not cos or len(van) != len(cos):
+        return False
+    for a, b in zip(van, cos):
+        ra = _euler_rot_matrix(a[0], a[1], a[2])
+        rb = _euler_rot_matrix(b[0], b[1], b[2])
+        rot = max(abs(ra[i][j] - rb[i][j]) for i in range(3) for j in range(3))
+        scl = max(abs(a[i] - b[i]) for i in range(3, 6))
+        trn = max(abs(a[i] - b[i]) for i in range(6, 9))
+        if rot > _ROT_EPS or scl > _SCALE_EPS or trn > _TRANS_EPS:
+            logger.info(
+                f"deformed skeleton detected for {Path(dat_filepath).name} "
+                f"({character}) -> rendering CSP at bind pose")
+            return True
+    return False
+
+
+def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=None):
     """Internal function to generate a single CSP
 
     Used by both normal CSP generation and Ice Climbers composite generation.
@@ -844,9 +1120,13 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
         anim_file: Optional animation file
         camera_file: Optional camera/scene YAML file
         scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
-        costume_slot: Vanilla CSS slot index of this costume (0 = default). Picks
-            the per-costume low-poly visibility config; alt costumes that add
-            geometry (Pikachu/Pichu hats, Peach's Daisy) need a different set.
+        costume_slot: Vanilla CSS slot index of this costume. Picks the
+            per-costume low-poly visibility config; color slots that add or move
+            geometry (Pichu's 4 configs, Pikachu hats, Peach's Daisy) need a
+            different set. Leave None (the default) to AUTO-DERIVE it from the
+            DAT's own detected color -- so callers that don't already know the
+            slot (Retake CSP, Manage CSPs/Poses, pose re-render) still get the
+            right config instead of silently falling back to slot 0.
     """
     # Generate output filename
     dat_dir = os.path.dirname(os.path.abspath(dat_filepath))
@@ -886,6 +1166,24 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     if head_bone is not None:
         cmd.extend(["--head-bone", str(head_bone)])
 
+    # Resolve the per-color low-poly visibility config. The canonical generate_csp
+    # passes costume_slot explicitly; the Retake CSP / Manage CSPs / pose-render
+    # paths call here directly and leave it None -- derive it from the DAT's own
+    # color exactly like generate_csp does. (Defaulting to slot 0 here was the bug
+    # behind "low-poly cheeks show on some skins": a non-default-color Pichu
+    # re-rendered via those paths hid costume-0's dobjs -- the wrong indices for
+    # its slot -- so its real low-poly cheek mesh leaked into the portrait.)
+    if costume_slot is None:
+        try:
+            cs_parser = DATParser(dat_filepath)
+            cs_parser.read_dat()
+            costume_slot = costume_slot_for_color(
+                character, cs_parser.detect_costume_color())
+        except Exception as e:
+            logger.info(f"costume_slot auto-derive failed for "
+                        f"{Path(dat_filepath).name}: {e}")
+            costume_slot = 0
+
     # Hiding the off-screen low-poly mesh.
     #
     # A character rendered with its OWN curated CSP scene/camera yml carries
@@ -901,14 +1199,34 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     # Without a curated yml (custom / model imports) or with a BORROWED scene
     # (Giga Bowser poses with Bowser's scene, whose hiddenNodes are wrong for the
     # Giga model) we apply the auto-derived per-costume low set directly.
-    has_curated_scene = bool(anim_file or camera_file) and character not in SCENE_BORROWERS
-    if has_curated_scene:
-        hide = curated_hide_override(dat_filepath, character, costume_slot,
-                                     camera_file or anim_file)
+    #
+    # BUT a full model import (Sonic over Mario) replaces the geometry, so NO
+    # index list -- baked or ftData-derived -- maps to its layout: hiding the
+    # fighter's low-poly indices removes real visible parts (Sonic's eyes).
+    # Detect the replaced model and pass `--hide-dobjs none` so the renderer
+    # drops all hiding (including the scene's baked hiddenNodes) for it.
+    # CSP_DISABLE_REPLACEMENT_FIX=1 reverts to the old behavior (escape hatch).
+    if (os.environ.get('CSP_DISABLE_REPLACEMENT_FIX') != '1'
+            and model_is_replacement(dat_filepath, character)):
+        cmd.extend(["--hide-dobjs", "none"])
+        logger.info(f"replaced model for {Path(dat_filepath).name} ({character}): "
+                    f"suppressing low-poly hide (--hide-dobjs none)")
     else:
-        hide = low_poly_dobjs(dat_filepath, character, costume_slot)
-    if hide:
-        cmd.extend(["--hide-dobjs", hide])
+        has_curated_scene = bool(anim_file or camera_file) and character not in SCENE_BORROWERS
+        if has_curated_scene:
+            hide = curated_hide_override(dat_filepath, character, costume_slot,
+                                         camera_file or anim_file)
+        else:
+            hide = low_poly_dobjs(dat_filepath, character, costume_slot)
+        if hide:
+            cmd.extend(["--hide-dobjs", hide])
+
+    # Costumes with a deliberately deformed skeleton (edited bind transforms)
+    # render normal under the curated pose because it overwrites their bone
+    # transforms. Detect that and render the costume's OWN bind pose instead so
+    # the custom rig shows (the scene camera + low-poly hide are still applied).
+    if skeleton_is_deformed(dat_filepath, character):
+        cmd.append("--bind-pose")
 
     if anim_file:
         cmd.append(to_windows_path(anim_file))
@@ -955,12 +1273,15 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
         logger.error(f"Error running HSDRawViewer: {e}", exc_info=True)
         return None
 
-def generate_ice_climbers_composite_csp(popo_dat, nana_dat):
+def generate_ice_climbers_composite_csp(popo_dat, nana_dat, scale=1):
     """Generate composite CSP for Ice Climbers (Popo + Nana)
 
     Args:
         popo_dat: Path to Popo .dat file
         nana_dat: Path to Nana .dat file
+        scale: Resolution multiplier (1=136x188, 4=544x752). Both climber layers
+            are rendered at this scale before compositing, so the composite is HD
+            when scale>1 (the texture-pack/bundle HD path needs this).
 
     Returns:
         Path to final composited CSP (associated with Popo) or None if failed
@@ -979,22 +1300,23 @@ def generate_ice_climbers_composite_csp(popo_dat, nana_dat):
 
     # Generate Nana CSP (background) - YML in anim_file slot for scene mode
     logger.info("Generating Nana CSP (background layer)")
-    nana_csp = generate_single_csp_internal(nana_dat, 'Ice Climbers', nana_yml, None)
+    nana_csp = generate_single_csp_internal(nana_dat, 'Ice Climbers', nana_yml, None, scale)
     if not nana_csp:
         logger.error("Failed to generate Nana CSP")
         return None
 
     # Generate Popo CSP (foreground, no shadow) - YML in anim_file slot for scene mode
     logger.info("Generating Popo CSP (foreground layer, no shadow)")
-    popo_csp = generate_single_csp_internal(popo_dat, 'Ice Climbers', popo_yml, None, no_shadow=True)
+    popo_csp = generate_single_csp_internal(popo_dat, 'Ice Climbers', popo_yml, None, scale, no_shadow=True)
     if not popo_csp:
         logger.error("Failed to generate Popo CSP")
         return None
 
-    # Composite them - Popo over Nana
+    # Composite them - Popo over Nana (both at the requested scale)
     popo_dat_name = os.path.splitext(os.path.basename(popo_dat))[0]
     output_dir = os.path.dirname(popo_csp)
-    final_csp = os.path.join(output_dir, f"{popo_dat_name}_csp.png")
+    suffix = "_csp_hd.png" if scale > 1 else "_csp.png"
+    final_csp = os.path.join(output_dir, f"{popo_dat_name}{suffix}")
 
     result = composite_ice_climbers_csp(nana_csp, popo_csp, final_csp)
 
@@ -1125,9 +1447,9 @@ def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
             logger.info(f"Skipping Nana {nana_color} - will be composited with Popo {popo_color}")
             return None
         elif char_type == 'popo' and pair_file:
-            # Found a matching pair - generate composite CSP
+            # Found a matching pair - generate composite CSP (at the requested scale)
             logger.info(f"Processing Ice Climbers pair: Popo {popo_color} + Nana {nana_color}")
-            return generate_ice_climbers_composite_csp(dat_filepath, pair_file)
+            return generate_ice_climbers_composite_csp(dat_filepath, pair_file, scale)
         elif char_type == 'popo' and not pair_file:
             # Popo without matching Nana - generate solo CSP
             logger.warning(f"No matching Nana found for Popo {popo_color}, generating solo CSP")
