@@ -67,7 +67,8 @@ holds *different* (sometimes working) versions — diagnosing it gives false res
 | D | A body part or the whole model is missing, but its textures decode fine | Over-hiding: scene `hiddenNodes` / `low_poly_dobjs` come from **vanilla** `Pl<XX>.dat` and are wrong for a custom / reordered model | OPEN — make the low-poly hide set robust for non-vanilla geometry |
 | E | White blobs on specific parts (fur, mask…) | Those textures are UNDECODABLE → `PreLoadTexture` skips them → the material's white shows through | rare — C# decodes most; usually really cause G |
 | F | Model renders blank / only a stray part, even with hiding disabled, but POBJ pointers exist in the DAT | **POBJ attribute list missing its `GX_VA_NULL` terminator** → `GX_DisplayList.Open()` reads ZERO primitives → no geometry. Common in imported / re-exported models | **FIXED** — `RenderDObj.cs` appends the terminator instead of discarding the pobj |
-| G | Model renders a flat white / dark silhouette (form correct, no texture detail), or specific parts are flat white | Material uses **multi-texturing (2nd texmap / TEX1)** and/or **normal-based texgen (`GX_TG_NRM`, sphere/env map)**; the CSP shader's TEV emulation samples the wrong texture/coords → base texture not applied → material color shows | OPEN — needs proper GX texgen + multi-stage TEV in the shader |
+| G | Model renders a flat white / dark silhouette (form correct, no texture detail) | The costume's body material carries **more TObjs than its RenderMode TEX0..7 bits** (real skin is a shared atlas past the flagged units) and/or `DF_ALL` force-enables phantom (unbound) units → the shader sampled the wrong / an empty unit → flat white (atlas ignored) or black (unbound-unit TEV combine). The *original* "multi-tex/`GX_TG_NRM` texgen" theory here was a wrong turn. | **FIXED** — `RenderJObj.SetupMObj` forces `hasTEX[i]` for every LOADED TObj and gates the per-unit init by texture COUNT |
+| H | A specific layered part (metal armor, pauldrons, trim) renders **flat grey / solid**, replacing the real skin under it | Material stacks a `MODULATE` skin + an **`RGB_MASK`** detail/tint TObj whose **alpha is opaque**. The shader implemented `RGB_MASK` identically to `ALPHA_MASK` — `mix(prev, tex.rgb, tex.a)` — so opaque alpha made the mask fully REPLACE the skin. GX (`tobj.c` `HSD_TExpColorIn`) mixes `RGB_MASK` by the texture's own **RGB per-channel** (`out = prev*(1-tex.rgb) + tex.rgb²`), not alpha. | **FIXED** — `gx_lightmap.frag` `RGB_MASK` case mixes by `pass.rgb` |
 
 Diagnostics: set `CSP_DOBJ_DEBUG=1` in the env before rendering — the renderer then logs a per-render DObj breakdown (`[cspdbg] dobjs=.. noPobj=.. hidden=.. opaPass=.. neither=..`), POBJ build skips, `[texfail]`/`[texdbg]` per texture, and `EnableBuffers FAILED`. Invaluable for D/E/F/G.
 
@@ -79,11 +80,14 @@ Fixed-cause details: see the `csp-renderer-edge-case-fixes` memory.
 |---|---|---|---|
 | Fox `shitslippy-plfxsp` (Slippy) | only the blaster rendered | F (POBJ no NULL terminator) | **FIXED** |
 | Luigi `pllgpg-pllgpg` | blank | F (POBJ no NULL terminator) | **body FIXED**; eyes still wrong (G) |
-| Falcon `plcagr-plcagr01` (Gohan) | flat white silhouette | G (multi-tex + `GX_TG_NRM` texgen) | OPEN |
-| Mario `plmrnr-plmrnr01` | flat dark silhouette | G (multi-tex + `GX_TG_NRM` texgen) | OPEN |
-| Marth `plmsgr-plmsgr01` (Lyn) | dark + white blobs on fur/mask | G (multi-tex + `GX_TG_NRM` texgen) | OPEN |
+| Falcon `plcagr-plcagr01` (Ryu) | flat white silhouette | G (atlas past RenderMode TEX bits) | **FIXED** (hasTEX force) |
+| Mario `plmrnr-plmrnr01` | flat black silhouette | G (`DF_ALL` phantom units) + H (`RGB_MASK` grey overcoat) | **FIXED** |
+| Marth `plmsgr-plmsgr01` (Lyn) | dark body + flat-grey pauldrons/armor | G (hasTEX) fixed the body/mask; **H (`RGB_MASK` alpha vs rgb)** the grey armor | **FIXED** |
 
-The OPEN ones all share cause **G**: their materials use a second texture map and normal-based
-texgen (the shiny suit / metal / env-map look). Fixing requires correct GX texgen + multi-stage
-TEV emulation in the CSP shader — a focused, higher-risk change (could affect every model), so
-it's a deliberate follow-up rather than a quick patch.
+Cause **G** (flat white/dark body) was resolved by the `hasTEX` fixes (see the memory). The
+remaining flat-grey **armor / pauldrons** on the Marth "Lyn" skin and the black overcoat on
+`plmrnr` were cause **H**: the `RGB_MASK` colormap op was mixing by the texture's alpha instead
+of its RGB (per the decomp), so an opaque grey/tint mask fully replaced the skin beneath.
+Whole-vault scan: only **4 costumes** use `RGB_MASK` (`plmsgr01/10`, `plmrnr01/09`) — **zero
+vanilla** — so the shader fix is safe; all 4 render correctly now. Re-render (Manage CSPs /
+re-import) to apply; the packaged app needs a `build.bat` rebuild to ship the shader.

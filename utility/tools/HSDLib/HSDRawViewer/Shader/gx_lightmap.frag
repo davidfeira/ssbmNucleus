@@ -405,7 +405,13 @@ vec4 PerformTextureOp(int index, vec4 passColor)
 				passColor.rgb = mix(passColor.rgb, pass.rgb, pass.a);
 			break;
 		case COLORMAP_RGB_MASK:
-			passColor.rgb = mix(passColor.rgb, pass.rgb, pass.a);
+			// GX RGB_MASK (decomp tobj.c HSD_TExpColorIn): the interpolation factor C
+			// is the texture's OWN RGB, per-channel -- out = prev*(1-tex) + tex*tex --
+			// NOT its alpha (that is ALPHA_MASK). Using pass.a here made an opaque
+			// grey/detail mask fully REPLACE the base skin, so armor that layers an
+			// RGB_MASK over a MODULATE'd skin rendered flat grey (Marth plmsgr01 "Lyn"
+			// pauldrons/shoulderpads). Match the hardware: mix by pass.rgb.
+			passColor.rgb = mix(passColor.rgb, pass.rgb, pass.rgb);
 			break;
 		case COLORMAP_BLEND:
 			passColor.rgb = mix(passColor.rgb, pass.rgb, TEX[index].blend);
