@@ -1,9 +1,10 @@
 # Vault Storage Migration: `metadata.json` → SQLite
 
-**Status:** PROPOSED — Phase 1 deliverable (plan for review). No code changes yet.
+**Status:** IMPLEMENTED (Phases 0, 1, 3, 4 done; Phase 2 — structural reorder — deferred).
+Behind `NUCLEUS_VAULT_DB`; shipped builds default to the DB backend with dual-write.
 **Author:** (drafted with Claude) — 2026-06-30
 **Target release line:** post-0.4.x (0.5.x)
-**Scope:** Backend (Python/Flask) only. **No C# changes. No frontend changes.**
+**Scope:** Backend (Python/Flask) + one launcher-env line. **No C# changes. No frontend changes.**
 
 ---
 
@@ -462,10 +463,15 @@ Each phase is independently shippable, keeps tests green, and does not change AP
   the whole-blob DB path is correct and fast enough at vault scale. `metadata_lock`/atomic-write
   code is retained (still used by the JSON path + `path=` writers).
 
-**Phase 4 — Cleanup & docs**
-- Remove dead JSON-path code paths that are no longer reachable (keep export-to-JSON).
-- Update `docs/ARCHITECTURE.md`, this doc's status, backup tooling, and memory.
-- Optionally retire the JSON path entirely after N stable releases.
+**Phase 4 — Cleanup & docs** — ✅ DONE
+- ✅ Vault backup/restore made DB-aware: `vault.db` (+ WAL sidecars) is excluded from backups
+  (it's a rebuildable cache; naively zipping a live WAL DB is unsafe) and rebuilt from the
+  restored/merged `metadata.json` on restore (`_sync_db_after_restore`). Tests in
+  `test_vault_backup_blueprint.py`.
+- ✅ Updated `docs/ARCHITECTURE.md` (Core Modules + directory structure) and this doc.
+- No JSON-path removal: JSON is retained indefinitely as the portable/fallback format (decision
+  §10.2). `metadata_lock`/atomic-write code stays (JSON path + `path=` writers still use it).
+- Full suite: 391 passed.
 
 ---
 

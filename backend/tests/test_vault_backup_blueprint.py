@@ -23,6 +23,8 @@ BACKEND_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from blueprints import vault_backup  # noqa: E402
+import core.config as core_config  # noqa: E402
+import core.vault as vaultmod  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -586,3 +588,61 @@ def test_clear_storage_optionally_clears_logs(vault_env):
     assert resp.status_code == 200
     assert not (vault_env.logs_path / 'app.log').exists()  # .log removed
     assert (vault_env.logs_path / 'keep.txt').exists()      # non-log kept
+
+
+# ---------------------------------------------------------------------------
+# SQLite backend interaction: vault.db is a rebuildable cache, excluded from
+# backups and rebuilt from the restored metadata.json (docs/VAULT_SQLITE_MIGRATION.md)
+# ---------------------------------------------------------------------------
+
+def _use_db(monkeypatch, storage_path):
+    monkeypatch.setattr(core_config, 'VAULT_BACKEND', 'db')
+    monkeypatch.setattr(core_config, 'VAULT_DB_PATH', storage_path / 'vault.db')
+    monkeypatch.setattr(core_config, 'VAULT_DUAL_WRITE', False)
+
+
+def test_backup_excludes_vault_db(vault_env):
+    _write_metadata(vault_env.storage_path, {'bundles': [{'id': 'a'}]})
+    # a stray SQLite cache + its WAL sidecars must NOT be in the portable backup
+    (vault_env.storage_path / 'vault.db').write_bytes(b'SQLITECACHE')
+    (vault_env.storage_path / 'vault.db-wal').write_bytes(b'WAL')
+
+    resp = vault_env.client.post('/api/mex/storage/backup')
+
+    assert resp.status_code == 200
+    with zipfile.ZipFile(Path(resp.get_json()['path'])) as zf:
+        names = set(zf.namelist())
+    assert 'metadata.json' in names
+    assert 'vault.db' not in names and 'vault.db-wal' not in names
+
+
+def test_replace_restore_rebuilds_db(vault_env, monkeypatch):
+    _use_db(monkeypatch, vault_env.storage_path)
+    backup = _make_backup_zip({'bundles': [{'id': 'restored'}]})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'replace', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    # DB rebuilt from the restored metadata.json, so DB-mode reads see the restore
+    assert vaultmod.db_to_blob(vault_env.storage_path / 'vault.db') == {'bundles': [{'id': 'restored'}]}
+
+
+def test_merge_restore_rebuilds_db(vault_env, monkeypatch):
+    _write_metadata(vault_env.storage_path, {'characters': {'Fox': {'skins': [_skin('fox-red')]}}})
+    _use_db(monkeypatch, vault_env.storage_path)
+    backup = _make_backup_zip({'characters': {'Fox': {'skins': [_skin('fox-blue')]}}})
+
+    resp = vault_env.client.post(
+        '/api/mex/storage/restore',
+        data={'mode': 'merge', 'file': (backup, 'backup.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 200
+    rebuilt = vaultmod.db_to_blob(vault_env.storage_path / 'vault.db')
+    ids = {s['id'] for s in rebuilt['characters']['Fox']['skins']}
+    assert ids == {'fox-red', 'fox-blue'}      # DB reflects the merged catalog

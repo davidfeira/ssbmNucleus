@@ -79,11 +79,24 @@ and `backend/blueprints/menus.py`) and have been split into packages at
 
 ```
 backend/core/
-├── config.py      # Path management, platform detection (dev vs bundled)
+├── config.py      # Path management, platform detection (dev vs bundled), VAULT_BACKEND flag
 ├── state.py       # Global state (MexManager instance, viewer process, SocketIO)
 ├── constants.py   # Character prefixes, vanilla costume counts
-└── helpers.py     # Utility functions
+├── helpers.py     # Utility functions
+├── metadata.py    # Vault DAL: load/save_metadata + metadata_transaction (JSON|DB dispatch)
+├── costume_files.py  # Costume archive name resolution
+└── vault/         # SQLite vault backend (blob<->DB, migration, dual-write)
 ```
+
+**Vault storage backend.** All vault state (costumes, stages, custom content,
+bundles) is read/written through the `core.metadata` DAL. `config.VAULT_BACKEND`
+selects the store: `json` (the historical `storage/metadata.json`) or `db`
+(`storage/vault.db`, SQLite/WAL). Shipped builds default to `db` (set by
+`electron/main.js`); dev/tests default to `json`. The DB is migrated from
+`metadata.json` on first launch (backup + round-trip validation, JSON fallback on
+error) and — during the rollout — dual-writes `metadata.json` as a live backup.
+`vault.db` is a rebuildable cache: it's excluded from vault backups and rebuilt
+from the restored `metadata.json`. Full design: `docs/VAULT_SQLITE_MIGRATION.md`.
 
 ### Supporting Modules
 
@@ -247,11 +260,11 @@ ssbmNucleus/
 │   └── xdelta/                 # Binary diff utilities
 │
 ├── storage/                    # User's mod vault (runtime)
+│   ├── metadata.json           # Vault index (JSON backend / dual-write mirror)
+│   ├── vault.db                # Vault index (SQLite backend; rebuildable cache)
 │   ├── [character]/
-│   │   └── [costume_id]/
-│   │       ├── metadata.json
-│   │       └── [costume files]
-│   └── stages/
+│   │   └── [costume files]
+│   └── das/                    # Stage variant zips
 │
 ├── build/                      # MEX project folder (runtime)
 │   ├── project.mexproj

@@ -56,6 +56,27 @@ def _extract_zip_with_progress(zipf, dest, restore_id, lo, hi,
                           message=f'{phase}… ({i}/{total})')
 
 
+# vault.db (+ WAL sidecars) is a rebuildable local cache of metadata.json, not a
+# portable artifact — and copying a live WAL DB can capture an inconsistent
+# state. Backups exclude it; restores rebuild it from the restored metadata.json
+# (which dual-write keeps current). See docs/VAULT_SQLITE_MIGRATION.md.
+_DB_ARTIFACTS = {'vault.db', 'vault.db-wal', 'vault.db-shm'}
+
+
+def _sync_db_after_restore():
+    """Rebuild vault.db from the (restored/merged) metadata.json when the DB
+    backend is active, so the DB reflects the restore. No-op in JSON mode."""
+    from core import config, vault
+    if getattr(config, 'VAULT_BACKEND', 'json') != 'db':
+        return
+    meta_path = STORAGE_PATH / 'metadata.json'
+    if not meta_path.exists():
+        return
+    with open(meta_path, 'r', encoding='utf-8') as f:
+        blob = json.load(f)
+    vault.save_blob(blob)
+
+
 @vault_backup_bp.route('/api/mex/storage/stats', methods=['GET'])
 def get_storage_stats():
     """Return total disk usage of the storage vault in bytes."""
@@ -83,6 +104,10 @@ def backup_vault():
                 for file in files:
                     file_path = Path(root) / file
                     arcname = file_path.relative_to(STORAGE_PATH)
+                    # Skip the rebuildable SQLite cache (see _DB_ARTIFACTS); the
+                    # dual-written metadata.json is the portable backup.
+                    if arcname.as_posix() in _DB_ARTIFACTS:
+                        continue
                     zipf.write(file_path, arcname)
 
         backup_size = backup_path.stat().st_size
@@ -324,7 +349,9 @@ def _merge_restore(zip_path, restore_id=None):
         # The dest-exists guard is a final safety for loose/shared files.
         STORAGE_PATH.mkdir(parents=True, exist_ok=True)
         files = [s for s in extract_root.rglob('*')
-                 if s.is_file() and s.relative_to(extract_root).as_posix() != 'metadata.json']
+                 if s.is_file()
+                 and s.relative_to(extract_root).as_posix() != 'metadata.json'
+                 and s.relative_to(extract_root).as_posix() not in _DB_ARTIFACTS]
         total = len(files) or 1
         copied = 0
         last_pct = -1
@@ -350,6 +377,9 @@ def _merge_restore(zip_path, restore_id=None):
                           percentage=95, message='Updating vault catalog…')
         with open(current_meta_path, 'w', encoding='utf-8') as f:
             json.dump(merged_meta, f, indent=2)
+
+        # Rebuild the SQLite cache from the merged metadata.json (DB mode only).
+        _sync_db_after_restore()
 
         return stats, report
 
@@ -402,7 +432,10 @@ def run_vault_restore(restore_id, tmp_path, restore_mode):
         logger.info("Extracting backup...")
         with zipfile.ZipFile(tmp_path, 'r') as zipf:
             _extract_zip_with_progress(zipf, STORAGE_PATH, restore_id, 5, 99,
-                                       phase='Restoring files')
+                                       skip=_DB_ARTIFACTS, phase='Restoring files')
+
+        # Rebuild the SQLite cache from the restored metadata.json (DB mode only).
+        _sync_db_after_restore()
 
         logger.info("=== VAULT RESTORE COMPLETE ===")
         _emit_restore(restore_id, 'vault_restore_complete',
