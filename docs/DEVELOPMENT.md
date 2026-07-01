@@ -135,11 +135,9 @@ All three components save logs to the `logs/` folder with timestamps:
 ## First-Run Setup
 
 When you first launch the app, you'll need to:
-1. Select your vanilla Melee 1.02 ISO
+1. Select your vanilla Melee 1.02 ISO (auto-detected when possible)
 2. Wait for asset extraction (~1-2 minutes)
 3. The app will extract CSPs, stocks, and stage icons from the ISO
-
-**Known Issue**: The vanilla ISO path doesn't get saved during setup, so you'll need to set it again in Settings.
 
 ## Project Structure
 
@@ -157,7 +155,7 @@ ssbmNucleus/
 ├── utility/            # MEX tools and assets
 │   ├── MexManager/     # MEX CLI tool
 │   ├── assets/        # Extracted vanilla assets
-│   └── website/       # Legacy web version
+│   └── tools/         # Processor (CSP gen) + HSDLib (3D viewer)
 ├── storage/           # User's mod collection
 ├── logs/             # Runtime logs
 ├── scripts/          # Build and run scripts
@@ -209,6 +207,7 @@ See [DISTRIBUTION_GUIDE.md](DISTRIBUTION_GUIDE.md) for instructions on building 
 
 ## Additional Documentation
 
+- [DOCUMENTATION.md](DOCUMENTATION.md) - How docs are organized + the ship checklist
 - [ROADMAP.md](ROADMAP.md) - Feature roadmap and current status
 - [MEX_INTEGRATION.md](MEX_INTEGRATION.md) - MEX framework integration details
 - [DISTRIBUTION_GUIDE.md](DISTRIBUTION_GUIDE.md) - Building and packaging

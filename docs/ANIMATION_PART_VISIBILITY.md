@@ -72,8 +72,9 @@ The ftData table struct is `SBM_PlayerModelLookupTables` (ftData+0x08):
 
 Probed every fighter's `FighterActionTable` (ftData+0x0C → 0x18-byte
 `SBM_FighterAction`; +0x00 symbol, +0x0C subaction) for code-31 events.
-Reproducer: `_probe_out/subaction_modelstate_probe.py` (`(slot, variant)` per action;
-parses exact command sizes from the `command_*.yml` so the walker is correct).
+Reproducer: `subaction_modelstate_probe.py` (one-off `_probe_out/` scratch script, not
+kept) walked `(slot, variant)` per action, parsing exact command sizes from the
+`command_*.yml` so the walker was correct.
 
 **Data-driven (code 31 → AUTO; no curation needed):**
 
@@ -165,7 +166,7 @@ Null/absent data file = feature off, zero change to texture-only / stage editing
 
 Gated entirely on a fighter-data dat being present + a lookup table + the loaded
 animation having a code-31 swap; everyone else (Mario, Fox, …) just shows the default
-body (correct). Repro/verify scripts: `_probe_out/test_anim_partvis*.py`.
+body (correct). (Verified with one-off `_probe_out/` scratch scripts, not kept.)
 
 ### Curated map for C-code-only swaps (also DONE, 2026-06-14)
 
@@ -192,7 +193,7 @@ These swaps are **not in any `.dat`** -- they're `ftParts_80074B0C` calls compil
 `main.dol`, so HSDRaw (which only reads `.dat`) cannot see them, and HSDRaw's own
 animation editor wouldn't show them either (it uses the same code-31 subaction path we
 ported). The source of truth is the **decomp**. A reliable derivation method (built +
-run in `_probe_out/derive_part_overrides2.py`) extracts every `ftParts_80074B0C(slot,
+run as a one-off scratch script, not kept) extracts every `ftParts_80074B0C(slot,
 variant)` call and attributes it to a move via the **call graph** -- the *trusted
 state-handler that calls it*, NOT the function's own decompiler name:
 - Naive "function name -> move" is **wrong**: the Bowser shell withdraw is named
@@ -217,8 +218,8 @@ naive auto-generator here.
 **Why keep the list rather than auto-generate at runtime:** the C-code set is tiny and
 **fixed** (Bowser + Giga up-B, Yoshi egg/shield -- the whole vanilla roster). Custom/modded
 characters can't add C-code swaps (they're data mods -> their swaps are code-31 ->
-already auto). So the list never needs to grow for user content; the method's role is a
-one-time validator/discovery tool (`_probe_out/derive_part_overrides*.py`), not a runtime
+already auto). So the list never needs to grow for user content; the method's role was a
+one-time validator/discovery tool (the derivation scratch script above), not a runtime
 dependency.
 
 ### Still open (not done)
@@ -244,5 +245,5 @@ dependency.
   (`SBM_CostumeLookupTable.HighPoly` per-slot option lists);
   action table `HSDRaw/Melee/Pl/SBM_FighterData.cs` (+0x0C) +
   `SBM_FighterAction.cs` / `SBM_FighterActionTable.cs`
-- Empirical probe: `_probe_out/subaction_modelstate_probe.py`
+- Empirical probe: `subaction_modelstate_probe.py` (one-off scratch, not kept)
 - Sibling (pure-data low-poly hiding): [CSP_LOWPOLY_HIDING.md](CSP_LOWPOLY_HIDING.md)

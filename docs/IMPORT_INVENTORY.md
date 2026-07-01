@@ -19,9 +19,9 @@
 > (`backend/stage_yml_converter.py` + a mexLib extension carrying the
 > embedded map-GOBJ/moving-collision tables into MxDt — verified healthy
 > in-game with Deadline). Known gap: classic `sound.spk` isn't converted.
-> Stage variants imported without a screenshot get one captured in-game by a
-> background queue (`import_unified/screenshot_backfill.py`, verified live,
-> ~55s/variant; defers politely while any Dolphin is open).
+> Stage variants imported without a screenshot stay previewless on purpose —
+> previews come from the bulk DAS "Capture Screenshots" flow (the old
+> per-import background backfill queue was removed as too disruptive).
 >
 > Remaining for the "one drop point" vision: frontend global drag-and-drop
 > surface + shared progress/dialog UI, ISO-scan unification, multi-file IC
@@ -39,9 +39,13 @@ step toward unifying the scattered import UX.
 
 | Entry point | UI location | Accepts | Endpoint |
 |---|---|---|---|
-| **Import File** button | `components/storage/ImportToolbar.jsx` | `.zip .7z .dat .usd`, multi-select | `POST /import/file` |
-| **Scan ISO** button (characters mode) | `ImportToolbar.jsx` → `IsoScanModal.jsx` | `.iso`, multi-select | `/iso-scan/start` → `/iso-scan/{id}/import` |
-| **Import Patch** button (patches mode) | `ImportToolbar.jsx` → `XdeltaImportModal.jsx` | `.xdelta`, `.ssbm` | `/xdelta/import`, `/bundle/import` |
+| **Import FAB** (floating button + window-wide drag-drop) | `components/storage/ImportFab.jsx` | `.zip .7z .dat .usd .xdelta .ssbm .iso .gcm`, multi-select | `POST /import/file` (auto-detects type) |
+| **ISO scan** (from FAB `.iso` drop) | `StorageViewer.jsx` → `IsoScanModal.jsx` | `.iso`, multi-select | `/iso-scan/start` → `/iso-scan/{id}/import` |
+| **Patch import** | `StorageViewer.jsx` → `XdeltaImportModal.jsx` | `.xdelta`, `.ssbm` | `/xdelta/import`, `/bundle/import` |
+
+> **2026-06 note:** the per-view import buttons this table was compiled around
+> have since been replaced by the single `ImportFab` + unified `/import/file`
+> pipeline; the table above reflects the current wiring.
 
 Logic lives in `hooks/useFileImport.js`. Single imports get Slippi-safety and
 duplicate dialogs; batch imports auto-fix/auto-skip. ISO scan streams progress
@@ -177,7 +181,7 @@ Plus HSDRawViewer CLI for menu-mod installs (`--css-doors`, `--pause-screen`,
 
 ## The scatter, summarized
 
-1. **~14 distinct UI import buttons** across ImportToolbar, two custom-content
+1. **~14 distinct UI import buttons** (historical; now folded into ImportFab) across the vault toolbar, two custom-content
    grids, four menu-mod views, settings, and MEX panels — each wired to its own
    endpoint with its own dialog/progress conventions.
 2. **Three different "scan an ISO" experiences**: main vault (wit + WebSocket

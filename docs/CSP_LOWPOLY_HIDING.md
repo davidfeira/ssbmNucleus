@@ -93,8 +93,8 @@ def low_dobjs(plxx_dat):                     # -> sorted list of DObj indices to
     return sorted({i for e in (low_tbl or []) for i in e})
 ```
 
-`_probe_out/giga_vis_probe.py` is a runnable reproducer (dumps High/Low for
-`PlKp`/`PlGk` and the model DObj counts).
+(A one-off `_probe_out/` scratch reproducer dumped High/Low for `PlKp`/`PlGk` and
+the model DObj counts to validate this; not kept.)
 
 ### Index-space proof (why this is the same space `SetDObjVisible` wants)
 - Bowser table references max DObj 114 → 115 DObjs; the model `PlKpNr.dat` walks
@@ -162,7 +162,8 @@ mismatched `29–97`.
 ## References
 - Apply path: `utility/tools/HSDLib/HSDRawViewer/Program.cs`
   (`RunCSPGeneration`, `ApplyHiddenNodes` ~L5495)
-- Reader: `backend/modellab/extract_visibility.py`, `backend/modellab/rig.py`
+- Reader: `modellab/extract_visibility.py` (research area, writes
+  `visibility_tables.json`), `backend/modellab/rig.py`
   (`load_low_indices`, `load_high_indices`)
 - CSP pipeline: `utility/tools/processor/generate_csp.py`
   (`find_character_assets` redirects Giga → Bowser at L207–210)

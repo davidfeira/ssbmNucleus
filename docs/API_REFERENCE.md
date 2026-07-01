@@ -38,6 +38,13 @@ Complete documentation of all Flask backend endpoints.
 | custom_characters_bp | Custom (m-ex) fighters | 12 |
 | test_in_game_bp | In-game test harness | 8 |
 | extras_bp | Character effects (extras) | 12 |
+| character_sounds_bp | Character sound-bank packs | 11 |
+| stage_song_packs_bp | DAS stage song packs | 11 |
+| skin_lab_bp | Skin Lab live edit session | 20 |
+| skin_lab_ai_bp | AI Skin Lab | 2 |
+| stage_lab_ai_bp | AI Stage Lab | 4 |
+| model_lab_bp | Model Lab (AI-Studio-gated) | 5 |
+| ai_engine_bp | Managed AI engine runtime | 15 |
 
 ---
 
@@ -1290,6 +1297,127 @@ Serve utility assets (icons).
 
 ### GET /assets/{path}
 Serve project assets.
+
+---
+
+## Character Sounds Blueprint
+
+Per-character sound-bank packs in the vault (browse, edit, install). All paths
+are under `/api/mex/storage/characters/{character}/sound-packs`. Audio uploads
+are converted via MeleeMedia (wav/brstm/dsp/hps).
+
+| Method | Endpoint (suffix) | Purpose |
+|---|---|---|
+| GET | *(base)* | List the character's sound packs |
+| POST | `/create` | Create a pack (copy of the vanilla bank) |
+| POST | `/{pack_id}/rename` | Rename a pack |
+| POST | `/{pack_id}/delete` | Delete a pack |
+| GET | `/{pack_id}/audio/sounds` | List sounds in the pack's bank |
+| GET | `/{pack_id}/audio/sound/{index}` | Decode one sound to WAV for preview |
+| POST | `/{pack_id}/audio/sound/{index}/replace` | Replace one sound with an uploaded audio file |
+| POST | `/{pack_id}/audio/sound/{index}/revert` | Restore one sound from the pristine bank |
+| POST | `/{pack_id}/audio/sounds/revert-all` | Restore all sounds |
+| POST | `/{pack_id}/install` | Install the pack's bank into the open project |
+| POST | `/uninstall` | Restore the character's original sounds in the open project |
+
+---
+
+## Stage Song Packs Blueprint
+
+Per-DAS-stage music playlists in the vault. All paths are under
+`/api/mex/das/{stage}/song-packs`.
+
+| Method | Endpoint (suffix) | Purpose |
+|---|---|---|
+| GET | *(base)* | List the stage's song packs |
+| POST | `/create` | Create a pack |
+| POST | `/{pack_id}/rename` | Rename a pack |
+| POST | `/{pack_id}/delete` | Delete a pack |
+| GET | `/{pack_id}/tracks` | List a pack's tracks |
+| POST | `/{pack_id}/tracks/add` | Add a song (non-HPS uploads converted via MeleeMedia) |
+| POST | `/{pack_id}/tracks/{index}/update` | Update track metadata |
+| POST | `/{pack_id}/tracks/{index}/remove` | Remove a track (renumbers `music_N.hps`) |
+| GET | `/{pack_id}/track/{index}` | Decode a track to WAV for preview |
+| POST | `/{pack_id}/install` | Install the pack as the stage's project playlist |
+| POST | `/uninstall` | Restore the stage's vanilla music (clears the playlist) |
+
+---
+
+## Skin Lab Blueprint
+
+Live costume-editing session over a HSDRawViewer `--stream` subprocess: open a
+vault skin in a 3D viewport, paint/replace textures, recolor by palette group,
+and save the result back to the vault as a new skin. One session at a time.
+All paths under `/api/mex/skin-lab`. See [SKIN_LAB.md](SKIN_LAB.md).
+
+| Method | Endpoint (suffix) | Purpose |
+|---|---|---|
+| POST | `/open` | Open a costume in a live viewer (`{character, skinId}`) |
+| GET | `/status` | Session status |
+| POST | `/close` | Close the session |
+| GET | `/textures` | List the DAT's textures |
+| GET | `/texture/{index}` | Fetch a texture as PNG (edited version if pushed) |
+| POST | `/texture/{index}` | Replace a texture (multipart or base64 PNG) |
+| POST | `/camera` | Set camera (rot/scale/pan) |
+| GET | `/frame` | Current rendered 3D view as JPEG |
+| GET | `/anims` | List available animations |
+| POST | `/anim` | Load an animation / jump to a frame |
+| POST | `/palette/analyze` | Detect color groups across all textures |
+| POST | `/palette/apply` | Recolor by group (hue/saturation shifts) |
+| POST | `/palette/reset` | Undo palette recolors (restore snapshot) |
+| POST | `/generate-texture` | Generate an image via the AI engine, optionally apply |
+| GET | `/regions` | The character's texture-region map (roles per texture) |
+| POST | `/composite` | Re-fabric: lay a material over masked pixels |
+| POST | `/tint` | Colorize masked pixels (set hue+saturation, keep lightness) |
+| POST | `/hue-shift` | Rotate hue / push saturation on masked pixels |
+| GET | `/export-dat` | Download the edited DAT |
+| POST | `/save` | Save the edited DAT to the vault as a NEW skin |
+
+---
+
+## AI Labs Blueprints (skin_lab_ai, stage_lab_ai, model_lab)
+
+End-to-end AI generation flows built on the Skin Lab session + AI engine.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/mex/skin-lab/ai-status` | AI skin flow status |
+| POST | `/api/mex/skin-lab/ai-create` | Run the full AI skin flow for a costume |
+| GET | `/api/mex/stage-lab/ai-status` | AI stage flow status |
+| POST | `/api/mex/stage-lab/ai-create` | Generate a DAS stage alt |
+| POST | `/api/mex/stage-lab/save` | Save the generated stage alt to the vault |
+| POST | `/api/mex/stage-lab/discard` | Discard the pending stage alt |
+| GET | `/api/mex/model-lab/status` | Model Lab status (AI-Studio-gated) |
+| POST | `/api/mex/model-lab/create` | Stage 1: generate mesh + raw preview |
+| POST | `/api/mex/model-lab/rig` | Stage 2: rig the approved mesh into a costume |
+| POST | `/api/mex/model-lab/save` | Route the pending DAT through unified intake |
+| POST | `/api/mex/model-lab/discard` | Discard the pending model |
+
+---
+
+## AI Engine Blueprint
+
+Managed AI runtime: install, model management, tier routing, OpenRouter key
+(encrypted at rest), local Ollama planners, and usage telemetry. All paths
+under `/api/mex/ai-engine`.
+
+| Method | Endpoint (suffix) | Purpose |
+|---|---|---|
+| GET | `/status` | Engine install/runtime status |
+| GET | `/models` | List available/installed models |
+| POST | `/models/{model_id}/download` | Download a model |
+| POST | `/models/{model_id}/delete` | Delete a model |
+| POST | `/models/{model_id}/toggle` | Enable/disable a model |
+| POST | `/install` | Install the engine runtime |
+| GET, POST | `/routing` | Get/set tier routing config |
+| POST | `/resolve` | Resolve which model a tier routes to |
+| POST | `/key` | Store the OpenRouter key encrypted (DPAPI) |
+| GET | `/planners` | Local planner LLMs via Ollama (reachability + models) |
+| POST | `/planners/install-runtime` | Download the portable Ollama runtime |
+| POST | `/planners/pull` | Pull an Ollama model (streamed progress) |
+| POST | `/planners/delete` | Delete an Ollama model |
+| GET | `/stats` | Usage stats (`?days=N` for a window) |
+| POST | `/stats/reset` | Reset the usage ledger |
 
 ---
 

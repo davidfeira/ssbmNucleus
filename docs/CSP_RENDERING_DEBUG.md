@@ -71,7 +71,7 @@ holds *different* (sometimes working) versions — diagnosing it gives false res
 
 Diagnostics: set `CSP_DOBJ_DEBUG=1` in the env before rendering — the renderer then logs a per-render DObj breakdown (`[cspdbg] dobjs=.. noPobj=.. hidden=.. opaPass=.. neither=..`), POBJ build skips, `[texfail]`/`[texdbg]` per texture, and `EnableBuffers FAILED`. Invaluable for D/E/F/G.
 
-Fixed-cause details: see the `csp-renderer-edge-case-fixes` memory and `Downloads/xrunriot/BEARINGS.md`.
+Fixed-cause details: see the `csp-renderer-edge-case-fixes` memory.
 
 ## Vault batch (installed vault, 2026-06-29)
 

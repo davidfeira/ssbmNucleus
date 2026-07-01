@@ -4,6 +4,14 @@ Melee modding tool (Electron + Flask + React). Builds modded ISOs via
 MexManager/MexCLI (C#) + HSDRaw; manages costumes, stages, custom characters,
 patches. See the user auto-memory `MEMORY.md` for architecture/paths.
 
+## Documentation
+
+[`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) defines the doc tiers (wiki =
+user-facing, `docs/` = dev evergreen vs research) and the **ship checklist** —
+when you change user-visible behavior, endpoints, blueprints, or hooks, update
+the matching docs in the same change. New wiki pages must be registered in
+`wiki/wiki.js` (`NAV_SECTIONS`) **and** `wiki/README.md`.
+
 ## ⚠️ Testing a built ISO in-game (crash tests, move/side-B repros, screenshots)
 
 **Use the solo, no-CPU, no-cursor engine in [`backend/ingame/`](backend/ingame/README.md).**

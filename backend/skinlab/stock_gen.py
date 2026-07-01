@@ -7,7 +7,7 @@ modded DAT's, pixel-aligned) and apply the same movement to the vanilla icon's
 palette.
 
 Transfer estimation is a hybrid tuned against the real vanilla colorways
-(Fox/Pikachu/Marth/Falco ground truth, see _probe_out/stock_texdiff_test.py):
+(Fox/Pikachu/Marth/Falco ground truth, via a one-off texdiff probe, since removed):
 
 - SATURATED icon colors take a per-hue-group transform: vanilla texture pixels
   are hue-binned into color groups (same binning as palette.py), each group's

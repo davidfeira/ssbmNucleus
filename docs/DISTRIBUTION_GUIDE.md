@@ -56,21 +56,15 @@ SSBM Nucleus/
             └── ...
 ```
 
-### Why Images Weren't Loading:
+### Why Images Weren't Loading (historical, resolved):
 
-1. **In Development:**
-   - `viewer/public/vanilla/` exists
-   - Vite serves from `public/`
-   - Images load as `/vanilla/stages/dreamland.jpg`
-
-2. **In Production (Bundled):**
-   - `viewer/public/vanilla/` gets bundled into `app.asar`
-   - BUT assets are also in `resources/utility/assets/vanilla/`
-   - Paths need to resolve correctly
-
-### Fix:
-
-Your backend serves `/storage/*` through Flask, which proxies to the right location. Images should work once paths are resolved via the backend API.
+Early builds shipped vanilla images in `viewer/public/vanilla/` (served by Vite
+in dev, bundled into `app.asar` in prod) while production also had them at
+`resources/utility/assets/vanilla/`, so paths diverged. The fix — still how it
+works today — is that all asset images are served through the Flask backend
+(`/vanilla/*`, `/storage/*`, `/utility/*`), which resolves the right on-disk
+location in both dev and bundled builds. `viewer/public/` no longer contains
+game assets.
 
 ---
 

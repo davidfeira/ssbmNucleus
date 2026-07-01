@@ -70,6 +70,13 @@ Located in `backend/blueprints/`. Each blueprint handles a specific domain:
 | **custom_characters_bp** | `custom_characters.py` | Wholly new m-ex fighters (vault + project install) |
 | **test_in_game_bp** | `test_in_game.py` | In-game test harness HTTP shell (see `backend/ingame/`) |
 | **extras_bp** | `extras/` (package) | Character effects (lasers, shine colors, model swaps, texture hues) |
+| **character_sounds_bp** | `character_sounds.py` | Character sound-bank browser, sound packs |
+| **stage_song_packs_bp** | `stage_song_packs.py` | DAS/stage playlist editing, song packs |
+| **skin_lab_bp** | `skin_lab.py` | Skin Lab: live paint/texture session over HSDRawViewer `--stream` |
+| **skin_lab_ai_bp** | `skin_lab_ai.py` | AI Skin Lab generation (OpenRouter / local planner) |
+| **stage_lab_ai_bp** | `stage_lab_ai.py` | AI Stage Lab (DAS stage-alt generation) |
+| **model_lab_bp** | `model_lab.py` | Model Lab (prompt→3D rigged skin; AI-Studio-gated) |
+| **ai_engine_bp** | `ai_engine.py` | Managed AI engine runtime (install, models, tier routing, telemetry) |
 
 Note: `extras` and `menus` were originally single files (`backend/extras_api.py`
 and `backend/blueprints/menus.py`) and have been split into packages at
@@ -109,8 +116,19 @@ backend/
 ├── iso_scanner.py            # ISO costume scan pipeline (used by iso_scan_bp)
 ├── extra_types.py            # Effect color type definitions
 ├── first_run_setup.py        # Setup wizard logic
+├── das_scan.py               # Scan ISOs for DAS stage variants (20XX .Xat + m-ex)
+├── fsm_patcher.py            # Bake Crazy Hand FSM entries into main.dol at export
+├── stage_yml_converter.py    # Classic stage.yml package → custom stage conversion
+├── skinlab/                  # Costume asset pipeline: CSP/stock generation,
+│                             #   render concurrency + persistent render pool
+├── aiengine/                 # Vendored AI engine (runtime install, model mgmt)
+├── modellab/                 # Shipped model-lab modules (rig, visibility tables)
 └── ingame/                   # In-game test engine (see below)
 ```
+
+Root-level `backend/*.py` scripts not listed above are research/validation
+tooling (build-limit probes, MexCLI diff validators — see
+[MEX_BUILD_LIMITS.md](MEX_BUILD_LIMITS.md)), not part of the running app.
 
 ### In-Game Test Engine (`backend/ingame/`)
 
@@ -192,16 +210,18 @@ Located in `viewer/src/hooks/`:
 
 | Hook | Purpose |
 |------|---------|
-| `useApi.js` | HTTP request wrapper with error handling |
+| `useFileImport.js` | The one import pipeline for the vault (ImportFab, drag-drop → `/import/file`) |
 | `useDownloadQueue.js` | Nucleus protocol download/import queue |
-| `useFileImport.js` | Drag-and-drop file handling |
-| `useCspManager.js` | CSP generation UI state |
-| `useEditModal.js` | Edit modal state management |
-| `useDragAndDrop.js` | Drag-and-drop file operations |
-| `useXdeltaPatches.js` | XDelta patch management |
+| `useCspManager.js` | CSP manager modal state and generation |
+| `useEditModal.js` | Costume/stage-variant edit modal state |
+| `useDragAndDrop.js` | Reorder skins/stage variants (drag state + API mutations) |
 | `useFolderManagement.js` | Vault folder operations |
-| `usePersistentState.js` | LocalStorage persistence |
-| `useModalState.js` | Modal visibility tracking |
+| `useXdeltaPatches.js` | XDelta patch fetch/import/edit/delete |
+| `useXdeltaProgress.js` | WebSocket progress for xdelta builds + bundle imports |
+| `useInGameTest.js` | Per-mod "Test in game" flow (temp ISO build + boot) |
+| `useBulkCharacterCsp.js` | Bulk CSP retake flow for a character |
+| `useBulkStageCapture.js` | Bulk DAS stage-screenshot flow |
+| `usePanelResize.js` | Resizable panel state |
 
 ### State Management
 
@@ -251,10 +271,9 @@ ssbmNucleus/
 │   ├── MexManager/
 │   │   ├── MexCLI/             # C# command-line wrapper
 │   │   └── mexLib/             # Core MexManager library
-│   ├── website/
-│   │   └── backend/tools/
-│   │       ├── processor/      # CSP generation (Python)
-│   │       └── HSDLib/         # 3D viewer (C#)
+│   ├── tools/
+│   │   ├── processor/          # CSP generation (Python)
+│   │   └── HSDLib/             # HSDRaw + HSDRawViewer (C#, 3D viewer/renderer)
 │   ├── assets/                 # Vanilla game assets, UI icons
 │   ├── DynamicAlternateStages/ # DAS framework
 │   └── xdelta/                 # Binary diff utilities
@@ -358,5 +377,5 @@ electron-builder packages:
 - `dist/` → Backend Python bundled via PyInstaller
 - `viewer/dist/` → Frontend assets
 - `utility/assets/` → Vanilla game graphics
-- `utility/HSDRawViewer/` → 3D viewer executable
+- `utility/HSDRawViewer/` → 3D viewer executable (built from `utility/tools/HSDLib`, staged via `dist-backend/hsdraw`)
 - `utility/tools/` → Processor tools
