@@ -104,6 +104,13 @@ _vault_flag = os.environ.get('NUCLEUS_VAULT_DB', '').strip().lower()
 VAULT_BACKEND = 'db' if _vault_flag in ('1', 'true', 'db', 'yes', 'on') else 'json'
 VAULT_DB_PATH = STORAGE_PATH / "vault.db"
 
+# Dual-write canary: when the DB backend is active, ALSO keep metadata.json in
+# sync on every save. This makes the JSON a live rollback backup and keeps any
+# path=-based JSON reader (e.g. the duel assembler) current. On by default during
+# rollout; set NUCLEUS_VAULT_DUAL_WRITE=0 to turn it off once the DB is proven.
+_dual_write_flag = os.environ.get('NUCLEUS_VAULT_DUAL_WRITE', '').strip().lower()
+VAULT_DUAL_WRITE = _dual_write_flag not in ('0', 'false', 'no', 'off')
+
 # Asset paths (user-extracted assets, not bundled)
 VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 

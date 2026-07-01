@@ -87,8 +87,15 @@ def save_metadata(metadata, path: Path = None):
         _save_json(metadata, path)
         return
     if _use_db():
-        from . import vault
+        from . import config, vault
         vault.save_blob(metadata)
+        # Dual-write canary: mirror to metadata.json so it stays a live rollback
+        # backup and path=-based JSON readers see current data.
+        if getattr(config, 'VAULT_DUAL_WRITE', False):
+            try:
+                _save_json(metadata, METADATA_FILE)
+            except Exception as e:
+                logger.warning(f"Vault dual-write to {METADATA_FILE} failed: {e}")
         return
     _save_json(metadata, METADATA_FILE)
 

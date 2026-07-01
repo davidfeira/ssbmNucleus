@@ -439,16 +439,28 @@ Each phase is independently shippable, keeps tests green, and does not change AP
 - Note: the round-trip round-trips the WHOLE blob (tier-1). Ordering is still by list position
   until Phase 2 wires reorder to `sort_order`.
 
-**Phase 2 — Kill the reorder bug class**
-- Migrate reorder / move-to-top / move-to-bottom / folder create-rename-delete-toggle /
-  set-folder (costumes *and* stages) to tier-2 granular `sort_order` transactions.
-- Update the whole-blob `save_metadata` shim to preserve existing `sort_order` (field-only upserts).
-- Add ordering-specific tests (reorder with disk-only entries, reorder within folders, etc.).
+**Phase 2 — Kill the reorder bug class** — ⏸️ DEFERRED (needs a frontend rework)
+- Investigation (2026-06-30): the reorder bug is in endpoint *logic* (index-based drag reorder vs
+  a server-reconstructed display order), not storage. move/folder/set-folder are already ID-based;
+  only drag-`reorder` is index-based, the frontend already sends adjacent index swaps
+  (`viewer/.../useCostumes.js`), and the drift is already band-aided by display reconstruction.
+  Phase 1's design already writes an explicit `sort_order` on every save, and equivalence tests
+  confirm reorder works correctly through the DB backend.
+- The remaining *structural* fix (ID-based reorder that can't drift) requires reworking the
+  frontend's adjacent-swap drag queue — out of the backend-only migration scope. **Deferred to a
+  separate, deliberate change** with preview verification. Not required for the migration.
 
-**Phase 3 — Migrate remaining mutators + flip default**
-- Move import/append, slippi, CSP, custom-char/stage, bundles, das, extras writes to granular
-  repo methods; remove the now-redundant `metadata_lock`/atomic-write code in those modules.
-- Dual-write canary release → then default flag to `db`, keep JSON export fallback.
+**Phase 3 — Rollout: dual-write canary + flip the default** — ✅ DONE
+- ✅ Dual-write (`config.VAULT_DUAL_WRITE`, default on): in DB mode every save also mirrors
+  `metadata.json`, so it stays a live rollback backup and any `path=` JSON consumer (duel
+  assembler) keeps seeing current data. Disable via `NUCLEUS_VAULT_DUAL_WRITE=0` once DB is proven.
+- ✅ Flipped the shipped default to DB via the launcher (`electron/main.js` sets
+  `NUCLEUS_VAULT_DB=1` for packaged builds), not `config.py` — so dev/tests stay on JSON and the
+  swap is reversible + doesn't surprise-migrate a dev vault. First launch runs `ensure_migrated`
+  (backup + round-trip gate) and falls back to JSON on any error.
+- Skipped (per Phase 2 finding): rewriting the already-working mutators to granular repo methods —
+  the whole-blob DB path is correct and fast enough at vault scale. `metadata_lock`/atomic-write
+  code is retained (still used by the JSON path + `path=` writers).
 
 **Phase 4 — Cleanup & docs**
 - Remove dead JSON-path code paths that are no longer reachable (keep export-to-JSON).

@@ -83,6 +83,14 @@ function startFlaskServer() {
     if (!isDev) {
       backendEnv.NUCLEUS_AI_LAB = '0';
       backendEnv.NUCLEUS_MODEL_LAB = '0';
+      // Vault store: shipped builds default to the SQLite backend (migrated from
+      // metadata.json on first launch, with a backup + round-trip validation and
+      // JSON fallback on failure). Dual-write keeps metadata.json in sync as a
+      // live rollback backup. Dev stays on JSON unless NUCLEUS_VAULT_DB=1 is set.
+      // See docs/VAULT_SQLITE_MIGRATION.md. Revert by setting NUCLEUS_VAULT_DB=0.
+      if (backendEnv.NUCLEUS_VAULT_DB === undefined) {
+        backendEnv.NUCLEUS_VAULT_DB = '1';
+      }
     }
 
     const spawnOptions = {

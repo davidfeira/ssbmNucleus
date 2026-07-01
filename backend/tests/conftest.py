@@ -100,6 +100,7 @@ def vault(tmp_path, monkeypatch):
     # Default to the JSON backend (existing tests assert JSON-specific behavior).
     monkeypatch.setattr(core_config, 'VAULT_BACKEND', 'json', raising=False)
     monkeypatch.setattr(core_config, 'VAULT_DB_PATH', storage / 'vault.db', raising=False)
+    monkeypatch.setattr(core_config, 'VAULT_DUAL_WRITE', False, raising=False)
     return VaultHarness(storage, monkeypatch)
 
 
@@ -114,6 +115,8 @@ def dual_backend(request, tmp_path, monkeypatch):
     monkeypatch.setattr(core_config, 'STORAGE_PATH', storage, raising=False)
     monkeypatch.setattr(core_config, 'VAULT_DB_PATH', storage / 'vault.db', raising=False)
     monkeypatch.setattr(core_config, 'VAULT_BACKEND', request.param, raising=False)
+    # Test each backend in isolation; dual-write is covered by its own test.
+    monkeypatch.setattr(core_config, 'VAULT_DUAL_WRITE', False, raising=False)
     harness = VaultHarness(storage, monkeypatch)
     harness.backend = request.param
     return harness
