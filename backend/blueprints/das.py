@@ -20,6 +20,7 @@ from flask import Blueprint, request, jsonify
 
 import das_scan
 from core.config import PROJECT_ROOT, STORAGE_PATH, BASE_PATH, get_subprocess_args
+from core.metadata import load_metadata, metadata_transaction
 from core.state import get_project_files_dir, metadata_lock
 
 logger = logging.getLogger(__name__)
@@ -377,11 +378,7 @@ def das_get_stage_variants(stage_code):
             file_pattern = '*.dat'
 
             # Load metadata to get slippi status and other info
-            metadata_file = STORAGE_PATH / 'metadata.json'
-            metadata = {}
-            if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
+            metadata = load_metadata(default={})
 
             stage_folder_name = DAS_STAGES[stage_code]['folder']
             stage_metadata = metadata.get('stages', {}).get(stage_folder_name, {})
@@ -451,11 +448,7 @@ def das_list_storage_variants():
         variants = []
 
         # Load metadata to get proper names
-        metadata_file = STORAGE_PATH / 'metadata.json'
-        metadata = {}
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
+        metadata = load_metadata(default={})
 
         # Determine which stages to scan
         stages_to_scan = {stage_code: DAS_STAGES[stage_code]} if stage_code and stage_code in DAS_STAGES else DAS_STAGES
@@ -594,15 +587,10 @@ def das_scan_iso():
             skip = das_scan.vault_variant_md5s(das_root)
             variants = das_scan.detect_das_variants(files_dir, skip_md5s=skip)
 
-            # Hold the shared metadata lock across the read-modify-write so this
-            # can't race a concurrent import and clobber custom_characters etc.
-            metadata_file = STORAGE_PATH / 'metadata.json'
+            # Locked read-modify-write via the DAL transaction so this can't race
+            # a concurrent import and clobber custom_characters etc.
             imported = []
-            with metadata_lock:
-                metadata = {}
-                if metadata_file.exists():
-                    with open(metadata_file, 'r') as f:
-                        metadata = json.load(f)
+            with metadata_transaction(default={}) as metadata:
                 stages_meta = metadata.setdefault('stages', {})
 
                 for v in variants:
@@ -613,14 +601,6 @@ def das_scan_iso():
                     vlist.append(entry)
                     imported.append({'stageCode': v.stage_code, 'stageName': v.stage_name,
                                      'name': entry['name'], 'id': entry['id'], 'source': v.source})
-
-                if imported:
-                    tmp = metadata_file.with_suffix('.json.tmp')
-                    with open(tmp, 'w', encoding='utf-8') as f:
-                        json.dump(metadata, f, indent=2)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    os.replace(tmp, metadata_file)
 
             by_stage = dict(Counter(i['stageName'] for i in imported))
             logger.info(f"[OK] DAS ISO scan: imported {len(imported)} variants {by_stage}")
@@ -688,13 +668,10 @@ def das_import_variant():
             variant_id = Path(full_variant_path).stem
 
             # Load metadata to get display name
-            metadata_file = STORAGE_PATH / 'metadata.json'
             display_name = variant_id
 
-            if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-
+            metadata = load_metadata(default={})
+            if metadata:
                 stage_folder_name = DAS_STAGES[stage_code]['folder']
                 stage_metadata = metadata.get('stages', {}).get(stage_folder_name, {})
 

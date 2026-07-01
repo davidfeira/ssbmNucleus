@@ -29,6 +29,7 @@ from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, get_subprocess_args
 from core.helpers import friendly_iso_open_error
+from core.metadata import load_metadata, save_metadata, metadata_transaction
 from core.state import metadata_lock
 from core.state import get_current_project_path, reload_mex_manager, get_socketio, mexcli_lock
 
@@ -63,25 +64,22 @@ def _dedupe_slug(slug):
     return f"{slug}-{counter}"
 
 
+# Default vault shape this module expects from a missing/empty metadata file.
+_DEFAULT_META = {'characters': {}, 'stages': {}, 'custom_stages': []}
+
+
 def _read_metadata():
-    if not METADATA_FILE.exists():
-        return {'characters': {}, 'stages': {}, 'custom_stages': []}
-    with open(METADATA_FILE, 'r') as f:
-        data = json.load(f)
-    if 'custom_stages' not in data:
-        data['custom_stages'] = []
+    # Delegates to the core.metadata DAL (the single seam the SQLite migration
+    # swaps behind); keeps this module's historical 'custom_stages' default.
+    data = load_metadata(default=dict(_DEFAULT_META))
+    data.setdefault('custom_stages', [])
     return data
 
 
 def _write_metadata(data):
-    # Atomic write (temp + os.replace) so a concurrent reader never sees a
-    # half-written metadata.json. Paired with metadata_lock at mutation sites.
-    tmp = METADATA_FILE.with_suffix('.json.tmp')
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, METADATA_FILE)
+    # DAL write is atomic (temp + os.replace); pairs with metadata_lock /
+    # metadata_transaction at the mutation sites to prevent lost updates.
+    save_metadata(data)
 
 
 def _is_folder(item):
@@ -194,11 +192,9 @@ def import_custom_stage_zip_bytes(zip_data, fallback_name):
     }
 
     # Locked read-append-write (see custom_characters import) — concurrent
-    # multi-file imports otherwise race on the shared metadata.json.
-    with metadata_lock:
-        metadata = _read_metadata()
-        metadata['custom_stages'].append(entry)
-        _write_metadata(metadata)
+    # multi-file imports otherwise race on the shared vault metadata.
+    with metadata_transaction(default=dict(_DEFAULT_META)) as metadata:
+        metadata.setdefault('custom_stages', []).append(entry)
 
     logger.info(f"[OK] Imported custom stage '{stage_name}' as {slug}")
     return entry

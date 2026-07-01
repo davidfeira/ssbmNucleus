@@ -17,6 +17,7 @@ BACKEND_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 import blueprints.custom_characters as cc
+import core.metadata as core_metadata  # custom_characters now reads/writes via the DAL
 
 
 def _make_costume_zip(dat_name, with_previews=True):
@@ -73,7 +74,7 @@ def test_export_import_roundtrip_preserves_everything(tmp_path, monkeypatch):
             'custom_series': {'active': True, 'name': 'Pokémon Plus'},
         }],
     }), encoding='utf-8')
-    monkeypatch.setattr(cc, 'METADATA_FILE', src_meta)
+    monkeypatch.setattr(core_metadata, 'METADATA_FILE', src_meta)
 
     _seed_full_vault_char(src_root)
 
@@ -94,7 +95,7 @@ def test_export_import_roundtrip_preserves_everything(tmp_path, monkeypatch):
     monkeypatch.setattr(cc, 'CUSTOM_CHARACTERS_PATH', dst_root)
     dst_meta = tmp_path / 'dst_metadata.json'
     dst_meta.write_text(json.dumps({'custom_characters': []}), encoding='utf-8')
-    monkeypatch.setattr(cc, 'METADATA_FILE', dst_meta)
+    monkeypatch.setattr(core_metadata, 'METADATA_FILE', dst_meta)
 
     entry = cc.import_custom_character_zip_bytes(export_bytes, 'fallback')
 
@@ -149,7 +150,7 @@ def test_zip_slip_member_is_skipped(tmp_path, monkeypatch):
     monkeypatch.setattr(cc, 'CUSTOM_CHARACTERS_PATH', root)
     meta = tmp_path / 'metadata.json'
     meta.write_text(json.dumps({'custom_characters': []}), encoding='utf-8')
-    monkeypatch.setattr(cc, 'METADATA_FILE', meta)
+    monkeypatch.setattr(core_metadata, 'METADATA_FILE', meta)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w') as zf:

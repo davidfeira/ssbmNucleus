@@ -11,6 +11,7 @@ import shutil
 from datetime import datetime
 from flask import request, jsonify
 
+from core.metadata import load_metadata, save_metadata
 from extra_types import get_extra_types, get_extra_type, has_extras, get_storage_character
 
 from . import extras_bp
@@ -43,18 +44,10 @@ def apply_extras_patches(project_path):
         'errors': []
     }
 
-    # Load metadata
-    metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-    if not metadata_file.exists():
-        logger.info("No metadata.json found, skipping extras patching")
-        return results
-
-    try:
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to load metadata for extras patching: {e}")
-        results['errors'].append(f"Failed to load metadata: {e}")
+    # Load metadata (via the core.metadata DAL)
+    metadata = load_metadata()
+    if not metadata:
+        logger.info("No vault metadata found, skipping extras patching")
         return results
 
     # Get MEX build files directory
@@ -210,16 +203,13 @@ def list_extras(character):
                 'message': f'No extras defined for {character}'
             })
 
-        # Load metadata
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        # Load metadata (via the core.metadata DAL)
+        metadata = load_metadata()
+        if not metadata:
             return jsonify({
                 'success': True,
                 'extras': {}
             })
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         # Build extras dict, pulling shared extras from owner characters
         extras = {}
@@ -372,13 +362,8 @@ def create_extra():
         # Get the storage character (owner for shared extras)
         storage_char = get_storage_character(character, extra_type)
 
-        # Load metadata
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-        else:
-            metadata = {'characters': {}}
+        # Load metadata (via the core.metadata DAL)
+        metadata = load_metadata(default={'characters': {}})
 
         # Ensure storage character exists in metadata
         if storage_char not in metadata.get('characters', {}):
@@ -408,9 +393,8 @@ def create_extra():
         # Add to list
         char_data['extras'][extra_type].append(new_mod)
 
-        # Save metadata
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        # Save metadata (atomic, via the DAL)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Created extra mod '{name}' ({extra_type}) for {storage_char}" +
                    (f" (shared from {character})" if storage_char != character else ""))
@@ -456,16 +440,13 @@ def delete_extra():
         # Get the storage character (owner for shared extras)
         storage_char = get_storage_character(character, extra_type)
 
-        # Load metadata
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        # Load metadata (via the core.metadata DAL)
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({
                 'success': False,
                 'error': 'Metadata file not found'
             }), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         # Get storage character extras
         char_data = metadata.get('characters', {}).get(storage_char, {})
@@ -485,9 +466,8 @@ def delete_extra():
         # Update metadata
         extras[extra_type] = mods
 
-        # Save metadata
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        # Save metadata (atomic, via the DAL)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Deleted extra mod {mod_id} ({extra_type}) from {storage_char}")
 
@@ -561,16 +541,13 @@ def install_extra():
         # Use dynamic offset detection for laser/sideb, fallback to hardcoded
         offsets = get_dynamic_offsets(dat_path, extra_type, fallback_offsets)
 
-        # Load metadata to find the mod
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        # Load metadata to find the mod (via the core.metadata DAL)
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({
                 'success': False,
                 'error': 'Metadata file not found'
             }), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         # Find the mod (from storage character)
         char_data = metadata.get('characters', {}).get(storage_char, {})

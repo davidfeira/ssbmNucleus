@@ -127,10 +127,12 @@ def required_character_slots() -> list[RequiredSlot]:
 
 
 def _load_metadata(storage_path: Path = STORAGE_PATH) -> dict[str, Any]:
-    path = storage_path / "metadata.json"
-    if not path.exists():
-        return {"characters": {}, "stages": {}}
-    return read_json(path)
+    # Route the read through the core.metadata DAL (the single seam the SQLite
+    # migration swaps behind) while preserving the storage_path parameter the
+    # duel assembler / its tests use to point at an arbitrary vault.
+    from core.metadata import load_metadata
+    return load_metadata(default={"characters": {}, "stages": {}},
+                         path=storage_path / "metadata.json")
 
 
 def _display_path(path: Path) -> str:

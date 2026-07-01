@@ -5,26 +5,22 @@ characters were imported at once). A multi-file drag fires many concurrent
 /import/file requests on Flask's threaded server; without a lock + atomic write
 their appends clobber each other. `_append_custom_character` must keep every
 entry, including a pre-existing one.
-"""
-import sys
-import json
-import threading
-from pathlib import Path
 
-BACKEND_DIR = Path(__file__).parent.parent
-sys.path.insert(0, str(BACKEND_DIR))
+custom_characters now routes its metadata IO through the core.metadata DAL, so
+these tests drive the unified path via the `vault` fixture (which redirects the
+DAL's metadata file at a temp vault).
+"""
+import threading
 
 import blueprints.custom_characters as cc
 
 
-def test_concurrent_appends_keep_all_entries(tmp_path, monkeypatch):
-    meta = tmp_path / 'metadata.json'
+def test_concurrent_appends_keep_all_entries(vault):
     # pre-existing builtin entry (stands in for the seeded Giga Bowser)
-    meta.write_text(json.dumps({
+    vault.write({
         'characters': {}, 'stages': {}, 'custom_stages': [],
         'custom_characters': [{'slug': 'giga-bowser', 'name': 'Giga Bowser', 'builtin': True}],
-    }), encoding='utf-8')
-    monkeypatch.setattr(cc, 'METADATA_FILE', meta)
+    })
 
     n = 24
     barrier = threading.Barrier(n)  # maximise overlap
@@ -39,7 +35,7 @@ def test_concurrent_appends_keep_all_entries(tmp_path, monkeypatch):
     for t in threads:
         t.join()
 
-    data = json.loads(meta.read_text(encoding='utf-8'))
+    data = vault.read()
     slugs = {c['slug'] for c in data['custom_characters']}
     # the builtin survived AND all 24 concurrent appends landed — nothing lost
     assert 'giga-bowser' in slugs
@@ -47,10 +43,8 @@ def test_concurrent_appends_keep_all_entries(tmp_path, monkeypatch):
     assert len(data['custom_characters']) == n + 1
 
 
-def test_write_is_atomic_valid_json(tmp_path, monkeypatch):
-    meta = tmp_path / 'metadata.json'
-    monkeypatch.setattr(cc, 'METADATA_FILE', meta)
+def test_write_is_atomic_valid_json(vault):
     cc._write_metadata({'custom_characters': [{'slug': 'x'}]})
     # readable as valid JSON and no leftover temp file
-    assert json.loads(meta.read_text(encoding='utf-8'))['custom_characters'][0]['slug'] == 'x'
-    assert not (tmp_path / 'metadata.json.tmp').exists()
+    assert vault.read()['custom_characters'][0]['slug'] == 'x'
+    assert not (vault.storage / 'metadata.json.tmp').exists()

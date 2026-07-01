@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, send_file, after_this_request
 
 from core.config import STORAGE_PATH, OUTPUT_PATH
 from core.costume_files import is_costume_archive_filename
+from core.metadata import load_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,9 @@ def export_costume():
             return jsonify({'success': False, 'error': f'Costume not found: {skin_id}'}), 404
 
         # Check if this is Ice Climbers Popo with paired Nana
-        metadata_file = STORAGE_PATH / 'metadata.json'
         paired_nana_id = None
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-
+        metadata = load_metadata(default={})
+        if metadata:
             if character in metadata.get('characters', {}):
                 for skin in metadata['characters'][character]['skins']:
                     if skin['id'] == skin_id:

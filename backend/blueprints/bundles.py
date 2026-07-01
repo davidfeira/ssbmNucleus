@@ -22,6 +22,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 
 from core.config import PROJECT_ROOT, RESOURCES_DIR, STORAGE_PATH, OUTPUT_PATH, get_subprocess_args
+from core.metadata import load_metadata, metadata_transaction
 from core.state import get_socketio, metadata_lock
 
 logger = logging.getLogger(__name__)
@@ -34,52 +35,28 @@ BUNDLE_PATH.mkdir(parents=True, exist_ok=True)
 
 
 def load_bundle_metadata():
-    """Load bundle metadata from metadata.json"""
-    metadata_file = STORAGE_PATH / 'metadata.json'
-    if not metadata_file.exists():
-        return []
-
-    with open(metadata_file, 'r') as f:
-        metadata = json.load(f)
-
-    return metadata.get('bundles', [])
+    """Load the bundles list from the shared vault metadata (via the DAL)."""
+    return (load_metadata() or {}).get('bundles', [])
 
 
 def save_bundle_metadata(bundles_list):
-    """Save the bundles list into the SHARED metadata.json.
+    """Save the bundles list into the SHARED vault metadata.
 
-    metadata.json also holds custom_characters/stages; an unguarded
+    The vault metadata also holds custom_characters/stages; an unguarded
     read-modify-write here can clobber those (the same race that dropped the
-    seeded Giga Bowser). So hold the shared metadata_lock and write atomically
-    (temp + os.replace). See [[metadata-concurrency]]."""
-    metadata_file = STORAGE_PATH / 'metadata.json'
-    with metadata_lock:
-        if metadata_file.exists():
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-        else:
-            metadata = {'version': '1.0', 'characters': {}, 'stages': {}}
-
+    seeded Giga Bowser). metadata_transaction holds the shared lock and writes
+    atomically. See [[metadata-concurrency]]."""
+    with metadata_transaction(default={'version': '1.0', 'characters': {}, 'stages': {}}) as metadata:
         metadata['bundles'] = bundles_list
-
-        tmp = metadata_file.with_suffix('.json.tmp')
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, metadata_file)
-
-    logger.info(f"Saved {len(bundles_list)} bundles to metadata.json")
+    logger.info(f"Saved {len(bundles_list)} bundles to vault metadata")
 
 
 def _append_bundle(entry):
-    """Thread-safe append of one bundle entry: the whole load-append-save runs
-    under metadata_lock so two concurrent bundle exports can't lose each other's
+    """Thread-safe append of one bundle entry: the load-append-save runs in one
+    locked transaction so two concurrent bundle exports can't lose each other's
     entry (read-modify-write race)."""
-    with metadata_lock:
-        bundles = load_bundle_metadata()
-        bundles.append(entry)
-        save_bundle_metadata(bundles)
+    with metadata_transaction(default={'version': '1.0', 'characters': {}, 'stages': {}}) as metadata:
+        metadata.setdefault('bundles', []).append(entry)
 
 
 def parse_dolphin_ini_iso_path(ini_path: str) -> str:

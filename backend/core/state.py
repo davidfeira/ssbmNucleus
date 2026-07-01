@@ -13,12 +13,10 @@ import threading
 # Add mex_bridge to path
 from .config import PROJECT_ROOT
 
-# Serializes read-modify-write of the shared storage/metadata.json. Flask runs
-# threaded, so concurrent imports (e.g. a multi-file drag firing 8 /import/file
-# requests at once) otherwise race and lose entries — this is what silently
-# dropped the seeded Giga Bowser from the vault. Both the custom-character and
-# custom-stage blueprints write the SAME metadata.json, so they share this lock.
-metadata_lock = threading.RLock()
+# metadata_lock now lives in core.metadata (next to the data it guards) so the
+# DAL can offer a locked metadata_transaction(). Re-exported here because many
+# blueprints still do `from core.state import metadata_lock` — keep that working.
+from .metadata import metadata_lock  # noqa: F401  (re-exported for back-compat)
 
 # Serializes operations that open + save the MexManager workspace (reorder,
 # import, remove, set-team-color, export). Two MexCLI processes touching the

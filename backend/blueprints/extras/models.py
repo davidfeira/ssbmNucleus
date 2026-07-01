@@ -16,6 +16,7 @@ from werkzeug.utils import secure_filename
 
 from extra_types import get_extra_type, get_storage_character
 from core.config import get_subprocess_args
+from core.metadata import load_metadata, save_metadata
 
 from . import extras_bp
 from . import helpers
@@ -193,13 +194,8 @@ def create_model_extra():
                 'error': f'Unsupported file type: {file_ext}. Use .dae or .dat'
             }), 400
 
-        # Load metadata
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if metadata_file.exists():
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-        else:
-            metadata = {'characters': {}}
+        # Load metadata (via the core.metadata DAL)
+        metadata = load_metadata(default={'characters': {}})
 
         # Ensure character structure exists
         if storage_char not in metadata.get('characters', {}):
@@ -223,9 +219,8 @@ def create_model_extra():
 
         char_data['extras'][extra_type].append(new_mod)
 
-        # Save metadata
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        # Save metadata (atomic, via the DAL)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Created model extra '{name}' ({extra_type}) for {storage_char}")
 
@@ -307,16 +302,13 @@ def install_model_extra():
                 'error': f'Could not find {target_file} in MEX project'
             }), 404
 
-        # Load metadata to find the mod
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        # Load metadata to find the mod (via the core.metadata DAL)
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({
                 'success': False,
                 'error': 'Metadata file not found'
             }), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         # Find the mod
         char_data = metadata.get('characters', {}).get(storage_char, {})
@@ -405,16 +397,13 @@ def delete_model_extra():
         # Get storage character
         storage_char = get_storage_character(character, extra_type)
 
-        # Load metadata
-        metadata_file = helpers.STORAGE_PATH / 'metadata.json'
-        if not metadata_file.exists():
+        # Load metadata (via the core.metadata DAL)
+        metadata = load_metadata()
+        if metadata is None:
             return jsonify({
                 'success': False,
                 'error': 'Metadata file not found'
             }), 404
-
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
 
         # Find the mod
         char_data = metadata.get('characters', {}).get(storage_char, {})
@@ -447,8 +436,8 @@ def delete_model_extra():
         # Update metadata
         extras[extra_type] = new_mods
 
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        # Save metadata (atomic, via the DAL)
+        save_metadata(metadata)
 
         logger.info(f"[OK] Deleted model extra {mod_id} from {storage_char}")
 

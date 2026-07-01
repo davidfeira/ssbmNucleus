@@ -1,13 +1,19 @@
 """
-Shared access to the vault's storage/metadata.json.
+Shared access to the vault's storage/metadata.json — the single data-access
+layer (DAL) for vault state.
 
-Every blueprint that reads or writes vault metadata should go through
-load_metadata()/save_metadata() instead of hand-rolling the open/json
-boilerplate.
+Every backend module that reads or writes vault metadata should go through
+load_metadata()/save_metadata()/metadata_transaction() instead of hand-rolling
+the open/json boilerplate. Routing ALL access through this one module is what
+lets the storage backend swap from metadata.json to SQLite in one place behind
+a feature flag (see docs/VAULT_SQLITE_MIGRATION.md).
 """
 
 import json
 import logging
+import os
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from .config import STORAGE_PATH
@@ -15,6 +21,13 @@ from .config import STORAGE_PATH
 logger = logging.getLogger(__name__)
 
 METADATA_FILE = STORAGE_PATH / 'metadata.json'
+
+# Serializes read-modify-write of the shared vault metadata. Flask runs threaded,
+# so concurrent imports (e.g. a multi-file drag firing many /import/file requests
+# at once) otherwise race and lose entries — this silently dropped the seeded
+# Giga Bowser from the vault. Defined here (next to the data it guards) and
+# re-exported from core.state for backwards compatibility with existing imports.
+metadata_lock = threading.RLock()
 
 
 def load_metadata(default=None, path: Path = None):
@@ -35,11 +48,39 @@ def load_metadata(default=None, path: Path = None):
 
 
 def save_metadata(metadata, path: Path = None):
-    """Write a metadata JSON file (the vault's metadata.json by default)."""
+    """Write a metadata JSON file atomically (the vault's metadata.json by default).
+
+    Serialize to a sibling temp file then os.replace, so a concurrent reader
+    never sees a half-written file and a crash mid-write can't truncate the
+    vault. (Previously this was a plain write; the custom-character/stage/bundle
+    paths hand-rolled their own atomic writes — now every caller gets the same
+    durability for free.)
+    """
     file = path or METADATA_FILE
     file.parent.mkdir(parents=True, exist_ok=True)
-    with open(file, 'w', encoding='utf-8') as f:
+    tmp = file.with_name(file.name + '.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
+    os.replace(tmp, file)
+
+
+@contextmanager
+def metadata_transaction(default=None, path: Path = None):
+    """Locked read-modify-write of a metadata file.
+
+    Acquires `metadata_lock`, loads the metadata, yields it for in-place
+    mutation, then writes it back atomically on clean exit. An exception in the
+    body propagates WITHOUT saving, so a failed mutation leaves the file
+    untouched. This is the canonical primitive for "load, change, save" and
+    replaces the per-module `with metadata_lock: read/mutate/write` blocks.
+
+        with metadata_transaction(default={'custom_characters': []}) as data:
+            data['custom_characters'].append(entry)
+    """
+    with metadata_lock:
+        data = load_metadata(default=default, path=path)
+        yield data
+        save_metadata(data, path=path)
 
 
 def custom_character_slug(character):

@@ -28,6 +28,7 @@ from flask import Blueprint, request, jsonify, send_file
 
 from core.config import STORAGE_PATH, MEXCLI_PATH, PROJECT_ROOT, BACKEND_ASSETS_DIR, get_subprocess_args
 from core.helpers import friendly_iso_open_error, is_incompatible_iso_error
+from core.metadata import load_metadata, save_metadata, metadata_transaction
 from core.state import get_current_project_path, reload_mex_manager, metadata_lock, get_socketio, mexcli_lock
 
 logger = logging.getLogger(__name__)
@@ -92,37 +93,31 @@ def _dedupe_slug(slug):
     return f"{slug}-{counter}"
 
 
+# Default vault shape this module expects from a missing/empty metadata file.
+_DEFAULT_META = {'characters': {}, 'stages': {}, 'custom_stages': [], 'custom_characters': []}
+
+
 def _read_metadata():
-    if not METADATA_FILE.exists():
-        return {'characters': {}, 'stages': {}, 'custom_stages': [], 'custom_characters': []}
-    with open(METADATA_FILE, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    if 'custom_characters' not in data:
-        data['custom_characters'] = []
+    # Delegates to the core.metadata DAL (the single seam the SQLite migration
+    # swaps behind); keeps this module's historical 'custom_characters' default.
+    data = load_metadata(default=dict(_DEFAULT_META))
+    data.setdefault('custom_characters', [])
     return data
 
 
 def _write_metadata(data):
-    # Atomic write: serialize to a temp file then os.replace, so a concurrent
-    # reader never sees a half-written file. Paired with metadata_lock at the
-    # mutation sites to prevent lost updates across concurrent imports.
-    tmp = METADATA_FILE.with_suffix('.json.tmp')
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, METADATA_FILE)
+    # DAL write is atomic (temp + os.replace); pairs with metadata_lock /
+    # metadata_transaction at the mutation sites to prevent lost updates.
+    save_metadata(data)
 
 
 def _append_custom_character(entry):
-    """Thread-safe append of one entry to metadata.json custom_characters.
-    The lock makes the read-modify-write atomic across concurrent imports (a
-    multi-file drag fires many /import/file at once); without it entries were
+    """Thread-safe append of one entry to the vault's custom_characters list.
+    The transaction makes the read-modify-write atomic across concurrent imports
+    (a multi-file drag fires many /import/file at once); without it entries were
     lost — this is what dropped the seeded Giga Bowser."""
-    with metadata_lock:
-        metadata = _read_metadata()
+    with metadata_transaction(default=dict(_DEFAULT_META)) as metadata:
         metadata.setdefault('custom_characters', []).append(entry)
-        _write_metadata(metadata)
 
 
 def _resolve_asset_png(assets_dir, asset_ref):
