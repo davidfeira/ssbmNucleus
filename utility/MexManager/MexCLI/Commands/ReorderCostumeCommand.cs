@@ -154,11 +154,14 @@ namespace MexCLI.Commands
                 }
 
                 // Special handling for Ice Climbers - reorder paired fighter's costumes
-                // Ice Climbers (Popo) is at index 9, Nana is at index 11
-                if (fighterInternalId == 9 || fighterInternalId == 11)
+                // Ice Climbers (Popo) is at internal index 10, Nana is at index 11.
+                // (Index 9 is Peach -- using it here left Popo's Nana un-reordered so
+                // the pair de-synced, and silently corrupted Nana's order when Peach
+                // was reordered.)
+                if (fighterInternalId == 10 || fighterInternalId == 11)
                 {
                     // Find the paired fighter (if reordering Popo, find Nana; if reordering Nana, find Popo)
-                    int pairedFighterId = (fighterInternalId == 9) ? 11 : 9;
+                    int pairedFighterId = (fighterInternalId == 10) ? 11 : 10;
 
                     if (pairedFighterId >= 0 && pairedFighterId < workspace.Project.Fighters.Count)
                     {

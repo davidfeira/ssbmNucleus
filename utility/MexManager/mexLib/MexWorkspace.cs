@@ -26,8 +26,10 @@ namespace mexLib
 
         public FileManager FileManager { get; internal set; } = new FileManager();
 
+        private static readonly char[] DirSeparators = { '/', '\\' };
+
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="fileName"></param>
         /// <returns></returns>
@@ -653,7 +655,30 @@ namespace mexLib
             string root = GetFilePath("");
             foreach (string f in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
             {
-                iso.AddFile(f[root.Length..], f);
+                string rel = f[root.Length..];
+
+                // Dynamic Alternate Stages: the m-ex loader only accepts .dat
+                // alternates inside a stage folder (files/Gr??/...). Pokemon Stadium's
+                // files are .usd-based, so older builds and hand-edits can leave a
+                // folder alt as .usd -- which makes the loader assert "no valid alts
+                // found in <stage> folder / alts must end in the correct file extension"
+                // (dynamicAlts.c) and crash at stage load. Pack any such folder-alt into
+                // the ISO under a .dat name so an exported ISO is ALWAYS valid, whatever
+                // state the project folder is in. (The stage ROOT file, e.g.
+                // files/GrPs.usd, is not inside a subfolder, so it is left untouched.)
+                int sep = rel.IndexOfAny(DirSeparators);
+                if (sep > 0
+                    && rel.EndsWith(".usd", StringComparison.OrdinalIgnoreCase)
+                    && DASInstaller.StageCodeToName.ContainsKey(rel[..sep]))
+                {
+                    // A .dat sibling is added by this same loop, so drop the redundant
+                    // .usd rather than colliding on the (now identical) .dat name.
+                    if (File.Exists(Path.ChangeExtension(f, ".dat")))
+                        continue;
+                    rel = rel[..^4] + ".dat";
+                }
+
+                iso.AddFile(rel, f);
             }
 
             iso.SetAddressTable(MeleeFilelist.FileList);
