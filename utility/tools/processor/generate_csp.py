@@ -55,6 +55,25 @@ def _resolve_hsdraw_dir() -> str:
 HSDRAW_PATH = _resolve_hsdraw_dir()
 HSDRAW_EXE = os.path.join(HSDRAW_PATH, "HSDRawViewer.exe")
 
+# Optional persistent-render pool (backend/skinlab/csp_pool.CspRenderPool). When a
+# batch caller (iso_scanner, texture-pack export) sets this, generate_single_csp_
+# internal routes its render through a reused --csp-server worker instead of
+# spawning a one-shot process, paying process/GL startup once per worker rather
+# than once per costume. Left None for one-off renders (Retake CSP etc.). A pool
+# failure on any single job silently falls back to the one-shot path.
+_active_pool = None
+
+
+def set_active_pool(pool):
+    """Install (or clear, with None) the process-wide CSP render pool. Batch
+    callers set it around their render loop and clear it in a finally."""
+    global _active_pool
+    _active_pool = pool
+
+
+def get_active_pool():
+    return _active_pool
+
 # Character code mapping for folder structure
 CHARACTER_CODES = {
     'Captain Falcon': 'Ca',
@@ -421,13 +440,41 @@ def find_ice_climbers_pair(dat_filepath, explicit_pair_filepath=None):
                     f"{explicit_pair.name} parsed as {pair_character}"
                 )
 
-    # Strategy 0: Filename slot suffix in the SAME directory.
+    # Strategy 0 (highest auto priority): VARIANT-AWARE SLOT PAIR.
+    # Popo/Nana slots pair by a FIXED color scheme (Re<->Wh, Or<->Aq, Gr<->Ye,
+    # Nr<->Nr; custom mex slots share a code, Bu<->Bu), and a modded costume ships
+    # BOTH halves with the same trailing variant (PlPpReMod <-> PlNnWhMod). When a
+    # built project holds vanilla AND modded Nana of the same color -- e.g.
+    # Animelee's files carry PlNnWh.dat AND PlNnWhMod.dat -- the color-name
+    # strategies below match on color ALONE and return whichever the glob yields
+    # first (the vanilla `PlNnWh.dat` sorts before `PlNnWhMod.dat`), so a modded
+    # Popo's portrait was composited with the VANILLA Nana. Build the partner's
+    # exact filename from the partner SLOT CODE + THIS file's own variant suffix so
+    # the modded Popo pairs with the modded Nana (and vanilla with vanilla). Falls
+    # through to the strategies below when that exact file is absent (no regression).
+    POPO_CODE_TO_NANA = {'Nr': 'Nr', 'Re': 'Wh', 'Or': 'Aq', 'Gr': 'Ye'}
+    NANA_CODE_TO_POPO = {v: k for k, v in POPO_CODE_TO_NANA.items()}
+    stem = os.path.splitext(filename)[0]
+    if len(stem) >= 6 and stem[:4].lower() in ('plpp', 'plnn'):
+        my_code = stem[4:6]           # 2-char slot code, e.g. "Re"
+        variant = stem[6:]            # trailing variant, e.g. "Mod" (base = "")
+        if char_type == 'popo':
+            partner_code = POPO_CODE_TO_NANA.get(my_code, my_code)
+        else:
+            partner_code = NANA_CODE_TO_POPO.get(my_code, my_code)
+        exact = dat_dir / f"{search_pattern}{partner_code}{variant}.dat"
+        if exact.exists() and exact.resolve() != dat_path.resolve():
+            logger.info(
+                f"Found Ice Climbers pair by variant-aware slot: {exact.name} "
+                f"(partner slot '{partner_code}', variant '{variant or 'base'}')")
+            return (char_type, str(exact), popo_color, nana_color)
+
+    # Strategy 0b: Filename slot suffix in the SAME directory.
     # Custom MEX color slots (e.g. Popo Blue + Nana Blue) aren't in the vanilla
     # POPO_TO_NANA color table, so the color-name strategies below give up. But
     # iso_scanner deliberately stages both halves of an IC pair into the same
     # skin folder before invoking generate_csp specifically so a filename match
     # works here — no DAT parsing needed.
-    stem = os.path.splitext(filename)[0]
     if len(stem) >= 6:
         my_suffix = stem[4:6]  # 2-char slot code, e.g. "Bu"
         candidate = dat_dir / f"{search_pattern}{my_suffix}.dat"
@@ -438,7 +485,7 @@ def find_ice_climbers_pair(dat_filepath, explicit_pair_filepath=None):
             )
             return (char_type, str(candidate), popo_color, nana_color)
 
-    # Strategy 0b: A caller may stage exactly one opposite climber beside this
+    # Strategy 0c: A caller may stage exactly one opposite climber beside this
     # DAT even when the slot suffixes do not match. Treat that as an explicit
     # local pair before any color-table or tree-search heuristics.
     local_opposites = [
@@ -703,14 +750,19 @@ def _vanilla_color_order(character):
 
 def costume_slot_for_color(character, color):
     """Vanilla CSS slot index (0 = default) for a costume color NAME (e.g.
-    'Blue'), or 0 when unknown. Only fighters whose alt costumes add geometry
-    (Pikachu/Pichu/Peach) actually depend on this; for everyone else every slot
-    maps to the same single visibility config."""
+    'Blue'), or None when the color doesn't match any of this character's
+    vanilla slots -- a custom/imported costume (e.g. a hand-spliced hat mod)
+    whose color name was never a vanilla one. Callers should fall back to
+    _best_fit_visibility_config() rather than assuming slot 0, which under-hides
+    custom costumes that add geometry (see that function's docstring). Only
+    fighters whose alt costumes add geometry (Pikachu/Pichu/Peach) actually
+    depend on this; for everyone else every slot maps to the same single
+    visibility config."""
     order = _vanilla_color_order(character)
     code = COLOR_CODES.get(color)
     if order and code and code in order:
         return order.index(code)
-    return 0
+    return None
 
 
 def _low_poly_set(dat_filepath, character, costume_slot=0):
@@ -752,23 +804,38 @@ def _low_poly_set(dat_filepath, character, costume_slot=0):
         if vis_arr is None or length < 1:
             return None
 
+        # HSD arrays carry no inline length; a DAT block runs until the next
+        # relocation TARGET (block start). Use that to size the LowPoly slot array.
+        _targets = sorted({d.u32(o) for o in d.relocs})
+
+        def _array_len(ptr, elem=0x08, cap=32):
+            nxt = next((t for t in _targets if t > ptr), None)
+            return min((nxt - ptr) // elem, cap) if nxt else 1
+
         def low_set(config):
-            # SBM_CostumeLookupTable stride 0x10; LowPoly table at +0x04.
-            table = rptr(vis_arr + config * 0x10 + 0x04)
-            if table is None:
-                return None
-            count = d.u32(table + 0x00)
-            arr = rptr(table + 0x04)
-            if arr is None or count > 64:
+            # SBM_CostumeLookupTable stride 0x10; LowPoly @+0x04 is an ARRAY of
+            # SBM_LookupTable SLOTS (each: Count@0x00, LookupEntries@0x04), and each
+            # entry lists DObj-index bytes. A costume's low-poly mesh is SPLIT across
+            # several slots -- read EVERY slot. (Reading only slot 0 was a bug: Pichu
+            # Blue's LowPoly is 4 slots = [25-48]; slot 0 alone is [31-48], so 25-30
+            # rendered as low-poly poking through the portrait on re-authored models.)
+            arr_ptr = rptr(vis_arr + config * 0x10 + 0x04)
+            if arr_ptr is None:
                 return None
             idx = set()
-            for i in range(count):
-                le = arr + i * 0x8
-                n = d.u32(le + 0x00)
-                data = rptr(le + 0x04)
-                if data is not None and n <= 256:
-                    idx.update(d.raw[0x20 + data:0x20 + data + n])
-            return idx
+            for slot in range(_array_len(arr_ptr, 0x08)):
+                stbl = arr_ptr + slot * 0x08
+                count = d.u32(stbl + 0x00)
+                entries = rptr(stbl + 0x04)
+                if entries is None or count <= 0 or count > 64:
+                    continue
+                for i in range(count):
+                    le = entries + i * 0x08
+                    n = d.u32(le + 0x00)
+                    data = rptr(le + 0x04)
+                    if data is not None and n <= 256:
+                        idx.update(d.raw[0x20 + data:0x20 + data + n])
+            return idx or None
 
         config = min(max(costume_slot, 0), length - 1)
         idx = low_set(config)
@@ -792,6 +859,97 @@ def low_poly_dobjs(dat_filepath, character, costume_slot=0):
     if not idx:
         return None
     return ",".join(str(i) for i in sorted(idx))
+
+
+def _visibility_config_length(dat_filepath, character):
+    """Number of per-costume visibility configs in the fighter's ftData table
+    (SBM_PlayerModelLookupTables Count), or 0 if unreadable."""
+    ft_dat = _find_ftdata(dat_filepath, character)
+    if not ft_dat:
+        return 0
+    try:
+        backend = str(SCRIPT_DIR.parents[2] / "backend")
+        if backend not in sys.path:
+            sys.path.insert(0, backend)
+        from skinlab.datprobe import DatFile
+
+        d = DatFile(str(ft_dat))
+        ft = next(o for n, o in d.roots if n.startswith('ftData'))
+        lookups = d.ptr(ft + 0x08)
+        return d.u32(lookups + 0x00) if lookups is not None else 0
+    except Exception:
+        return 0
+
+
+def _best_fit_visibility_config(dat_filepath, character):
+    """Pick a visibility config for a costume whose color couldn't be matched to
+    a known vanilla slot (a custom/imported costume, e.g. a hand-spliced hat
+    mod) -- so there's no color name to look up a slot from and blindly
+    defaulting to config 0 is wrong.
+
+    This is exactly the Pikachu hat-mod bug: an unrecognized "White" color fell
+    back to config 0's hide list on a hatted model, leaving its real low-poly
+    cheeks/ears (only covered by config 1) visible in the portrait. Both vault
+    hat costumes hit it: `plpkwh-plpkwh01` (32 DObjs) and `plpkwh-plpkwh`
+    (31 DObjs) -- a spliced hat leaves the count near, but not exactly at, a
+    config's footprint.
+
+    Two signals, and WHICH is trustworthy depends on how many alt configs the
+    fighter has:
+      1. VANILLA COUNT MATCH, but ONLY for a SINGLE-ALT-CONFIG fighter (length==2,
+         i.e. Pikachu: cfg0=base body, cfg1=every non-base color). There the alt
+         is unambiguous -- any costume matching a non-base vanilla DObj count MUST
+         be cfg1 -- so `_vanilla_count_to_config` is authoritative. This is what a
+         footprint-only rule missed: a 30-DObj Pikachu (= Blue/Green's count,
+         which use cfg1) is distance-2 from cfg1's 32-DObj footprint, so a "within
+         1" rule wrongly kept it on cfg0 and its low-poly ears/cheeks leaked
+         (`plpkbk-plpkbk03`, `plpkor`). For MULTI-alt fighters (Pichu length 4,
+         Peach length 7) count-matching is UNRELIABLE: a custom costume's count
+         can coincidentally equal a DIFFERENT-structured vanilla color -- a 42-DObj
+         headband Pichu equals vanilla Red's count (cfg1) but is really a
+         cfg0-structured body with an added headband, and forcing cfg1 makes the
+         headband render blocky. So multi-alt fighters skip this signal.
+      2. FOOTPRINT DISTANCE (fallback). For a splice that matches no vanilla count
+         (the 31-DObj Pikachu sailor hat) pick the config whose footprint (highest
+         referenced DObj index + 1) is CLOSEST to the DObj count, ties -> lowest
+         index, escalating above cfg0 only on a TIGHT match (|footprint-actual|
+         <= 1). This stays conservative for Pichu/Peach customs (they sit >=2 from
+         any alt footprint -> cfg0, the previous safe behavior).
+    Verified against Pikachu/Pichu/Peach vanilla costumes and the full installed
+    vault: only the Pikachu hat/alt costumes change (→ config 1); Pichu/Peach
+    customs stay on config 0."""
+    length = _visibility_config_length(dat_filepath, character)
+    if length <= 1:
+        return 0
+    actual = _model_dobj_count(dat_filepath)
+    if not actual:
+        return 0
+    # 1. authoritative for SINGLE-ALT-CONFIG fighters only: a non-base vanilla
+    #    DObj-count match is unambiguous -> that (single) alt config.
+    if length == 2:
+        vmap = _vanilla_count_to_config(character)
+        if actual in vmap:
+            cfg = vmap[actual]
+            if cfg:
+                logger.info(f"best-fit visibility config for {Path(dat_filepath).name} "
+                            f"({character}, {actual} dobjs, unrecognized color): {cfg} "
+                            f"(vanilla-count match)")
+            return cfg
+    # 2. fallback: closest config footprint, tight match only
+    best, best_dist = 0, None
+    for cfg in range(length):
+        idx = _low_poly_set(dat_filepath, character, cfg)
+        if not idx:
+            continue
+        dist = abs((max(idx) + 1) - actual)
+        if best_dist is None or dist < best_dist:   # strict < keeps lowest on ties
+            best, best_dist = cfg, dist
+    if best and best_dist is not None and best_dist <= 1:
+        logger.info(f"best-fit visibility config for {Path(dat_filepath).name} "
+                    f"({character}, {actual} dobjs, unrecognized color): {best} "
+                    f"(footprint dist {best_dist})")
+        return best
+    return 0
 
 
 def _scene_hidden_nodes(yml_path):
@@ -910,6 +1068,46 @@ def _model_dobj_count(dat_path):
 
 
 _VANILLA_DOBJ_COUNTS = {}
+_VANILLA_COUNT_CONFIG = {}
+
+
+def _vanilla_count_to_config(character):
+    """Map {body-model DObj count -> visibility config} across this fighter's
+    vanilla color costumes: each color's model DObj count -> the config that
+    color uses (`min(slot, VisibilityLookupLength-1)`); the LOWEST config wins on
+    ties (Peach's five 85-DObj colors span cfg0/2/3/4 with identical low sets ->
+    cfg0). A custom/unrecognized-color costume is a recolor+splice that reuses one
+    of these vanilla models, so an exact DObj-count match yields its true config
+    -- the authoritative signal, unlike footprint distance. E.g. Pikachu maps
+    {26->cfg0 (Nr), 30->cfg1 (Bu/Gr), 32->cfg1 (Re)}, so a 30-DObj black hat mod
+    correctly gets cfg1. Cached per character; empty when unreadable (caller then
+    falls back to the footprint heuristic)."""
+    if character in _VANILLA_COUNT_CONFIG:
+        return _VANILLA_COUNT_CONFIG[character]
+    mapping = {}
+    code = _resolve_char_code(character)
+    order = _vanilla_color_order(character)
+    length = None
+    if code and order:
+        for base in _test_base_files_dirs():
+            found = False
+            for slot, cc in enumerate(order):
+                p = base / f"Pl{code}{cc}.dat"
+                if not p.exists():
+                    continue
+                found = True
+                if length is None:
+                    length = _visibility_config_length(str(p), character)
+                cnt = _model_dobj_count(p)
+                if not cnt or not length:
+                    continue
+                cfg = min(slot, length - 1)
+                if cnt not in mapping or cfg < mapping[cnt]:
+                    mapping[cnt] = cfg
+            if found:
+                break
+    _VANILLA_COUNT_CONFIG[character] = mapping
+    return mapping
 
 
 def _vanilla_dobj_counts(character):
@@ -934,6 +1132,25 @@ def _vanilla_dobj_counts(character):
     return counts
 
 
+def _near_visibility_footprint(dat_filepath, character, tol=1):
+    """True when the model's DObj count sits within `tol` of ANY visibility-config
+    footprint on a multi-config fighter -- i.e. it carries an alt config's extra
+    geometry (a spliced hat), so it's an alt-geometry recolor, not a foreign
+    model. Single-config fighters (everyone but Pikachu/Pichu/Peach) return False,
+    so this never loosens replacement detection for them."""
+    length = _visibility_config_length(dat_filepath, character)
+    if length <= 1:
+        return False
+    actual = _model_dobj_count(dat_filepath)
+    if not actual:
+        return False
+    for cfg in range(length):
+        idx = _low_poly_set(dat_filepath, character, cfg)
+        if idx and abs((max(idx) + 1) - actual) <= tol:
+            return True
+    return False
+
+
 def model_is_replacement(dat_filepath, character):
     """True when the costume swaps in a model whose DObj layout differs from
     every vanilla color costume of this fighter (a full import, not a recolor),
@@ -945,7 +1162,21 @@ def model_is_replacement(dat_filepath, character):
     cnt = _model_dobj_count(dat_filepath)
     if cnt is None:
         return False
-    return cnt not in van
+    if cnt in van:
+        return False
+    # A count that misses the vanilla set but sits within 1 of a visibility-config
+    # footprint is an ALT-GEOMETRY RECOLOR, not a foreign model: the alt-geometry
+    # fighters (Pikachu/Pichu/Peach) legitimately change the DObj count with a
+    # spliced hat/part, keeping the base body's DObj layout (so the fighter's
+    # low-poly indices still line up and MUST be hidden). This is the Pikachu
+    # sailor-hat costume `plpkwh-plpkwh` (31 DObjs): it misses vanilla {26,30,32}
+    # yet is one short of config 1's 32-DObj footprint. Without this it was
+    # mis-flagged as a replacement -> `--hide-dobjs none` -> low-poly cheeks/ears
+    # leaked through, defeating the config fix. (The 32-DObj `..01` variant dodged
+    # this only because 32 happens to equal vanilla Red's count.)
+    if _near_visibility_footprint(dat_filepath, character):
+        return False
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -1096,7 +1327,113 @@ def _fox_gun_args():
     return []
 
 
-def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=None):
+def _gw_body_color(character, dat_filepath, color_index=0):
+    """The flat GAMEWATCH_COLOR the game recolors Mr. Game & Watch to at load, as an
+    (r, g, b) tuple, or None for anyone else / on any read failure.
+
+    G&W's model ships a WHITE diffuse on every material; the game recolors him at
+    load (ftMaterial_800BFB4C) with a flat per-costume color from the fighter
+    attributes -- GAMEWATCH_COLOR[4] = {black, dark-red, dark-blue, dark-green}.
+    `color_index` is the CSS costume position (0=black default, 1=red, 2=blue,
+    3=green); G&W's 4 slots all share PlGwNr.dat and differ ONLY by this index (the
+    DAT's own detected color is always 'Default'), so the caller must pass it.
+    Clamped to 0..3."""
+    if _resolve_char_code(character) != 'Gw':
+        return None
+    ft = _find_ftdata(dat_filepath, character)   # PlGw.dat (fighter data)
+    if not ft:
+        logger.info("G&W recolor: PlGw.dat not found; rendering without recolor")
+        return None
+    try:
+        import struct
+        data = Path(ft).read_bytes()
+        # ftGameWatchAttributes: float GAMEWATCH_WIDTH (~0.01) immediately followed
+        # by GXColor GAMEWATCH_COLOR[4] then GAMEWATCH_OUTLINE. Locate that block by
+        # its signature: a ~0.01 big-endian float trailed by four fully-opaque
+        # colors. It's unique in PlGw.dat (matches exactly once, vanilla + m-ex).
+        for off in range(0, len(data) - 24, 4):
+            w = struct.unpack_from('>f', data, off)[0]
+            if 0.005 < w < 0.02:
+                colors = [tuple(data[off + 4 + i * 4: off + 8 + i * 4]) for i in range(4)]
+                if all(len(c) == 4 and c[3] == 255 for c in colors):
+                    idx = min(max(color_index or 0, 0), 3)
+                    r, g, b, _a = colors[idx]
+                    return (r, g, b)
+        logger.info("G&W recolor: GAMEWATCH_COLOR attributes not found in PlGw.dat")
+    except Exception as e:
+        logger.info(f"G&W recolor read failed: {e}")
+    return None
+
+
+def _gw_diffuse_args(character, dat_filepath, color_index=0):
+    """`--override-diffuse R,G,B,255` for Mr. Game & Watch, or [] for anyone else.
+
+    The CSP renders the raw model (white diffuse), so without this he's a white
+    silhouette. See _gw_body_color for how the flat per-costume color is sourced."""
+    body = _gw_body_color(character, dat_filepath, color_index)
+    if body is None:
+        return []
+    r, g, b = body
+    logger.info(f"G&W recolor: costume {color_index or 0} -> ({r},{g},{b})")
+    return ["--override-diffuse", f"{r},{g},{b},255"]
+
+
+def _gw_apply_outline(png_path, body_rgb):
+    """Rebuild Mr. Game & Watch's signature outline in his rendered portrait.
+
+    G&W's model bakes a second, offset copy of his silhouette -- a diffuse-independent
+    gray layer. In-game his outline reads as a thin edge, but the CSP camera projects
+    that layer as a far-offset gray blob: it's offset in the SCREEN PLANE, not depth,
+    so the game's flatten (fp->x34_scale.z) can't pull it in -- verified by testing an
+    outer flatten on every axis (depth does nothing; X/Y collapse him). The game draws
+    his outline by other means, so we reproduce the vanilla look here: keep the solid
+    body (the recolored diffuse), drop the blob, and redraw the outline from the body
+    silhouette using values measured off the vanilla CSP -- gray (115,115,115), a thin
+    even edge plus a small down-left drop. Edge/offset scale with the render width
+    (vanilla basis = 136px wide). Best-effort: any failure leaves the render untouched."""
+    try:
+        import numpy as np
+        from PIL import ImageFilter
+        GRAY = 115
+        a = np.array(Image.open(png_path).convert("RGBA"))
+        br, bg, bb = body_rgb
+        r, g, b, al = (a[..., i].astype(int) for i in range(4))
+        # body = opaque pixels close to the flat recolor; this excludes the gray blob
+        # (which ignores the diffuse recolor) and the anti-aliased transparent fringe.
+        body = (al > 128) & (np.abs(r - br) + np.abs(g - bg) + np.abs(b - bb) < 90)
+        if not body.any():
+            logger.info("G&W outline: no body pixels matched; leaving render as-is")
+            return
+        s = a.shape[1] / 136.0   # render px per vanilla-136 unit (folds in --scale)
+
+        def dilate(mask, px):
+            px = max(1, int(round(px)))
+            m = Image.fromarray((mask * 255).astype('uint8'))
+            return np.array(m.filter(ImageFilter.MaxFilter(px * 2 + 1))) > 128
+
+        def shift(mask, dx, dy):
+            out = np.zeros_like(mask)
+            h, w = mask.shape
+            ys, xs = np.where(mask)
+            ny, nx = ys + int(round(dy)), xs + int(round(dx))
+            ok = (ny >= 0) & (ny < h) & (nx >= 0) & (nx < w)
+            out[ny[ok], nx[ok]] = True
+            return out
+
+        # thin even outline (vanilla ~1.5px @136) + a small down-left drop (vanilla
+        # measured centroid offset ~(-4,+7) @136), both dilated to the edge width.
+        edge = 1.5 * s
+        graym = (dilate(body, edge) | dilate(shift(body, -4 * s, 7 * s), edge)) & (~body)
+        out = np.zeros(a.shape, dtype='uint8')
+        out[graym] = [GRAY, GRAY, GRAY, 255]
+        out[body] = [br, bg, bb, 255]
+        Image.fromarray(out, "RGBA").save(png_path)
+        logger.info(f"G&W outline: rebuilt (body {body_rgb}, gray {GRAY})")
+    except Exception as e:
+        logger.info(f"G&W outline rebuild skipped: {e}")
+
+
+def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera_file=None, scale=1, no_shadow=False, costume_slot=None, color_index=None):
     """Internal function to generate a single CSP
 
     Used by both normal CSP generation and Ice Climbers composite generation.
@@ -1167,6 +1504,8 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
             cs_parser.read_dat()
             costume_slot = costume_slot_for_color(
                 character, cs_parser.detect_costume_color())
+            if costume_slot is None:
+                costume_slot = _best_fit_visibility_config(dat_filepath, character)
         except Exception as e:
             logger.info(f"costume_slot auto-derive failed for "
                         f"{Path(dat_filepath).name}: {e}")
@@ -1212,8 +1551,32 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     # Fox: render the real 3D blaster attached to his hand (replaces the old 2D
     # gunlayer.png composite). The renderer pulls the gun model from PlFx.dat and
     # pins it to the thumb bone; params are scale-independent (see FOX_GUN).
+    uses_gun = False
     if character == 'Fox':
-        cmd.extend(_fox_gun_args())
+        gun_args = _fox_gun_args()
+        if gun_args:
+            cmd.extend(gun_args)
+            uses_gun = True
+
+    # Mr. Game & Watch: his model ships a white diffuse; the game recolors it at
+    # load to a flat per-costume color from the fighter attributes (costume 0 =
+    # black, 1 = red, 2 = blue, 3 = green). His 4 CSS slots all share PlGwNr.dat
+    # and differ only by color_index (the caller's costume position); the DAT's
+    # own detected color is always 'Default', so fall back to 0 (black) when the
+    # caller didn't supply an index (Retake CSP, single-slot paths).
+    cmd.extend(_gw_diffuse_args(character, dat_filepath, color_index))
+
+    def _finalize(path):
+        # Mr. Game & Watch: rebuild his outline over the flat recolor (see
+        # _gw_apply_outline). No-op for every other character. Applied here, post
+        # render, so it covers EVERY caller of this function -- the canonical
+        # generate_csp path plus Retake CSP, Manage CSPs, HD/bundle and pose
+        # re-renders -- not just one entry point.
+        if path:
+            body = _gw_body_color(character, dat_filepath, color_index)
+            if body is not None:
+                _gw_apply_outline(path, body)
+        return path
 
     # Costumes with a deliberately deformed skeleton (edited bind transforms)
     # render normal under the curated pose because it overwrites their bone
@@ -1238,6 +1601,34 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
     # the "no_output / return code 3762504530" pattern that shows up under
     # iso_scanner's parallel ThreadPoolExecutor. Force the cwd to the DAT's
     # own folder so each parallel call isolates its debug log.
+    # Fast path: a reused --csp-server worker from the active pool (set by a batch
+    # caller). cmd is [exe, "--csp", dat, output, ...] (or ["wine", exe, ...] on
+    # Linux); the worker wants the argv from "--csp" onward. A failure on this one
+    # costume falls through to the one-shot path below, so a flaky worker or a bad
+    # DAT never blocks the batch.
+    #
+    # EXCEPT gun renders (Fox): --gun splices the blaster as an extra child JObj
+    # into the render tree. The pool reuses ONE HSDRawViewer host across every
+    # job (no process restart), and that spliced/pinned gun state doesn't fully
+    # reset between renders on the reused host -> Fox portraits T-pose / lose the
+    # gun in a batch export (yet Retake CSP, which is always one-shot, is fine).
+    # Force gun renders down the one-shot path (fresh process, clean host) -- the
+    # correctness-critical, low-volume case. Non-gun costumes still use the pool.
+    pool = None if uses_gun else get_active_pool()
+    if uses_gun:
+        logger.info(f"Gun render for {Path(dat_filepath).name}: using one-shot "
+                    f"(bypassing --csp-server pool for a clean host)")
+    if pool is not None:
+        try:
+            csp_argv = cmd[cmd.index("--csp"):]
+            if pool.render(csp_argv) and os.path.exists(output_csp):
+                logger.info(f"CSP generated (pool): {Path(output_csp).name}")
+                return _finalize(output_csp)
+            logger.warning(f"Pool render failed for {Path(dat_filepath).name}; "
+                           "falling back to one-shot")
+        except Exception as e:
+            logger.warning(f"Pool render error ({e}); falling back to one-shot")
+
     try:
         # Run directly without PowerShell to avoid path quoting issues
         result = subprocess.run(
@@ -1251,7 +1642,7 @@ def generate_single_csp_internal(dat_filepath, character, anim_file=None, camera
         if result.returncode == 0:
             if os.path.exists(output_csp):
                 logger.info(f"CSP generated successfully: {Path(output_csp).name}")
-                return output_csp
+                return _finalize(output_csp)
             else:
                 logger.error("HSDRawViewer completed but CSP file not found")
                 return None
@@ -1359,8 +1750,12 @@ def generate_head_shot(dat_filepath):
         cmd.extend(["--collapse-bones", f"{arm_bones[0]},{arm_bones[1]}"])
     # Hide the low-poly mesh so it can't bleed into the head crop (the head-shot
     # has no scene yml, so this is the only way to hide it here). Use the
-    # costume's own per-costume visibility config (slot from its color).
-    hide = low_poly_dobjs(dat_filepath, character, costume_slot_for_color(character, color))
+    # costume's own per-costume visibility config (slot from its color), or the
+    # best-fit config when the color isn't a recognized vanilla slot.
+    costume_slot = costume_slot_for_color(character, color)
+    if costume_slot is None:
+        costume_slot = _best_fit_visibility_config(dat_filepath, character)
+    hide = low_poly_dobjs(dat_filepath, character, costume_slot)
     if hide:
         cmd.extend(["--hide-dobjs", hide])
     if os.name != 'nt':
@@ -1399,7 +1794,7 @@ def generate_head_shot(dat_filepath):
     return output, head_info
 
 
-def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
+def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None, color_index=None):
     """
     Generate CSP for a DAT file using HSDRawViewer headless CSP generation
     Returns path to generated CSP or None if failed
@@ -1408,6 +1803,10 @@ def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
         dat_filepath: Path to the DAT file
         scale: Resolution multiplier (1=136x188, 2=272x376, 4=544x752, etc.)
         paired_dat_filepath: Optional explicit Ice Climbers partner DAT.
+        color_index: CSS costume position, used for characters whose color comes
+            from the fighter attributes rather than the model DAT (Mr. Game &
+            Watch: 0=black default, 1=red, 2=blue, 3=green). None for everyone
+            else (their color is in the DAT).
     """
 
     logger.info(f"Starting CSP generation for: {dat_filepath} (scale={scale}x)")
@@ -1459,9 +1858,13 @@ def generate_csp(dat_filepath, scale=1, paired_dat_filepath=None):
 
     # 3. Generate CSP using internal function. The costume's vanilla CSS slot
     # selects its per-costume low-poly visibility config (matters for alt
-    # costumes that add geometry -- Pikachu/Pichu hats, Peach's Daisy).
+    # costumes that add geometry -- Pikachu/Pichu hats, Peach's Daisy). When the
+    # color isn't a recognized vanilla slot (a custom/imported costume), pick
+    # the config that best fits the costume's actual geometry instead.
     costume_slot = costume_slot_for_color(character, color)
-    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file, scale, costume_slot=costume_slot)
+    if costume_slot is None:
+        costume_slot = _best_fit_visibility_config(dat_filepath, character)
+    output_csp = generate_single_csp_internal(dat_filepath, character, anim_file, camera_file, scale, costume_slot=costume_slot, color_index=color_index)
 
     if output_csp:
         # Apply character-specific layers (e.g., Fox gun layer)

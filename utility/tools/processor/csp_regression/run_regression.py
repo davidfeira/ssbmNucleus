@@ -83,12 +83,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--update-goldens", action="store_true")
     ap.add_argument("--exe", help="HSDRawViewer build dir (with HSDRawViewer.exe)")
+    ap.add_argument("--pool", type=int, default=0, metavar="N",
+                    help="render via a CspRenderPool of N persistent --csp-server "
+                         "workers (validates the pooled batch path == one-shot)")
     args = ap.parse_args()
     if args.exe:
         generate_csp.HSDRAW_PATH = args.exe
         generate_csp.HSDRAW_EXE = os.path.join(args.exe, "HSDRawViewer.exe")
     os.makedirs(GOLDENS, exist_ok=True)
     work = os.path.join(HERE, "_out"); os.makedirs(work, exist_ok=True)
+
+    pool = None
+    if args.pool:
+        sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "..", "backend"))
+        from skinlab.csp_pool import CspRenderPool
+        pool = CspRenderPool(generate_csp.HSDRAW_EXE, workers=args.pool)
+        generate_csp.set_active_pool(pool)
+        print(f"[pool] rendering via {pool.size} persistent --csp-server worker(s)")
 
     passed = failed = warned = 0
     for name, spec in MANIFEST.items():
@@ -129,6 +140,10 @@ def main():
         if ok: passed += 1
         else: failed += 1
         print(f"{status} {name}  [{spec['fix']}]  {' '.join(msgs)}")
+
+    if pool is not None:
+        generate_csp.set_active_pool(None)
+        pool.close()
 
     print(f"\n=== {passed} passed, {failed} failed, {warned} open-warnings ===")
     sys.exit(1 if failed else 0)

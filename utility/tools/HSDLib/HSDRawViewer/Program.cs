@@ -59,6 +59,15 @@ namespace HSDRawViewer
                 return;
             }
 
+            // Persistent batch CSP renderer: one process renders many costumes
+            // off a stdin job queue, so per-model process + GL startup is paid
+            // once, not per costume. Driven by backend/skinlab/csp_pool.py.
+            if (args.Length >= 1 && args[0] == "--csp-server")
+            {
+                RunCspServer(args);
+                return;
+            }
+
             // Check for streaming mode
             if (args.Length >= 3 && args[0] == "--stream")
             {
@@ -352,8 +361,50 @@ namespace HSDRawViewer
             }
         }
 
+        // Process-wide one-time init for CSP rendering (idempotent). The heavy
+        // bits -- plugin/settings load + MainForm -- are paid ONCE, not per model,
+        // so a persistent --csp-server can render costume after costume cheaply.
+        private static bool _cspGlobalInit = false;
+        static void EnsureCspGlobalInit()
+        {
+            if (_cspGlobalInit) return;
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            PluginManager.Init();
+            ApplicationSettings.Init();
+            MainForm.Init();
+            _cspGlobalInit = true;
+        }
+
+        // One-shot entry (`--csp`): stand up a fresh render host, render once,
+        // tear down. Behavior-preserving wrapper around RenderCspCore.
         static void RunCSPGeneration(string[] args)
         {
+            EnsureCspGlobalInit();
+            using var host = new CspRenderHost();
+            host.Init();
+            if (!RenderCspCore(args, host))
+                Environment.Exit(1);
+        }
+
+        // Renders ONE costume onto the host's (reusable) viewport. Returns true on
+        // success, false on failure (the caller decides whether to exit). Safe to
+        // call repeatedly on the same host -- the --csp-server loop does -- because
+        // it resets every piece of per-job state so nothing bleeds between models.
+        static bool RenderCspCore(string[] args, CspRenderHost host)
+        {
+            // Reset the per-job static render state a previous job may have left
+            // behind (the --scale parse only RAISES CSPWidth, and --head-shot /
+            // --no-shadow only SET the skip flags -- so a fresh job must start
+            // from defaults or it inherits the last job's scale/silhouette).
+            GUI.ViewportControl.CSPWidth = 136 * 2;
+            GUI.ViewportControl.CSPHeight = 188 * 2;
+            GUI.ViewportControl.SkipCSPPostProcess = false;
+            GUI.ViewportControl.SkipCSPShadow = false;
+            var viewport = host.Viewport;
+            viewport.ClearDrawables();
+            // Hoisted to method scope so the finally can free its GL resources
+            // between jobs (the assignment stays down where the model is built).
+            HSDRawViewer.Rendering.Models.RenderJObj renderJObj = null;
             try
             {
                 Console.WriteLine("Starting CSP generation...");
@@ -362,7 +413,7 @@ namespace HSDRawViewer
                 {
                     Console.WriteLine("Usage: HSDRawViewer.exe --csp <dat_file> <output_file> [--scale N] [anim_file] [camera_yml]");
                     Console.WriteLine("Example: HSDRawViewer.exe --csp PlKpNr.dat bowser_csp.png --scale 4 cspfinal.anim cspfinal.yml");
-                    return;
+                    return false;
                 }
 
                 // Parse --scale argument if present
@@ -498,6 +549,35 @@ namespace HSDRawViewer
                     Console.WriteLine(suppressHide
                         ? "Hide DObjs: none (suppressing scene hiddenNodes — replaced model)"
                         : $"Hide DObjs (overrides scene hiddenNodes): {string.Join(",", hideDObjs)}");
+                }
+
+                // --override-diffuse R,G,B[,A]: overwrite EVERY material's diffuse
+                // color with this value after the model loads. Replicates the
+                // game's per-character material fixups that live in fighter code,
+                // not in the costume DAT -- notably Mr. Game & Watch, whose model
+                // ships a white diffuse and gets recolored at load by
+                // ftMaterial_800BFB4C(gobj, &ftGwAttributes.GAMEWATCH_COLOR[costume])
+                // to his real flat color (costume 0 = black). Without this the CSP
+                // renders G&W as a white silhouette. The Python side reads the
+                // color from the fighter's PlGw.dat attributes and passes it here.
+                System.Drawing.Color? overrideDiffuse = null;
+                int odArg = argsList.IndexOf("--override-diffuse");
+                if (odArg >= 0 && odArg + 1 < argsList.Count)
+                {
+                    var parts = argsList[odArg + 1].Split(',');
+                    if (parts.Length >= 3
+                        && int.TryParse(parts[0].Trim(), out int odR)
+                        && int.TryParse(parts[1].Trim(), out int odG)
+                        && int.TryParse(parts[2].Trim(), out int odB))
+                    {
+                        int odA = 255;
+                        if (parts.Length >= 4) int.TryParse(parts[3].Trim(), out odA);
+                        overrideDiffuse = System.Drawing.Color.FromArgb(odA, odR, odG, odB);
+                        Console.WriteLine($"Override diffuse (all materials): ({odR},{odG},{odB},{odA})");
+                    }
+                    argsList.RemoveAt(odArg + 1);
+                    argsList.RemoveAt(odArg);
+                    args = argsList.ToArray();
                 }
 
                 // --bind-pose: load the scene/anim for its CAMERA + hidden nodes
@@ -738,10 +818,9 @@ namespace HSDRawViewer
                 Console.WriteLine($"Output: {outputFile}");
                 Console.WriteLine($"Scene file mode: {useSceneFile}");
 
-                // Initialize core systems (no GUI)
-                Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
-                PluginManager.Init();
-                ApplicationSettings.Init();
+                // Core systems (culture, plugins, settings, MainForm) are inited
+                // once per process by EnsureCspGlobalInit -- not here, so the
+                // persistent --csp-server pays that cost once, not per costume.
 
                 // Load DAT file
                 Console.WriteLine($"Loading DAT file: {datFile}");
@@ -759,12 +838,12 @@ namespace HSDRawViewer
                 // Use the EXACT same approach as the working GUI - create actual ViewportControl
                 Console.WriteLine("Creating ViewportControl with loaded DAT...");
 
-                // Initialize MainForm like normal GUI mode (this sets up all the renderers properly)
-                MainForm.Init();
-                MainForm.Instance.OpenFile(datFile);
-
-                // Wait for file to load
-                System.Threading.Thread.Sleep(500);
+                // Point MainForm.FilePath at this DAT so the CSP screenshot saves
+                // to the expected default path (csp_<datname>.png next to the DAT).
+                // We render our OWN rawFile / RenderJObj / viewport below -- not
+                // MainForm's node tree -- so the heavy OpenFile + its load sleep
+                // aren't needed (MainForm itself was already inited once).
+                MainForm.Instance.FilePath = datFile;
 
                 // Find and select the character JOBJ node (like PlyPichu5K_Share_joint)
                 Console.WriteLine("Looking for character JOBJ to render...");
@@ -785,13 +864,7 @@ namespace HSDRawViewer
                     }
                 }
 
-                if (characterJobjNode != null)
-                {
-                    Console.WriteLine($"Selecting character JOBJ: {characterJobjNode.Text}");
-                    MainForm.SelectedDataNode = characterJobjNode;
-                    MainForm.Instance.OpenEditor(); // This triggers the viewport rendering
-                }
-                else
+                if (characterJobjNode == null)
                 {
                     Console.WriteLine("No character JOBJ found - trying first JOBJ as fallback");
                     // Fallback to first JOBJ found
@@ -801,8 +874,6 @@ namespace HSDRawViewer
                         {
                             Console.WriteLine($"Using fallback JOBJ: {root.Name}");
                             characterJobjNode = new DataNode(root.Name, root.Data, root: root);
-                            MainForm.SelectedDataNode = characterJobjNode;
-                            MainForm.Instance.OpenEditor();
                             break;
                         }
                     }
@@ -960,16 +1031,31 @@ namespace HSDRawViewer
                     }
                 }
 
-                // Wait for editor to open
-                System.Threading.Thread.Sleep(1000);
-
-                // Create a ViewportControl directly
-                var viewport = new HSDRawViewer.GUI.ViewportControl();
+                // viewport is the host's reusable ViewportControl (created + GL-
+                // inited once); no per-job editor/init wait.
 
                 // Manually create the RenderJObj like JObjEditorNew does
-                HSDRawViewer.Rendering.Models.RenderJObj renderJObj = null;
+                // renderJObj is declared at method scope (above the try)
                 if (characterJobjNode != null && characterJobjNode.Accessor is HSDRaw.Common.HSD_JOBJ jobj)
                 {
+                    // Recolor every material's diffuse before the render reads it
+                    // (mirrors the game's ftMaterial_800BFB4C fixup -- e.g. G&W's
+                    // white model -> its real flat color). Fresh model per job, so
+                    // this is pool-safe (no leak across --csp-server renders).
+                    if (overrideDiffuse.HasValue)
+                    {
+                        int recolored = 0;
+                        foreach (HSDRaw.Common.HSD_JOBJ j in jobj.TreeList)
+                            if (j.Dobj != null)
+                                foreach (HSDRaw.Common.HSD_DOBJ d in j.Dobj.List)
+                                    if (d.Mobj?.Material != null)
+                                    {
+                                        d.Mobj.Material.DiffuseColor = overrideDiffuse.Value;
+                                        recolored++;
+                                    }
+                        Console.WriteLine($"Override diffuse applied to {recolored} materials");
+                    }
+
                     Console.WriteLine("Creating RenderJObj...");
                     renderJObj = new HSDRawViewer.Rendering.Models.RenderJObj(jobj);
                     Console.WriteLine($"RenderJObj created. DOBJs loaded: {renderJObj.DObjCount}");
@@ -1129,25 +1215,12 @@ namespace HSDRawViewer
                     viewport.AddRenderer(drawable);
                 }
 
-                // Create a form to host the viewport (hidden, never activates -
-                // batch CSP generation must not steal focus from the user).
-                // Parked offscreen rather than minimized: a minimized window with
-                // ShowInTaskbar=false is drawn by Windows as a small caption box
-                // at the bottom-left of the desktop (the "lil popup" users saw).
-                using (var form = new NoActivateForm())
+                // The host owns the offscreen NoActivateForm + viewport (created,
+                // shown, and GL-inited once -- never per job). Plain scope here so
+                // the large render block below stays byte-for-byte unchanged.
                 {
-                    form.FormBorderStyle = FormBorderStyle.None;
-                    form.StartPosition = FormStartPosition.Manual;
-                    form.Location = new System.Drawing.Point(-32000, -32000);
-                    form.ShowInTaskbar = false;
-                    viewport.Dock = DockStyle.Fill;
-                    form.Controls.Add(viewport);
-                    form.Show();
-
-                    // Wait for everything to initialize
-                    System.Threading.Thread.Sleep(1000);
-
-                    // Enable CSP mode exactly like the GUI
+                    // (Re)assert CSP mode each job so a per-job --scale change
+                    // resizes the GL canvas from the (reset) CSPWidth/CSPHeight.
                     Console.WriteLine("Enabling CSP mode...");
                     viewport.CSPMode = true;
 
@@ -1981,12 +2054,17 @@ namespace HSDRawViewer
                     Console.WriteLine("Taking screenshot using native method...");
                     viewport.Screenshot();
 
-                    // Wait for screenshot to complete
+                    // Wait for screenshot to complete. Screenshot() arms a 2-frame
+                    // state machine that TakeGLScreenShot advances once per
+                    // viewport.Render(), so pump renders tightly (completes in ~2
+                    // frames) instead of sleeping in 500ms steps -- the persistent
+                    // --csp-server does this per costume.
                     int attempts = 0;
-                    while (!screenshotTaken && attempts < 10)
+                    while (!screenshotTaken && attempts < 400)
                     {
-                        System.Threading.Thread.Sleep(500);
-                        System.Windows.Forms.Application.DoEvents(); // Process events
+                        viewport.Render();
+                        System.Windows.Forms.Application.DoEvents();
+                        System.Threading.Thread.Sleep(2);
                         attempts++;
                     }
 
@@ -2073,17 +2151,90 @@ namespace HSDRawViewer
                 }
 
                 Console.WriteLine("CSP generation completed successfully!");
+                return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"EXCEPTION CAUGHT: Error generating CSP: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 Console.WriteLine($"Inner exception: {ex.InnerException?.Message}");
-                Environment.Exit(1);
+                return false;
             }
             finally
             {
-                Console.WriteLine("RunCSPGeneration finally block reached");
+                // Per-job teardown: free the model's GL buffers/textures and drop
+                // it from the viewport so the next job on this host starts clean.
+                // The host's viewport + form + GL context persist across jobs.
+                try { renderJObj?.FreeResources(); } catch { }
+                viewport.ClearDrawables();
+                Console.WriteLine("RenderCspCore finally block reached");
+            }
+        }
+
+        // Persistent batch CSP renderer. Inits the process + GL host ONCE, then
+        // reads one job per stdin line and renders each onto the same reused host,
+        // so the ~4s per-model process/GL startup is paid once, not per costume.
+        //
+        // Protocol (driven by backend/skinlab/csp_pool.py):
+        //   - prints "READY" on stdout once the host is up
+        //   - each job line is TAB-separated = the argv `--csp` takes
+        //     ("--csp\t<dat>\t<output>\t--scale\t2\t<scene.yml>" ...); tabs because
+        //     paths contain spaces
+        //   - replies "DONE\t<output>" or "ERR\t<output>" per job
+        //   - "QUIT" or EOF exits
+        // RenderCspCore's own debug spam is routed to a temp log so stdout stays a
+        // clean channel for the protocol.
+        static void RunCspServer(string[] args)
+        {
+            var protocol = Console.Out;   // the real stdout pipe -> Python pool
+            try
+            {
+                string logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    $"csp_server_{System.Diagnostics.Process.GetCurrentProcess().Id}.log");
+                Console.SetOut(new System.IO.StreamWriter(logPath, false) { AutoFlush = true });
+            }
+            catch { /* fall back to shared stdout; the pool tolerates extra lines */ }
+
+            try
+            {
+                EnsureCspGlobalInit();
+                using var host = new CspRenderHost();
+                host.Init();
+
+                protocol.WriteLine("READY");
+                protocol.Flush();
+
+                string line;
+                while ((line = Console.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    if (line.Length == 0) continue;
+                    if (line == "QUIT" || line == "quit") break;
+
+                    var jobArgs = line.Split('\t');
+                    string output = jobArgs.Length > 2 ? jobArgs[2] : "";
+                    bool ok;
+                    try
+                    {
+                        ok = RenderCspCore(jobArgs, host);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("server job error: " + ex.Message);
+                        ok = false;
+                    }
+
+                    if (ok && !string.IsNullOrEmpty(output) && System.IO.File.Exists(output))
+                        protocol.WriteLine("DONE\t" + output);
+                    else
+                        protocol.WriteLine("ERR\t" + output);
+                    protocol.Flush();
+                }
+            }
+            catch (Exception ex)
+            {
+                try { protocol.WriteLine("FATAL\t" + ex.Message); protocol.Flush(); } catch { }
+                Environment.Exit(1);
             }
         }
 
@@ -6495,6 +6646,47 @@ namespace HSDRawViewer
             }
         }
 
+    }
+
+    // Owns the reusable render surface for CSP generation: one offscreen
+    // NoActivateForm + ViewportControl + GL context, created and GL-inited ONCE.
+    // RenderCspCore renders costume after costume onto it; --csp one-shot uses a
+    // fresh host per process, while --csp-server keeps one host alive for its
+    // whole life so per-model process + GL startup is paid once, not per costume.
+    public class CspRenderHost : IDisposable
+    {
+        public HSDRawViewer.GUI.ViewportControl Viewport;
+        public NoActivateForm Form;
+
+        public void Init()
+        {
+            Viewport = new HSDRawViewer.GUI.ViewportControl();
+            Form = new NoActivateForm
+            {
+                FormBorderStyle = System.Windows.Forms.FormBorderStyle.None,
+                StartPosition = System.Windows.Forms.FormStartPosition.Manual,
+                Location = new System.Drawing.Point(-32000, -32000),
+                ShowInTaskbar = false,
+            };
+            Viewport.Dock = System.Windows.Forms.DockStyle.Fill;
+            Form.Controls.Add(Viewport);
+            Form.Show();
+
+            // Pump messages so the GLControl creates its handle + GL context before
+            // the first job renders. One-time (~1s); NOT paid per costume. This is
+            // the init the old per-render Thread.Sleep(1000)s were covering.
+            for (int i = 0; i < 100; i++)
+            {
+                System.Windows.Forms.Application.DoEvents();
+                System.Threading.Thread.Sleep(10);
+            }
+        }
+
+        public void Dispose()
+        {
+            try { Form?.Close(); } catch { }
+            try { Form?.Dispose(); } catch { }
+        }
     }
 
     // Simple drawable wrapper for RenderJObj

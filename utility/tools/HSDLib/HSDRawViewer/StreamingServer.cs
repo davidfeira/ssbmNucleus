@@ -61,6 +61,10 @@ namespace HSDRawViewer
         // docs/ANIMATION_PART_VISIBILITY.md.
         private ModelPartVisibility _partVis;
 
+        // Costume accessory + matanim assembly (caps / Navi / capes / hats +
+        // eye blink), shared with EmbeddedServer and the batch CSP renderer.
+        private MexCostumeScene _costumeScene;
+
         // Cached texture list (populated after first render to avoid Invoke deadlocks)
         private List<TextureInfo> _cachedTextureList = null;
 
@@ -221,36 +225,22 @@ namespace HSDRawViewer
             if (characterJobjNode.Accessor is HSD_JOBJ jobj)
             {
                 Log("Creating RenderJObj...");
+
+                // Scan the costume for accessories (m-ex Accessories[] caps / Navi
+                // / capes + separate *Hat* roots) and eye/blink matanim before we
+                // build the render object.
+                _costumeScene = MexCostumeScene.Build(rawFile, jobj, Log);
+
                 _renderJObj = new RenderJObj(jobj);
                 _renderJObj._settings.RenderBones = false;
                 _renderJObj._settings.RenderObjects = ObjectRenderMode.Visible;
 
-                // MatAnim swap frames (blink textures etc.) hide in
-                // matanim_joint roots -- register them so the texture list
-                // and texture updates cover them.
-                var matAnimRoots = rawFile.Roots
-                    .Where(r => r.Data is HSDRaw.Common.Animation.HSD_MatAnimJoint)
-                    .Select(r => (HSDRaw.Common.Animation.HSD_MatAnimJoint)r.Data)
-                    .ToList();
-                if (matAnimRoots.Count > 0)
-                {
-                    _renderJObj.SetMatAnims(matAnimRoots);
-                    Log($"Registered {matAnimRoots.Count} matanim root(s)");
-                }
-
-                // Costume accessories can ship as EXTRA JOBJ roots (e.g.
-                // Jigglypuff's alt-costume hats: Ply*Hat_TopN_joint) -- the
-                // render model only walks the character root, so register
-                // the rest for texture-list/update coverage.
-                var extraJobjRoots = rawFile.Roots
-                    .Where(r => r.Data is HSD_JOBJ && !ReferenceEquals(r.Data, jobj))
-                    .Select(r => (HSD_JOBJ)r.Data)
-                    .ToList();
-                if (extraJobjRoots.Count > 0)
-                {
-                    _renderJObj.SetExtraRoots(extraJobjRoots);
-                    Log($"Registered {extraJobjRoots.Count} extra JOBJ root(s)");
-                }
+                // Link accessories into the render tree (so they render, list their
+                // textures, and stay editable/exportable — WITHOUT mutating the
+                // descriptor the exported DAT is built from) and wire eye/blink
+                // matanim. Same assembly the batch CSP renderer uses; per-frame
+                // attach-bone follow happens in the streaming loop below.
+                _costumeScene.Attach(_renderJObj);
 
                 var drawable = new SimpleJObjDrawable(_renderJObj);
                 _viewport.AddRenderer(drawable);
@@ -354,6 +344,9 @@ namespace HSDRawViewer
                 _partVis = new ModelPartVisibility(_renderJObj, Log, LogError);
                 _partVis.LoadFighterData(dataFilePath);
                 _partVis.ApplyDefaultState();
+                // Pin accessories once for the initial/rest render (the streaming
+                // loop re-pins every frame thereafter).
+                _costumeScene?.ApplyFollow(_renderJObj, _viewport.Camera);
                 Application.DoEvents();
                 _viewport.Render();
                 Application.DoEvents();
@@ -560,6 +553,13 @@ namespace HSDRawViewer
                                     _renderJObj.RequestAnimationUpdate(FrameFlags.All, _animationFrame);
                                     _partVis?.ApplyFrame(_animationFrame);
                                 }
+
+                                // Re-pin accessories to their attach bones' posed
+                                // world so caps / Navi / capes / hats track the body
+                                // throughout the animation. Idempotent + cheap, so
+                                // run it every frame (also keeps the static pose
+                                // correct after a camera move or setFrame).
+                                _costumeScene?.ApplyFollow(_renderJObj, _viewport.Camera);
 
                                 bitmap = _viewport.GenerateBitmap(_frameWidth, _frameHeight);
                             }));

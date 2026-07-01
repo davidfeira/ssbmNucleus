@@ -299,7 +299,7 @@ function App() {
               <StorageViewer metadata={metadata} onRefresh={fetchMetadata} onSkinCreatorChange={setSkinCreatorOpen} />
             </div>
             <div className={`app-panel app-panel--fill ${activeTab === 'mex' ? '' : 'app-panel--hidden'}`}>
-              <MexPanel />
+              <MexPanel active={activeTab === 'mex'} vaultMetadata={metadata} />
             </div>
             <div className={`app-panel app-panel--scroll ${activeTab === 'settings' ? '' : 'app-panel--hidden'}`}>
               <Settings

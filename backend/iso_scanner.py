@@ -34,6 +34,7 @@ from core.config import (
 from detect_character import DATParser
 from dat_processor import validate_for_slippi
 from generate_csp import HSDRAW_EXE, generate_csp
+from skinlab.csp_pool import active_pool
 
 logger = logging.getLogger(__name__)
 
@@ -1293,7 +1294,14 @@ def _run_scan(job: IsoScanJob, on_event):
         _emit(job, on_event, 'csp',
               f"Generating thumbnails 0/{total} (×{CSP_PARALLELISM} workers)", 70)
 
-        with ThreadPoolExecutor(max_workers=CSP_PARALLELISM) as ex:
+        # Reuse a handful of persistent --csp-server workers across every costume
+        # instead of spawning one HSDRawViewer process per costume (~9x render
+        # throughput). generate_csp routes through the pool while it's active and
+        # falls back to a one-shot process for any costume the pool fails to
+        # render, so a flaky worker or bad DAT never blocks the scan. Kill switch:
+        # MEX_CSP_SERVER=0.
+        with active_pool(workers=CSP_PARALLELISM), \
+                ThreadPoolExecutor(max_workers=CSP_PARALLELISM) as ex:
             futures = {
                 ex.submit(_build_candidate, i, c, skins_dir, job): i
                 for i, c in enumerate(survivors)

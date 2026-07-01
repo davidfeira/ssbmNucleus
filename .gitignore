@@ -90,6 +90,7 @@ pytest-cache-files-*/
 /sheik_*.jpg
 /sheik_*.yml
 /csp_test_out/
+/csp_debug_out/
 /door_tex_dump/
 /parallel_test/
 tmp_retake/

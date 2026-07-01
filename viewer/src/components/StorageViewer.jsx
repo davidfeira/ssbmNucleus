@@ -1335,6 +1335,7 @@ export default function StorageViewer({ metadata, onRefresh, onSkinCreatorChange
           alternativeCsps,
           capturingHdCsp,
           lastImageUpdate,
+          setLastImageUpdate,
           openCspManager,
           closeCspManager,
           handleCspManagerMainChange,

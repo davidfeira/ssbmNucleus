@@ -8749,7 +8749,7 @@
 .bulk-capture-count {
   margin-left: auto; color: var(--color-text-secondary, #8b93a7); font-size: 13px;
 }
-.bulk-capture-body { overflow-y: auto; padding: 12px 18px; flex: 1; }
+.bulk-capture-body { overflow-y: auto; padding: 12px 18px; flex: 1; min-height: 0; }
 .bulk-capture-muted { color: var(--color-text-secondary, #8b93a7); }
 .bulk-capture-stage { margin-bottom: 18px; }
 .bulk-capture-stage-head {
@@ -8786,6 +8786,11 @@
   color: var(--color-danger, #ff6b6b); font-size: 12px;
   padding: 8px; text-align: center;
 }
+/* Before -> after pair in the bulk CSP retake review grid (CSPs are portrait,
+   so show both fully with `contain` rather than cropping). */
+.bulk-capture-thumb.bulk-capture-beforeafter { gap: 4px; padding: 4px; }
+.bulk-capture-beforeafter img { width: auto; height: 100%; object-fit: contain; }
+.bulk-capture-arrow { color: #9aab; font-size: 14px; flex: 0 0 auto; }
 .bulk-capture-card-label {
   padding: 5px 7px; font-size: 11.5px; display: flex; align-items: center; gap: 5px;
   white-space: nowrap; overflow: hidden;
@@ -8870,10 +8875,14 @@
   white-space: pre-wrap;
 }
 .bulk-capture-review-grid {
-  overflow-y: auto; padding: 12px 18px; flex: 1;
-  display: grid; gap: 8px;
+  overflow-y: auto; padding: 12px 18px; flex: 1; min-height: 0;
+  display: grid; gap: 8px; align-content: start;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 }
+/* Definite card height so the review grid SCROLLS when there are many items,
+   instead of collapsing every row to cram them all onto one screen (the bug
+   that hit both the bulk CSP retake and the stage-screenshot review). */
+.bulk-capture-review-grid .bulk-capture-card { min-height: 150px; }
 
 /* small screens: tighter chrome, smaller tiles, full-bleed modal */
 @media (max-width: 760px) {

@@ -61,6 +61,67 @@ def test_list_costumes_includes_only_on_disk_and_skips_folders(vault):
     assert c['stockUrl'] == '/storage/Fox/present_stc.png'
 
 
+def test_list_costumes_orders_folder_members_like_vault(vault):
+    # Members m1/m2 are scattered among root skins, with the folder entry sitting
+    # at the END -- exactly the real-world "Animelee folder" shape. The vault
+    # (storage tab) groups members under the folder wherever it sits; the flat
+    # "Available to Import" list must match that order so the two screens agree:
+    # root skins in place, then the folder's members grouped together.
+    vault.write({'characters': {'Fox': {'skins': [
+        _skin('r1'),
+        _skin('m1', folder_id='folder_a'),
+        _skin('r2'),
+        _skin('m2', folder_id='folder_a'),
+        {'type': 'folder', 'id': 'folder_a', 'name': 'Animelee', 'expanded': True},
+    ]}}})
+    for sid in ('r1', 'm1', 'r2', 'm2'):
+        vault.add_costume_files('Fox', sid)
+    client = vault.client(sc, 'storage_costumes_bp')
+
+    resp = client.get('/api/mex/storage/costumes?character=Fox')
+
+    assert resp.status_code == 200
+    ids = [c['folder'] for c in resp.get_json()['costumes']]
+    assert ids == ['r1', 'r2', 'm1', 'm2']   # grouped at the folder's position
+
+
+def test_list_costumes_keeps_hidden_and_orphaned_skins(vault):
+    # Hidden Nana entries (visible=False) and a member whose folder was deleted
+    # (orphaned folder_id) are never shown by the vault, but the endpoint must
+    # still RETURN them: the Ice Climbers install path finds Nana by id, and
+    # silently dropping a skin here would break that. Ordering aside, the SET of
+    # returned skins must be unchanged by the vault-order reshuffle.
+    vault.write({'characters': {'Ice Climbers': {'skins': [
+        _skin('popo', is_popo=True),
+        _skin('nana', is_nana=True, visible=False),
+        _skin('orphan', folder_id='folder_gone'),
+    ]}}})
+    for sid in ('popo', 'nana', 'orphan'):
+        vault.add_costume_files('Ice Climbers', sid)
+    client = vault.client(sc, 'storage_costumes_bp')
+
+    resp = client.get('/api/mex/storage/costumes?character=Ice Climbers')
+
+    assert resp.status_code == 200
+    ids = sorted(c['folder'] for c in resp.get_json()['costumes'])
+    assert ids == ['nana', 'orphan', 'popo']   # nothing dropped
+
+
+def test_order_skins_like_vault_groups_members_and_drops_headers():
+    # Unit-level: folder header dropped, members pulled to the folder position,
+    # every real skin returned exactly once (folder in the MIDDLE this time).
+    skins = [
+        {'id': 'r1'},
+        {'id': 'm1', 'folder_id': 'F'},
+        {'type': 'folder', 'id': 'F'},
+        {'id': 'm2', 'folder_id': 'F'},
+        {'id': 'r2'},
+    ]
+    ordered = sc.order_skins_like_vault(skins)
+    assert [s['id'] for s in ordered] == ['r1', 'm1', 'm2', 'r2']
+    assert all(s.get('type') != 'folder' for s in ordered)
+
+
 # ──────────────────────────── costumes: reorder ────────────────────────────
 
 def test_reorder_costumes_happy_path(vault):

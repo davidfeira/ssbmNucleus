@@ -22,9 +22,14 @@ export_bp = Blueprint('export', __name__)
 def _resolve_project_dat(files_dir, file_name):
     """Locate a costume's model DAT in a project's files/ dir.
 
-    Handles region-resolved names (Red Falcon's costume fileName is 'PlCaRe.' --
-    a trailing dot, no extension; the game appends usd/dat by region). Prefers
-    .dat (the model) over .usd. Returns a Path or None.
+    Handles region-resolved names: Red Falcon's costume fileName is 'PlCaRe.' --
+    a trailing dot, no extension, because the game appends the REGION extension
+    ('usd' for NTSC-U). For such names the file the US game actually loads is the
+    '.usd', and that is where a patch (Animelee) put its modded costume -- the
+    sibling 'PlCaRe.dat' is the untouched VANILLA model. So a trailing-dot name
+    must prefer '.usd' (else the export rendered the vanilla Red Falcon, not the
+    patch one). A normal name ('PlFxNrMod.dat') resolves directly and, failing
+    that, still prefers '.dat'. Returns a Path or None.
     """
     from pathlib import Path
     if not file_name:
@@ -34,7 +39,10 @@ def _resolve_project_dat(files_dir, file_name):
     if direct.is_file():
         return direct
     stem = file_name.rstrip('.')
-    for ext in ('.dat', '.usd', ''):
+    # region-resolved (trailing dot) -> the US game loads .usd, where the patch's
+    # modded costume lives; otherwise the model is a plain .dat.
+    exts = ('.usd', '.dat', '') if file_name.endswith('.') else ('.dat', '.usd', '')
+    for ext in exts:
         cand = files_dir / f"{stem}{ext}"
         if cand.is_file():
             return cand
@@ -149,6 +157,7 @@ def start_export():
                     from skinlab.hd_csp_cache import (
                         get_or_render_hd, hash_dat, get_cached, effective_key_hash)
                     from skinlab.csp_concurrency import csp_workers
+                    from skinlab.csp_pool import active_pool
                     from concurrent.futures import ThreadPoolExecutor, as_completed
                     from mex_bridge import MexManager
                     from core.config import MEXCLI_PATH
@@ -252,11 +261,22 @@ def start_export():
                             except Exception as e:
                                 logger.warning(f"ICs pair lookup failed for {dat_path.name}: {e}")
 
+                        # Mr. Game & Watch: his 4 CSS slots all share one PlGwNr.dat
+                        # and get their flat color (black/red/blue/green) from the
+                        # fighter attributes by costume position, not the DAT bytes.
+                        # Pass that position so each slot renders + caches its own
+                        # color instead of all colliding on the shared DAT hash.
+                        color_index = None
+                        if slot['character'] in ('Mr. Game & Watch', 'G&W'):
+                            color_index = slot.get('costume_index', 0)
+
                         eff_hash = effective_key_hash(
-                            dat_path, paired_dat_path=paired_dat_path, dat_hash=dat_hash)
+                            dat_path, paired_dat_path=paired_dat_path,
+                            dat_hash=dat_hash, color_index=color_index)
                         was_miss = bool(eff_hash) and get_cached(eff_hash) is None
                         hd = get_or_render_hd(
-                            dat_path, dat_hash=dat_hash, paired_dat_path=paired_dat_path)
+                            dat_path, dat_hash=dat_hash, paired_dat_path=paired_dat_path,
+                            color_index=color_index)
                         return (str(hd) if hd else None), dat_hash, was_miss
 
                     rendered = 0
@@ -265,7 +285,11 @@ def start_export():
                     done = 0
                     progress_callback(
                         1, f"Rendering HD portraits (0/{total_slots}, ×{workers} workers)…")
-                    with ThreadPoolExecutor(max_workers=workers) as pool:
+                    # Reuse persistent --csp-server workers across all HD portraits
+                    # instead of a fresh process per slot (~9x); one-shot fallback
+                    # per slot on any failure. Kill switch: MEX_CSP_SERVER=0.
+                    with active_pool(workers=workers), \
+                            ThreadPoolExecutor(max_workers=workers) as pool:
                         futs = {pool.submit(_resolve_slot_hd, s): i
                                 for i, s in enumerate(slots)}
                         for fut in as_completed(futs):

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './MexPanel.css'
 import { playSound, playHoverSound } from '../utils/sounds'
 import IsoBuilder from './IsoBuilder'
@@ -12,7 +12,7 @@ import MenuMode from './mex/MenuMode'
 import HexagonLoader from './shared/HexagonLoader'
 import { API_URL } from '../config'
 
-const MexPanel = () => {
+const MexPanel = ({ active, vaultMetadata }) => {
   const [mode, setMode] = useState('characters')
   const [mexStatus, setMexStatus] = useState(null)
   const [fighters, setFighters] = useState([])
@@ -45,6 +45,26 @@ const MexPanel = () => {
       fetchBuildInfo()
     }
   }, [projectLoaded])
+
+  // The vault (Storage tab) and this install page keep their own copies of the
+  // costume list, and both panels stay mounted (just hidden). So a folder move /
+  // reorder / retake done in the vault would leave our "Available to Import" list
+  // stale. Re-fetch it (a) whenever this tab becomes active, and (b) the moment
+  // the vault changes -- App.fetchMetadata runs on every vault mutation and hands
+  // us a fresh metadata object -- so the install order always matches the vault.
+  useEffect(() => {
+    if (active && projectLoaded) fetchStorageCostumes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
+
+  const vaultFirstRef = useRef(true)
+  useEffect(() => {
+    // Skip the initial value (the projectLoaded effect already loaded the list);
+    // only re-fetch on SUBSEQUENT vault changes.
+    if (vaultFirstRef.current) { vaultFirstRef.current = false; return }
+    if (projectLoaded) fetchStorageCostumes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaultMetadata])
 
   const fetchMexStatus = async () => {
     try {

@@ -34,6 +34,18 @@ CSP_LAUNCH_STAGGER_S = float(os.environ.get('MEX_CSP_LAUNCH_STAGGER', '1.5'))
 _launch_lock = threading.Lock()
 
 
+def _csp_pool_active() -> bool:
+    """True when a persistent CSP render pool is installed. Then per-render
+    process-launch staggering is unnecessary (and would only slow pooled renders):
+    the pool already staggered its workers' one-time GL-init at startup, and each
+    pooled render reuses a warm worker instead of launching a process."""
+    try:
+        import generate_csp
+        return generate_csp.get_active_pool() is not None
+    except Exception:
+        return False
+
+
 @contextmanager
 def staggered_launch():
     """Serialize only the LAUNCH of each render so each HSDRawViewer gets a
@@ -43,8 +55,11 @@ def staggered_launch():
     in parallel with others. A single, uncontended caller just pays the stagger
     once. Used by the HD-CSP cache so the texture-pack export can render in
     parallel safely (the lock is shared across all callers in this process).
+
+    No-op when a render pool is active -- pooled renders don't launch a process,
+    so the stagger would just add dead time per costume.
     """
-    if CSP_LAUNCH_STAGGER_S > 0:
+    if CSP_LAUNCH_STAGGER_S > 0 and not _csp_pool_active():
         with _launch_lock:
             time.sleep(CSP_LAUNCH_STAGGER_S)
     yield

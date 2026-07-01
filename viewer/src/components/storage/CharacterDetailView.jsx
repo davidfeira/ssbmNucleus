@@ -31,6 +31,7 @@ import { getDefaultCostumeCode } from './posemanager/animData'
 import SoundPacksModal from './SoundPacksModal'
 import ExtrasPageView from './ExtrasPageView'
 import AnimeleeDetectModal from './AnimeleeDetectModal'
+import BulkCharacterCspModal from './BulkCharacterCspModal'
 import { hasExtras } from '../../config/extraTypes'
 
 export default function CharacterDetailView({
@@ -147,6 +148,7 @@ export default function CharacterDetailView({
     alternativeCsps,
     capturingHdCsp,
     lastImageUpdate,
+    setLastImageUpdate,
     openCspManager,
     closeCspManager,
     handleCspManagerMainChange,
@@ -243,6 +245,9 @@ export default function CharacterDetailView({
   // Extras page state
   const [showExtrasPage, setShowExtrasPage] = useState(false)
 
+  // Per-character bulk CSP retake modal
+  const [showBulkRetake, setShowBulkRetake] = useState(false)
+
   // Helper to delete a folder
   const handleDeleteFolder = async (folderId) => {
     try {
@@ -305,6 +310,14 @@ export default function CharacterDetailView({
               title="Create and manage CSP / portrait poses for this character's costumes"
             >
               🎭 Poses
+            </button>
+            <button
+              className="character-action-button"
+              onMouseEnter={playHoverSound}
+              onClick={() => { playSound('boop'); setShowBulkRetake(true); }}
+              title="Bulk re-render CSP portraits for this character's costumes (each with its active pose)"
+            >
+              📸 Retake CSPs
             </button>
             {hasCharacterExtras && (
               <button
@@ -565,6 +578,15 @@ export default function CharacterDetailView({
         displayName={isSharedSoundBank ? 'Zelda / Sheik' : selectedCharacter}
         API_URL={API_URL}
         onClose={() => setShowSoundBank(false)}
+      />
+      <BulkCharacterCspModal
+        show={showBulkRetake}
+        character={selectedCharacter}
+        skins={allSkins}
+        onApplied={(applied) => {
+          if (applied) { setLastImageUpdate(Date.now()); onRefresh && onRefresh() }
+        }}
+        onClose={() => setShowBulkRetake(false)}
       />
 
       {showAnimelee && (

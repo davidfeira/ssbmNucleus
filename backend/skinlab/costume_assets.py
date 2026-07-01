@@ -22,7 +22,13 @@ import tempfile
 
 from core.config import VANILLA_ASSETS_DIR
 from generate_csp import generate_csp, generate_head_shot
-from skinlab.stock_gen import generate_stock
+from skinlab.stock_gen import generate_stock, recolor_gw_stock
+
+# Characters whose stock icon is DERIVED (recolored) from the vanilla one rather
+# than rendered/texture-diffed: Mr. Game & Watch carries no color in his model
+# (the game recolors him from GAMEWATCH_COLOR by slot), so he's always a solid
+# color -- recoloring the vanilla icon is exact and can't fail to a white render.
+_GW_NAMES = ("Mr. Game & Watch", "G&W")
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,7 @@ def build_stock(
     is_nana: bool = False,
     popo_stock: bytes | None = None,
     vanilla_fallback: bool = True,
+    color_index: int | None = None,
     log: logging.Logger | None = None,
 ) -> tuple[bytes | None, str, str | None]:
     """Derive ONE costume's stock icon. Returns (png_bytes|None, source, method).
@@ -62,12 +69,23 @@ def build_stock(
     csp-diff path; community/custom CSPs must not. `vanilla_fallback=False` makes
     a failed generation return (None,'missing',None) instead of a vanilla icon --
     used by the "preview a generated stock" UI which wants generated-only.
+    `color_index` is the CSS slot for characters recolored from the vanilla icon
+    (Mr. Game & Watch: 0=black default, 1=red, 2=blue, 3=green).
     """
     log = log or logger
     if is_nana:
         if popo_stock:
             return popo_stock, "copied_from_popo", "copied_from_popo"
         return None, "missing", None
+
+    # Mr. Game & Watch: recolor the vanilla icon by slot, never render him (his
+    # model has no color, so the render/texture-diff path can only make black or a
+    # white head-shot). color_index 0 (default) leaves the vanilla black icon as-is.
+    if character in _GW_NAMES:
+        data, source = _vanilla_stock(character, costume_code)
+        if data is not None:
+            return recolor_gw_stock(data, color_index), source, "gw_recolor"
+        return (None, "missing", None) if not vanilla_fallback else (None, source, source)
 
     own_tmp = None
     if dat_path is None:
@@ -109,6 +127,7 @@ def build_csp_and_stock(
     popo_csp: bytes | None = None,
     popo_stock: bytes | None = None,
     allow_stock_gen: bool = True,
+    color_index: int | None = None,
     log: logging.Logger | None = None,
 ) -> dict:
     """Return {csp, csp_source, stock, stock_source} for one costume.
@@ -187,6 +206,9 @@ def build_csp_and_stock(
                 if is_nana:
                     stock_data = popo_stock
                     stock_source = "copied_from_popo" if popo_stock else "missing"
+                elif character in _GW_NAMES:
+                    data, stock_source = _vanilla_stock(character, costume_code)
+                    stock_data = recolor_gw_stock(data, color_index) if data else None
                 else:
                     stock_data, stock_source = _vanilla_stock(character, costume_code)
             else:
@@ -196,7 +218,7 @@ def build_csp_and_stock(
                 stock_data, stock_source, _ = build_stock(
                     character, costume_code, dat_data, dat_path=dat_path,
                     aligned_csp=aligned_csp, is_nana=is_nana, popo_stock=popo_stock,
-                    vanilla_fallback=True, log=log)
+                    color_index=color_index, vanilla_fallback=True, log=log)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

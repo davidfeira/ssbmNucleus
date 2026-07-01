@@ -73,13 +73,18 @@ def get_cached(dat_hash: str, scale: int = HD_SCALE) -> Optional[Path]:
     return p if p.exists() else None
 
 
-def effective_key_hash(dat_path, *, paired_dat_path=None, dat_hash=None) -> Optional[str]:
+def effective_key_hash(dat_path, *, paired_dat_path=None, dat_hash=None,
+                       color_index=None) -> Optional[str]:
     """The md5 the cache is actually keyed by.
 
     For Ice Climbers the partner (Nana) DAT is composited into the render, so the
     output depends on BOTH files -- fold the partner hash in, otherwise a
-    Nana-only recolor (Popo bytes unchanged) would serve a stale composite. For
-    everything else this is just the costume DAT's own md5.
+    Nana-only recolor (Popo bytes unchanged) would serve a stale composite.
+
+    `color_index` is folded in for characters whose color is NOT in the DAT (Mr.
+    Game & Watch: all 4 CSS slots share one PlGwNr.dat and differ only by index),
+    so each color slot gets its own cache entry instead of colliding on the shared
+    DAT hash. None (the default, everyone else) leaves the key unchanged.
     """
     h = dat_hash or hash_dat(dat_path)
     if not h:
@@ -88,6 +93,8 @@ def effective_key_hash(dat_path, *, paired_dat_path=None, dat_hash=None) -> Opti
         ph = hash_dat(paired_dat_path)
         if ph:
             h = hashlib.md5(f"{h}+{ph}".encode()).hexdigest()
+    if color_index is not None:
+        h = hashlib.md5(f"{h}#c{color_index}".encode()).hexdigest()
     return h
 
 
@@ -97,6 +104,7 @@ def get_or_render_hd(
     scale: int = HD_SCALE,
     paired_dat_path=None,
     dat_hash: Optional[str] = None,
+    color_index: Optional[int] = None,
     log: Optional[logging.Logger] = None,
 ) -> Optional[Path]:
     """Return a cached 4x HD CSP for this costume DAT, rendering + caching on miss.
@@ -109,7 +117,8 @@ def get_or_render_hd(
     log = log or logger
     dat_path = Path(dat_path)
 
-    h = effective_key_hash(dat_path, paired_dat_path=paired_dat_path, dat_hash=dat_hash)
+    h = effective_key_hash(dat_path, paired_dat_path=paired_dat_path,
+                           dat_hash=dat_hash, color_index=color_index)
     if not h:
         return None
 
@@ -142,6 +151,7 @@ def get_or_render_hd(
                 str(local),
                 scale=scale,
                 paired_dat_filepath=str(paired_local) if paired_local else None,
+                color_index=color_index,
             )
         if not out or not Path(out).exists():
             log.warning(f"HD cache: render produced no output for {dat_path.name} ({h[:8]})")
@@ -190,19 +200,25 @@ def preseed_vanilla_hd_csps(
 
     total = len(costume_dats)
     log.info(f"HD cache preseed: {total} vanilla costumes to warm")
-    for i, dat in enumerate(costume_dats):
-        h = hash_dat(dat)
-        if h and get_cached(h):
-            skipped += 1
-        elif get_or_render_hd(dat, dat_hash=h, log=log):
-            rendered += 1
-        else:
-            failed += 1
-        if progress:
-            try:
-                progress(i + 1, total, rendered, skipped, failed)
-            except Exception:  # noqa: BLE001 - progress is best-effort
-                pass
+    # Pool persistent --csp-server workers across the whole preseed batch: each
+    # costume renders through a warm worker, and the per-render launch stagger
+    # no-ops while the pool is active. One-shot fallback per costume; kill switch
+    # MEX_CSP_SERVER=0.
+    from skinlab.csp_pool import active_pool
+    with active_pool():
+        for i, dat in enumerate(costume_dats):
+            h = hash_dat(dat)
+            if h and get_cached(h):
+                skipped += 1
+            elif get_or_render_hd(dat, dat_hash=h, log=log):
+                rendered += 1
+            else:
+                failed += 1
+            if progress:
+                try:
+                    progress(i + 1, total, rendered, skipped, failed)
+                except Exception:  # noqa: BLE001 - progress is best-effort
+                    pass
 
     log.info(
         f"HD cache preseed done: {rendered} rendered, {skipped} already cached, "

@@ -4,6 +4,15 @@ All notable changes to SSBM Nucleus are documented here.
 
 ## Unreleased
 
+### 🐛 Fixes
+- **The character page's "Available to Import" list now matches the vault's
+  order.** Costumes you filed into a folder (e.g. an "Animelee" folder) were
+  grouped together in the vault but showed up scattered in raw import-order on
+  the character page, so the two screens disagreed. The import list now orders
+  costumes exactly like the vault — folder members grouped where the folder
+  sits — just as a flat list, without the folder headers. Ordering only; no
+  costumes are added, removed, or changed on disk.
+
 ### ⚙️ Internal
 - **Vault storage moved to SQLite.** The vault index (costumes, stages, custom
   content, bundles) can now be stored in a SQLite database (`storage/vault.db`)

@@ -699,6 +699,45 @@ def csp_head_crop(csp_rgba, head_x, head_y, out_size=24, debug_out=None):
 
 
 # --------------------------------------------------------------------------- #
+# Mr. Game & Watch: recolor, don't render                                      #
+# --------------------------------------------------------------------------- #
+# The GAME recolors G&W to a flat per-costume color at load (ftGw_Init ->
+# ftMaterial_800BFB4C, GAMEWATCH_COLOR[costume_id]); his model/textures carry NO
+# color, so the texture-diff/head-shot stock generator can only ever reproduce the
+# vanilla black icon (or a white head-shot). He's always a solid color, so deriving
+# his icon from the vanilla one is both simpler and exact. These are the vanilla
+# GAMEWATCH_COLOR values (fixed in PlGw.dat, unchanged even in Animelee).
+GW_STOCK_COLORS = [(0, 0, 0), (110, 0, 0), (0, 0, 110), (0, 110, 0)]  # black/red/blue/green
+
+
+def recolor_gw_stock(png_bytes, color_index):
+    """Recolor the vanilla Mr. Game & Watch stock icon to CSS slot `color_index`
+    (0=black default, 1=red, 2=blue, 3=green). His icon is a solid black silhouette
+    over a gray outline; ramp the black body toward the team color while keeping the
+    outline gray (and the alpha). color_index 0 returns the icon unchanged. Returns
+    PNG bytes, or the input unchanged on any failure."""
+    try:
+        idx = min(max(int(color_index or 0), 0), len(GW_STOCK_COLORS) - 1)
+        if idx == 0:
+            return png_bytes
+        team = np.array(GW_STOCK_COLORS[idx], dtype=np.float64)
+        im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+        a = np.array(im, dtype=np.float64)
+        lum = a[..., :3].mean(axis=2)
+        OUTLINE = 72.0    # vanilla G&W outline gray level; body ramps 0->OUTLINE
+        t = np.clip((OUTLINE - lum) / OUTLINE, 0.0, 1.0)[..., None]   # 1=body, 0=outline
+        gray = np.repeat(lum[..., None], 3, axis=2)
+        a[..., :3] = t * team + (1.0 - t) * gray      # body->team, outline stays gray
+        out = np.clip(a, 0, 255).astype(np.uint8)
+        buf = io.BytesIO()
+        Image.fromarray(out, "RGBA").save(buf, "PNG")
+        return buf.getvalue()
+    except Exception as e:  # noqa: BLE001 - recolor is best-effort
+        logger.warning(f"G&W stock recolor failed (index {color_index}): {e}")
+        return png_bytes
+
+
+# --------------------------------------------------------------------------- #
 # entry point                                                                  #
 # --------------------------------------------------------------------------- #
 def generate_stock(vanilla_dir, character, costume_code,

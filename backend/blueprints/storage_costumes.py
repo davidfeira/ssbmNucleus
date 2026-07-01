@@ -13,6 +13,7 @@ import re
 import shutil
 import zipfile
 import tempfile
+import threading
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +94,56 @@ def get_folder_id_at_position(skins, position):
     return None
 
 
+def order_skins_like_vault(skins):
+    """Return the non-folder skins in the SAME visual order the vault shows them.
+
+    The vault (viewer buildDisplayList) pulls every foldered skin *under* its
+    folder entry -- which can sit anywhere in the array -- so grouped skins
+    display together, while the raw ``skins`` list leaves those members
+    scattered at their original positions. The install page's "Available to
+    Import" list is flat (it shows no folders), so we flatten to a plain list
+    but keep the vault's order, which is what makes the two screens agree.
+
+    Folder headers are dropped; every real skin is returned exactly once, in
+    vault order. Skins the vault never shows (hidden Nana entries, or members
+    whose folder was deleted) are appended afterward in raw order so the
+    returned SET is identical to a plain folder-skipping walk -- no skin is
+    silently dropped (the Ice Climbers pairing lookup depends on that).
+    """
+    folder_members = {}  # folder_id -> [skins, in array order]
+    for s in skins:
+        if not isinstance(s, dict):
+            continue
+        if s.get('type') == 'folder':
+            folder_members.setdefault(s.get('id'), [])
+        elif s.get('folder_id'):
+            folder_members.setdefault(s.get('folder_id'), []).append(s)
+
+    ordered = []
+    placed = set()  # id() of skins already emitted
+    for s in skins:
+        if not isinstance(s, dict):
+            continue
+        if s.get('type') == 'folder':
+            for member in folder_members.get(s.get('id'), []):
+                if id(member) not in placed:
+                    ordered.append(member)
+                    placed.add(id(member))
+        elif not s.get('folder_id'):
+            ordered.append(s)
+            placed.add(id(s))
+        # else: folder member -- emitted under its folder above
+
+    # Hidden / orphaned skins (never shown by the vault) still have to be
+    # returned; append them in raw order after the vault-ordered skins.
+    for s in skins:
+        if isinstance(s, dict) and s.get('type') != 'folder' and id(s) not in placed:
+            ordered.append(s)
+            placed.add(id(s))
+
+    return ordered
+
+
 @storage_costumes_bp.route('/api/mex/storage/metadata', methods=['GET'])
 def get_storage_metadata():
     """Get storage metadata.json"""
@@ -132,9 +183,12 @@ def list_storage_costumes():
         for char_name, char_data in characters_data.items():
             skins = char_data.get('skins', [])
 
-            for skin in skins:
-                if skin.get('type') == 'folder':
-                    continue
+            # Present skins in the SAME order the vault (storage tab) shows them
+            # -- folder members grouped at their folder's position -- so the flat
+            # "Available to Import" list and the vault don't disagree on order.
+            # order_skins_like_vault drops folder entries and returns every real
+            # skin exactly once, so no `type == 'folder'` guard is needed here.
+            for skin in order_skins_like_vault(skins):
                 # NOTE: We do NOT filter `visible: False` here. The frontend
                 # (CharacterMode.jsx) already filters `!c.isNana` for the
                 # displayed costume grid, so hidden Nana entries don't appear
@@ -1037,6 +1091,50 @@ def _resolve_active_portrait(skin_meta):
     return active_alt, pose_name
 
 
+def _render_costume_preview(character, zip_path, pose_name):
+    """Render a costume's HD portrait for the given active pose (pose_name=None =>
+    default) and return (png_bytes, pose_label). Writes nothing. Shared by the
+    single retake (generate_costume_csp) and the per-character bulk retake so both
+    use the identical render path -- and both flow through the CSP render pool
+    when one is active. Raises on a missing DAT / failed render."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tdir = Path(temp_dir)
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(tdir)
+        dat_file = find_extracted_costume_archive(tdir)
+        if not dat_file:
+            raise ValueError('No costume archive found in costume ZIP')
+
+        scale = 4  # render HD; the in-game SD is derived from it on apply
+
+        # A custom pose drives the render through its saved scene YAML + the
+        # character's AJ animations (same path the CSP manager's HD regen uses);
+        # the default portrait goes through the canonical generator (character
+        # auto-detect, per-costume low-poly slot, Fox gun, ICs).
+        csp_output = None
+        if pose_name:
+            pose_path = VANILLA_ASSETS_DIR / 'custom_poses' / character / f"{pose_name}.yml"
+            if pose_path.exists():
+                camera_file = None
+                char_prefix = get_char_prefix(character)
+                if char_prefix:
+                    aj_file = VANILLA_ASSETS_DIR / character / f"{char_prefix}AJ.dat"
+                    if aj_file.exists():
+                        camera_file = str(aj_file)
+                csp_output = generate_single_csp_internal(
+                    str(dat_file), character, str(pose_path), camera_file, scale)
+                if csp_output and Path(csp_output).exists():
+                    apply_character_specific_layers(csp_output, character, scale)
+        if not csp_output:
+            # default pose, or pose YAML missing -> fall back to default
+            csp_output = generate_csp(str(dat_file), scale=scale)
+
+        if not csp_output or not Path(csp_output).exists():
+            raise RuntimeError('Failed to render a portrait for this costume')
+
+        return Path(csp_output).read_bytes(), (pose_name or 'Default')
+
+
 @storage_costumes_bp.route('/api/mex/storage/costumes/generate-csp', methods=['POST'])
 def generate_costume_csp():
     """Re-render ("retake") a vault costume's character-select portrait with the
@@ -1163,45 +1261,7 @@ def generate_costume_csp():
                             'hasHd': bool(hd_data)})
 
         # ---- preview: render now at HD, return a data URI, write nothing ----
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tdir = Path(temp_dir)
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(tdir)
-            dat_file = find_extracted_costume_archive(tdir)
-            if not dat_file:
-                return jsonify({'success': False, 'error': 'No costume archive found in costume ZIP'}), 400
-
-            scale = 4  # render HD; the in-game SD is derived from it on apply
-
-            # A custom pose drives the render through its saved scene YAML + the
-            # character's AJ animations (same path the CSP manager's HD regen
-            # uses); the default portrait goes through the canonical generator
-            # (character auto-detect, per-costume low-poly slot, Fox gun, ICs).
-            csp_output = None
-            if pose_name:
-                pose_path = VANILLA_ASSETS_DIR / 'custom_poses' / character / f"{pose_name}.yml"
-                if pose_path.exists():
-                    camera_file = None
-                    char_prefix = get_char_prefix(character)
-                    if char_prefix:
-                        aj_file = VANILLA_ASSETS_DIR / character / f"{char_prefix}AJ.dat"
-                        if aj_file.exists():
-                            camera_file = str(aj_file)
-                    csp_output = generate_single_csp_internal(
-                        str(dat_file), character, str(pose_path), camera_file, scale)
-                    if csp_output and Path(csp_output).exists():
-                        apply_character_specific_layers(csp_output, character, scale)
-            if not csp_output:
-                # default pose, or pose YAML missing -> fall back to default
-                csp_output = generate_csp(str(dat_file), scale=scale)
-
-            if not csp_output or not Path(csp_output).exists():
-                return jsonify({'success': False,
-                                'error': 'Failed to render a portrait for this costume'}), 500
-
-            png_bytes = Path(csp_output).read_bytes()
-
-        pose_label = pose_name or 'Default'
+        png_bytes, pose_label = _render_costume_preview(character, zip_path, pose_name)
         logger.info(f"[OK] Previewed retaken CSP for {character} - {skin_id} (pose '{pose_label}')")
         return jsonify({'success': True, 'poseName': pose_label,
                         'dataUri': 'data:image/png;base64,'
@@ -1209,6 +1269,90 @@ def generate_costume_csp():
     except Exception as e:
         logger.error(f"Generate CSP error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# One bulk retake at a time: active_pool installs a process-global CSP pool, so
+# two concurrent batches would clobber each other's pool.
+_batch_retake_lock = threading.Lock()
+_batch_retake_running = False
+
+
+@storage_costumes_bp.route('/api/mex/storage/costumes/batch-retake-csp', methods=['POST'])
+def batch_retake_csp():
+    """Bulk-retake every selected costume's portrait for ONE character, each with
+    its OWN active pose, through the persistent CSP render pool. Renders only --
+    nothing is written; the frontend reviews the before/after grid and applies the
+    kept ones via /generate-csp (apply). Mirrors the stage bulk-capture flow.
+
+    Streams over socket.io: `csp_retake_item` per costume
+    ({skinId, ok, dataUri|error, poseName, done, total}) and a final
+    `csp_retake_complete` ({total, rendered}); `csp_retake_error` on a fatal error.
+    Body: {character, skinIds}. Returns immediately; work runs in a bg thread."""
+    global _batch_retake_running
+    import base64
+
+    data = request.json or {}
+    character = data.get('character')
+    skin_ids = data.get('skinIds') or []
+    if not character or not skin_ids:
+        return jsonify({'success': False, 'error': 'Missing character or skinIds'}), 400
+
+    with _batch_retake_lock:
+        if _batch_retake_running:
+            return jsonify({'success': False,
+                            'error': 'A bulk CSP retake is already running.'}), 409
+        _batch_retake_running = True
+
+    # Snapshot the skins' metadata on the request thread (don't touch Flask state
+    # from the worker); each costume keeps its own active-portrait/pose.
+    metadata = load_metadata()
+    char_data = get_char_data(metadata, character) if metadata else None
+    skins = (char_data or {}).get('skins', [])
+    skin_lookup = {s['id']: s for s in skins if s.get('type') != 'folder'}
+    jobs = [(sid, skin_lookup.get(sid)) for sid in skin_ids]
+
+    def run():
+        global _batch_retake_running
+        from core.state import get_socketio
+        from skinlab.csp_pool import active_pool
+        from skinlab.csp_concurrency import csp_workers
+        socketio = get_socketio()
+        total = len(jobs)
+        rendered = 0
+        try:
+            # One warm pool for the whole batch (bounded to the job count).
+            with active_pool(workers=max(1, min(csp_workers(), total))):
+                for i, (sid, skin_meta) in enumerate(jobs):
+                    item = {'skinId': sid, 'done': i + 1, 'total': total}
+                    try:
+                        if skin_meta is None:
+                            raise ValueError('Skin not found')
+                        zip_path = STORAGE_PATH / character / f"{sid}.zip"
+                        if not zip_path.exists():
+                            raise FileNotFoundError('Costume zip not found')
+                        _active_alt, pose_name = _resolve_active_portrait(skin_meta)
+                        png_bytes, pose_label = _render_costume_preview(
+                            character, zip_path, pose_name)
+                        item.update({
+                            'ok': True, 'poseName': pose_label,
+                            'dataUri': 'data:image/png;base64,'
+                                       + base64.b64encode(png_bytes).decode('ascii')})
+                        rendered += 1
+                    except Exception as e:  # noqa: BLE001 - one bad costume mustn't stop the batch
+                        item.update({'ok': False, 'error': str(e)})
+                        logger.warning(f"Batch retake: {character}/{sid} failed: {e}")
+                    socketio.emit('csp_retake_item', item)
+            socketio.emit('csp_retake_complete',
+                          {'character': character, 'total': total, 'rendered': rendered})
+            logger.info(f"[OK] Batch retake for {character}: {rendered}/{total} rendered")
+        except Exception as e:
+            logger.error(f"Batch retake error: {e}", exc_info=True)
+            socketio.emit('csp_retake_error', {'error': str(e)})
+        finally:
+            _batch_retake_running = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'success': True, 'message': f'Retaking {len(jobs)} costume(s)'})
 
 
 @storage_costumes_bp.route('/api/mex/storage/costumes/retest-slippi', methods=['POST'])

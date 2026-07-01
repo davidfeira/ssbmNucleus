@@ -18,6 +18,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from skinlab.stock_gen import (
     generate_stock,
     recolor_stock,
+    recolor_gw_stock,
     texture_pixel_pairs,
     csp_pixel_pairs,
     csp_head_crop,
@@ -72,6 +73,40 @@ class TestRecolorStock:
         stock = _load_rgba(FOX / 'PlFxNr' / 'stock.png')
         result = recolor_stock(stock, pairs[0], pairs[1])
         assert np.array_equal(result[..., 3], stock[..., 3])
+
+
+class TestGwStock:
+    """Mr. Game & Watch's icon is recolored from the vanilla one by CSS slot (his
+    model carries no color), so recolor_gw_stock maps the black body to
+    GAMEWATCH_COLOR[index] while keeping the gray outline and the alpha. Uses a
+    synthetic icon so it needs no G&W vanilla asset."""
+
+    @staticmethod
+    def _icon():
+        a = np.zeros((2, 2, 4), np.uint8)
+        a[0, 0] = (0, 0, 0, 255)       # body (black)
+        a[0, 1] = (72, 72, 72, 255)    # outline (vanilla gray level)
+        a[1, 0] = (36, 36, 36, 255)    # anti-alias halfway between
+        a[1, 1] = (0, 0, 0, 0)         # transparent
+        buf = io.BytesIO(); Image.fromarray(a, 'RGBA').save(buf, 'PNG')
+        return buf.getvalue()
+
+    def test_index0_is_byte_identical(self):
+        b = self._icon()
+        assert recolor_gw_stock(b, 0) == b       # black default: nothing to do
+        assert recolor_gw_stock(b, None) == b
+
+    def test_body_recolored_outline_and_alpha_kept(self):
+        out = _load_rgba(recolor_gw_stock(self._icon(), 1))   # red = (110,0,0)
+        assert tuple(out[0, 0][:3]) == (110, 0, 0)            # body -> team color
+        assert tuple(out[0, 1][:3]) == (72, 72, 72)           # outline gray kept
+        assert tuple(out[1, 0][:3]) == (73, 18, 18)           # AA ramps halfway
+        assert np.array_equal(out[..., 3], np.array([[255, 255], [255, 0]]))
+
+    def test_all_four_slots_distinct(self):
+        icon = self._icon()
+        bodies = [tuple(_load_rgba(recolor_gw_stock(icon, i))[0, 0][:3]) for i in range(4)]
+        assert bodies == [(0, 0, 0), (110, 0, 0), (0, 0, 110), (0, 110, 0)]
 
 
 class TestGenerateStock:
