@@ -96,6 +96,10 @@ pytest-cache-files-*/
 tmp_retake/
 /*_test_out/
 /tmp_iso_samples/
+# probe outputs are regenerable — keep only the probe scripts themselves
+/_probe_out/*
+!/_probe_out/*.py
+/backend/scripts/_probe_out/
 
 # local release staging (release_to_r2.py)
 releases/
