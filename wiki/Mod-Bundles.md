@@ -26,21 +26,16 @@ Shipping only one half means the recipient is missing something visible. Bundles
 
 ## Creating A Bundle
 
-When you create a bundle, Nucleus needs:
+Bundles are created from the **Export** screen as one pipeline. Pick Bundle, give it a name, description, and optional cover image, and Nucleus:
 
-- your configured vanilla Melee ISO
-- the exported modded ISO for this build
-- a texture pack folder (usually produced by [Texture Pack Mode](Texture-Pack-Mode.md))
-- a name, description, and optional cover image
+1. builds a texture-pack ISO from the current project (placeholder portraits inside)
+2. auto-applies the HD portraits into a texture-pack folder ([Texture Pack Mode](Texture-Pack-Mode.md))
+3. runs `xdelta3 -e` against your configured vanilla ISO to produce `patch.xdelta`
+4. copies the texture pack PNGs into `textures/`
+5. writes `manifest.json` with the metadata you supplied
+6. ZIPs it all into `<name>.ssbm`
 
-Nucleus then:
-
-1. runs `xdelta3 -e` against vanilla vs. the modded ISO to produce `patch.xdelta`
-2. copies the texture pack PNGs into `textures/`
-3. writes `manifest.json` with the metadata you supplied
-4. ZIPs it all into `<name>.ssbm`
-
-The output lives in the bundle library and can be downloaded again later.
+The output lives in the bundle library and can be downloaded again later. There is no separate "gather the ISO and texture folder yourself" step anymore.
 
 ## Importing A Bundle
 

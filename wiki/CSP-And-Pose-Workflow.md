@@ -7,6 +7,8 @@ Nucleus has extra CSP tools on top of normal costume import.
 - generate a missing CSP on import from the default vanilla pose
 - let you make and save custom poses in the app
 - batch-generate CSPs for many costumes with a saved pose
+- retake a single costume's CSP with the active pose from its edit modal
+- generate a matching stock icon from a recolored costume
 - capture HD CSPs from either the default pose or a saved pose for [Texture Pack Mode](Texture-Pack-Mode.md)
 
 ## Missing CSPs On Import
@@ -32,6 +34,14 @@ Saved poses are useful because:
 - they can be used later for both normal CSP generation and HD CSP capture
 
 When possible, Nucleus also generates a thumbnail for the saved pose so it is easy to pick again later.
+
+## Retaking A Single CSP
+
+A costume's edit modal has a **Retake CSP** button. It re-renders that one costume's portrait with the currently active pose and shows a preview before you confirm, so you can refresh a single skin without running a batch.
+
+## Stock Icons
+
+Recolored costumes can get a matching stock icon generated automatically. Nucleus measures how the costume's colors moved relative to the vanilla costume and applies the same movement to the vanilla stock icon's palette — so the icon follows the skin without anyone drawing pixel art. This runs at import for recolors, and the vault has a button to generate or regenerate a stock on demand.
 
 ## Batch Generation
 
@@ -59,6 +69,8 @@ You can generate HD CSPs from:
 - the default vanilla pose
 - a saved custom pose
 
+HD CSPs are always rendered at 4x resolution, and they never go inside the ISO — they exist purely for Dolphin texture-pack output. The **Manage CSPs** view on a costume shows all of its portraits (normal, HD, and alternates) in one grid.
+
 That makes HD capture useful whether you want a cleaner version of the normal portrait or a full custom posed set.
 
 ## Texture Pack Mode
@@ -66,6 +78,10 @@ That makes HD capture useful whether you want a cleaner version of the normal po
 HD CSPs can also be generated for use with [Texture Pack Mode](Texture-Pack-Mode.md).
 
 That workflow can use the HD portrait files instead of only relying on the normal in-project CSPs, which is what makes it useful for Dolphin texture-pack output.
+
+## Poses On The Install Page
+
+Applying a pose from the install page regenerates **all** of that character's in-ISO portraits with the pose — including vanilla costumes and costumes that came from a patch — so the whole select-screen column ends up in a consistent style, not just your vault skins.
 
 ## Ice Climbers Note
 

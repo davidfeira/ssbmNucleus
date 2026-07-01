@@ -29,14 +29,15 @@ If a site says it supports one-click install for Nucleus, what it is really doin
 
 The mod format is still just a normal supported archive. The link is only what tells Nucleus where to get it.
 
-## Texture Pack Note
+## Whole-Build Sharing
 
-Texture-pack mode is a separate export workflow.
+One-click links are for individual mods (a skin, a stage).
 
-There is not a documented combined "patch plus texture pack" bundle format in the current repo. If that gets added later, it should be documented as its own distribution format.
+For sharing a whole build — patch plus texture pack in one file — the format is the `.ssbm` [Mod Bundle](Mod-Bundles.md).
 
 ## Related Pages
 
 - [Manual Import](Manual-Import.md)
 - [Patches](Patches.md)
+- [Mod Bundles](Mod-Bundles.md)
 - [Texture Pack Mode](Texture-Pack-Mode.md)

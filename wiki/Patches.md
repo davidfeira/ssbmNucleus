@@ -33,12 +33,12 @@ Nucleus also lets you download a stored patch again after it has been added to t
 
 ## Creating A Patch
 
-When you create a patch, Nucleus compares:
+There are two ways to end up with a new patch:
 
-- your configured vanilla Melee ISO
-- a modded ISO you choose
+- **From the Export screen** — the Patch pipeline builds an ISO from your current project and diffs it against your configured vanilla ISO in one go. This is the normal path for sharing your own build.
+- **From the patch library** — pick any existing modded ISO and Nucleus compares it against your configured vanilla ISO.
 
-The result is a new `.xdelta` file that can be kept in the patch library and shared with other people.
+Either way, the result is a new `.xdelta` file that can be kept in the patch library and shared with other people.
 
 ## Building From A Patch
 

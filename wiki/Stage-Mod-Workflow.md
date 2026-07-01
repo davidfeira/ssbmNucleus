@@ -7,8 +7,7 @@ Nucleus currently handles stage mods through **Dynamic Alternate Stages** for a 
 At minimum, a stage mod is a stage archive file:
 
 - usually a `.dat`
-- Pokemon Stadium can use either `.dat` or `.usd`
-- Nucleus should preserve the original Pokemon Stadium extension instead of normalizing it
+- Pokemon Stadium's files come as `.usd`, but installed **alt** files must end in `.dat` — the m-ex alt loader only accepts `.dat` inside a stage's alt folder, and a `.usd` alt crashes the stage at load. Nucleus renames Stadium alts to `.dat` for you (and heals older projects that still have `.usd` alts at export/install time).
 
 A screenshot is optional, but useful because Nucleus can use it as the preview image in storage.
 
@@ -49,7 +48,7 @@ That means the active project ends up with:
 
 - the stage root file replaced with the stage-variant setup
 - a per-stage alt folder such as `GrSt`, `GrOp`, or `GrPs`
-- the original stage copied into that folder as `vanilla.dat` or `vanilla.usd`
+- the original stage copied into that folder as `vanilla.dat`
 
 ## Variant Names
 
@@ -67,11 +66,7 @@ Examples:
 - `GrOp` for Dreamland
 - `GrPs` for Pokemon Stadium
 
-The alt files themselves can be named freely as long as they use the right stage extension:
-
-- `.dat` for most supported stages
-- Pokemon Stadium may use either `.dat` or `.usd`
-- for Stadium, Nucleus should preserve the original extension instead of changing it
+The alt files themselves can be named freely, but they must use the `.dat` extension — including Pokemon Stadium alts, which Nucleus converts from `.usd` automatically. (Only the stage's root file, like `GrPs.usd`, keeps its original extension.)
 
 ## What Importing A Stage Variant To The Project Does
 
@@ -104,6 +99,14 @@ Stage variants do not currently follow the same automatic Slippi validation flow
 Right now, stage Slippi status is a manual flag rather than an automated validator result.
 
 For the full distinction, see [Slippi Safety](Slippi-Safety.md).
+
+## Stage Music
+
+Each DAS stage can also carry a custom music playlist via [song packs](Sound-Mods.md) — installed alongside the variants, uninstalled back to vanilla music independently of the stage skins.
+
+## Custom Stages Are Different
+
+This page is about **stage skins** — alternate looks for the six legal stages. Wholly new stages added to the stage select screen are a separate system: see [Custom Stages](Custom-Stages.md).
 
 ## Summary
 

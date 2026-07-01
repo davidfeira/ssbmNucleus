@@ -19,8 +19,21 @@ On Windows, you can also run `open_wiki.bat` from the repo root. It starts the w
 ## Importing Mods
 
 - [One-Click Imports](One-Click-Imports.md)
+- [ISO Scanning](ISO-Scanning.md)
 - [Slippi Safety](Slippi-Safety.md)
 - [Slippi Validation Internals](Slippi-Validation-Internals.md)
+
+## Beyond Costumes
+
+- [Custom Characters](Custom-Characters.md)
+- [Custom Stages](Custom-Stages.md)
+- [Menus And Select Screen Mods](Menus-And-Select-Screen-Mods.md)
+- [Sound Mods](Sound-Mods.md)
+
+## In-App Tools
+
+- [Skin Creator](Skin-Creator.md)
+- [Test In Game](Test-In-Game.md)
 
 ## Reference
 

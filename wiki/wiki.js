@@ -16,6 +16,7 @@ const NAV_SECTIONS = [
     items: [
       { label: "Manual Import", path: "wiki/Manual-Import.md" },
       { label: "One-Click Imports", path: "wiki/One-Click-Imports.md" },
+      { label: "ISO Scanning", path: "wiki/ISO-Scanning.md" },
       {
         label: "Slippi Safety",
         path: "wiki/Slippi-Safety.md",
@@ -48,6 +49,17 @@ const NAV_SECTIONS = [
           { label: "Fox And Falco Shared Effects", path: "wiki/Fox-And-Falco-Shared-Extras.md" },
         ],
       },
+      { label: "Custom Characters", path: "wiki/Custom-Characters.md" },
+      { label: "Custom Stages", path: "wiki/Custom-Stages.md" },
+      { label: "Menus And Select Screens", path: "wiki/Menus-And-Select-Screen-Mods.md" },
+      { label: "Sound Mods", path: "wiki/Sound-Mods.md" },
+    ],
+  },
+  {
+    title: "In-App Tools",
+    items: [
+      { label: "Skin Creator", path: "wiki/Skin-Creator.md" },
+      { label: "Test In Game", path: "wiki/Test-In-Game.md" },
     ],
   },
   {
