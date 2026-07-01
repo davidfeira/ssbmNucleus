@@ -95,6 +95,15 @@ OUTPUT_PATH = PROJECT_ROOT / "output"
 PROJECTS_PATH = PROJECT_ROOT / "projects"
 LOGS_PATH = PROJECT_ROOT / "logs"
 
+# Vault storage backend selector. 'json' = the historical storage/metadata.json
+# (default, authoritative); 'db' = the SQLite vault.db. Set NUCLEUS_VAULT_DB=1 to
+# opt in. Flip the default only once the migration is proven on real data — see
+# docs/VAULT_SQLITE_MIGRATION.md. Read live (via config.VAULT_BACKEND) at the DAL
+# so it stays test-monkeypatchable.
+_vault_flag = os.environ.get('NUCLEUS_VAULT_DB', '').strip().lower()
+VAULT_BACKEND = 'db' if _vault_flag in ('1', 'true', 'db', 'yes', 'on') else 'json'
+VAULT_DB_PATH = STORAGE_PATH / "vault.db"
+
 # Asset paths (user-extracted assets, not bundled)
 VANILLA_ASSETS_DIR = PROJECT_ROOT / "utility" / "assets" / "vanilla"
 

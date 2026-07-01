@@ -97,4 +97,23 @@ def vault(tmp_path, monkeypatch):
     # save_metadata is the same function object, so this one patch covers them all.
     monkeypatch.setattr(core_metadata, 'METADATA_FILE', storage / 'metadata.json')
     monkeypatch.setattr(core_config, 'STORAGE_PATH', storage, raising=False)
+    # Default to the JSON backend (existing tests assert JSON-specific behavior).
+    monkeypatch.setattr(core_config, 'VAULT_BACKEND', 'json', raising=False)
+    monkeypatch.setattr(core_config, 'VAULT_DB_PATH', storage / 'vault.db', raising=False)
     return VaultHarness(storage, monkeypatch)
+
+
+@pytest.fixture(params=['json', 'db'])
+def dual_backend(request, tmp_path, monkeypatch):
+    """Like `vault`, but parametrized over BOTH storage backends so a single
+    test asserts identical behavior on JSON and SQLite — the equivalence proof
+    for the metadata.json -> DB migration."""
+    storage = tmp_path / 'storage'
+    storage.mkdir()
+    monkeypatch.setattr(core_metadata, 'METADATA_FILE', storage / 'metadata.json')
+    monkeypatch.setattr(core_config, 'STORAGE_PATH', storage, raising=False)
+    monkeypatch.setattr(core_config, 'VAULT_DB_PATH', storage / 'vault.db', raising=False)
+    monkeypatch.setattr(core_config, 'VAULT_BACKEND', request.param, raising=False)
+    harness = VaultHarness(storage, monkeypatch)
+    harness.backend = request.param
+    return harness

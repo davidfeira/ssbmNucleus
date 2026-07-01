@@ -116,6 +116,20 @@ cleanup_output_folder()
 # Initialize extras API with dependencies
 init_extras_api(STORAGE_PATH, get_project_files_dir, HSDRAW_EXE)
 
+# Vault storage backend: when the SQLite backend is selected (NUCLEUS_VAULT_DB),
+# make sure the DB is built from metadata.json before serving — otherwise the
+# vault would read as empty. On any failure, fall back to JSON so the user is
+# never blocked or shown a blank vault. Default (json) mode is a no-op.
+import core.config as _core_config
+from core import vault as _vault_store
+if _core_config.VAULT_BACKEND == 'db':
+    try:
+        _result = _vault_store.ensure_migrated()
+        logger.info("Vault DB backend ready: %s", _result)
+    except Exception as _e:
+        logger.error("Vault DB migration failed; falling back to JSON backend: %s", _e, exc_info=True)
+        _core_config.VAULT_BACKEND = 'json'
+
 # Register all blueprints
 app.register_blueprint(extras_bp)
 app.register_blueprint(assets_bp)

@@ -420,11 +420,24 @@ Each phase is independently shippable, keeps tests green, and does not change AP
 - ⏳ TODO: add CI (`.github/workflows`) running `pytest` (windows-latest; scope to the hermetic
   storage/DAL tests first).
 
-**Phase 1 — SQLite backend behind the flag (default off)**
-- Implement `core/vault/` schema + tier-1 whole-blob `load_metadata`/`save_metadata` over SQLite.
-- Implement the migration + round-trip validation + backup + `vault-export-json`.
-- Parametrize the storage test suite over `backend ∈ {json, db}` so equivalence is enforced
-  continuously. Prove round-trip on the validation corpus.
+**Phase 1 — SQLite backend behind the flag (default off)** — ✅ DONE
+- ✅ `core/vault/` implements the SQLite backend. Design: each reorder-prone collection (skins,
+  stage variants) + extras + top-level lists is decomposed into ROWS with an explicit
+  `sort_order`, while every row stores its entry VERBATIM as `data_json` and a `__skeleton__`
+  copy holds all non-decomposed structure with those lists emptied. This guarantees a provably
+  lossless round-trip and still gives Phase 2 real `sort_order` rows to mutate.
+- ✅ `config.VAULT_BACKEND` flag (env `NUCLEUS_VAULT_DB`, default `json`); `core.metadata`
+  `load_metadata`/`save_metadata` dispatch JSON vs DB (explicit `path=` always stays JSON). DB
+  writes are single transactions; WAL + `busy_timeout` on the connection.
+- ✅ `migrate_json_to_db` (backup + **round-trip-validation gate** → raises on mismatch),
+  `export_db_to_json` (reversibility), `ensure_migrated` (startup hook, wired in `mex_api.py`
+  with fall-back-to-JSON on failure so the vault never reads empty).
+- ✅ Tests: `test_vault_db_roundtrip.py` (synthetic edge cases + the **real dev metadata.json** +
+  migration/backup/export/ensure_migrated) and `test_backend_equivalence.py` (same ops on
+  `{json, db}` via the `dual_backend` fixture). Full suite 385 passed. Caught + fixed one edge
+  case: `extras._vanilla_laser` is a dict, not a list — the catch-all preserved it.
+- Note: the round-trip round-trips the WHOLE blob (tier-1). Ordering is still by list position
+  until Phase 2 wires reorder to `sort_order`.
 
 **Phase 2 — Kill the reorder bug class**
 - Migrate reorder / move-to-top / move-to-bottom / folder create-rename-delete-toggle /

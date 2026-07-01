@@ -30,13 +30,7 @@ METADATA_FILE = STORAGE_PATH / 'metadata.json'
 metadata_lock = threading.RLock()
 
 
-def load_metadata(default=None, path: Path = None):
-    """Load a metadata JSON file (the vault's metadata.json by default).
-
-    Returns `default` when the file is missing or unreadable. Pass e.g.
-    default={'characters': {}} to match the shape callers expect.
-    """
-    file = path or METADATA_FILE
+def _load_json(file: Path, default):
     if not file.exists():
         return default
     try:
@@ -47,21 +41,56 @@ def load_metadata(default=None, path: Path = None):
         return default
 
 
-def save_metadata(metadata, path: Path = None):
-    """Write a metadata JSON file atomically (the vault's metadata.json by default).
-
-    Serialize to a sibling temp file then os.replace, so a concurrent reader
-    never sees a half-written file and a crash mid-write can't truncate the
-    vault. (Previously this was a plain write; the custom-character/stage/bundle
-    paths hand-rolled their own atomic writes — now every caller gets the same
-    durability for free.)
-    """
-    file = path or METADATA_FILE
+def _save_json(metadata, file: Path):
+    """Atomic JSON write: sibling temp file then os.replace, so a concurrent
+    reader never sees a half-written file and a crash mid-write can't truncate
+    the vault."""
     file.parent.mkdir(parents=True, exist_ok=True)
     tmp = file.with_name(file.name + '.tmp')
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
     os.replace(tmp, file)
+
+
+def _use_db() -> bool:
+    """Whether the vault store is the SQLite backend. Read live from config so
+    it stays flippable at runtime and in tests."""
+    from . import config
+    return getattr(config, 'VAULT_BACKEND', 'json') == 'db'
+
+
+def load_metadata(default=None, path: Path = None):
+    """Load the vault metadata (metadata.json or the SQLite DB, per the flag).
+
+    Returns `default` when the store is missing/empty/unreadable. Pass e.g.
+    default={'characters': {}} to match the shape callers expect. An explicit
+    `path` always means "this specific JSON file" (menu-mod catalogs, the duel
+    assembler, etc.) and is NEVER redirected to the DB.
+    """
+    if path is not None:
+        return _load_json(path, default)
+    if _use_db():
+        from . import vault
+        blob = vault.load_blob()
+        return blob if blob is not None else default
+    return _load_json(METADATA_FILE, default)
+
+
+def save_metadata(metadata, path: Path = None):
+    """Persist the vault metadata (metadata.json or the SQLite DB, per the flag).
+
+    JSON writes are atomic (temp + os.replace); DB writes are a single
+    transaction. An explicit `path` always writes that specific JSON file and is
+    never redirected to the DB.
+    """
+    if path is not None:
+        _save_json(metadata, path)
+        return
+    if _use_db():
+        from . import vault
+        vault.save_blob(metadata)
+        return
+    _save_json(metadata, METADATA_FILE)
 
 
 @contextmanager
