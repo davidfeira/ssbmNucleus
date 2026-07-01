@@ -2,6 +2,21 @@
 
 All notable changes to SSBM Nucleus are documented here.
 
+## Unreleased
+
+### ⚙️ Internal
+- **Vault storage moved to SQLite.** The vault index (costumes, stages, custom
+  content, bundles) can now be stored in a SQLite database (`storage/vault.db`)
+  instead of the single `storage/metadata.json` blob. Shipped builds default to
+  the DB backend; it's migrated automatically from `metadata.json` on first
+  launch with a backup and a round-trip-validation check (and falls back to JSON
+  if anything looks wrong). `metadata.json` is kept in sync as a live backup and
+  remains the portable format for vault backups/exports. Lays the groundwork to
+  eliminate list-position ordering bugs and makes concurrent writes safe across
+  processes. Set `NUCLEUS_VAULT_DB=0` to stay on JSON. See
+  `docs/VAULT_SQLITE_MIGRATION.md`.
+- Added a backend pytest suite + GitHub Actions CI that runs it.
+
 ## 0.4.2
 
 ### 🐛 Fixes
